@@ -201,7 +201,7 @@ export function SettingsView({
                 name: staffForm.name,
                 username: `${restaurantName.toLowerCase().replace(/\\s+/g, '-')}.${staffForm.username.toLowerCase().replace(/\\s+/g, '')}`,
                 is_active: staffForm.is_active,
-                role: 'waiter'
+                role: 'WAITER'
             }
             if (staffForm.password) {
                 payload.password = staffForm.password
@@ -599,8 +599,8 @@ export function SettingsView({
 
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
-                                            <Key size={16} className="text-amber-500" />
-                                            <h4 className="text-sm font-bold text-zinc-200">Credenziali Camerieri</h4>
+                                            <Key size={20} className="text-amber-500" />
+                                            <h4 className="text-xl font-bold text-zinc-200">Credenziali Camerieri</h4>
                                         </div>
                                         <Button
                                             onClick={() => {
@@ -608,35 +608,35 @@ export function SettingsView({
                                                 setStaffForm({ name: '', username: '', password: '', is_active: true })
                                                 setShowStaffDialog(true)
                                             }}
-                                            size="sm"
-                                            className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 h-8 text-xs px-3"
+                                            size="lg"
+                                            className="bg-amber-600 hover:bg-amber-700 text-white gap-2 h-10 text-sm px-4"
                                         >
-                                            <UserPlus size={14} /> Aggiungi
+                                            <UserPlus size={16} /> Aggiungi
                                         </Button>
                                     </div>
 
                                     {isStaffLoading ? (
                                         <p className="text-zinc-500 text-sm py-4">Caricamento in corso...</p>
                                     ) : staffList.length === 0 ? (
-                                        <div className="text-center py-6 bg-black/20 rounded-xl border border-white/5 border-dashed">
-                                            <UserMinus className="mx-auto h-8 w-8 text-zinc-600 mb-2" />
-                                            <p className="text-zinc-400 text-sm">Nessun cameriere configurato.</p>
+                                        <div className="text-center py-10 bg-black/20 rounded-xl border border-white/5 border-dashed">
+                                            <UserMinus className="mx-auto h-12 w-12 text-zinc-600 mb-4" />
+                                            <p className="text-zinc-400 text-lg">Nessun cameriere configurato.</p>
                                         </div>
                                     ) : (
-                                        <div className="space-y-2">
+                                        <div className="space-y-3">
                                             {staffList.map(staff => (
                                                 <div key={staff.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${staff.is_active ? 'bg-black/20 border-white/8' : 'bg-black/40 border-red-500/20 opacity-60'}`}>
                                                     {/* Avatar */}
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${staff.is_active ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-700 text-zinc-400'}`}>
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${staff.is_active ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-700 text-zinc-400'}`}>
                                                         {staff.name.substring(0, 1).toUpperCase()}
                                                     </div>
                                                     {/* Info */}
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-semibold text-white leading-tight truncate">{staff.name}</p>
-                                                        <p className="text-[10px] font-mono text-amber-400/70 truncate">{staff.username}</p>
+                                                    <div className="flex-1 min-w-0 ml-1">
+                                                        <p className="text-base font-semibold text-white leading-tight truncate">{staff.name}</p>
+                                                        <p className="text-sm font-mono text-amber-400/70 mt-0.5 truncate">{staff.username}</p>
                                                     </div>
                                                     {/* Actions */}
-                                                    <div className="flex gap-1 shrink-0">
+                                                    <div className="flex gap-2 shrink-0">
                                                         {/* Eye toggle */}
                                                         <button
                                                             title={staff.is_active ? 'Disattiva accesso' : 'Riattiva accesso'}
@@ -679,56 +679,57 @@ export function SettingsView({
                         <Dialog open={showStaffDialog} onOpenChange={setShowStaffDialog}>
                             <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-white/10 text-white">
                                 <DialogHeader>
-                                    <DialogTitle className="text-xl text-amber-500">{editingStaff ? 'Modifica Cameriere' : 'Nuovo Cameriere'}</DialogTitle>
+                                    <DialogTitle className="text-2xl font-bold text-amber-500">{editingStaff ? 'Modifica Cameriere' : 'Nuovo Cameriere'}</DialogTitle>
                                 </DialogHeader>
-                                <div className="grid gap-4 py-4">
+                                <div className="grid gap-5 py-4">
                                     <div className="space-y-2">
-                                        <Label>Nome di Battesimo</Label>
+                                        <Label className="text-base">Nome di Battesimo</Label>
                                         <Input
                                             placeholder="Es. Mario"
                                             value={staffForm.name}
                                             onChange={(e) => setStaffForm(prev => ({ ...prev, name: e.target.value }))}
-                                            className="bg-black border-white/10"
+                                            className="bg-black border-white/10 h-12 text-base"
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label>Username</Label>
+                                    <div className="space-y-3">
+                                        <Label className="text-base">Username</Label>
                                         <div className="flex rounded-md overflow-hidden ring-1 ring-white/10 focus-within:ring-amber-500">
-                                            <span className="bg-zinc-900 border-r border-white/10 px-3 flex items-center text-sm text-zinc-400 font-mono">
-                                                {restaurantName.toLowerCase().replace(/\\s+/g, '-') + '.'}
+                                            <span className="bg-zinc-900 border-r border-white/10 px-3 flex items-center text-base text-zinc-400 font-mono">
+                                                {restaurantName.toLowerCase().replace(/\s+/g, '-') + '.'}
                                             </span>
                                             <Input
                                                 placeholder="mario"
                                                 value={staffForm.username}
                                                 onChange={(e) => setStaffForm(prev => ({ ...prev, username: e.target.value.replace(/[^a-zA-Z0-9_]/g, '') }))}
-                                                className="bg-black border-0 rounded-none focus-visible:ring-0"
+                                                className="bg-black border-0 rounded-none focus-visible:ring-0 h-12 text-base font-mono"
                                             />
                                         </div>
-                                        <p className="text-xs text-zinc-500">Sarà usato per il login.</p>
+                                        <p className="text-sm text-zinc-500">Sarà usato per il login.</p>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label>Password {editingStaff && <span className="text-zinc-500 font-normal">(lascia vuoto per non cambiare)</span>}</Label>
+                                    <div className="space-y-3">
+                                        <Label className="text-base">Password {editingStaff && <span className="text-zinc-500 font-normal">(lascia vuoto per non cambiare)</span>}</Label>
                                         <Input
                                             type="text"
                                             placeholder="Inserisci password complessa"
                                             value={staffForm.password}
                                             onChange={(e) => setStaffForm(prev => ({ ...prev, password: e.target.value }))}
-                                            className="bg-black border-white/10"
+                                            className="bg-black border-white/10 h-12 text-base"
                                         />
                                     </div>
-                                    <div className="flex items-center gap-3 bg-black/20 p-3 rounded-lg border border-white/5 mt-2">
+                                    <div className="flex items-center gap-4 bg-black/20 p-4 rounded-lg border border-white/5 mt-2">
                                         <Switch
                                             checked={staffForm.is_active}
                                             onCheckedChange={(val) => setStaffForm(prev => ({ ...prev, is_active: val }))}
                                             id="active-switch"
+                                            className="scale-125"
                                         />
-                                        <Label htmlFor="active-switch" className="cursor-pointer">Cameriere Attivo</Label>
+                                        <Label htmlFor="active-switch" className="cursor-pointer text-base">Cameriere Attivo</Label>
                                     </div>
                                 </div>
-                                <div className="flex justify-end gap-3 mt-4">
-                                    <Button variant="ghost" onClick={() => setShowStaffDialog(false)}>Annulla</Button>
-                                    <Button onClick={handleSaveStaff} className="bg-amber-600 hover:bg-amber-700 text-white">
-                                        <Save size={16} className="mr-2" /> Salva Credenziali
+                                <div className="flex justify-end gap-3 mt-6">
+                                    <Button variant="ghost" className="text-base py-6 px-6" onClick={() => setShowStaffDialog(false)}>Annulla</Button>
+                                    <Button onClick={handleSaveStaff} className="bg-amber-600 hover:bg-amber-700 text-white text-base py-6 px-6">
+                                        <Save size={20} className="mr-2" /> Salva Credenziali
                                     </Button>
                                 </div>
                             </DialogContent>
@@ -818,11 +819,11 @@ export function SettingsView({
                         </div>
 
                         {/* Bottom row: Orari di Servizio (Full Width) */}
-                        <div className="relative p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-zinc-900/90 to-zinc-900/50 border border-white/5 backdrop-blur-sm shadow-2xl overflow-hidden group">
+                        <div className="relative pt-6 sm:pt-8 w-full max-w-4xl mx-auto overflow-hidden group">
                             <div className="absolute top-0 right-0 p-8 opacity-[0.03] transition-opacity duration-500 group-hover:opacity-5 pointer-events-none">
                                 <Clock size={200} weight="fill" />
                             </div>
-                            <div className="relative z-10 w-full max-w-4xl mx-auto">
+                            <div className="relative z-10 w-full">
                                 <WeeklyServiceHoursEditor
                                     schedule={weeklyServiceHours || {
                                         enabled: true,
