@@ -11,6 +11,94 @@
 -- =============================================================================
 
 -- ========================================
+-- CUSTOM MENUS SCHEMA
+-- ========================================
+
+-- Custom Menus Table
+CREATE TABLE IF NOT EXISTS public.custom_menus (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  restaurant_id uuid REFERENCES public.restaurants(id) ON DELETE CASCADE NOT NULL,
+  name text NOT NULL,
+  description text,
+  is_active boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Custom Menu Dishes (Join Table)
+CREATE TABLE IF NOT EXISTS public.custom_menu_dishes (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  custom_menu_id uuid REFERENCES public.custom_menus(id) ON DELETE CASCADE NOT NULL,
+  dish_id uuid REFERENCES public.dishes(id) ON DELETE CASCADE NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(custom_menu_id, dish_id)
+);
+
+-- Custom Menu Schedules
+CREATE TABLE IF NOT EXISTS public.custom_menu_schedules (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  custom_menu_id uuid REFERENCES public.custom_menus(id) ON DELETE CASCADE NOT NULL,
+  day_of_week integer, -- 0-6 (Sun-Sat), null = every day
+  meal_type text CHECK (meal_type IN ('lunch', 'dinner', 'all')),
+  start_time time,
+  end_time time,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable RLS for custom menus tables
+ALTER TABLE public.custom_menus ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.custom_menu_dishes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.custom_menu_schedules ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for custom_menus
+CREATE POLICY "Users can view custom menus for their restaurant"
+  ON public.custom_menus FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can insert custom menus for their restaurant"
+  ON public.custom_menus FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Users can update custom menus for their restaurant"
+  ON public.custom_menus FOR UPDATE
+  USING (true);
+
+CREATE POLICY "Users can delete custom menus for their restaurant"
+  ON public.custom_menus FOR DELETE
+  USING (true);
+
+-- RLS Policies for custom_menu_dishes
+CREATE POLICY "Users can view custom menu dishes"
+  ON public.custom_menu_dishes FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can insert custom menu dishes"
+  ON public.custom_menu_dishes FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Users can delete custom menu dishes"
+  ON public.custom_menu_dishes FOR DELETE
+  USING (true);
+
+-- RLS Policies for custom_menu_schedules
+CREATE POLICY "Users can view custom menu schedules"
+  ON public.custom_menu_schedules FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can insert custom menu schedules"
+  ON public.custom_menu_schedules FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Users can update custom menu schedules"
+  ON public.custom_menu_schedules FOR UPDATE
+  USING (true);
+
+CREATE POLICY "Users can delete custom menu schedules"
+  ON public.custom_menu_schedules FOR DELETE
+  USING (true);
+
+-- ========================================
 -- MODIFICATIONS & ENHANCEMENTS
 -- ========================================
 
@@ -81,6 +169,65 @@ BEGIN
   RETURN COALESCE(avg_minutes, NULL);
 END;
 $$ LANGUAGE plpgsql STABLE;
+
+-- Apply Custom Menu
+-- Sets the selected menu as active, and updates all dishes is_active state based on inclusion in the menu.
+DROP FUNCTION IF EXISTS public.apply_custom_menu(uuid, uuid);
+
+CREATE OR REPLACE FUNCTION public.apply_custom_menu(p_restaurant_id uuid, p_menu_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- 1. Deactivate all other menus for this restaurant
+  UPDATE public.custom_menus
+  SET is_active = false
+  WHERE restaurant_id = p_restaurant_id;
+
+  -- 2. Activate the selected menu
+  UPDATE public.custom_menus
+  SET is_active = true
+  WHERE id = p_menu_id;
+
+  -- 3. Update Dishes Visibility
+  -- First, hide ALL dishes for this restaurant
+  UPDATE public.dishes
+  SET is_active = false
+  WHERE restaurant_id = p_restaurant_id;
+
+  -- Then, show only dishes in the custom menu
+  UPDATE public.dishes
+  SET is_active = true
+  WHERE id IN (
+    SELECT dish_id
+    FROM public.custom_menu_dishes
+    WHERE custom_menu_id = p_menu_id
+  );
+END;
+$$;
+
+-- Reset to Full Menu
+-- Deactivates all custom menus and shows ALL dishes.
+DROP FUNCTION IF EXISTS public.reset_to_full_menu(uuid);
+
+CREATE OR REPLACE FUNCTION public.reset_to_full_menu(p_restaurant_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- 1. Deactivate all custom menus
+  UPDATE public.custom_menus
+  SET is_active = false
+  WHERE restaurant_id = p_restaurant_id;
+
+  -- 2. Show ALL dishes
+  UPDATE public.dishes
+  SET is_active = true
+  WHERE restaurant_id = p_restaurant_id;
+END;
+$$;
 
 -- =============================================================================
 -- NOTE: The base tables (users, orders, restaurants, dishes, etc.) are already
