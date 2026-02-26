@@ -97,6 +97,9 @@ interface SettingsViewProps {
     viewOnlyMenuEnabled: boolean
     setViewOnlyMenuEnabled: (enabled: boolean) => void
 
+    showCookingTimes: boolean
+    setShowCookingTimes: (enabled: boolean) => void
+
     restaurantId: string
 }
 
@@ -149,6 +152,8 @@ export function SettingsView({
     setWeeklyServiceHours,
     viewOnlyMenuEnabled,
     setViewOnlyMenuEnabled,
+    showCookingTimes,
+    setShowCookingTimes,
     restaurantId
 }: SettingsViewProps) {
 
@@ -483,6 +488,26 @@ export function SettingsView({
                                     <Switch
                                         checked={viewOnlyMenuEnabled}
                                         onCheckedChange={setViewOnlyMenuEnabled}
+                                        className="data-[state=checked]:bg-amber-500"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Tempo Medio di Cottura */}
+                            <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                                    <div className="space-y-2">
+                                        <h3 className="text-2xl font-bold flex items-center gap-3">
+                                            <Clock className="text-amber-500 w-8 h-8" weight="duotone" />
+                                            Tempo Medio di Cottura
+                                        </h3>
+                                        <p className="text-sm text-zinc-400 max-w-prose">
+                                            Se attivo, mostra il tempo medio di preparazione sotto ogni piatto nel menù cliente e nella dashboard cameriere. Calcolato sugli ultimi 2 mesi (minimo 3 ordini).
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={showCookingTimes}
+                                        onCheckedChange={setShowCookingTimes}
                                         className="data-[state=checked]:bg-amber-500"
                                     />
                                 </div>

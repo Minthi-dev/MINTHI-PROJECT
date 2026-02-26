@@ -911,6 +911,26 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }
 
+  // Show Cooking Times State
+  const [optimisticShowCookingTimes, setOptimisticShowCookingTimes] = useState<boolean | null>(null)
+  const showCookingTimes = optimisticShowCookingTimes ?? (currentRestaurant as any)?.show_cooking_times ?? false
+
+  const updateShowCookingTimes = async (enabled: boolean) => {
+    setOptimisticShowCookingTimes(enabled)
+    if (!restaurantId) return
+    try {
+      await DatabaseService.updateRestaurant({
+        id: restaurantId,
+        show_cooking_times: enabled
+      } as any)
+      toast.success(enabled ? 'Tempo di cottura attivato' : 'Tempo di cottura disattivato')
+    } catch (error) {
+      console.error('Error updating cooking times setting:', error)
+      toast.error('Errore durante l\'aggiornamento')
+      setOptimisticShowCookingTimes(null)
+    }
+  }
+
 
   // --- Handlers ---
   const updateRestaurantName = async (name: string) => {
@@ -3342,6 +3362,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                 viewOnlyMenuEnabled={viewOnlyMenuEnabled}
                 setViewOnlyMenuEnabled={updateViewOnlyMenuEnabled}
+
+                showCookingTimes={showCookingTimes}
+                setShowCookingTimes={updateShowCookingTimes}
 
                 copertoPrice={copertoPrice}
                 setCopertoPrice={updateCopertoPrice}

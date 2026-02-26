@@ -208,14 +208,16 @@ const DishCard = ({
   onSelect,
   onAdd,
   isViewOnly,
-  theme
+  theme,
+  cookingTime
 }: {
   dish: Dish,
   index: number,
   onSelect: (dish: Dish) => void,
   onAdd: (dish: Dish) => void,
   isViewOnly?: boolean,
-  theme: typeof MENU_COLORS
+  theme: typeof MENU_COLORS,
+  cookingTime?: number
 }) => (
   <motion.div
     layout
@@ -249,6 +251,12 @@ const DishCard = ({
       <h3 className="font-normal text-base leading-tight line-clamp-1 mb-1 tracking-wide" style={{ color: theme.textPrimary, fontFamily: theme.headerFont }}>{dish.name}</h3>
       {dish.description && (
         <p className="text-xs line-clamp-1 leading-snug font-light" style={{ color: `${theme.textPrimary}99` }}>{dish.description}</p>
+      )}
+      {cookingTime != null && cookingTime > 0 && (
+        <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: theme.textMuted }}>
+          <Clock className="w-3 h-3" />
+          ~{cookingTime} min
+        </p>
       )}
       <div className="flex items-center justify-between mt-2">
         <span className="font-medium text-sm tracking-wide" style={{ color: theme.primary }}>€ {dish.price.toFixed(2)}</span>
@@ -1005,6 +1013,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }, [cart])
   const [previousOrders, setPreviousOrders] = useState<Order[]>([])
   const [isOrderSubmitting, setIsOrderSubmitting] = useState(false)
+  const [cookingTimesMap, setCookingTimesMap] = useState<Record<string, number>>({})
   const [dishNote, setDishNote] = useState('')
   const [dishQuantity, setDishQuantity] = useState(1)
 
@@ -1080,31 +1089,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     }
   }, [sessionId])
 
-  useEffect(() => {
-    if (!sessionId || previousOrders.length === 0) return
-
-    // 2. Subscribe to Order Items updates (for status changes: SERVED etc)
-    const orderIds = previousOrders.map(o => o.id)
-    // Create filter string: order_id=in.(id1,id2,...)
-    const filter = `order_id=in.(${orderIds.join(',')})`
-
-    const itemsChannel = supabase
-      .channel(`order-items-watch:${orderIds.join('-')}`) // Unique channel name per ID set
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'order_items',
-        filter: filter
-      }, () => {
-        // Refresh orders when any item status changes
-        fetchOrders()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(itemsChannel)
-    }
-  }, [sessionId, previousOrders.map(o => o.id).join(',')])
+  // Order items subscription is set up below, after fetchOrders is defined
 
   // --- Shared Cart Implementation ---
   const fetchCart = useCallback(async () => {
@@ -1204,6 +1189,21 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     return () => clearTimeout(timer)
   }, [isLoading, restaurantName, error])
 
+  // Fetch cooking times if enabled
+  useEffect(() => {
+    if (!restaurantId || !(fullRestaurant as any)?.show_cooking_times) return
+    supabase.rpc('get_dish_avg_cooking_times', { p_restaurant_id: restaurantId })
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<string, number> = {}
+          data.forEach((row: { dish_id: string, avg_minutes: number }) => {
+            map[row.dish_id] = row.avg_minutes
+          })
+          setCookingTimesMap(map)
+        }
+      })
+  }, [restaurantId, (fullRestaurant as any)?.show_cooking_times])
+
   // Sort categories by order field properly
   const sortedCategories = useMemo(() => {
     return [...categories].sort((a, b) => {
@@ -1292,6 +1292,27 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       supabase.removeChannel(channel)
     }
   }, [sessionId, fetchOrders])
+
+  // Order Items updates (for status changes: SERVED, READY etc) — placed here since fetchOrders is now defined
+  useEffect(() => {
+    if (!sessionId || !restaurantId) return
+
+    const itemsChannel = supabase
+      .channel(`order-items-watch:${sessionId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'order_items',
+        filter: `restaurant_id=eq.${restaurantId}`
+      }, () => {
+        fetchOrders()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(itemsChannel)
+    }
+  }, [sessionId, restaurantId, fetchOrders])
 
   const quickAddToCart = (dish: Dish) => {
     // OLD: Immediately added +1
@@ -1672,6 +1693,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                       onAdd={(d) => quickAddToCart(d)}
                       isViewOnly={isViewOnly}
                       theme={theme}
+                      cookingTime={(fullRestaurant as any)?.show_cooking_times ? cookingTimesMap[dish.id] : undefined}
                     />
                   ))}
                 </div>

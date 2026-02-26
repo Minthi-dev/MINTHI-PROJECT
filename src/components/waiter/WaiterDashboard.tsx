@@ -74,6 +74,20 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const [activateAyceEnabled, setActivateAyceEnabled] = useState(false)
     const [activateCopertoEnabled, setActivateCopertoEnabled] = useState(false)
 
+    // Activity Center State
+    const [activityRoomFilter, setActivityRoomFilter] = useState<string>('all')
+    const [justDeliveredIds, setJustDeliveredIds] = useState<Set<string>>(new Set())
+
+    // Device ID for notification routing
+    const deviceId = useMemo(() => {
+        let id = localStorage.getItem('waiter_device_id')
+        if (!id) {
+            id = uuidv4()
+            localStorage.setItem('waiter_device_id', id)
+        }
+        return id
+    }, [])
+
     const handleQuickOrderClick = (table: Table) => {
         navigate(`/waiter/table/${table.id}/order`)
     }
@@ -292,7 +306,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             return
         }
 
-        // Check for new Orders
+        // Check for new Orders (always shown to all devices - customer triggered)
         if (currentOrderCount > prevOrderCountRef.current) {
             soundManager.play('chime')
             toast.info(`Nuovo ordine ricevuto!`, {
@@ -303,10 +317,19 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
         prevOrderCountRef.current = currentOrderCount
 
-        // Check for new Ready Items
-        if (currentReadyCount > prevReadyCountRef.current) {
+        // Check for new Ready Items (filter by room if active)
+        const filteredReadyCount = activityRoomFilter === 'all'
+            ? currentReadyCount
+            : activeOrders.reduce((acc, order) => {
+                const session = sessions.find(s => s.id === order.table_session_id)
+                const table = tables.find(t => t.id === session?.table_id)
+                if (!table || table.room_id !== activityRoomFilter) return acc
+                return acc + (order.items?.filter(i => i.status?.toLowerCase() === 'ready').length || 0)
+            }, 0)
+
+        const prevFilteredReady = prevReadyCountRef.current
+        if (filteredReadyCount > prevFilteredReady || (activityRoomFilter === 'all' && currentReadyCount > prevFilteredReady)) {
             soundManager.play('kitchen-bell')
-            // Play a second time after short delay for emphasis
             setTimeout(() => soundManager.play('success'), 400)
             toast.success('Ci sono piatti pronti da servire!', {
                 icon: '🔔',
@@ -315,8 +338,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             })
         }
 
-        // Check for new Assistance Requests
-        if (currentAssistanceCount > prevAssistanceCountRef.current) {
+        // Check for new Assistance Requests (filter by room if active)
+        const filteredAssistanceCount = activityRoomFilter === 'all'
+            ? currentAssistanceCount
+            : assistanceRequests.filter(t => {
+                const tableRoom = rooms.find(r => r.id === t.room_id)
+                return activityRoomFilter === 'all' || t.room_id === activityRoomFilter
+            }).length
+
+        const prevFilteredAssistance = prevAssistanceCountRef.current
+        if (filteredAssistanceCount > prevFilteredAssistance || (activityRoomFilter === 'all' && currentAssistanceCount > prevFilteredAssistance)) {
             soundManager.play('alert')
             setTimeout(() => soundManager.play('alert'), 500)
             setTimeout(() => soundManager.play('alert'), 1000)
@@ -330,9 +361,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         prevReadyCountRef.current = currentReadyCount
         prevAssistanceCountRef.current = currentAssistanceCount
 
-    }, [activeOrders, assistanceRequests, loading])
+    }, [activeOrders, assistanceRequests, loading, activityRoomFilter, sessions, tables, rooms])
 
     const handleMarkAsDelivered = async (orderId: string, itemId: string) => {
+        // Track in justDeliveredIds for grey-out effect before group disappears
+        setJustDeliveredIds(prev => new Set([...prev, itemId]))
+
         await supabase
             .from('order_items')
             .update({ status: 'SERVED' })
@@ -352,7 +386,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             }
             return o
         }))
-        // REMOVED toast.success('Piatto consegnato!')
     }
 
     // Resolve assistance request
@@ -391,6 +424,70 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 dish: i.dish || dishes.find(d => d.id === i.dish_id)
             }))
     }).sort((a, b) => new Date(a.created_at || Date.now()).getTime() - new Date(b.created_at || Date.now()).getTime())
+
+    // Grouped display: ready items (+ just-delivered greyed) grouped by table, filtered by room
+    const displayReadyItemsByTable = useMemo(() => {
+        type DisplayItem = {
+            id: string
+            tableId: string
+            tableName: string
+            roomId: string | null | undefined
+            roomName: string | null | undefined
+            order_id: string
+            dish: any
+            quantity: number
+            note: string | null | undefined
+            created_at: string | null | undefined
+            isDelivered: boolean
+        }
+
+        const allItems: DisplayItem[] = activeOrders.flatMap(o => {
+            const session = sessions.find(s => s.id === o.table_session_id)
+            if (!session) return []
+            const table = tables.find(t => t.id === session.table_id)
+            if (!table) return []
+
+            // Apply room filter
+            if (activityRoomFilter !== 'all' && table.room_id !== activityRoomFilter) return []
+
+            const room = rooms.find(r => r.id === table.room_id)
+
+            return (o.items || [])
+                .filter(i => i.status?.toLowerCase() === 'ready' || justDeliveredIds.has(i.id))
+                .map(i => ({
+                    id: i.id,
+                    tableId: table.id,
+                    tableName: table.number,
+                    roomId: table.room_id,
+                    roomName: room?.name || null,
+                    order_id: o.id,
+                    dish: i.dish || dishes.find(d => d.id === i.dish_id),
+                    quantity: i.quantity,
+                    note: i.note,
+                    created_at: i.created_at,
+                    isDelivered: justDeliveredIds.has(i.id)
+                }))
+        })
+
+        // Group by tableId, sort by oldest created_at
+        const grouped = new Map<string, DisplayItem[]>()
+        allItems.forEach(item => {
+            const existing = grouped.get(item.tableId) || []
+            existing.push(item)
+            grouped.set(item.tableId, existing)
+        })
+
+        // Convert to array of table groups, sorted by table name
+        return Array.from(grouped.entries())
+            .map(([tableId, items]) => ({
+                tableId,
+                tableName: items[0].tableName,
+                roomName: items[0].roomName,
+                items: items.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()),
+                allDelivered: items.every(i => i.isDelivered)
+            }))
+            .sort((a, b) => a.tableName.localeCompare(b.tableName))
+    }, [activeOrders, sessions, tables, rooms, dishes, justDeliveredIds, activityRoomFilter])
 
     const sortTables = (tables: Table[]) => {
         return [...tables].sort((a, b) => {
@@ -995,12 +1092,15 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         className="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
                     >
                         {/* Header */}
-                        <div className="h-16 px-4 flex items-center justify-between border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0">
+                        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0 gap-3 flex-wrap">
                             <div className="flex items-center gap-3">
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => setIsReadyDrawerOpen(false)} // Close activity view
+                                    onClick={() => {
+                                        setIsReadyDrawerOpen(false)
+                                        setJustDeliveredIds(new Set())
+                                    }}
                                     className="text-zinc-400 hover:text-white"
                                 >
                                     <ArrowLeft size={24} />
@@ -1010,96 +1110,205 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                     Centro Attività
                                 </h2>
                             </div>
-                            <Badge variant="outline" className="border-amber-500/30 text-amber-500">
-                                {readyItems.length + assistanceRequests.length} Notifiche
-                            </Badge>
+                            <div className="flex items-center gap-3">
+                                {/* Room filter for activity center */}
+                                {rooms.length > 0 && (
+                                    <Select value={activityRoomFilter} onValueChange={setActivityRoomFilter}>
+                                        <SelectTrigger className="w-[160px] h-9 bg-zinc-900/80 border-white/10 text-xs font-bold rounded-xl">
+                                            <House size={14} className="mr-1.5 text-amber-500 shrink-0" />
+                                            <SelectValue placeholder="Tutte le Sale" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-zinc-950 border-zinc-800">
+                                            <SelectItem value="all">Tutte le Sale</SelectItem>
+                                            {rooms.map(room => (
+                                                <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                                <Badge variant="outline" className="border-amber-500/30 text-amber-500 shrink-0">
+                                    {readyItems.length + assistanceRequests.length} attivi
+                                </Badge>
+                            </div>
                         </div>
 
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
-                            {/* Assistance Requests Section */}
-                            {assistanceRequests.length > 0 && (
-                                <div className="space-y-3">
-                                    <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 flex items-center gap-2">
-                                        <WarningCircle size={16} weight="fill" />
-                                        Richieste Assistenza
-                                    </h3>
-                                    {assistanceRequests.map(t => (
-                                        <div key={t.id} className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-center justify-between animate-pulse-slow">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-black font-bold text-lg">
-                                                    {t.number}
+                            {/* Assistance Requests Section — filtered by room */}
+                            {(() => {
+                                const filteredAssistance = activityRoomFilter === 'all'
+                                    ? assistanceRequests
+                                    : assistanceRequests.filter(t => t.room_id === activityRoomFilter)
+                                return filteredAssistance.length > 0 ? (
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 flex items-center gap-2">
+                                            <WarningCircle size={16} weight="fill" />
+                                            Richieste Assistenza
+                                        </h3>
+                                        {filteredAssistance.map(t => {
+                                            const room = rooms.find(r => r.id === t.room_id)
+                                            return (
+                                                <div key={t.id} className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-center justify-between animate-pulse-slow">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-black font-bold text-lg shrink-0">
+                                                            {t.number}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-red-400">Richiesta Cameriere</p>
+                                                            {room && <p className="text-xs text-red-300/40 font-medium">{room.name}</p>}
+                                                            <p className="text-xs text-red-300/60">
+                                                                {t.last_assistance_request ? new Date(t.last_assistance_request).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Adesso'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        size="sm"
+                                                        className="bg-red-500 hover:bg-red-400 text-black font-bold h-9 px-4 rounded-lg"
+                                                        onClick={() => handleResolveAssistance(t.id)}
+                                                    >
+                                                        <CheckCircle size={18} className="mr-2" weight="fill" />
+                                                        Risolvi
+                                                    </Button>
                                                 </div>
-                                                <div>
-                                                    <p className="font-bold text-red-400">Richiesta Cameriere</p>
-                                                    <p className="text-xs text-red-300/60">
-                                                        {t.last_assistance_request ? new Date(t.last_assistance_request).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Adesso'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                className="bg-red-500 hover:bg-red-400 text-black font-bold h-9 px-4 rounded-lg"
-                                                onClick={() => handleResolveAssistance(t.id)}
-                                            >
-                                                <CheckCircle size={18} className="mr-2" weight="fill" />
-                                                Risolvi
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                            )
+                                        })}
+                                    </div>
+                                ) : null
+                            })()}
 
-                            {/* Ready Items Section */}
+                            {/* Ready Items Section — grouped by table */}
                             <div className="space-y-3">
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
                                     <ChefHat size={16} />
-                                    Piatti Pronti in Cucina
+                                    Piatti Pronti da Servire
+                                    {activityRoomFilter !== 'all' && (
+                                        <span className="text-amber-500 normal-case font-normal">
+                                            — {rooms.find(r => r.id === activityRoomFilter)?.name}
+                                        </span>
+                                    )}
                                 </h3>
 
-                                {readyItems.length === 0 ? (
+                                {displayReadyItemsByTable.length === 0 ? (
                                     <div className="py-12 flex flex-col items-center justify-center text-zinc-600 border border-dashed border-white/5 rounded-2xl bg-zinc-900/20">
                                         <ForkKnife size={48} className="mb-4 opacity-20" />
                                         <p>Nessun piatto pronto da servire</p>
                                     </div>
                                 ) : (
-                                    readyItems.map((item, idx) => (
-                                        <div key={item.id + idx} className="bg-zinc-900 border border-amber-500/20 rounded-xl overflow-hidden flex shadow-lg shadow-black/50">
-                                            {/* Left Stripe */}
-                                            <div className="w-1.5 bg-amber-500"></div>
-
-                                            <div className="flex-1 p-4 flex gap-4">
-                                                {/* Content */}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-start justify-between mb-1">
-                                                        <div className="flex items-center gap-2">
-                                                            <Badge className="bg-zinc-800 text-white border-zinc-700 font-mono text-sm px-2 py-0.5 rounded-md">
-                                                                TAVOLO {tables.find(t => t.id === item.tableId)?.number}
-                                                            </Badge>
-                                                            <span className="text-xs text-zinc-500">
-                                                                {new Date(item.created_at || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </span>
+                                    <AnimatePresence>
+                                        {displayReadyItemsByTable.map(tableGroup => (
+                                            <motion.div
+                                                key={tableGroup.tableId}
+                                                initial={{ opacity: 1 }}
+                                                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                                                transition={{ duration: 0.4 }}
+                                                className={cn(
+                                                    "rounded-2xl overflow-hidden border shadow-lg shadow-black/50 transition-all duration-300",
+                                                    tableGroup.allDelivered
+                                                        ? "border-zinc-700/30 bg-zinc-900/30 opacity-50"
+                                                        : "border-amber-500/20 bg-zinc-900"
+                                                )}
+                                            >
+                                                {/* Table Group Header */}
+                                                <div className={cn(
+                                                    "px-4 py-3 flex items-center justify-between border-b",
+                                                    tableGroup.allDelivered
+                                                        ? "border-zinc-700/20 bg-zinc-900/20"
+                                                        : "border-amber-500/10 bg-amber-500/5"
+                                                )}>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={cn(
+                                                            "w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shadow-inner",
+                                                            tableGroup.allDelivered
+                                                                ? "bg-zinc-700/50 text-zinc-400"
+                                                                : "bg-amber-500 text-black"
+                                                        )}>
+                                                            {tableGroup.tableName}
+                                                        </div>
+                                                        <div>
+                                                            <p className={cn(
+                                                                "font-bold text-sm",
+                                                                tableGroup.allDelivered ? "text-zinc-500" : "text-white"
+                                                            )}>
+                                                                Tavolo {tableGroup.tableName}
+                                                            </p>
+                                                            {tableGroup.roomName && (
+                                                                <p className="text-xs text-zinc-500 flex items-center gap-1">
+                                                                    <House size={10} />
+                                                                    {tableGroup.roomName}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
-                                                    <h4 className="font-bold text-lg text-white mb-1 leading-tight">{item.dish?.name}</h4>
-                                                    {item.note && (
-                                                        <p className="text-sm text-amber-500/80 italic mb-2">Note: {item.note}</p>
-                                                    )}
-                                                    <p className="text-xs text-zinc-500">Quantità: <span className="text-white font-bold">{item.quantity}</span></p>
+                                                    <div className="flex items-center gap-2">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={cn(
+                                                                "text-[10px] font-bold",
+                                                                tableGroup.allDelivered
+                                                                    ? "border-zinc-600 text-zinc-500"
+                                                                    : "border-amber-500/40 text-amber-400"
+                                                            )}
+                                                        >
+                                                            {tableGroup.items.filter(i => !i.isDelivered).length} da servire
+                                                        </Badge>
+                                                    </div>
                                                 </div>
 
-                                                {/* Action */}
-                                                <div className="flex flex-col justify-center">
-                                                    <Button
-                                                        className="h-12 w-12 rounded-full bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 p-0"
-                                                        onClick={() => handleMarkAsDelivered(item.order_id, item.id)}
-                                                    >
-                                                        <Check size={24} weight="bold" />
-                                                    </Button>
+                                                {/* Dishes in this table group */}
+                                                <div className="divide-y divide-white/5">
+                                                    {tableGroup.items.map(item => (
+                                                        <div
+                                                            key={item.id}
+                                                            className={cn(
+                                                                "p-4 flex gap-4 transition-all duration-300",
+                                                                item.isDelivered && "opacity-40"
+                                                            )}
+                                                        >
+                                                            {/* Left stripe */}
+                                                            <div className={cn(
+                                                                "w-1 rounded-full shrink-0 self-stretch",
+                                                                item.isDelivered ? "bg-zinc-600" : "bg-amber-500"
+                                                            )} />
+
+                                                            {/* Content */}
+                                                            <div className="flex-1 min-w-0">
+                                                                <h4 className={cn(
+                                                                    "font-bold text-base leading-tight mb-0.5",
+                                                                    item.isDelivered ? "line-through text-zinc-500" : "text-white"
+                                                                )}>
+                                                                    {item.dish?.name || 'Piatto'}
+                                                                </h4>
+                                                                <p className="text-xs text-zinc-500 mb-1">
+                                                                    Quantità: <span className={item.isDelivered ? "text-zinc-600" : "text-white font-bold"}>{item.quantity}</span>
+                                                                    <span className="mx-2 text-zinc-700">·</span>
+                                                                    {new Date(item.created_at || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </p>
+                                                                {item.note && (
+                                                                    <p className="text-xs text-amber-500/70 italic">Note: {item.note}</p>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Action button */}
+                                                            <div className="flex flex-col justify-center shrink-0">
+                                                                {item.isDelivered ? (
+                                                                    <div className="h-11 w-11 rounded-full bg-zinc-700/40 flex items-center justify-center">
+                                                                        <Check size={20} weight="bold" className="text-zinc-500" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <Button
+                                                                        className="h-11 w-11 rounded-full bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 p-0"
+                                                                        onClick={() => handleMarkAsDelivered(item.order_id, item.id)}
+                                                                    >
+                                                                        <Check size={20} weight="bold" />
+                                                                    </Button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            </div>
-                                        </div>
-                                    ))
+                                            </motion.div>
+                                        ))}
+                                    </AnimatePresence>
                                 )}
                             </div>
                         </div>

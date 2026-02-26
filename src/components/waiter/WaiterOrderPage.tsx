@@ -64,6 +64,9 @@ const WaiterOrderPage = () => {
     const [confirmActionType, setConfirmActionType] = useState<'standard' | 'delivered'>('standard')
     const [itemToMarkDelivered, setItemToMarkDelivered] = useState<number | null>(null)
 
+    // Cooking times
+    const [cookingTimesMap, setCookingTimesMap] = useState<Record<string, number>>({})
+
     // Refs for scrolling
     const categoryScrollRef = useRef<HTMLDivElement>(null)
 
@@ -99,6 +102,18 @@ const WaiterOrderPage = () => {
                     const allDishes = await DatabaseService.getDishes(restaurantId)
                     // Relaxed filter: show providing is_available is not explicitly false
                     setDishes(allDishes.filter(d => d.is_available !== false))
+
+                    // Fetch cooking times if enabled
+                    if ((rest as any)?.show_cooking_times) {
+                        const { data: timesData } = await supabase.rpc('get_dish_avg_cooking_times', { p_restaurant_id: restaurantId })
+                        if (timesData) {
+                            const map: Record<string, number> = {}
+                            timesData.forEach((row: { dish_id: string, avg_minutes: number }) => {
+                                map[row.dish_id] = row.avg_minutes
+                            })
+                            setCookingTimesMap(map)
+                        }
+                    }
                 }
 
             } catch (error) {
@@ -488,6 +503,11 @@ const WaiterOrderPage = () => {
                                         <span className="text-amber-500 font-bold text-sm whitespace-nowrap">€{dish.price.toFixed(2)}</span>
                                     </div>
                                     <p className="text-zinc-500 text-xs line-clamp-1 mt-0.5">{dish.description}</p>
+                                    {(restaurant as any)?.show_cooking_times && cookingTimesMap[dish.id] != null && cookingTimesMap[dish.id] > 0 && (
+                                        <p className="text-zinc-500 text-xs mt-0.5 flex items-center gap-1">
+                                            <span>⏱</span>~{cookingTimesMap[dish.id]} min
+                                        </p>
+                                    )}
                                     {dish.allergens && dish.allergens.length > 0 && (
                                         <div className="flex gap-1 mt-1.5 overflow-hidden">
                                             {dish.allergens.map(a => (

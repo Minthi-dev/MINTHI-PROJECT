@@ -61,7 +61,11 @@ export function useRestaurantLogic(restaurantId: string) {
     }
 
     const updateOrderItemStatus = async (orderId: string, itemId: string, status: OrderItem['status']) => {
-        await DatabaseService.updateOrderItem(itemId, { status })
+        const updates: any = { status }
+        if (status === 'READY') {
+            updates.ready_at = new Date().toISOString()
+        }
+        await DatabaseService.updateOrderItem(itemId, updates)
     }
 
     const updateTableStatus = async (tableId: string, status: Table['status']) => {
