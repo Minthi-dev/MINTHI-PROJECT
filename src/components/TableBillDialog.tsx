@@ -252,7 +252,6 @@ export default function TableBillDialog({
                             dish_id: originalItem.dish_id,
                             course_number: originalItem.course_number,
                             note: originalItem.note,
-                            price: originalItem.price,
                             quantity: countToPay,
                             status: 'PAID'
                         })

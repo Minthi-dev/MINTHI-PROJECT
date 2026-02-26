@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import { Trash, MagnifyingGlass as Search, Check, Clock, ArrowRight, Users, ChatText } from '@phosphor-icons/react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -298,7 +299,13 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
         const startMinutes = hours * 60 + minutes
 
         // Use configurable duration from settings
-        const duration = reservationDuration
+        // For "infinite" (9999), extend to end of closing time
+        let duration = reservationDuration
+        if (reservationDuration >= 9999) {
+          const [cH, cM] = closingTime.split(':').map(Number)
+          const closingMinutes = cH * 60 + cM
+          duration = Math.max(60, closingMinutes - startMinutes)
+        }
 
         return {
           booking,
@@ -1249,19 +1256,25 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
             </div>
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2.5">
-                <Label htmlFor="res-duration" className="text-zinc-400">Durata (Minuti)</Label>
-                <div className="relative">
-                  <Input
-                    id="res-duration"
-                    type="number"
-                    step="15"
-                    min="15"
-                    value={newReservation.duration}
-                    onChange={(e) => setNewReservation(prev => ({ ...prev, duration: parseInt(e.target.value) || 120 }))}
-                    className="bg-zinc-900 border-zinc-800 pl-9"
-                  />
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
-                </div>
+                <Label htmlFor="res-duration" className="text-zinc-400">Durata</Label>
+                <Select
+                  value={String(newReservation.duration)}
+                  onValueChange={(val) => setNewReservation(prev => ({ ...prev, duration: parseInt(val) }))}
+                >
+                  <SelectTrigger className="bg-zinc-900 border-zinc-800">
+                    <Clock className="mr-2 text-zinc-500" size={16} />
+                    <SelectValue placeholder="Durata" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                    <SelectItem value="60">1 ora</SelectItem>
+                    <SelectItem value="90">1 ora 30 min</SelectItem>
+                    <SelectItem value="120">2 ore</SelectItem>
+                    <SelectItem value="150">2 ore 30 min</SelectItem>
+                    <SelectItem value="180">3 ore</SelectItem>
+                    <SelectItem value="240">4 ore</SelectItem>
+                    <SelectItem value="9999">Fino a fine servizio</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <Button onClick={handleCreateReservation} className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold shadow-lg shadow-amber-500/10">

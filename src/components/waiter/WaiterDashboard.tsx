@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { motion, AnimatePresence } from 'framer-motion'
 import TableBillDialog from '../TableBillDialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu' // Restored
+import { soundManager } from '../../utils/SoundManager'
 
 interface WaiterDashboardProps {
     user: any
@@ -65,6 +66,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const [isEditRoomDialogOpen, setIsEditRoomDialogOpen] = useState(false)
     const [roomToEdit, setRoomToEdit] = useState<Room | null>(null)
     const [newRoomName, setNewRoomName] = useState('')
+
+    // Table Activation Dialog State
+    const [isActivateDialogOpen, setIsActivateDialogOpen] = useState(false)
+    const [tableToActivate, setTableToActivate] = useState<Table | null>(null)
+    const [activateCustomerCount, setActivateCustomerCount] = useState('2')
+    const [activateAyceEnabled, setActivateAyceEnabled] = useState(false)
+    const [activateCopertoEnabled, setActivateCopertoEnabled] = useState(false)
 
     const handleQuickOrderClick = (table: Table) => {
         navigate(`/waiter/table/${table.id}/order`)
@@ -260,9 +268,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         return true
     })
 
-    // Sound Logic for "Ready" items AND Assistance Requests
+    // Sound Logic for "Ready" items, New Orders AND Assistance Requests
     const prevReadyCountRef = useRef(0)
     const prevAssistanceCountRef = useRef(0)
+    const prevOrderCountRef = useRef(0)
     const isFirstLoadRef = useRef(true)
 
     useEffect(() => {
@@ -273,26 +282,49 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }, 0)
 
         const currentAssistanceCount = assistanceRequests.length
+        const currentOrderCount = activeOrders.length
 
         if (isFirstLoadRef.current) {
             prevReadyCountRef.current = currentReadyCount
             prevAssistanceCountRef.current = currentAssistanceCount
+            prevOrderCountRef.current = currentOrderCount
             isFirstLoadRef.current = false
             return
         }
 
+        // Check for new Orders
+        if (currentOrderCount > prevOrderCountRef.current) {
+            soundManager.play('chime')
+            toast.info(`Nuovo ordine ricevuto!`, {
+                icon: '📋',
+                duration: 5000,
+                style: { background: '#1e1b4b', border: '1px solid #6366f1', color: '#c7d2fe' }
+            })
+        }
+        prevOrderCountRef.current = currentOrderCount
+
         // Check for new Ready Items
         if (currentReadyCount > prevReadyCountRef.current) {
-            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3')
-            audio.play().catch(console.error)
-            toast.success('Ci sono piatti pronti da servire!', { icon: '🔔' })
+            soundManager.play('kitchen-bell')
+            // Play a second time after short delay for emphasis
+            setTimeout(() => soundManager.play('success'), 400)
+            toast.success('Ci sono piatti pronti da servire!', {
+                icon: '🔔',
+                duration: 6000,
+                style: { background: '#422006', border: '1px solid #f59e0b', color: '#fbbf24' }
+            })
         }
 
         // Check for new Assistance Requests
         if (currentAssistanceCount > prevAssistanceCountRef.current) {
-            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3') // You might want a different sound
-            audio.play().catch(console.error)
-            toast.info('Nuova richiesta assistenza al tavolo!', { icon: '👋' })
+            soundManager.play('alert')
+            setTimeout(() => soundManager.play('alert'), 500)
+            setTimeout(() => soundManager.play('alert'), 1000)
+            toast.error('Nuova richiesta assistenza al tavolo!', {
+                icon: '🚨',
+                duration: 10000,
+                style: { background: '#450a0a', border: '1px solid #ef4444', color: '#fca5a5' }
+            })
         }
 
         prevReadyCountRef.current = currentReadyCount
@@ -442,23 +474,36 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
     }
 
-    // Activate a free table (create session)
+    // Open activation dialog for a free table
     const activateTable = async (table: Table) => {
-        if (!restaurantId) return
+        setTableToActivate(table)
+        setActivateCustomerCount(String(table.seats || 2))
+        setActivateAyceEnabled(restaurant?.ayce_enabled || false)
+        setActivateCopertoEnabled(restaurant?.coperto_enabled || false)
+        setIsActivateDialogOpen(true)
+    }
+
+    // Confirm table activation with collected data
+    const confirmActivateTable = async () => {
+        if (!restaurantId || !tableToActivate) return
         setActivatingTable(true)
         try {
             const pin = Math.floor(1000 + Math.random() * 9000).toString()
             const newSession = await DatabaseService.createSession({
-                table_id: table.id,
+                table_id: tableToActivate.id,
                 restaurant_id: restaurantId,
                 status: 'OPEN',
                 session_pin: pin,
                 opened_at: new Date().toISOString(),
-                customer_count: table.seats || 2
+                customer_count: parseInt(activateCustomerCount) || 2,
+                ayce_enabled: activateAyceEnabled,
+                coperto_enabled: activateCopertoEnabled
             })
             setSessions(prev => [...prev, newSession])
-            toast.success(`Tavolo ${table.number} attivato! PIN: ${pin}`)
+            toast.success(`Tavolo ${tableToActivate.number} attivato! PIN: ${pin}`)
             setIsTableModalOpen(false)
+            setIsActivateDialogOpen(false)
+            setTableToActivate(null)
             refreshData()
         } catch (error) {
             console.error('Error activating table:', error)
@@ -1244,6 +1289,76 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             </>
                         )
                     })()}
+                </DialogContent>
+            </Dialog>
+
+            {/* Table Activation Dialog */}
+            <Dialog open={isActivateDialogOpen} onOpenChange={setIsActivateDialogOpen}>
+                <DialogContent className="sm:max-w-md w-[95vw] bg-zinc-950 border-zinc-800 text-zinc-100">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Users size={20} className="text-amber-500" />
+                            Attiva Tavolo {tableToActivate?.number}
+                        </DialogTitle>
+                        <DialogDescription>Configura il tavolo prima di attivarlo</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-5 py-4">
+                        <div className="space-y-2">
+                            <Label className="text-zinc-400">Numero Persone</Label>
+                            <Input
+                                type="number"
+                                min="1"
+                                max="50"
+                                value={activateCustomerCount}
+                                onChange={(e) => setActivateCustomerCount(e.target.value)}
+                                className="bg-zinc-900 border-zinc-800 h-12 text-lg text-center"
+                            />
+                        </div>
+                        {restaurant?.ayce_enabled && (
+                            <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/50 border border-white/5">
+                                <div>
+                                    <p className="font-medium">AYCE (All You Can Eat)</p>
+                                    <p className="text-xs text-zinc-500">Attiva il menu AYCE per questo tavolo</p>
+                                </div>
+                                <Button
+                                    variant={activateAyceEnabled ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => setActivateAyceEnabled(!activateAyceEnabled)}
+                                    className={activateAyceEnabled ? "bg-amber-500 hover:bg-amber-600 text-black" : "border-zinc-700"}
+                                >
+                                    {activateAyceEnabled ? 'Attivo' : 'Disattivo'}
+                                </Button>
+                            </div>
+                        )}
+                        {restaurant?.coperto_enabled && (
+                            <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/50 border border-white/5">
+                                <div>
+                                    <p className="font-medium">Coperto</p>
+                                    <p className="text-xs text-zinc-500">Applica il coperto a questo tavolo</p>
+                                </div>
+                                <Button
+                                    variant={activateCopertoEnabled ? "default" : "outline"}
+                                    size="sm"
+                                    onClick={() => setActivateCopertoEnabled(!activateCopertoEnabled)}
+                                    className={activateCopertoEnabled ? "bg-amber-500 hover:bg-amber-600 text-black" : "border-zinc-700"}
+                                >
+                                    {activateCopertoEnabled ? 'Attivo' : 'Disattivo'}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="outline" onClick={() => setIsActivateDialogOpen(false)} className="border-zinc-700">
+                            Annulla
+                        </Button>
+                        <Button
+                            onClick={confirmActivateTable}
+                            disabled={activatingTable}
+                            className="bg-amber-500 hover:bg-amber-600 text-black font-bold"
+                        >
+                            {activatingTable ? 'Attivazione...' : 'Attiva Tavolo'}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

@@ -426,7 +426,7 @@ const CustomerMenuBase = () => {
         schema: 'public',
         table: 'table_sessions',
         filter: `table_id=eq.${tableId}`
-      }, (payload) => {
+      }, async (payload) => {
         if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
           const session = payload.new as any
           if (session.status === 'OPEN') {
@@ -436,11 +436,29 @@ const CustomerMenuBase = () => {
               joinSession(tableId, restaurantId)
             }
           } else if (session.status === 'CLOSED' || session.status === 'PAID') {
-            setIsTableActive(false)
+            // Instead of immediately setting inactive, re-query for any OTHER open sessions
+            // This prevents race conditions when table is closed and immediately reopened
+            const { data: openSession } = await supabase
+              .from('table_sessions')
+              .select('id')
+              .eq('table_id', tableId)
+              .eq('status', 'OPEN')
+              .maybeSingle()
+            setIsTableActive(!!openSession)
+            if (openSession && !isAuthenticated && restaurantId) {
+              joinSession(tableId, restaurantId)
+            }
           }
         }
         if (payload.eventType === 'DELETE') {
-          setIsTableActive(false)
+          // Re-query instead of assuming no sessions exist
+          const { data: openSession } = await supabase
+            .from('table_sessions')
+            .select('id')
+            .eq('table_id', tableId)
+            .eq('status', 'OPEN')
+            .maybeSingle()
+          setIsTableActive(!!openSession)
         }
       })
       .subscribe()
@@ -498,13 +516,9 @@ const CustomerMenuBase = () => {
               const currentlyClosed = !isRestaurantOpen(restaurant)
               setIsClosed(currentlyClosed)
 
-              if (restaurant.view_only_menu_enabled || currentlyClosed) {
+              if (restaurant.view_only_menu_enabled === true) {
                 setIsViewOnly(true)
-                setIsAuthenticated(true) // Bypass PIN
-                // We don't join session here because we don't need a session to view menu? 
-                // Actually, we might still want to join if a session exists to show 'orders' if any?
-                // But user requirement says: "valid only for visualization... no PIN required".
-                // So we treat it as authenticated but restricted.
+                setIsAuthenticated(true) // Bypass PIN for view-only mode only
               }
             }
 

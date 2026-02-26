@@ -153,7 +153,9 @@ const PublicReservationPage = () => {
                     ? activeTables.reduce((sum, t) => sum + (t.seats || 4), 0)
                     : 50
 
-                const reservationDuration = restaurant.reservation_duration || 120
+                // If reservation_duration is 9999 (infinite/until end of service), use 240 for slot calculation on public page
+                const rawDuration = restaurant.reservation_duration || 120
+                const reservationDuration = rawDuration >= 9999 ? 240 : rawDuration
 
                 const checkAvailable = (slotTime: string) => {
                     const [sH, sM] = slotTime.split(':').map(Number)
@@ -286,7 +288,8 @@ const PublicReservationPage = () => {
 
             const activeTables = allTables?.filter((t: any) => t.is_active !== false) || []
             const bookingStart = bookingDate.getTime()
-            const bookingEnd = bookingStart + (restaurant.reservation_duration || 120) * 60 * 1000
+            const resDur = (restaurant.reservation_duration || 120) >= 9999 ? 240 : (restaurant.reservation_duration || 120)
+            const bookingEnd = bookingStart + resDur * 60 * 1000
 
             // Filter tables by capacity and availability
             const suitableTables = activeTables
@@ -295,7 +298,8 @@ const PublicReservationPage = () => {
                     // Check if table has any conflicting bookings
                     const conflicts = dayBookings?.filter((b: any) => b.table_id === t.id).some((b: any) => {
                         const bStart = new Date(b.date_time).getTime()
-                        const bEnd = bStart + (restaurant.reservation_duration || 120) * 60 * 1000
+                        const bDur = (restaurant.reservation_duration || 120) >= 9999 ? 240 : (restaurant.reservation_duration || 120)
+                        const bEnd = bStart + bDur * 60 * 1000
                         return (bookingStart < bEnd && bookingEnd > bStart)
                     })
                     return !conflicts

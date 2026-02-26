@@ -770,6 +770,13 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Notes display */}
+            {selectedBooking?.notes && (
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                <p className="text-xs font-semibold text-amber-400 mb-1">📝 Note</p>
+                <p className="text-sm text-zinc-300">{selectedBooking.notes}</p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="move-date">Nuova Data</Label>
               <Input
@@ -831,11 +838,14 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
             </DialogDescription>
           </DialogHeader>
           {selectedBooking && (
-            <div className="bg-muted/30 p-4 rounded-lg">
+            <div className="bg-muted/30 p-4 rounded-lg space-y-1">
               <p><strong>Cliente:</strong> {selectedBooking.name}</p>
               <p><strong>Data:</strong> {formatDate(selectedBooking.date_time.split('T')[0])}</p>
               <p><strong>Orario:</strong> {selectedBooking.date_time.split('T')[1].substring(0, 5)}</p>
               <p><strong>Tavolo:</strong> {getTableName(selectedBooking.table_id)}</p>
+              {selectedBooking.notes && (
+                <p className="pt-1"><strong>Note:</strong> <span className="text-amber-400">{selectedBooking.notes}</span></p>
+              )}
             </div>
           )}
           <div className="flex gap-3 justify-end pt-4">

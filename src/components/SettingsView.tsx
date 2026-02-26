@@ -706,6 +706,8 @@ export function SettingsView({
                                         <SelectItem value="120">2 Ore (Standard)</SelectItem>
                                         <SelectItem value="150">2 h 30 min</SelectItem>
                                         <SelectItem value="180">3 Ore</SelectItem>
+                                        <SelectItem value="240">4 Ore</SelectItem>
+                                        <SelectItem value="9999">Fino a fine servizio</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

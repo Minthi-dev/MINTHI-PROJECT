@@ -323,9 +323,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           if (suppression) {
             try {
               const sup = JSON.parse(suppression)
-              if (sup.day === scheduleDay && sup.mealType === currentMealType) {
+              // Use timestamp-based expiry: suppression valid for 6 hours from when it was set
+              const suppressedAt = sup.timestamp ? new Date(sup.timestamp).getTime() : 0
+              const hoursSinceSuppression = (now.getTime() - suppressedAt) / (1000 * 60 * 60)
+              if (hoursSinceSuppression < 6 && sup.day === scheduleDay && (sup.mealType === currentMealType || currentMealType === null)) {
                 isSuppressedForNow = true;
-              } else {
+              } else if (hoursSinceSuppression >= 6) {
                 localStorage.removeItem(suppressionKey)
               }
             } catch { localStorage.removeItem(suppressionKey) }
@@ -349,19 +352,19 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         }
 
         // EARLY SUPPRESSION CHECK FOR MULTIPLE MENUS:
-        const suppressionKey = 'easyfood_menu_suppressed'
-        const suppression = localStorage.getItem(suppressionKey)
-        if (suppression) {
+        const suppressionKey2 = 'easyfood_menu_suppressed'
+        const suppression2 = localStorage.getItem(suppressionKey2)
+        if (suppression2) {
           try {
-            const sup = JSON.parse(suppression)
-            // If suppressed for the same day+mealType, skip entirely
-            if (sup.day === scheduleDay && sup.mealType === currentMealType) {
+            const sup = JSON.parse(suppression2)
+            const suppressedAt = sup.timestamp ? new Date(sup.timestamp).getTime() : 0
+            const hoursSinceSuppression = (now.getTime() - suppressedAt) / (1000 * 60 * 60)
+            if (hoursSinceSuppression < 6 && sup.day === scheduleDay && (sup.mealType === currentMealType || currentMealType === null)) {
               return
-            } else {
-              // Different meal/day — clear the suppression
-              localStorage.removeItem(suppressionKey)
+            } else if (hoursSinceSuppression >= 6) {
+              localStorage.removeItem(suppressionKey2)
             }
-          } catch { localStorage.removeItem(suppressionKey) }
+          } catch { localStorage.removeItem(suppressionKey2) }
         }
 
         if (
@@ -2719,7 +2722,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           let mealType = 'lunch'
                           if (dinnerMin > 0 && currentMinutes >= dinnerMin) mealType = 'dinner'
                           else if (lunchMin > 0 && currentMinutes >= lunchMin) mealType = 'lunch'
-                          localStorage.setItem('easyfood_menu_suppressed', JSON.stringify({ day: dayOfWeek, mealType }))
+                          localStorage.setItem('easyfood_menu_suppressed', JSON.stringify({ day: dayOfWeek, mealType, timestamp: now.toISOString() }))
                           // Also clear the lastScheduledMenuRef so it doesn't think it's already applied
                           lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
                         }}
