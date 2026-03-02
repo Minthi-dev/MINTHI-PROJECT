@@ -746,7 +746,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
             </div>
 
             {/* BODY: TABLES & GRID */}
-            <div ref={scrollContainerRef} className="timeline-scroll-container overflow-y-auto max-h-[60vh] scrollbar-thin scrollbar-thumb-white/10 relative">
+            <div ref={scrollContainerRef} className="timeline-scroll-container overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 relative pt-8" style={{ maxHeight: 'calc(100vh - 280px)' }}>
               {sortedTables.map((table, tableIndex) => {
                 // Status Logic
                 const now = new Date()
@@ -819,7 +819,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                             width: `${getBlockStyle(draftSlot.startMinutes, draftSlot.duration).width}`
                           }}
                         >
-                          <div className="absolute -top-6 left-0 bg-emerald-500 text-black text-xs px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap opacity-100 transition-opacity">
+                          <div className="absolute -top-7 left-0 bg-emerald-500 text-black text-xs px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap opacity-100 transition-opacity z-[60]">
                             {minutesToTime(draftSlot.startMinutes)} - {minutesToTime(draftSlot.startMinutes + draftSlot.duration)}
                           </div>
                         </div>
@@ -834,7 +834,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                             width: `${getBlockStyle(hoveredSlot.startMinutes, reservationDuration).width}`
                           }}
                         >
-                          <div className="absolute -top-6 left-0 bg-amber-500 text-black text-xs px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap">
+                          <div className="absolute -top-7 left-0 bg-amber-500 text-black text-xs px-1.5 py-0.5 rounded shadow-sm font-bold whitespace-nowrap z-[60]">
                             {hoveredSlot.time}
                           </div>
                         </div>
