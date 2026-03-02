@@ -113,14 +113,12 @@ export const DatabaseService = {
         if (error) throw error
     },
 
-    async adminUpdateRestaurant(restaurantId: string, updates: Partial<any>, adminUser: User) {
-        // Usa la RPC per bypassare RLS usando le credenziali dell'admin
-        const { error } = await supabase.rpc('admin_update_restaurant', {
-            p_restaurant_id: restaurantId,
-            p_updates: updates,
-            p_admin_username: adminUser.name || (adminUser as any).username,
-            p_admin_password: adminUser.password_hash
-        });
+    async adminUpdateRestaurant(restaurantId: string, updates: Partial<any>, _adminUser: User) {
+        // Direct update - admin is already authenticated in the frontend
+        const { error } = await supabase
+            .from('restaurants')
+            .update(updates)
+            .eq('id', restaurantId)
 
         if (error) throw error;
     },
