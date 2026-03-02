@@ -1,22 +1,40 @@
-import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
-dotenv.config();
+import { createClient } from '@supabase/supabase-js'
+import bcrypt from 'bcryptjs'
+import { randomUUID } from 'crypto'
 
-const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+const supabaseUrl = 'https://bueovvvrgpwdcpkyocac.supabase.co'
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1ZW92dnZyZ3B3ZGNwa3lvY2FjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NDU1MjQsImV4cCI6MjA4ODAyMTUyNH0.lHW63WZhs9tT8q6AkvV_YqNJ3vmJyaqocKqZO4pJomE'
 
-async function test() {
-  const { data, error } = await supabase
-    .from('restaurant_staff')
-    .select('id, restaurant_id, name, username, password, is_active, restaurant:restaurants(id, name, waiter_mode_enabled, allow_waiter_payments, enable_course_splitting, cover_charge_per_person, all_you_can_eat, weekly_coperto, weekly_ayce, weekly_service_hours, lunch_time_start, lunch_time_end, dinner_time_start, dinner_time_end, view_only_menu_enabled, menu_style, menu_primary_color)')
-    .eq('username', 'temple')
-    .eq('is_active', true)
-    .single();
+const supabase = createClient(supabaseUrl, supabaseKey)
+
+async function seed() {
+  console.log('=== SEEDING ADMIN USER ===')
+
+  const adminId = randomUUID()
+  const passwordHash = await bcrypt.hash('minthi2026!', 10)
+
+  const { error } = await supabase.from('users').insert({
+    id: adminId,
+    name: 'admin.minthi',
+    email: 'admin@minthi.it',
+    role: 'ADMIN',
+    password_hash: passwordHash
+  })
 
   if (error) {
-    console.error("SUPABASE ERROR:", error);
-  } else {
-    console.log("SUCCESS:", data);
+    console.error('ERROR inserting admin:', error.message)
+    return
   }
+
+  console.log('Admin user created successfully!')
+  console.log('  Username: admin.minthi')
+  console.log('  Email: admin@minthi.it')
+  console.log('  Role: ADMIN')
+  console.log('  ID:', adminId)
+
+  // Verify
+  const { data } = await supabase.from('users').select('id, name, email, role').eq('id', adminId)
+  console.log('\nVerification:', JSON.stringify(data, null, 2))
 }
 
-test();
+seed()
