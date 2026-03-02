@@ -1060,8 +1060,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
 
     DatabaseService.createTable(newTable)
-      .then((created) => {
-        setTables?.((prev = []) => [...prev, created as Table])
+      .then(() => {
         setNewTableName('')
         setNewTableSeats(4)
         setNewTableRoomId('all')
