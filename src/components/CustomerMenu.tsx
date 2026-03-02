@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useSession } from '../context/SessionContext'
 
@@ -201,8 +201,8 @@ function SortableDishItem({ item, courseNum, theme }: { item: CartItem, courseNu
   )
 }
 
-// Extract DishCard outside to prevent re-renders - Themed Design
-const DishCard = ({
+// Extract DishCard outside to prevent re-renders - Themed Design + React.memo
+const DishCard = React.memo(({
   dish,
   index,
   onSelect,
@@ -278,7 +278,7 @@ const DishCard = ({
       </Button>
     )}
   </motion.div>
-)
+))
 
 // Helper for empty course drop zone
 function DroppableCoursePlaceholder({ id, theme }: { id: string, theme: typeof MENU_COLORS }) {
@@ -372,6 +372,10 @@ const CustomerMenuBase = () => {
     joinSession,
     loading: sessionLoading
   } = useSession()
+
+  // Timer cleanup for this component scope
+  const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { return () => { if (pinTimerRef.current) clearTimeout(pinTimerRef.current) } }, [])
 
   // Local state for PIN entry/validation
   const [pin, setPin] = useState(['', '', '', '']) // 4 digit pin state
@@ -757,6 +761,13 @@ const CustomerMenuBase = () => {
           localStorage.setItem('customerSessionId', session.id)
           toast.success("Accesso effettuato!")
           return
+        } else {
+          toast.dismiss()
+          setPinError(true)
+          toast.error("PIN non valido")
+          pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
+          setPin(['', '', '', ''])
+          return
         }
       } else {
         toast.error("Dati tavolo mancanti. Riprova a scansionare il QR.")
@@ -772,7 +783,7 @@ const CustomerMenuBase = () => {
     } else if (activeSession) {
       setPinError(true)
       toast.error("PIN non valido")
-      setTimeout(() => setPinError(false), 2000)
+      pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
       setPin(['', '', '', ''])
     }
   }
@@ -1021,8 +1032,14 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [currentCourse, setCurrentCourse] = useState(1)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [isCartAnimating, setIsCartAnimating] = useState(false)
+  const timersRef = React.useRef<ReturnType<typeof setTimeout>[]>([])
   const [activeWaitCourse, setActiveWaitCourse] = useState(1) // Waiter Mode: Selected course for new items
   const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Default to true
+
+  // Cleanup all pending timers on unmount
+  React.useEffect(() => {
+    return () => { timersRef.current.forEach(t => clearTimeout(t)) }
+  }, [])
 
   // Fixed amber dark theme
   const theme = MENU_COLORS
@@ -1057,7 +1074,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
       // 30 second cooldown to prevent spam
       setCallWaiterDisabled(true)
-      setTimeout(() => setCallWaiterDisabled(false), 30000)
+      timersRef.current.push(setTimeout(() => setCallWaiterDisabled(false), 30000))
     } catch (err) {
       console.error('Error calling waiter:', err)
       toast.error("Errore. Riprova.")
@@ -1067,11 +1084,32 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   // Helper to generate PIN
   const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString()
 
-  // --- Realtime Order Updates ---
+  // Definito prima degli useEffect che lo referenziano
+  const fetchOrders = React.useCallback(async () => {
+    if (!sessionId) return
+
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at, dish:dishes(id, name, price, category_id, image_url))')
+      .eq('table_session_id', sessionId)
+      .order('created_at', { ascending: false })
+
+    if (orders) setPreviousOrders(orders as any[])
+  }, [sessionId])
+
+  // --- Realtime Order Updates (unica subscription per orders + fetch iniziale) ---
   useEffect(() => {
     if (!sessionId) return
 
-    // 1. Subscribe to new Orders (to fetch them when created)
+    // Fetch iniziale ordini
+    fetchOrders()
+
+    let orderDebounce: ReturnType<typeof setTimeout> | undefined
+    const debouncedFetchOrders = () => {
+      if (orderDebounce) clearTimeout(orderDebounce)
+      orderDebounce = setTimeout(() => fetchOrders(), 300)
+    }
+
     const orderChannel = supabase
       .channel(`orders-watch:${sessionId}`)
       .on('postgres_changes', {
@@ -1080,14 +1118,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         table: 'orders',
         filter: `table_session_id=eq.${sessionId}`
       }, () => {
-        fetchOrders()
+        debouncedFetchOrders()
       })
       .subscribe()
 
     return () => {
+      if (orderDebounce) clearTimeout(orderDebounce)
       supabase.removeChannel(orderChannel)
     }
-  }, [sessionId])
+  }, [sessionId, fetchOrders])
 
   // Order items subscription is set up below, after fetchOrders is defined
 
@@ -1109,6 +1148,12 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     if (!sessionId) return
     fetchCart()
 
+    let cartDebounce: ReturnType<typeof setTimeout> | undefined
+    const debouncedFetchCart = () => {
+      if (cartDebounce) clearTimeout(cartDebounce)
+      cartDebounce = setTimeout(() => fetchCart(), 300)
+    }
+
     const cartChannel = supabase
       .channel(`cart-watch:${sessionId}`)
       .on('postgres_changes', {
@@ -1117,11 +1162,12 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         table: 'cart_items',
         filter: `session_id=eq.${sessionId}`
       }, () => {
-        fetchCart()
+        debouncedFetchCart()
       })
       .subscribe()
 
     return () => {
+      if (cartDebounce) clearTimeout(cartDebounce)
       supabase.removeChannel(cartChannel)
     }
   }, [sessionId, fetchCart])
@@ -1150,9 +1196,9 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       // We already have restaurantId passed as prop which is consistent.
       // But let's re-fetch strictly by restaurant_id to be safe and consistent.
       const { data: tableData } = await supabase.from('tables').select('restaurant_id, number').eq('id', tableId).single()
-      const { data: restData } = await supabase.from('restaurants').select('*').eq('id', restaurantId).single()
-      const { data: catsData } = await supabase.from('categories').select('*').eq('restaurant_id', restaurantId).order('order', { ascending: true })
-      const { data: dishesData } = await supabase.from('dishes').select('*').eq('restaurant_id', restaurantId).eq('is_active', true)
+      const { data: restData } = await supabase.from('restaurants').select('id, name, enable_course_splitting, all_you_can_eat, ayce_price, ayce_max_orders, cover_charge_per_person, menu_style, menu_primary_color, view_only_menu_enabled, is_active, logo_url, weekly_coperto, weekly_ayce, weekly_service_hours').eq('id', restaurantId).single()
+      const { data: catsData } = await supabase.from('categories').select('id, name, restaurant_id, "order", created_at').eq('restaurant_id', restaurantId).order('order', { ascending: true })
+      const { data: dishesData } = await supabase.from('dishes').select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, is_available, short_code, exclude_from_all_you_can_eat, is_ayce, allergens').eq('restaurant_id', restaurantId).eq('is_active', true)
       if (tableData) setTableName(tableData.number || '')
       if (restData) {
         setRestaurantName(restData.name || '')
@@ -1267,35 +1313,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   const courseNumbers = useMemo(() => Object.keys(cartByCourse).map(Number).sort((a, b) => a - b), [cartByCourse])
 
-  const fetchOrders = React.useCallback(async () => {
-    if (!sessionId) return
-
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('*, items:order_items(*, dishes(*))')
-      .eq('table_session_id', sessionId)
-      .order('created_at', { ascending: false })
-
-    if (orders) setPreviousOrders(orders as any[])
-  }, [sessionId])
-
-  useEffect(() => {
-    fetchOrders()
-
-    // Real-time subscription for orders
-    const channel = supabase
-      .channel(`orders:${sessionId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `table_session_id=eq.${sessionId}` }, fetchOrders)
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [sessionId, fetchOrders])
-
   // Order Items updates (for status changes: SERVED, READY etc) — placed here since fetchOrders is now defined
   useEffect(() => {
     if (!sessionId || !restaurantId) return
+
+    let itemsDebounce: ReturnType<typeof setTimeout> | undefined
+    const debouncedFetchOrders = () => {
+      if (itemsDebounce) clearTimeout(itemsDebounce)
+      itemsDebounce = setTimeout(() => fetchOrders(), 500)
+    }
 
     const itemsChannel = supabase
       .channel(`order-items-watch:${sessionId}`)
@@ -1305,22 +1331,21 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         table: 'order_items',
         filter: `restaurant_id=eq.${restaurantId}`
       }, () => {
-        fetchOrders()
+        debouncedFetchOrders()
       })
       .subscribe()
 
     return () => {
+      if (itemsDebounce) clearTimeout(itemsDebounce)
       supabase.removeChannel(itemsChannel)
     }
   }, [sessionId, restaurantId, fetchOrders])
 
-  const quickAddToCart = (dish: Dish) => {
-    // OLD: Immediately added +1
-    // NEW Requirements: Always open popup
+  const quickAddToCart = React.useCallback((dish: Dish) => {
     setSelectedDish(dish)
     setDishQuantity(1)
     setDishNote('')
-  }
+  }, [])
 
   const handleAddClick = (dish: Dish, quantity: number, notes: string) => {
     // New UX: Always add to cart first, default to Course 1
@@ -1342,7 +1367,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
       if (quantity > 0) {
         setIsCartAnimating(true)
-        setTimeout(() => setIsCartAnimating(false), 500)
+        timersRef.current.push(setTimeout(() => setIsCartAnimating(false), 500))
         toast.success(`Aggiunto al carrello`, { position: 'top-center', duration: 1500, style: { background: '#10B981', color: '#fff', border: 'none' } })
       }
       setSelectedDish(null)
@@ -1489,6 +1514,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }
 
   const submitOrder = async () => {
+    if (isOrderSubmitting) return // Prevent double-submit
     if ((!activeSession && !isWaiterMode) || cart.length === 0 || !restaurantId) return
 
     setIsOrderSubmitting(true)
@@ -1690,7 +1716,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                       dish={dish}
                       index={index}
                       onSelect={setSelectedDish}
-                      onAdd={(d) => quickAddToCart(d)}
+                      onAdd={quickAddToCart}
                       isViewOnly={isViewOnly}
                       theme={theme}
                       cookingTime={(fullRestaurant as any)?.show_cooking_times ? cookingTimesMap[dish.id] : undefined}

@@ -66,19 +66,22 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
             .on(
                 'postgres_changes',
                 {
-                    event: 'UPDATE',
+                    event: '*',
                     schema: 'public',
                     table: 'table_sessions',
                     filter: `id=eq.${sessionId}`
                 },
                 (payload) => {
-                    const newStatus = payload.new.status;
-                    console.log('Session Status Update:', newStatus);
+                    if (payload.eventType === 'DELETE') {
+                        toast.info('Il tavolo è stato chiuso. Grazie della visita!');
+                        exitSession();
+                        return;
+                    }
+                    const newStatus = payload.new?.status;
 
                     if (newStatus === 'CLOSED' || newStatus === 'PAID') {
                         toast.info('Il tavolo è stato chiuso. Grazie della visita!');
-                        exitSession(); // Force logout
-                        // navigate('/'); // REMOVED: Stay on page to show PIN screen again
+                        exitSession();
                     } else {
                         setSessionStatus(newStatus);
                     }

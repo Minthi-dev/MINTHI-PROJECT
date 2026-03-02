@@ -80,7 +80,7 @@ export default function LoginPage({ onLogin }: Props) {
               restaurant_id: targetRestaurant.id
             }
 
-            localStorage.setItem('easyfood_user', JSON.stringify(waiterUser))
+            localStorage.setItem('minthi_user', JSON.stringify(waiterUser))
             onLogin(waiterUser)
             toast.success(`Benvenuto ${staffCredentials.name} - ${targetRestaurant.name}`)
             setIsLoading(false)
@@ -117,7 +117,7 @@ export default function LoginPage({ onLogin }: Props) {
             }
 
             // Always persist session to localStorage
-            localStorage.setItem('easyfood_user', JSON.stringify(waiterUser))
+            localStorage.setItem('minthi_user', JSON.stringify(waiterUser))
 
             onLogin(waiterUser)
             toast.success(`Benvenuto Staff - ${targetRestaurant.name}`)
@@ -152,7 +152,7 @@ export default function LoginPage({ onLogin }: Props) {
           const userWithRestaurant = { ...user, restaurant_id: userRestaurant.id }
 
           // Always persist session to localStorage
-          localStorage.setItem('easyfood_user', JSON.stringify(userWithRestaurant))
+          localStorage.setItem('minthi_user', JSON.stringify(userWithRestaurant))
 
           onLogin(userWithRestaurant)
           toast.success(`Benvenuto, ${userRestaurant.name}`)
@@ -160,7 +160,7 @@ export default function LoginPage({ onLogin }: Props) {
         }
 
         // Always persist session to localStorage
-        localStorage.setItem('easyfood_user', JSON.stringify(user))
+        localStorage.setItem('minthi_user', JSON.stringify(user))
 
         onLogin(user)
         toast.success(`Benvenuto ${user.name || 'Utente'}`)
@@ -209,17 +209,19 @@ export default function LoginPage({ onLogin }: Props) {
             initial={{ scale: 0, rotate: -20 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
-            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-zinc-900/50 border border-amber-500/20 text-amber-500 mb-6 shadow-[0_0_30px_-10px_rgba(245,158,11,0.3)] backdrop-blur-md"
+            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 mb-6 shadow-[0_0_30px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md"
           >
-            <Users weight="fill" size={32} />
+            <svg xmlns="http://www.000webhost.com" viewBox="0 0 256 256" width="36" height="36" fill="currentColor">
+              <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
+            </svg>
           </motion.div>
           <motion.h1
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-3xl font-light tracking-tight text-white"
+            className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1"
           >
-            Benvenuto in <span className="font-bold text-amber-500">EASYFOOD</span>
+            min<span className="font-bold text-emerald-400">thi</span>
           </motion.h1>
           <motion.p
             initial={{ opacity: 0 }}
@@ -312,7 +314,7 @@ export default function LoginPage({ onLogin }: Props) {
           transition={{ delay: 0.6 }}
           className="text-center text-[10px] text-zinc-700 mt-12 uppercase tracking-widest"
         >
-          Secured by EASYFOOD Systems
+          Secured by MINTHI Systems
         </motion.p>
       </motion.div>
     </div>

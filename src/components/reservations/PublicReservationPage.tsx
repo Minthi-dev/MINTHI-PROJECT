@@ -99,13 +99,13 @@ const PublicReservationPage = () => {
                 if (rest.enable_reservation_room_selection) {
                     const { data: r } = await supabase
                         .from('rooms')
-                        .select('*')
+                        .select('id, restaurant_id, name, is_active, "order"')
                         .eq('restaurant_id', restaurantId)
                     if (r) setRooms(r)
                     // 4. Fetch Tables to calculate capacity
                     const { data: t } = await supabase
                         .from('tables')
-                        .select('*')
+                        .select('id, number, restaurant_id, seats, room_id, is_active')
                         .eq('restaurant_id', restaurantId)
 
                     if (t) {
@@ -280,8 +280,8 @@ const PublicReservationPage = () => {
             // 1. Find a suitable table automatically
             // Need to fetch fresh tables and bookings for reliability
             const [{ data: allTables }, { data: dayBookings }] = await Promise.all([
-                supabase.from('tables').select('*').eq('restaurant_id', restaurant.id),
-                supabase.from('bookings').select('*').eq('restaurant_id', restaurant.id)
+                supabase.from('tables').select('id, number, restaurant_id, seats, room_id, is_active').eq('restaurant_id', restaurant.id),
+                supabase.from('bookings').select('id, restaurant_id, table_id, name, date_time, guests, duration, status').eq('restaurant_id', restaurant.id)
                     .gte('date_time', new Date(bookingDate).setHours(0, 0, 0, 0))
                     .lt('date_time', new Date(bookingDate).setHours(23, 59, 59, 999))
             ])
@@ -662,7 +662,7 @@ const PublicReservationPage = () => {
 
                 {/* FOOTER */}
                 <footer className="p-6 text-center">
-                    <p className="text-xs text-zinc-600">Powered by EASYFOOD</p>
+                    <p className="text-xs text-zinc-600">Powered by MINTHI</p>
                 </footer>
             </div>
 

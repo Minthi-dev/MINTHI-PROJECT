@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
@@ -18,6 +18,7 @@ import { Separator } from './ui/separator'
 import { ScrollArea } from './ui/scroll-area'
 import { Textarea } from './ui/textarea'
 import { DishPlaceholder } from './ui/DishPlaceholder'
+import { hashPassword } from '../utils/passwordUtils'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import {
@@ -62,7 +63,7 @@ import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { generatePdfFromElement } from '../utils/pdfUtils'
-import { useRestaurantLogic } from '../hooks/useRestaurantLogic'
+import { useRestaurantActions } from '../hooks/useRestaurantLogic'
 import { DatabaseService } from '../services/DatabaseService'
 import { useSupabaseData } from '../hooks/useSupabaseData'
 import { getCurrentCopertoPrice, getCurrentAyceSettings } from '../utils/pricingUtils'
@@ -150,6 +151,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const restaurantTables = tables || []
   const restaurantOrders = orders || []
   const restaurantCompletedOrders = useMemo(() => orders?.filter(o => o.status === 'completed') || [], [orders])
+
+  // Mappa piatti per categoria — evita O(categories × dishes) per render
+  const dishesByCategory = useMemo(() => {
+    const map = new Map<string, Dish[]>()
+    restaurantDishes.forEach(d => {
+      const list = map.get(d.category_id) || []
+      list.push(d)
+      map.set(d.category_id, list)
+    })
+    return map
+  }, [restaurantDishes])
 
   // Sound Settings State
   const [selectedReservationDate, setSelectedReservationDate] = useState(new Date())
@@ -271,7 +283,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         // Get full schedule details
         const { data: schedules } = await supabase
           .from('custom_menu_schedules')
-          .select('*')
+          .select('id, custom_menu_id, day_of_week, meal_type, start_time, end_time, is_active')
           .eq('is_active', true)
           .eq('day_of_week', scheduleDay)
           .in('custom_menu_id', allSchedules.map(s => s.custom_menu_id))
@@ -315,29 +327,25 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           }
 
           // EARLY SUPPRESSION CHECK:
-          // If we manually deactivated a scheduled menu in this same meal period,
-          // we do not want to automatically re-apply it until the next period.
-          const suppressionKey = 'easyfood_menu_suppressed'
+          // If we manually deactivated a scheduled menu, suppression lasts until end of current meal service.
+          const suppressionKey = 'minthi_menu_suppressed'
           const suppression = localStorage.getItem(suppressionKey)
           let isSuppressedForNow = false;
           if (suppression) {
             try {
               const sup = JSON.parse(suppression)
-              // Use timestamp-based expiry: suppression valid for 6 hours from when it was set
-              const suppressedAt = sup.timestamp ? new Date(sup.timestamp).getTime() : 0
-              const hoursSinceSuppression = (now.getTime() - suppressedAt) / (1000 * 60 * 60)
-              if (hoursSinceSuppression < 6 && sup.day === scheduleDay && (sup.mealType === currentMealType || currentMealType === null)) {
+              const expiresAt = sup.expiresAt ? new Date(sup.expiresAt).getTime() : 0
+              if (now.getTime() < expiresAt) {
                 isSuppressedForNow = true;
-              } else if (hoursSinceSuppression >= 6) {
+              } else {
                 localStorage.removeItem(suppressionKey)
               }
             } catch { localStorage.removeItem(suppressionKey) }
           }
 
           if (isSuppressedForNow) {
-            // We have actively suppressed the custom menu for this meal.
+            // We have actively suppressed the custom menu until service ends.
             // DO NOT process any new schedule activations.
-            // If there's an active menu from a previous cycle that we want to clear, ensure tracking is cleared.
             if (lastScheduledMenuRef.current.menuId) {
               lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
             }
@@ -352,16 +360,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         }
 
         // EARLY SUPPRESSION CHECK FOR MULTIPLE MENUS:
-        const suppressionKey2 = 'easyfood_menu_suppressed'
+        const suppressionKey2 = 'minthi_menu_suppressed'
         const suppression2 = localStorage.getItem(suppressionKey2)
         if (suppression2) {
           try {
             const sup = JSON.parse(suppression2)
-            const suppressedAt = sup.timestamp ? new Date(sup.timestamp).getTime() : 0
-            const hoursSinceSuppression = (now.getTime() - suppressedAt) / (1000 * 60 * 60)
-            if (hoursSinceSuppression < 6 && sup.day === scheduleDay && (sup.mealType === currentMealType || currentMealType === null)) {
+            const expiresAt = sup.expiresAt ? new Date(sup.expiresAt).getTime() : 0
+            if (now.getTime() < expiresAt) {
               return
-            } else if (hoursSinceSuppression >= 6) {
+            } else {
               localStorage.removeItem(suppressionKey2)
             }
           } catch { localStorage.removeItem(suppressionKey2) }
@@ -520,19 +527,31 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
     fetchOrders()
 
+    // Debounced fetch to avoid rapid re-fetches and ensure items are committed
+    let fetchTimeout: ReturnType<typeof setTimeout> | null = null
+    const debouncedFetch = () => {
+      if (fetchTimeout) clearTimeout(fetchTimeout)
+      fetchTimeout = setTimeout(() => fetchOrders(), 500)
+    }
+
     const channel = supabase
       .channel(`dashboard_orders_${restaurantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
-        fetchOrders()
+        debouncedFetch()
         // Play sound on new order using refs to avoid re-subscription
         if (payload.eventType === 'INSERT' && soundEnabledRef.current) {
           soundManager.play(selectedSoundRef.current)
           toast.info('Nuovo ordine ricevuto!', { icon: '🔔' })
         }
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
+        // Also refresh when order items change (new items added, status updated, etc.)
+        debouncedFetch()
+      })
       .subscribe()
 
     return () => {
+      if (fetchTimeout) clearTimeout(fetchTimeout)
       supabase.removeChannel(channel)
     }
   }, [restaurantId]) // Only re-subscribe if restaurantId changes
@@ -639,12 +658,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   // Timeline State
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
-  const refreshData = async () => {
-    // Basic wrapper to refresh data for the timeline
+  const refreshData = useCallback(async () => {
     refreshTables?.()
     refreshBookings?.()
     refreshRooms?.()
-  }
+    refreshSessions?.()
+  }, [refreshTables, refreshBookings, refreshRooms, refreshSessions])
 
   // Restaurant Settings State (initialized from DB)
   const [restaurantName, setRestaurantName] = useState(currentRestaurant?.name || '')
@@ -710,7 +729,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       setRestaurantName(currentRestaurant.name)
       setWaiterModeEnabled(currentRestaurant.waiter_mode_enabled || false)
       setAllowWaiterPayments(currentRestaurant.allow_waiter_payments || false)
-      setWaiterPassword(currentRestaurant.waiter_password || '')
+      setWaiterPassword('')
 
       setAyceEnabled(!!currentRestaurant.all_you_can_eat?.enabled)
       setAycePrice(currentRestaurant.all_you_can_eat?.pricePerPerson || 0)
@@ -728,7 +747,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
       setWaiterModeEnabled(currentRestaurant.waiter_mode_enabled || false)
       setAllowWaiterPayments(currentRestaurant.allow_waiter_payments || false)
-      setWaiterPassword(currentRestaurant.waiter_password || '')
+      setWaiterPassword('')
       setRestaurantName(currentRestaurant.name || '')
       setCourseSplittingEnabled(currentRestaurant.enable_course_splitting || false)
 
@@ -799,11 +818,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const saveWaiterPassword = async (password: string) => {
     if (!restaurantId || !password.trim()) return
-    // Update local state immediately so UI reflects the change
+    const hashedPw = await hashPassword(password)
+    // Update local state with original password for display
     setWaiterPassword(password)
     await DatabaseService.updateRestaurant({
       id: restaurantId,
-      waiter_password: password
+      waiter_password: hashedPw
     })
     toast.success('Password cameriere aggiornata')
     // Don't call refreshRestaurants() here as it can cause a race condition
@@ -1007,7 +1027,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }, [currentRestaurant])
 
-  const { updateOrderItemStatus, updateOrderStatus } = useRestaurantLogic(restaurantId)
+  const { updateOrderItemStatus, updateOrderStatus } = useRestaurantActions()
 
   useEffect(() => {
     if (activeTab === 'tables') {
@@ -1101,15 +1121,19 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     if (!table) return
 
     const isAyceEnabled = ayceEnabled
+    const currentAycePrice = currentRestaurant
+      ? getCurrentAyceSettings({ ...currentRestaurant, weekly_ayce: weeklyAyce } as any, lunchTimeStart, dinnerTimeStart).price
+      : (typeof aycePrice === 'string' ? parseFloat(aycePrice) : aycePrice)
+    const isAyceEffective = isAyceEnabled && (currentAycePrice || 0) > 0
     const price = typeof copertoPrice === 'string' ? parseFloat(copertoPrice) : copertoPrice
     const isCopertoEnabled = copertoEnabled && (price || 0) > 0
 
-    if (!isAyceEnabled && !isCopertoEnabled) {
+    if (!isAyceEffective && !isCopertoEnabled) {
       setPendingAutoOrderTableId(tableId)
       handleActivateTable(tableId, 1)
     } else {
       setTableCopertoOverride(isCopertoEnabled)
-      setTableAyceOverride(isAyceEnabled)
+      setTableAyceOverride(isAyceEffective)
       setSelectedTable(table)
       setShowTableDialog(true)
     }
@@ -1589,7 +1613,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         </div>
         <div className="relative z-10 w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]" />
         <div className="relative z-10 flex flex-col items-center gap-2">
-          <p className="text-lg font-light tracking-[0.2em] uppercase text-white">EASYFOOD</p>
+          <p className="text-lg font-light tracking-[0.2em] uppercase text-white">MINTHI</p>
           <p className="text-xs text-zinc-500 uppercase tracking-widest">Caricamento sistema...</p>
         </div>
         <Button variant="ghost" onClick={onLogout} className="relative z-10 mt-8 text-zinc-600 hover:text-amber-500 hover:bg-white/5 uppercase text-xs tracking-widest">
@@ -1638,7 +1662,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     <ChefHat size={24} />
                   </div>
                   <div className="overflow-hidden flex-1 min-w-0">
-                    <h1 className="font-medium text-base text-zinc-100 tracking-tight leading-none truncate">{currentRestaurant?.name || 'EASYFOOD'}</h1>
+                    <h1 className="font-medium text-base text-zinc-100 tracking-tight leading-none truncate">{currentRestaurant?.name || 'MINTHI'}</h1>
                     <p className="text-[9px] uppercase tracking-[0.2em] text-zinc-500 font-bold mt-1.5 flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
                       Online
@@ -2245,7 +2269,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 >
                   Tutte
                 </Button>
-                {rooms?.map(room => (
+                {rooms?.filter(r => r.is_active !== false).map(room => (
                   <Button
                     key={room.id}
                     variant={selectedRoomFilter === room.id ? "default" : "outline"}
@@ -2736,16 +2760,39 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         categories={categories || []}
                         onDishesChange={refreshDishes}
                         onMenuDeactivated={() => {
-                          // Suppress the scheduler from re-applying for the current meal period
+                          // Suppress the scheduler until the END of the current meal service
                           const now = new Date()
-                          const dayOfWeek = now.getDay()
                           const currentMinutes = now.getHours() * 60 + now.getMinutes()
                           const lunchMin = lunchTimeStart ? parseInt(lunchTimeStart.split(':')[0]) * 60 + parseInt(lunchTimeStart.split(':')[1]) : 0
                           const dinnerMin = dinnerTimeStart ? parseInt(dinnerTimeStart.split(':')[0]) * 60 + parseInt(dinnerTimeStart.split(':')[1]) : 0
-                          let mealType = 'lunch'
-                          if (dinnerMin > 0 && currentMinutes >= dinnerMin) mealType = 'dinner'
-                          else if (lunchMin > 0 && currentMinutes >= lunchMin) mealType = 'lunch'
-                          localStorage.setItem('easyfood_menu_suppressed', JSON.stringify({ day: dayOfWeek, mealType, timestamp: now.toISOString() }))
+
+                          // Calculate when the current meal service ends
+                          let endMinutes: number
+                          if (dinnerMin > 0 && currentMinutes >= dinnerMin) {
+                            // Currently in dinner service → suppress until next day 06:00
+                            endMinutes = 24 * 60 + 6 * 60 // next day 06:00
+                          } else if (lunchMin > 0 && currentMinutes >= lunchMin && dinnerMin > 0) {
+                            // Currently in lunch service → suppress until dinner starts
+                            endMinutes = dinnerMin
+                          } else if (lunchMin > 0 && currentMinutes >= lunchMin) {
+                            // Only lunch configured → suppress until 18:00 or end of day
+                            endMinutes = 18 * 60
+                          } else {
+                            // Outside service hours → suppress for 4 hours
+                            endMinutes = currentMinutes + 4 * 60
+                          }
+
+                          // Convert endMinutes to an actual Date
+                          const expiresAt = new Date(now)
+                          if (endMinutes >= 24 * 60) {
+                            // Next day
+                            expiresAt.setDate(expiresAt.getDate() + 1)
+                            expiresAt.setHours(Math.floor((endMinutes - 24 * 60) / 60), (endMinutes - 24 * 60) % 60, 0, 0)
+                          } else {
+                            expiresAt.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0)
+                          }
+
+                          localStorage.setItem('minthi_menu_suppressed', JSON.stringify({ expiresAt: expiresAt.toISOString() }))
                           // Also clear the lastScheduledMenuRef so it doesn't think it's already applied
                           lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
                         }}
@@ -3067,7 +3114,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
               <div className="space-y-10">
                 {restaurantCategories.map(category => {
-                  const categoryDishes = restaurantDishes.filter(d => d.id && d.category_id === category.id)
+                  const categoryDishes = dishesByCategory.get(category.id)?.filter(d => d.id) || []
                   if (categoryDishes.length === 0) return null
 
                   return (
@@ -3280,10 +3327,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     openingTime={effOpen}
                     closingTime={effClose}
                     serviceSegments={serviceSegments}
-                    onRefresh={() => {
-                      refreshBookings()
-                      refreshSessions()
-                    }}
+                    onRefresh={refreshData}
                     onDateChange={(date) => setSelectedReservationDate(date)}
                     reservationDuration={reservationDuration}
                   />
@@ -3455,22 +3499,26 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <div className="space-y-3 pt-3 border-t border-zinc-800">
                     <p className="text-xs text-zinc-500 uppercase tracking-wider">Opzioni per questo tavolo</p>
 
-                    {ayceEnabled && (
-                      <div className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-zinc-300">All You Can Eat</span>
-                          <span className="text-xs text-zinc-500">
-                            (€{currentRestaurant
-                              ? getCurrentAyceSettings({ ...currentRestaurant, weekly_ayce: weeklyAyce } as any, lunchTimeStart, dinnerTimeStart).price
-                              : aycePrice})
-                          </span>
+                    {ayceEnabled && (() => {
+                      const currentAycePrice = currentRestaurant
+                        ? getCurrentAyceSettings({ ...currentRestaurant, weekly_ayce: weeklyAyce } as any, lunchTimeStart, dinnerTimeStart).price
+                        : (typeof aycePrice === 'string' ? parseFloat(aycePrice) : aycePrice)
+                      if (!currentAycePrice || currentAycePrice <= 0) return null
+                      return (
+                        <div className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-zinc-300">All You Can Eat</span>
+                            <span className="text-xs text-zinc-500">
+                              (€{currentAycePrice})
+                            </span>
+                          </div>
+                          <Switch
+                            checked={tableAyceOverride}
+                            onCheckedChange={setTableAyceOverride}
+                          />
                         </div>
-                        <Switch
-                          checked={tableAyceOverride}
-                          onCheckedChange={setTableAyceOverride}
-                        />
-                      </div>
-                    )}
+                      )
+                    })()}
 
                     {copertoEnabled && (
                       <div className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
@@ -3978,7 +4026,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
 
 
-              <p style={{ fontSize: '11px', color: '#3f3f46', letterSpacing: '1px' }}>EASYFOOD</p>
+              <p style={{ fontSize: '11px', color: '#3f3f46', letterSpacing: '1px' }}>MINTHI</p>
             </DialogContent>
           </Dialog>
 
@@ -4111,7 +4159,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           <p style={{ color: '#52525b', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', margin: 0 }}>
             {currentRestaurant?.address || ''} {currentRestaurant?.address && currentRestaurant?.phone ? '•' : ''} {currentRestaurant?.phone || ''}
           </p>
-          <p style={{ color: '#3f3f46', fontSize: '9px', marginTop: '8px', letterSpacing: '0.1em' }}>Powered by EasyFood</p>
+          <p style={{ color: '#3f3f46', fontSize: '9px', marginTop: '8px', letterSpacing: '0.1em' }}>Powered by Minthi</p>
         </div>
       </div>
 

@@ -225,6 +225,7 @@ export interface Booking {
     phone?: string
     date_time: string
     guests: number
+    duration?: number
     notes?: string
     status: string
     created_at?: string

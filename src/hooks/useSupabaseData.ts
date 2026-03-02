@@ -10,6 +10,9 @@ export function useSupabaseData<T>(
     const [data, setData] = useState<T[]>(initialData)
     const [loading, setLoading] = useState(true)
 
+    // Stable unique ID per istanza hook — evita collisioni channel tra componenti
+    const channelIdRef = useRef(crypto.randomUUID())
+
     // Use ref for mapper to avoid infinite loops if an inline function is passed
     const mapperRef = useRef(mapper)
     useEffect(() => {
@@ -46,35 +49,43 @@ export function useSupabaseData<T>(
 
         fetchData()
 
-        // Realtime subscription
+        // Debounce ref per accumulare eventi rapidi
+        let debounceTimer: ReturnType<typeof setTimeout> | undefined
+
+        // Realtime subscription — channel name unico per istanza
         const channel = supabase
-            .channel(`${tableName}_changes`)
+            .channel(`${tableName}_${channelIdRef.current}`)
             .on(
                 'postgres_changes',
                 {
                     event: '*',
                     schema: 'public',
                     table: tableName,
-                    filter: filter ? `"${filter.column}"=eq.${filter.value}` : undefined
+                    filter: filter ? `${filter.column}=eq.${filter.value}` : undefined
                 },
                 (payload) => {
-                    const currentMapper = mapperRef.current
-                    if (payload.eventType === 'INSERT') {
-                        const newItem = currentMapper ? currentMapper(payload.new) : payload.new as T
-                        setData((prev) => [...prev, newItem])
-                    } else if (payload.eventType === 'UPDATE') {
-                        const updatedItem = currentMapper ? currentMapper(payload.new) : payload.new as T
-                        setData((prev) =>
-                            prev.map((item: any) => (item.id === (payload.new as any).id ? updatedItem : item))
-                        )
-                    } else if (payload.eventType === 'DELETE') {
-                        setData((prev) => prev.filter((item: any) => item.id !== payload.old.id))
-                    }
+                    // Debounce: accumula eventi rapidi in un singolo batch (300ms)
+                    if (debounceTimer) clearTimeout(debounceTimer)
+                    debounceTimer = setTimeout(() => {
+                        const currentMapper = mapperRef.current
+                        if (payload.eventType === 'INSERT') {
+                            const newItem = currentMapper ? currentMapper(payload.new) : payload.new as T
+                            setData((prev) => [...prev, newItem])
+                        } else if (payload.eventType === 'UPDATE') {
+                            const updatedItem = currentMapper ? currentMapper(payload.new) : payload.new as T
+                            setData((prev) =>
+                                prev.map((item: any) => (item.id === (payload.new as any).id ? updatedItem : item))
+                            )
+                        } else if (payload.eventType === 'DELETE') {
+                            setData((prev) => prev.filter((item: any) => item.id !== payload.old.id))
+                        }
+                    }, 300)
                 }
             )
             .subscribe()
 
         return () => {
+            if (debounceTimer) clearTimeout(debounceTimer)
             supabase.removeChannel(channel)
         }
     }, [tableName, filter?.column, filter?.value, fetchData])

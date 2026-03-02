@@ -169,12 +169,16 @@ export default function TableBillDialog({
     }, [orders, session, paidItemIds])
 
     // Specific list for display in "Split" view
-    // (In normal view we show totals, in split view we show the expanded list)
+    // Include ALL items (paid ones shown as greyed out)
     const splitPayableItems = useMemo(() => {
-        // Filter out items already in paidItemIds (handled in loop above mostly, but double check virtuals)
         const virt = virtualItems.filter(i => !paidItemIds.has(i.id))
         return [...realItemsExpanded, ...virt]
     }, [realItemsExpanded, virtualItems, paidItemIds])
+
+    // Only unpaid items for selection/payment logic
+    const unpaidSplitItems = useMemo(() => {
+        return splitPayableItems.filter(i => !paidItemIds.has(i.id))
+    }, [splitPayableItems, paidItemIds])
 
 
     // Calculate Total Amount (Full Bill)
@@ -265,6 +269,15 @@ export default function TableBillDialog({
                 const newSet = new Set(prev)
                 virtualIdsToHide.forEach(id => newSet.add(id))
                 selectedSplitItems.forEach(id => newSet.add(id))
+                // Also mark original DB IDs as paid when ALL their splits are paid
+                selectedRealGroups.forEach((countToPay, originalId) => {
+                    const itemWrapper = realItemsExpanded.find(i => i.originalId === originalId)
+                    if (itemWrapper?.originalItem) {
+                        if (countToPay >= itemWrapper.originalItem.quantity) {
+                            newSet.add(originalId) // Mark original DB ID as paid too
+                        }
+                    }
+                })
                 return newSet
             })
 
@@ -274,7 +287,7 @@ export default function TableBillDialog({
             }, 0)
 
             toast.success(`Pagamento parziale di €${totalPaid.toFixed(2)} registrato`)
-            setIsSplitMode(false)
+            // Stay in split mode so user can continue paying other items
             setSelectedSplitItems(new Set())
 
         } catch (error) {
@@ -329,7 +342,7 @@ export default function TableBillDialog({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-hidden relative min-h-0">
+                <div className="flex-1 overflow-y-auto min-h-0">
                     <AnimatePresence mode="wait">
 
                         {/* Mode 1: Main Overview */}
@@ -340,11 +353,11 @@ export default function TableBillDialog({
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.95, y: -10 }}
                                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                                className="h-full flex flex-col p-4 md:p-6 min-h-0"
+                                className="p-4 md:p-6"
                             >
 
                                 {/* Receipt Card - Dark Glassmorphism */}
-                                <div className="bg-black/20 backdrop-blur-2xl border border-white/5 text-zinc-100 rounded-[1.5rem] overflow-hidden shadow-2xl relative flex-1 flex flex-col ring-1 ring-white/5 min-h-0">
+                                <div className="bg-black/20 backdrop-blur-2xl border border-white/5 text-zinc-100 rounded-[1.5rem] overflow-hidden shadow-2xl relative flex flex-col ring-1 ring-white/5">
 
                                     {/* Fluid Background Effect */}
                                     <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 blur-[100px] rounded-full pointer-events-none -mr-32 -mt-32"></div>
@@ -361,8 +374,7 @@ export default function TableBillDialog({
                                         </div>
                                     </div>
 
-                                    <div className="flex-1 min-h-0 relative z-10">
-                                        <div className="absolute inset-0 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+                                    <div className="max-h-[40vh] overflow-y-auto overscroll-contain relative z-10" style={{ WebkitOverflowScrolling: 'touch' }}>
                                         <div className="p-6 space-y-3">
                                             {(() => {
                                                 // Group items for clean receipt display — show ALL items including €0 AYCE dishes
@@ -410,7 +422,6 @@ export default function TableBillDialog({
                                                 ))
                                             })()}
                                         </div>
-                                        </div>
                                     </div>
 
                                     {/* Receipt Footer */}
@@ -436,11 +447,11 @@ export default function TableBillDialog({
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
                                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                                className="h-full flex flex-col p-4 md:p-6 min-h-0"
+                                className="p-4 md:p-6"
                             >
 
                                 {/* Glass Container */}
-                                <div className="bg-black/20 backdrop-blur-2xl border border-white/5 text-zinc-100 rounded-[1.5rem] overflow-hidden shadow-2xl relative flex-1 flex flex-col ring-1 ring-white/5 min-h-0">
+                                <div className="bg-black/20 backdrop-blur-2xl border border-white/5 text-zinc-100 rounded-[1.5rem] overflow-hidden shadow-2xl relative flex flex-col ring-1 ring-white/5">
 
                                     {/* Fluid Background Effect */}
                                     <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 blur-[100px] rounded-full pointer-events-none -mr-32 -mt-32"></div>
@@ -448,43 +459,50 @@ export default function TableBillDialog({
                                     <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between text-xs font-bold uppercase tracking-widest text-zinc-500 z-10 bg-black/20 backdrop-blur-md shrink-0">
                                         <span>Seleziona Piatti</span>
                                         <button className="text-amber-500 hover:text-amber-400 transition-colors" onClick={() => {
-                                            if (selectedSplitItems.size === splitPayableItems.length) setSelectedSplitItems(new Set())
-                                            else setSelectedSplitItems(new Set(splitPayableItems.map(i => i.id)))
+                                            if (selectedSplitItems.size === unpaidSplitItems.length) setSelectedSplitItems(new Set())
+                                            else setSelectedSplitItems(new Set(unpaidSplitItems.map(i => i.id)))
                                         }}>
-                                            {selectedSplitItems.size === splitPayableItems.length ? 'Deseleziona Tutto' : 'Seleziona Tutto'}
+                                            {selectedSplitItems.size === unpaidSplitItems.length && unpaidSplitItems.length > 0 ? 'Deseleziona Tutto' : 'Seleziona Tutto'}
                                         </button>
                                     </div>
 
-                                    <div className="flex-1 min-h-0 relative z-10">
-                                        <div className="absolute inset-0 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+                                    <div className="max-h-[40vh] overflow-y-auto overscroll-contain relative z-10" style={{ WebkitOverflowScrolling: 'touch' }}>
                                         <div className="p-4 space-y-2 pb-6">
                                             {splitPayableItems.map((item) => {
-                                                const isSelected = selectedSplitItems.has(item.id)
+                                                const isPaid = paidItemIds.has(item.id)
+                                                const isSelected = !isPaid && selectedSplitItems.has(item.id)
                                                 return (
                                                     <div
                                                         key={item.id}
                                                         onClick={() => {
+                                                            if (isPaid) return // Can't interact with paid items
                                                             const newSet = new Set(selectedSplitItems)
                                                             if (newSet.has(item.id)) newSet.delete(item.id)
                                                             else newSet.add(item.id)
                                                             setSelectedSplitItems(newSet)
                                                         }}
-                                                        className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer select-none group ${isSelected
-                                                            ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)]'
-                                                            : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+                                                        className={`flex items-center justify-between p-4 rounded-xl border transition-all select-none group ${isPaid
+                                                                ? 'bg-white/[0.02] border-white/5 opacity-40 cursor-default'
+                                                                : isSelected
+                                                                    ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)] cursor-pointer'
+                                                                    : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10 cursor-pointer'
                                                             }`}
                                                     >
                                                         <div className="flex items-center gap-4">
-                                                            <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all ${isSelected ? 'bg-amber-500 border-amber-500 scale-110' : 'border-zinc-600 bg-transparent group-hover:border-zinc-500'
+                                                            <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all ${isPaid
+                                                                    ? 'bg-emerald-500/20 border-emerald-500/50'
+                                                                    : isSelected ? 'bg-amber-500 border-amber-500 scale-110' : 'border-zinc-600 bg-transparent group-hover:border-zinc-500'
                                                                 }`}>
+                                                                {isPaid && <Check size={14} weight="bold" className="text-emerald-500" />}
                                                                 {isSelected && <Check size={14} weight="bold" className="text-black" />}
                                                             </div>
                                                             <div className="flex flex-col">
-                                                                <span className={`text-sm font-medium transition-colors ${isSelected ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-300'}`}>{item.name}</span>
-                                                                {item.isVirtual && <span className="text-[10px] text-zinc-600 uppercase font-bold tracking-wider">Autom</span>}
+                                                                <span className={`text-sm font-medium transition-colors ${isPaid ? 'line-through text-zinc-600' : isSelected ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-300'}`}>{item.name}</span>
+                                                                {isPaid && <span className="text-[10px] text-emerald-600 uppercase font-bold tracking-wider">Pagato</span>}
+                                                                {!isPaid && item.isVirtual && <span className="text-[10px] text-zinc-600 uppercase font-bold tracking-wider">Autom</span>}
                                                             </div>
                                                         </div>
-                                                        <span className={`font-mono font-bold transition-colors ${isSelected ? 'text-amber-500' : 'text-zinc-500 group-hover:text-zinc-400'}`}>€{item.price.toFixed(2)}</span>
+                                                        <span className={`font-mono font-bold transition-colors ${isPaid ? 'line-through text-zinc-700' : isSelected ? 'text-amber-500' : 'text-zinc-500 group-hover:text-zinc-400'}`}>€{item.price.toFixed(2)}</span>
                                                     </div>
                                                 )
                                             })}
@@ -494,7 +512,6 @@ export default function TableBillDialog({
                                                     <p>Nessun elemento da dividere</p>
                                                 </div>
                                             )}
-                                        </div>
                                         </div>
                                     </div>
                                 </div>
@@ -510,9 +527,9 @@ export default function TableBillDialog({
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
                                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                                className="h-full flex flex-col p-4 md:p-6 min-h-0"
+                                className="p-4 md:p-6"
                             >
-                                <div className="bg-black/20 backdrop-blur-2xl border border-white/5 text-zinc-100 rounded-[1.5rem] overflow-hidden shadow-2xl relative flex-1 flex flex-col ring-1 ring-white/5 min-h-0">
+                                <div className="bg-black/20 backdrop-blur-2xl border border-white/5 text-zinc-100 rounded-[1.5rem] overflow-hidden shadow-2xl relative flex flex-col ring-1 ring-white/5">
 
                                     <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none -ml-32 -mt-32"></div>
                                     <div className="absolute bottom-0 right-0 w-64 h-64 bg-fuchsia-500/10 blur-[100px] rounded-full pointer-events-none -mr-32 -mb-32"></div>
@@ -598,7 +615,7 @@ export default function TableBillDialog({
                 </div>
 
                 {/* Footer Action Bar */}
-                <div className="p-4 md:p-6 border-t border-white/5 bg-zinc-900/40 relative z-20">
+                <div className="p-4 md:p-6 border-t border-white/5 bg-zinc-900/40 relative z-20 shrink-0">
                     {isWaiter && !restaurant?.allow_waiter_payments ? (
                         <div className="w-full py-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center gap-2 text-red-400 text-sm font-bold">
                             <X size={16} />

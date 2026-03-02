@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -80,6 +80,15 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
   // Auto-scroll ref
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const scrollIntervalRef = useRef<number | null>(null)
+
+  // Cleanup auto-scroll interval on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollIntervalRef.current) {
+        clearInterval(scrollIntervalRef.current)
+      }
+    }
+  }, [])
 
   // Table sorting/filtering state
   const [tableSortBy, setTableSortBy] = useState<'name' | 'capacity' | 'status'>('name')
@@ -300,8 +309,8 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
 
         // Use configurable duration from settings
         // For "infinite" (9999), extend to end of closing time
-        let duration = reservationDuration
-        if (reservationDuration >= 9999) {
+        let duration = booking.duration || reservationDuration
+        if (duration >= 9999) {
           const [cH, cM] = closingTime.split(':').map(Number)
           const closingMinutes = cH * 60 + cM
           duration = Math.max(60, closingMinutes - startMinutes)
@@ -832,15 +841,34 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                       )}
 
                       {/* DROP TARGET PREVIEW (FOR DRAGGING EXISTING BOOKING) */}
-                      {dropTarget && dropTarget.tableId === table.id && draggedBookingId && (
-                        <div
-                          className="absolute top-2 bottom-2 rounded-md bg-amber-500/40 border-2 border-amber-500/80 border-dashed z-40 pointer-events-none transition-none"
-                          style={{
-                            left: `${getBlockStyle(timeToMinutes(dropTarget.time), draggedBookingDuration).left}`,
-                            width: `${getBlockStyle(timeToMinutes(dropTarget.time), draggedBookingDuration).width}`
-                          }}
-                        />
-                      )}
+                      {dropTarget && dropTarget.tableId === table.id && draggedBookingId && (() => {
+                        const draggedBooking = bookings.find(b => b.id === draggedBookingId);
+                        if (!draggedBooking) return null;
+
+                        return (
+                          <div
+                            className="absolute top-2 bottom-2 rounded-md bg-amber-500/80 border-2 border-amber-400 border-dashed z-40 pointer-events-none transition-none flex flex-col justify-center px-2 overflow-hidden shadow-[0_10px_20px_-5px_rgba(245,158,11,0.5)] scale-[1.02]"
+                            style={{
+                              left: `${getBlockStyle(timeToMinutes(dropTarget.time), draggedBookingDuration).left}`,
+                              width: `${getBlockStyle(timeToMinutes(dropTarget.time), draggedBookingDuration).width}`,
+                              color: '#000',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <div className="flex items-center gap-1.5 overflow-hidden opacity-90">
+                              <div className="font-bold text-sm truncate leading-tight flex-1">
+                                {draggedBooking.name}
+                              </div>
+                              {draggedBooking.notes && (
+                                <ChatText size={14} weight="fill" className="text-black/60 shrink-0" />
+                              )}
+                            </div>
+                            <div className="text-[10px] truncate font-bold uppercase tracking-wide opacity-90 mt-0.5">
+                              {dropTarget.time} - {minutesToTime(timeToMinutes(dropTarget.time) + draggedBookingDuration)} • {draggedBooking.guests}p
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* SEGMENT SEPARATORS/GAPS */}
                       <div className="absolute inset-0 pointer-events-none">
@@ -893,7 +921,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                           return (
                             <div
                               key={block.booking.id}
-                              className={`absolute top-2 bottom-2 rounded-md border border-white/20 px-2 flex flex-col justify-center overflow-hidden transition-all duration-300 hover:z-50 hover:scale-[1.03] hover:shadow-[0_20px_40px_rgba(0,0,0,0.8)] ${isCompleted ? 'opacity-40 grayscale scale-[0.98]' : 'shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] cursor-move'} ${draggedBookingId === block.booking.id ? 'opacity-60 scale-95' : ''}`}
+                              className={`absolute top-2 bottom-2 rounded-md border border-white/20 px-2 flex flex-col justify-center overflow-hidden transition-all duration-300 hover:z-50 hover:scale-[1.03] hover:shadow-[0_20px_40px_rgba(0,0,0,0.8)] ${isCompleted ? 'opacity-40 grayscale scale-[0.98]' : 'shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] cursor-move'} ${draggedBookingId === block.booking.id ? 'opacity-20 border-dashed grayscale scale-95 z-0' : ''}`}
                               style={{
                                 left: `${getBlockStyle(block.startMinutes, block.duration).left}`,
                                 width: `${getBlockStyle(block.startMinutes, block.duration).width}`,
@@ -1071,21 +1099,6 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="search-date">Data</Label>
-                <Input
-                  id="search-date"
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => {
-                    const newDate = new Date(e.target.value)
-                    if (!isNaN(newDate.getTime()) && onDateChange) {
-                      onDateChange(newDate)
-                      setAvailableTables([]) // Reset results when date changes
-                    }
-                  }}
-                />
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="search-date">Data</Label>
                 <Input

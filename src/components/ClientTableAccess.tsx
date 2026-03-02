@@ -145,7 +145,7 @@ export default function ClientTableAccess({ tableId, onAccessGranted }: ClientTa
                     </div>
 
                     <CardTitle className="text-3xl font-bold tracking-tight" style={{ color: C.textPrimary }}>
-                        {restaurantName || 'EasyFood'}
+                        {restaurantName || 'Minthi'}
                     </CardTitle>
                     <CardDescription className="font-medium text-sm mt-2" style={{ color: C.textSecondary }}>
                         Accedi al menu e ordina
@@ -213,7 +213,7 @@ export default function ClientTableAccess({ tableId, onAccessGranted }: ClientTa
             </Card>
 
             <div className="absolute bottom-6 text-xs" style={{ color: C.textMuted }}>
-                Powered by EasyFood
+                Powered by Minthi
             </div>
         </div>
     )

@@ -15,7 +15,7 @@ interface UseCachedDataOptions {
     orderBy?: { column: string; ascending?: boolean }
 }
 
-const CACHE_PREFIX = 'easyfood_cache_'
+const CACHE_PREFIX = 'minthi_cache_'
 
 /**
  * Custom hook for cached data fetching with localStorage persistence
@@ -152,7 +152,7 @@ export function useCachedData<T>(options: UseCachedDataOptions) {
 }
 
 /**
- * Clear all EASYFOOD cache entries
+ * Clear all MINTHI cache entries
  */
 export function clearAllCache() {
     const keysToRemove: string[] = []

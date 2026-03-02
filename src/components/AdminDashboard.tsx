@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSupabaseData } from '../hooks/useSupabaseData'
 import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
-import { User, Restaurant, Order } from '../services/types'
+import { User, Restaurant } from '../services/types'
+import { supabase } from '../lib/supabase'
 import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
 import { populateRestaurantData } from '../services/populateData'
+import { hashPassword } from '../utils/passwordUtils'
 
 interface Props {
   user: User
@@ -32,8 +34,26 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     (r: any) => ({ ...r, isActive: r.is_active })
   )
   const [users] = useSupabaseData<User>('users', [])
-  const [orders] = useSupabaseData<Order>('orders', [])
+  const [salesByRestaurant, setSalesByRestaurant] = useState<Record<string, number>>({})
   const [activeView, setActiveView] = useState<'restaurants' | 'statistics'>('restaurants')
+
+  // Fetch aggregated sales per restaurant (lightweight, no realtime subscription on ALL orders)
+  useEffect(() => {
+    const fetchSales = async () => {
+      const { data } = await supabase
+        .from('orders')
+        .select('restaurant_id, total_amount')
+        .eq('status', 'PAID')
+      if (data) {
+        const sales: Record<string, number> = {}
+        data.forEach((o: any) => {
+          sales[o.restaurant_id] = (sales[o.restaurant_id] || 0) + (o.total_amount || 0)
+        })
+        setSalesByRestaurant(sales)
+      }
+    }
+    fetchSales()
+  }, [restaurants])
   const [impersonatedRestaurantId, setImpersonatedRestaurantId] = useState<string | null>(null)
 
   // Search & Sort State
@@ -92,18 +112,14 @@ export default function AdminDashboard({ user, onLogout }: Props) {
           // Active first
           return (a.isActive === b.isActive) ? 0 : a.isActive ? -1 : 1
         case 'sales':
-          // Calculate sales for a and b
-          const getSales = (rId: string) => (orders || [])
-            .filter(o => o.restaurant_id === rId && o.status === 'PAID')
-            .reduce((sum, o) => sum + (o.total_amount || 0), 0)
-          return getSales(b.id) - getSales(a.id)
+          return (salesByRestaurant[b.id] || 0) - (salesByRestaurant[a.id] || 0)
         default:
           return 0
       }
     })
 
     return result
-  }, [restaurants, orders, searchQuery, sortOption])
+  }, [restaurants, salesByRestaurant, searchQuery, sortOption])
 
   const handleLogoUpload = async (file: File) => {
     try {
@@ -147,11 +163,12 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         isActive: true,
       }
 
+      const hashedPw = await hashPassword(newRestaurant.password)
       const restaurantUser: User = {
         id: userId,
         name: newRestaurant.username,
         email: newRestaurant.email,
-        password_hash: newRestaurant.password,
+        password_hash: hashedPw,
         role: 'OWNER',
       }
 
@@ -233,10 +250,9 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         ))
       }
 
-      await DatabaseService.updateRestaurant({
-        id: restaurant.id,
-        isActive: !restaurant.isActive
-      })
+      await DatabaseService.adminUpdateRestaurant(restaurant.id, {
+        is_active: !restaurant.isActive
+      }, user)
 
       // Removed the toast as requested ("non deve saltare fuori la scritta grossa")
       // The visual feedback (transparency) is enough.
@@ -278,21 +294,26 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         ))
       }
 
-      await DatabaseService.updateRestaurant({
-        id: updatedRestaurant.id,
+      await DatabaseService.adminUpdateRestaurant(updatedRestaurant.id, {
         name: updatedRestaurant.name,
         phone: updatedRestaurant.phone,
         email: updatedRestaurant.email,
         logo_url: finalLogoUrl,
-      })
+      }, user)
 
       if (editingUser) {
-        await DatabaseService.updateUser({
+        const userUpdate: any = {
           id: editingUser.id,
           name: editingUser.name,
-          password_hash: editingUser.password_hash,
           role: editingUser.role
-        })
+        }
+        // Hash password only if it was changed (non-bcrypt value)
+        if (editingUser.password_hash && !editingUser.password_hash.startsWith('$2a$') && !editingUser.password_hash.startsWith('$2b$')) {
+          userUpdate.password_hash = await hashPassword(editingUser.password_hash)
+        } else {
+          userUpdate.password_hash = editingUser.password_hash
+        }
+        await DatabaseService.updateUser(userUpdate)
       }
 
       setShowEditDialog(false)
@@ -694,10 +715,15 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Password</Label>
+                    <Label className="text-xs text-muted-foreground">Nuova Password (lascia vuoto per non cambiare)</Label>
                     <Input
-                      value={editingUser.password_hash || ''}
-                      onChange={(e) => setEditingUser(prev => prev ? ({ ...prev, password_hash: e.target.value }) : null)}
+                      type="password"
+                      placeholder="••••••••"
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setEditingUser(prev => prev ? ({ ...prev, password_hash: e.target.value }) : null)
+                        }
+                      }}
                     />
                   </div>
                 </div>

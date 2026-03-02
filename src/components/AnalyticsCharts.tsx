@@ -1474,7 +1474,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
 
         {/* Footer */}
         <div style={{ marginTop: '40px', textAlign: 'center', color: '#a1a1aa', fontSize: '12px', borderTop: '1px solid #e4e4e7', paddingTop: '20px' }}>
-          Documento generato automaticamente da EasyFood
+          Documento generato automaticamente da Minthi
         </div>
       </div>
     </>

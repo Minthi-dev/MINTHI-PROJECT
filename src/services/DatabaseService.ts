@@ -5,9 +5,9 @@ import { hashPassword } from '../utils/passwordUtils'
 export const DatabaseService = {
     // Users
     async getUsers() {
-        const { data, error } = await supabase.from('users').select('*')
+        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash')
         if (error) throw error
-        return data as User[]
+        return data as unknown as User[]
     },
 
     async createUser(user: Partial<User>) {
@@ -17,7 +17,7 @@ export const DatabaseService = {
 
     // Restaurants
     async getRestaurants() {
-        const { data, error } = await supabase.from('restaurants').select('*')
+        const { data, error } = await supabase.from('restaurants').select('id, name, address, phone, email, logo_url, cover_image_url, owner_id, created_at, is_active, all_you_can_eat, ayce_price, ayce_max_orders, cover_charge_per_person, lunch_time_start, dinner_time_start, enable_course_splitting, reservation_duration, weekly_coperto, weekly_ayce, weekly_service_hours, waiter_password, waiter_mode_enabled, allow_waiter_payments, menu_style, menu_primary_color, view_only_menu_enabled, enable_reservation_room_selection, enable_public_reservations')
         if (error) throw error
         return data.map((r: any) => ({
             ...r,
@@ -113,11 +113,23 @@ export const DatabaseService = {
         if (error) throw error
     },
 
+    async adminUpdateRestaurant(restaurantId: string, updates: Partial<any>, adminUser: User) {
+        // Usa la RPC per bypassare RLS usando le credenziali dell'admin
+        const { error } = await supabase.rpc('admin_update_restaurant', {
+            p_restaurant_id: restaurantId,
+            p_updates: updates,
+            p_admin_username: adminUser.name || (adminUser as any).username,
+            p_admin_password: adminUser.password_hash
+        });
+
+        if (error) throw error;
+    },
+
     // Rooms
     async getRooms(restaurantId: string) {
         const { data, error } = await supabase
             .from('rooms')
-            .select('*')
+            .select('id, restaurant_id, name, is_active, "order", created_at')
             .eq('restaurant_id', restaurantId)
             .eq('is_active', true)
             .order('order', { ascending: true })
@@ -269,7 +281,7 @@ export const DatabaseService = {
         try {
             const { data, error } = await supabase
                 .from('restaurant_staff')
-                .select('*')
+                .select('id, restaurant_id, name, username, is_active, created_at')
                 .eq('restaurant_id', restaurantId)
                 .order('created_at', { ascending: true })
             if (error) {
@@ -286,7 +298,7 @@ export const DatabaseService = {
         // Fetch by username only - password verification happens in JS via verifyPassword()
         const { data, error } = await supabase
             .from('restaurant_staff')
-            .select('*, restaurant:restaurants(*)')
+            .select('id, restaurant_id, name, username, password, is_active, restaurant:restaurants(id, name, waiter_mode_enabled, allow_waiter_payments, enable_course_splitting, cover_charge_per_person, all_you_can_eat, weekly_coperto, weekly_ayce, weekly_service_hours, lunch_time_start, lunch_time_end, dinner_time_start, dinner_time_end, view_only_menu_enabled, menu_style, menu_primary_color)')
             .eq('username', username)
             .eq('is_active', true)
             .single()
@@ -340,9 +352,10 @@ export const DatabaseService = {
     async getWaiterActivityLogs(restaurantId: string) {
         const { data, error } = await supabase
             .from('waiter_activity_logs')
-            .select('*')
+            .select('id, restaurant_id, waiter_id, action_type, details, created_at')
             .eq('restaurant_id', restaurantId)
             .order('created_at', { ascending: false })
+            .limit(200)
         if (error) throw error
         return data || []
     },
@@ -350,8 +363,10 @@ export const DatabaseService = {
     async getWaiterLogs(restaurantId: string, startDate?: string, endDate?: string) {
         let query = supabase
             .from('waiter_activity_logs')
-            .select('*, waiter:restaurant_staff(*)')
+            .select('id, restaurant_id, waiter_id, action_type, details, created_at, waiter:restaurant_staff(id, name, username)')
             .eq('restaurant_id', restaurantId)
+            .order('created_at', { ascending: false })
+            .limit(500)
 
         if (startDate) query = query.gte('created_at', startDate)
         if (endDate) query = query.lte('created_at', endDate)
@@ -362,38 +377,49 @@ export const DatabaseService = {
     },
 
     // Storage
+    _validateUpload(file: File) {
+        const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            throw new Error('Tipo file non supportato. Usa JPEG, PNG o WebP.')
+        }
+        if (file.size > MAX_SIZE) {
+            throw new Error('File troppo grande. Massimo 5MB.')
+        }
+    },
+
     async uploadLogo(file: File) {
+        this._validateUpload(file)
         const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
-        const filePath = `${fileName}`
+        const fileName = `${crypto.randomUUID()}.${fileExt}`
 
         const { error: uploadError } = await supabase.storage
             .from('logos')
-            .upload(filePath, file)
+            .upload(fileName, file)
 
         if (uploadError) throw uploadError
 
         const { data } = supabase.storage
             .from('logos')
-            .getPublicUrl(filePath)
+            .getPublicUrl(fileName)
 
         return data.publicUrl
     },
 
     async uploadImage(file: File, bucket: string) {
+        this._validateUpload(file)
         const fileExt = file.name.split('.').pop()
-        const fileName = `${Math.random()}.${fileExt}`
-        const filePath = `${fileName}`
+        const fileName = `${crypto.randomUUID()}.${fileExt}`
 
         const { error: uploadError } = await supabase.storage
             .from(bucket)
-            .upload(filePath, file)
+            .upload(fileName, file)
 
         if (uploadError) throw uploadError
 
         const { data } = supabase.storage
             .from(bucket)
-            .getPublicUrl(filePath)
+            .getPublicUrl(fileName)
 
         return data.publicUrl
     },
@@ -402,7 +428,7 @@ export const DatabaseService = {
     async getCategories(restaurantId: string) {
         const { data, error } = await supabase
             .from('categories')
-            .select('*')
+            .select('id, name, restaurant_id, "order", created_at')
             .eq('restaurant_id', restaurantId)
             .order('order', { ascending: true })
         if (error) throw error
@@ -434,7 +460,7 @@ export const DatabaseService = {
     async getDishes(restaurantId: string) {
         const { data, error } = await supabase
             .from('dishes')
-            .select('*')
+            .select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, created_at, is_available, short_code, exclude_from_all_you_can_eat, is_ayce, allergens')
             .eq('restaurant_id', restaurantId)
         if (error) throw error
         return data.map((d: any) => ({
@@ -489,7 +515,7 @@ export const DatabaseService = {
     async getTables(restaurantId: string) {
         const { data, error } = await supabase
             .from('tables')
-            .select('*')
+            .select('id, number, restaurant_id, token, pin, seats, room_id, created_at, is_active, last_assistance_request')
             .eq('restaurant_id', restaurantId)
         if (error) throw error
         return data as Table[]
@@ -521,7 +547,7 @@ export const DatabaseService = {
     async getActiveSession(tableId: string) {
         const { data, error } = await supabase
             .from('table_sessions')
-            .select('*')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
             .eq('table_id', tableId)
             .eq('status', 'OPEN')
             .single()
@@ -624,12 +650,18 @@ export const DatabaseService = {
         return { data: data as unknown as (Order & { restaurant: { name: string } })[], total: count || 0, page, pageSize }
     },
 
-    async getAllTableSessions() {
-        const { data, error } = await supabase
+    async getAllTableSessions(restaurantId?: string) {
+        let query = supabase
             .from('table_sessions')
-            .select('*')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
+            .order('created_at', { ascending: false })
+            .limit(1000)
+        if (restaurantId) {
+            query = query.eq('restaurant_id', restaurantId)
+        }
+        const { data, error } = await query
         if (error) throw error
-        return data as TableSession[]
+        return data as unknown as TableSession[]
     },
 
     async getSessionOrderCount(sessionId: string) {
@@ -690,10 +722,12 @@ export const DatabaseService = {
     async getBookings(restaurantId: string) {
         const { data, error } = await supabase
             .from('bookings')
-            .select('*')
+            .select('id, restaurant_id, table_id, name, email, phone, date_time, guests, duration, notes, status, created_at')
             .eq('restaurant_id', restaurantId)
+            .order('date_time', { ascending: false })
+            .limit(500)
         if (error) throw error
-        return data as Booking[]
+        return data as unknown as Booking[]
     },
 
     async createBooking(booking: Partial<Booking>) {
@@ -727,11 +761,11 @@ export const DatabaseService = {
     async getCartItems(sessionId: string) {
         const { data, error } = await supabase
             .from('cart_items')
-            .select('*, dish:dishes(*)')
+            .select('id, session_id, dish_id, quantity, notes, created_at, course_number, dish:dishes(id, name, price, category_id, image_url, is_ayce, exclude_from_all_you_can_eat, allergens)')
             .eq('session_id', sessionId)
             .order('created_at', { ascending: true })
         if (error) throw error
-        return data as CartItem[]
+        return data as unknown as CartItem[]
     },
 
     async addToCart(item: { session_id: string, dish_id: string, quantity: number, notes?: string, course_number?: number }) {
@@ -798,16 +832,16 @@ export const DatabaseService = {
     async getSessionOrders(sessionId: string) {
         const { data, error } = await supabase
             .from('orders')
-            .select('*, items:order_items(*, dish:dishes(*))')
+            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at, dish:dishes(id, name, price, category_id, image_url))')
             .eq('table_session_id', sessionId)
             .order('created_at', { ascending: false })
         if (error) throw error
-        return data as Order[]
+        return data as unknown as Order[]
     },
     async getSessionById(sessionId: string) {
         const { data, error } = await supabase
             .from('table_sessions')
-            .select('*')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
             .eq('id', sessionId)
             .single()
         if (error) return null
@@ -818,7 +852,7 @@ export const DatabaseService = {
     async getCustomMenus(restaurantId: string) {
         const { data, error } = await supabase
             .from('custom_menus')
-            .select('*')
+            .select('id, restaurant_id, name, description, is_active, created_at, updated_at')
             .eq('restaurant_id', restaurantId)
             .eq('is_active', true)
         if (error) throw error
@@ -828,7 +862,7 @@ export const DatabaseService = {
     async getAllCustomMenus(restaurantId: string) {
         const { data, error } = await supabase
             .from('custom_menus')
-            .select('*')
+            .select('id, restaurant_id, name, description, is_active, created_at, updated_at')
             .eq('restaurant_id', restaurantId)
             .order('created_at', { ascending: false })
         if (error) throw error
@@ -844,5 +878,20 @@ export const DatabaseService = {
 
         if (error) throw error
         return data
+    },
+
+    // Stripe
+    async createStripeSubscriptionCheckout(restaurantId: string, priceId: string) {
+        const { data, error } = await supabase.functions.invoke('stripe-checkout', {
+            body: {
+                restaurantId,
+                priceId,
+                successUrl: `${window.location.origin}/dashboard?payment=success`,
+                cancelUrl: `${window.location.origin}/dashboard?payment=cancelled`
+            }
+        });
+
+        if (error) throw error;
+        return data; // { sessionId: string, url: string }
     }
 }

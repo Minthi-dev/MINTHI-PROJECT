@@ -60,7 +60,7 @@ const AppContent = () => {
 
   useEffect(() => {
     // Check localStorage for saved user first
-    const savedUser = localStorage.getItem('easyfood_user')
+    const savedUser = localStorage.getItem('minthi_user')
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser)
@@ -68,7 +68,7 @@ const AppContent = () => {
         setLoading(false)
         return
       } catch (e) {
-        localStorage.removeItem('easyfood_user')
+        localStorage.removeItem('minthi_user')
       }
     }
 
@@ -86,7 +86,7 @@ const AppContent = () => {
   }, [])
 
   const handleLogout = () => {
-    localStorage.removeItem('easyfood_user')
+    localStorage.removeItem('minthi_user')
     supabase.auth.signOut()
     setUser(null)
   }

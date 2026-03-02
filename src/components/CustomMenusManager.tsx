@@ -61,7 +61,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     const fetchCustomMenus = async () => {
         const { data } = await supabase
             .from('custom_menus')
-            .select('*')
+            .select('id, restaurant_id, name, description, is_active, created_at, updated_at')
             .eq('restaurant_id', restaurantId)
             .order('created_at', { ascending: false })
         if (data) setCustomMenus(data)
@@ -70,7 +70,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     const fetchMenuDetails = async (menuId: string) => {
         const [dishesRes, schedulesRes] = await Promise.all([
             supabase.from('custom_menu_dishes').select('dish_id').eq('custom_menu_id', menuId),
-            supabase.from('custom_menu_schedules').select('*').eq('custom_menu_id', menuId)
+            supabase.from('custom_menu_schedules').select('id, custom_menu_id, day_of_week, meal_type, start_time, end_time, is_active').eq('custom_menu_id', menuId)
         ])
 
         if (dishesRes.data) setMenuDishes(dishesRes.data.map(d => d.dish_id))

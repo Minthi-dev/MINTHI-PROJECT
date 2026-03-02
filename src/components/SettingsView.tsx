@@ -291,6 +291,13 @@ export function SettingsView({
                         <CalendarCheck size={20} />
                         Prenotazioni
                     </TabsTrigger>
+                    <TabsTrigger
+                        value="subscription"
+                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-emerald-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
+                    >
+                        <CreditCard size={20} />
+                        Abbonamento MINTHI
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* 1. SEZIONE GENERALE */}
@@ -790,6 +797,81 @@ export function SettingsView({
                                     defaultLunchStart={lunchTimeStart}
                                     defaultDinnerStart={dinnerTimeStart}
                                 />
+                            </div>
+                        </div>
+                    </motion.div>
+                </TabsContent>
+
+                {/* 5. SEZIONE ABBONAMENTO STRIPE */}
+                <TabsContent value="subscription">
+                    <motion.div
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        className="space-y-6 max-w-2xl mx-auto"
+                    >
+                        <div className="p-8 rounded-2xl bg-zinc-900/50 border border-emerald-500/20 backdrop-blur-sm text-center relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+                            <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -ml-32 -mb-32 pointer-events-none"></div>
+
+                            <div className="relative z-10 flex flex-col items-center">
+                                <CreditCard className="text-emerald-500 w-16 h-16 mb-4" weight="duotone" />
+                                <h3 className="text-3xl font-bold mb-2">Abbonamento MINTHI</h3>
+                                <p className="text-zinc-400 mb-8 max-w-md mx-auto">
+                                    Gestisci il tuo abbonamento per continuare a utilizzare le funzionalità Premium del gestionale per il tuo locale.
+                                </p>
+
+                                <div className="bg-black/40 border border-white/5 rounded-2xl p-6 w-full max-w-sm mb-8 relative">
+                                    <div className="absolute -top-3 right-4 bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full">
+                                        PIANO MENSILE
+                                    </div>
+                                    <div className="flex justify-between items-end mb-4">
+                                        <div className="text-left">
+                                            <p className="text-sm text-zinc-400 mb-1">Costo</p>
+                                            <div className="flex items-baseline gap-1">
+                                                <span className="text-3xl font-bold text-white">€49</span>
+                                                <span className="text-zinc-500">/mese</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <ul className="text-left space-y-3 mt-6">
+                                        {[
+                                            'Ordini e tavoli illimitati',
+                                            'Menu digitale QR code',
+                                            'Supporto clienti prioritario',
+                                            'Statistiche avanzate'
+                                        ].map((feature, i) => (
+                                            <li key={i} className="flex items-center gap-3 text-sm text-zinc-300">
+                                                <CheckCircle className="text-emerald-500 shrink-0" weight="fill" />
+                                                {feature}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <Button
+                                    size="lg"
+                                    className="w-full max-w-sm bg-emerald-600 hover:bg-emerald-700 text-white text-lg h-14 font-semibold shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]"
+                                    onClick={async () => {
+                                        try {
+                                            const priceId = prompt("Inserisci temporaneamente l'ID del prezzo di Stripe qui (es. price_123...):");
+                                            if (!priceId) return;
+
+                                            toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
+                                            const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
+                                            window.location.href = url;
+                                        } catch (e: any) {
+                                            console.error(e);
+                                            toast.error("Errore durante la connessione a Stripe: " + e.message, { id: "stripe-checkout" });
+                                        }
+                                    }}
+                                >
+                                    Attiva Abbonamento
+                                </Button>
+                                <p className="text-xs text-zinc-500 mt-4 flex items-center justify-center gap-1">
+                                    <CreditCard size={14} /> Pagamenti sicuri gestiti da Stripe
+                                </p>
                             </div>
                         </div>
                     </motion.div>

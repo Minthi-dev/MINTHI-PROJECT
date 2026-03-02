@@ -149,7 +149,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     DatabaseService.getRooms(rId),
                     DatabaseService.getDishes(rId),
                     DatabaseService.getCategories(rId),
-                    supabase.from('table_sessions').select('*').eq('restaurant_id', rId).eq('status', 'OPEN'),
+                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled').eq('restaurant_id', rId).eq('status', 'OPEN'),
                     supabase.from('orders')
                         .select(`
                             id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
@@ -190,7 +190,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!restaurantId) return
         const { data: sess } = await supabase
             .from('table_sessions')
-            .select('*')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
             .eq('restaurant_id', restaurantId)
             .eq('status', 'OPEN')
         if (sess) setSessions(sess as TableSession[])
@@ -247,9 +247,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             .on('postgres_changes', {
                 event: '*', schema: 'public', table: 'tables',
                 filter: `restaurant_id=eq.${restaurantId}`
-            }, async () => {
-                const tbs = await DatabaseService.getTables(restaurantId)
-                setTables(tbs)
+            }, () => {
+                if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
+                refreshDebounceRef.current = setTimeout(async () => {
+                    const tbs = await DatabaseService.getTables(restaurantId)
+                    setTables(tbs)
+                }, 300)
             })
             .subscribe()
 
@@ -317,12 +320,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
     }
 
-    // Assistance Requests Calculation (moved up for use in effect)
-    const assistanceRequests = tables.filter(table => {
+    // Assistance Requests Calculation (memoizzata)
+    const assistanceRequests = useMemo(() => tables.filter(table => {
         if (!table.last_assistance_request) return false
-        // Show all unresolved assistance requests (no time filter)
         return true
-    })
+    }), [tables])
 
     // Sound Logic for "Ready" items, New Orders AND Assistance Requests
     const prevReadyCountRef = useRef(0)
@@ -448,24 +450,22 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         toast.success('Richiesta assistenza risolta')
     }
 
-    const readyItems = activeOrders.flatMap(o => {
+    const readyItems = useMemo(() => activeOrders.flatMap(o => {
         const session = sessions.find(s => s.id === o.table_session_id)
-        // Only show ready items for OPEN sessions
         if (!session) return []
 
         const table = tables.find(t => t.id === session.table_id)
         if (!table) return []
 
         return (o.items || [])
-            .filter(i => i.status?.toLowerCase() === 'ready') // Only 'ready', not 'delivered' or 'served'
+            .filter(i => i.status?.toLowerCase() === 'ready')
             .map(i => ({
                 ...i,
                 tableId: table.id,
                 order_id: o.id,
-                // Ensure dish is available (either from join or state lookup)
                 dish: i.dish || dishes.find(d => d.id === i.dish_id)
             }))
-    }).sort((a, b) => new Date(a.created_at || Date.now()).getTime() - new Date(b.created_at || Date.now()).getTime())
+    }).sort((a, b) => new Date(a.created_at || Date.now()).getTime() - new Date(b.created_at || Date.now()).getTime()), [activeOrders, sessions, tables, dishes])
 
     // Grouped display: ready items (+ just-delivered greyed) grouped by table, filtered by room
     const displayReadyItemsByTable = useMemo(() => {
@@ -797,12 +797,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         setIsEditRoomDialogOpen(true)
     }
 
-    // Filtered tables based on room selection
-    const filteredTables = selectedRoomFilter === 'all'
+    // Filtered tables based on room selection (memoizzata)
+    const filteredTables = useMemo(() => selectedRoomFilter === 'all'
         ? tables
         : selectedRoomFilter === 'no-room'
             ? tables.filter(t => !t.room_id)
-            : tables.filter(t => t.room_id === selectedRoomFilter)
+            : tables.filter(t => t.room_id === selectedRoomFilter), [tables, selectedRoomFilter])
 
     if (loading) return (
         <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center text-amber-500">
@@ -811,7 +811,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         </div>
     )
 
-    const sortedTables = sortTables(filteredTables)
+    const sortedTables = useMemo(() => sortTables(filteredTables), [filteredTables, sortBy, sessions, activeOrders])
     const readyCount = readyItems.length
 
     // Helper function to render a table card - MATCHING ADMIN DASHBOARD GRAPHICS
