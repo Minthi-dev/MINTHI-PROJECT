@@ -17,7 +17,7 @@ export const DatabaseService = {
 
     // Restaurants
     async getRestaurants() {
-        const { data, error } = await supabase.from('restaurants').select('id, name, address, phone, email, logo_url, cover_image_url, owner_id, created_at, is_active, all_you_can_eat, ayce_price, ayce_max_orders, cover_charge_per_person, lunch_time_start, dinner_time_start, enable_course_splitting, reservation_duration, weekly_coperto, weekly_ayce, weekly_service_hours, waiter_password, waiter_mode_enabled, allow_waiter_payments, menu_style, menu_primary_color, view_only_menu_enabled, enable_reservation_room_selection, enable_public_reservations')
+        const { data, error } = await supabase.from('restaurants').select('*')
         if (error) throw error
         return data.map((r: any) => ({
             ...r,
