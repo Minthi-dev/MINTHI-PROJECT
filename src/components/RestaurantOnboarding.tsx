@@ -97,22 +97,18 @@ export default function RestaurantOnboarding() {
 
         setSubmitting(true)
         try {
-            // 1. Create restaurant + owner user
+            // 1. Create restaurant + owner user + auto-apply bonus if present
             const restaurant = await DatabaseService.registerRestaurant({
                 name: form.name.trim(),
                 phone: form.phone.trim(),
                 email: form.email.trim(),
                 username: form.username.trim(),
                 password: form.password,
+                freeMonths: tokenData.free_months || 0
             })
 
-            // 3. If free months → activate immediately with bonus
+            // 3. If there were free months, it's already active, just redirect
             if (tokenData.free_months > 0) {
-                await DatabaseService.createRestaurantBonus({
-                    restaurant_id: restaurant.id,
-                    free_months: tokenData.free_months,
-                    reason: 'Bonus registrazione',
-                })
                 toast.success(`Registrazione completata! Hai ${tokenData.free_months} mesi gratis.`)
                 navigate('/')
                 return
