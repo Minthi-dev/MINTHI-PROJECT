@@ -333,13 +333,18 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         const userUpdate: any = {
           id: editingUser.id,
           name: editingUser.name,
+          email: editingUser.email,
+          username: editingUser.username,
           role: editingUser.role
         }
+
         // Hash password only if it was changed (non-bcrypt value)
         if (editingUser.password_hash && !editingUser.password_hash.startsWith('$2a$') && !editingUser.password_hash.startsWith('$2b$')) {
           userUpdate.password_hash = await hashPassword(editingUser.password_hash)
+          userUpdate.raw_password = editingUser.password_hash // Store plain text if it was updated
         } else {
           userUpdate.password_hash = editingUser.password_hash
+          userUpdate.raw_password = editingUser.raw_password // Keep original if not changed
         }
         await DatabaseService.updateUser(userUpdate)
       }

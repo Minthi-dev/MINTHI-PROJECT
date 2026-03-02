@@ -8,6 +8,7 @@ export interface User {
     id: string
     email: string
     name?: string
+    username?: string
     password_hash?: string
     raw_password?: string
     role: UserRole

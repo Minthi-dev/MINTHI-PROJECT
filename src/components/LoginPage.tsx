@@ -150,8 +150,7 @@ export default function LoginPage({ onLogin }: Props) {
       if (user) {
         // If user is OWNER, we might want to fetch their restaurant here to ensure it exists
         if (user.role === 'OWNER') {
-          const restaurants = await DatabaseService.getRestaurants()
-          const userRestaurant = restaurants.find(r => r.owner_id === user.id)
+          const userRestaurant = await DatabaseService.getRestaurantForLogin(user.id)
           if (!userRestaurant) {
             toast.error('Nessun ristorante associato a questo account.')
             setIsLoading(false)
@@ -159,7 +158,7 @@ export default function LoginPage({ onLogin }: Props) {
           }
 
           // Check if restaurant is active
-          if (userRestaurant.isActive === false) {
+          if (userRestaurant.is_active === false) {
             toast.error('Il tuo ristorante è stato temporaneamente sospeso. Contatta l\'assistenza.')
             setIsLoading(false)
             return

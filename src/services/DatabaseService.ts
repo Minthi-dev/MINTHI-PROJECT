@@ -1138,7 +1138,6 @@ export const DatabaseService = {
         if (error) throw error
     },
 
-    // Public restaurant registration (no auth required, uses service role via edge function or anon via RPC)
     async registerRestaurant(data: { name: string, phone: string, email: string, username: string, password: string, freeMonths?: number }) {
         const hashedPassword = await hashPassword(data.password)
 
@@ -1159,4 +1158,14 @@ export const DatabaseService = {
 
         return { id: result.restaurant_id };
     },
+
+    // Secure login lookup for inactive restaurants
+    async getRestaurantForLogin(ownerId: string) {
+        const { data, error } = await supabase.rpc('get_restaurant_for_login', {
+            p_owner_id: ownerId
+        });
+
+        if (error) throw error;
+        return data as { id: string, name: string, is_active: boolean } | null;
+    }
 }
