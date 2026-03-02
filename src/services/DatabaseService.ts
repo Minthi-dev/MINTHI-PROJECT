@@ -374,6 +374,38 @@ export const DatabaseService = {
         return data
     },
 
+    async _compressImage(file: File, maxWidth = 800, quality = 0.7): Promise<File> {
+        return new Promise((resolve) => {
+            const img = new Image()
+            const canvas = document.createElement('canvas')
+            const reader = new FileReader()
+
+            reader.onload = (e) => {
+                img.onload = () => {
+                    let w = img.width
+                    let h = img.height
+                    if (w > maxWidth) {
+                        h = Math.round((h * maxWidth) / w)
+                        w = maxWidth
+                    }
+                    canvas.width = w
+                    canvas.height = h
+                    const ctx = canvas.getContext('2d')!
+                    ctx.drawImage(img, 0, 0, w, h)
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            resolve(new File([blob], file.name.replace(/\.\w+$/, '.webp'), { type: 'image/webp' }))
+                        } else {
+                            resolve(file)
+                        }
+                    }, 'image/webp', quality)
+                }
+                img.src = e.target?.result as string
+            }
+            reader.readAsDataURL(file)
+        })
+    },
+
     // Storage
     _validateUpload(file: File) {
         const MAX_SIZE = 5 * 1024 * 1024 // 5MB
@@ -388,12 +420,12 @@ export const DatabaseService = {
 
     async uploadLogo(file: File) {
         this._validateUpload(file)
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${crypto.randomUUID()}.${fileExt}`
+        const compressed = await this._compressImage(file)
+        const fileName = `${crypto.randomUUID()}.webp`
 
         const { error: uploadError } = await supabase.storage
             .from('logos')
-            .upload(fileName, file)
+            .upload(fileName, compressed)
 
         if (uploadError) throw uploadError
 
@@ -406,12 +438,12 @@ export const DatabaseService = {
 
     async uploadImage(file: File, bucket: string) {
         this._validateUpload(file)
-        const fileExt = file.name.split('.').pop()
-        const fileName = `${crypto.randomUUID()}.${fileExt}`
+        const compressed = await this._compressImage(file)
+        const fileName = `${crypto.randomUUID()}.webp`
 
         const { error: uploadError } = await supabase.storage
             .from(bucket)
-            .upload(fileName, file)
+            .upload(fileName, compressed)
 
         if (uploadError) throw uploadError
 
@@ -458,7 +490,7 @@ export const DatabaseService = {
     async getDishes(restaurantId: string) {
         const { data, error } = await supabase
             .from('dishes')
-            .select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, created_at, is_available, short_code, exclude_from_all_you_can_eat, is_ayce, allergens')
+            .select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, created_at, exclude_from_all_you_can_eat, is_ayce, allergens')
             .eq('restaurant_id', restaurantId)
         if (error) throw error
         return data.map((d: any) => ({
@@ -545,7 +577,7 @@ export const DatabaseService = {
     async getActiveSession(tableId: string) {
         const { data, error } = await supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled')
             .eq('table_id', tableId)
             .eq('status', 'OPEN')
             .single()
@@ -651,8 +683,8 @@ export const DatabaseService = {
     async getAllTableSessions(restaurantId?: string) {
         let query = supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
-            .order('created_at', { ascending: false })
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled')
+            .order('opened_at', { ascending: false })
             .limit(1000)
         if (restaurantId) {
             query = query.eq('restaurant_id', restaurantId)
@@ -720,7 +752,7 @@ export const DatabaseService = {
     async getBookings(restaurantId: string) {
         const { data, error } = await supabase
             .from('bookings')
-            .select('id, restaurant_id, table_id, name, email, phone, date_time, guests, duration, notes, status, created_at')
+            .select('id, restaurant_id, table_id, name, email, phone, date_time, guests, notes, status, created_at')
             .eq('restaurant_id', restaurantId)
             .order('date_time', { ascending: false })
             .limit(500)

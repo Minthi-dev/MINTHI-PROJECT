@@ -1208,6 +1208,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleDeleteTable = (tableId: string) => {
+    if (!confirm('Sei sicuro di voler eliminare questo tavolo?')) return
+
     setTables(prev => prev.filter(t => t.id !== tableId))
 
     DatabaseService.deleteTable(tableId)
@@ -1215,6 +1217,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       .catch((error) => {
         console.error('Error deleting table:', error)
         toast.error('Errore nell\'eliminare il tavolo')
+        refreshTables()
       })
   }
 
