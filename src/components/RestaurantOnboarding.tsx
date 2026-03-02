@@ -8,6 +8,7 @@ import {
     Users, CheckCircle, ArrowRight, Eye, Rocket, ShieldCheck, Clock,
     X, Sparkle, ChefHat, Tray
 } from '@phosphor-icons/react'
+import { supabase } from '../lib/supabase'
 
 const MACRO_FEATURES = [
     {
@@ -76,6 +77,10 @@ export default function RestaurantOnboarding() {
 
     // Validate token on mount
     useEffect(() => {
+        // Clear any existing session to prevent conflicting redirects after registration
+        localStorage.removeItem('minthi_user')
+        supabase.auth.signOut().catch(console.error)
+
         if (!token) { setTokenError(true); setLoading(false); return }
         DatabaseService.validateRegistrationToken(token).then(data => {
             if (data) { setTokenData(data) } else { setTokenError(true) }

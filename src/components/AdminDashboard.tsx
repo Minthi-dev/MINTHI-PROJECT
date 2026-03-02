@@ -38,8 +38,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin'>('restaurants')
 
   // Admin Payments State
-  const [subscriptionPayments, setSubscriptionPayments] = useState<SubscriptionPayment[]>([])
-  const [restaurantBonuses, setRestaurantBonuses] = useState<RestaurantBonus[]>([])
+  const [subscriptionPayments, loadingPayments, refreshPayments, setSubscriptionPayments] = useSupabaseData<SubscriptionPayment>('subscription_payments', [])
+  const [restaurantBonuses, loadingBonuses, refreshBonuses, setRestaurantBonuses] = useSupabaseData<RestaurantBonus>('restaurant_bonuses', [])
   const [adminFilter, setAdminFilter] = useState<'all' | 'paying' | 'not_paying' | 'suspended'>('all')
   const [showBonusDialog, setShowBonusDialog] = useState(false)
   const [bonusRestaurantId, setBonusRestaurantId] = useState('')
@@ -58,8 +58,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   // Load admin data
   useEffect(() => {
     if (activeView === 'admin') {
-      DatabaseService.getSubscriptionPayments().then(setSubscriptionPayments).catch(console.error)
-      DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
       DatabaseService.getAppConfig('stripe_price_id').then(val => {
         if (val) { setStripePriceId(val); setStripePriceIdSaved(val) }
       }).catch(console.error)
