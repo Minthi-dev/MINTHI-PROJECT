@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { verifyPassword } from '../utils/passwordUtils'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -28,6 +29,22 @@ export default function LoginPage({ onLogin }: Props) {
   const [rememberMe, setRememberMe] = useState(false)
   const [loginAttempts, setLoginAttempts] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState<Date | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const [paymentSuccess, setPaymentSuccess] = useState(false)
+
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment')
+    if (paymentStatus === 'success') {
+      setPaymentSuccess(true)
+      searchParams.delete('payment')
+      setSearchParams(searchParams)
+    } else if (paymentStatus === 'cancelled') {
+      toast.error('Pagamento annullato. Riprova quando sei pronto.')
+      searchParams.delete('payment')
+      setSearchParams(searchParams)
+    }
+  }, [searchParams, setSearchParams])
 
   const handleAdminLogin = async () => {
     // Rate limiting check
@@ -197,6 +214,40 @@ export default function LoginPage({ onLogin }: Props) {
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
       </div>
+
+      {paymentSuccess && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-xl">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, type: 'spring' }}
+            className="text-center px-6 max-w-md"
+          >
+            <div className="w-24 h-24 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-8 shadow-[0_0_50px_-10px_rgba(52,211,153,0.3)]">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.3, type: 'spring' }}
+              >
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 22C17.5 22 22 17.5 22 12C22 6.5 17.5 2 12 2C6.5 2 2 6.5 2 12C2 17.5 6.5 22 12 22Z" stroke="#34D399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M7.75 12L10.58 14.83L16.25 9.17" stroke="#34D399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </motion.div>
+            </div>
+            <h2 className="text-3xl font-bold text-white mb-4">Pagamento Completato!</h2>
+            <p className="text-zinc-400 mb-8 leading-relaxed">
+              Il tuo abbonamento è attivo. Inserisci subito le credenziali che hai scelto durante la registrazione per accedere al tuo nuovo ristorante.
+            </p>
+            <button
+              onClick={() => setPaymentSuccess(false)}
+              className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-colors"
+            >
+              Vai al Login
+            </button>
+          </motion.div>
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}

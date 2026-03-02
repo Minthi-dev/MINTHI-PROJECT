@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSupabaseData } from '../hooks/useSupabaseData'
 import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
-import { User, Restaurant } from '../services/types'
+import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn } from '@phosphor-icons/react'
+import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
@@ -35,7 +35,36 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   )
   const [users] = useSupabaseData<User>('users', [])
   const [salesByRestaurant, setSalesByRestaurant] = useState<Record<string, number>>({})
-  const [activeView, setActiveView] = useState<'restaurants' | 'statistics'>('restaurants')
+  const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin'>('restaurants')
+
+  // Admin Payments State
+  const [subscriptionPayments, setSubscriptionPayments] = useState<SubscriptionPayment[]>([])
+  const [restaurantBonuses, setRestaurantBonuses] = useState<RestaurantBonus[]>([])
+  const [adminFilter, setAdminFilter] = useState<'all' | 'paying' | 'not_paying' | 'suspended'>('all')
+  const [showBonusDialog, setShowBonusDialog] = useState(false)
+  const [bonusRestaurantId, setBonusRestaurantId] = useState('')
+  const [bonusMonths, setBonusMonths] = useState(1)
+  const [bonusReason, setBonusReason] = useState('')
+  const [stripePriceId, setStripePriceId] = useState('')
+  const [stripePriceIdSaved, setStripePriceIdSaved] = useState('')
+
+  // Registration Link Generator
+  const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [inviteFreeMonths, setInviteFreeMonths] = useState(false)
+  const [inviteMonthsCount, setInviteMonthsCount] = useState(1)
+  const [generatedLink, setGeneratedLink] = useState('')
+  const [generatingLink, setGeneratingLink] = useState(false)
+
+  // Load admin data
+  useEffect(() => {
+    if (activeView === 'admin') {
+      DatabaseService.getSubscriptionPayments().then(setSubscriptionPayments).catch(console.error)
+      DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
+      DatabaseService.getAppConfig('stripe_price_id').then(val => {
+        if (val) { setStripePriceId(val); setStripePriceIdSaved(val) }
+      }).catch(console.error)
+    }
+  }, [activeView])
 
   // Fetch aggregated sales per restaurant (lightweight, no realtime subscription on ALL orders)
   useEffect(() => {
@@ -169,6 +198,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         name: newRestaurant.username,
         email: newRestaurant.email,
         password_hash: hashedPw,
+        raw_password: newRestaurant.password,
         role: 'OWNER',
       }
 
@@ -394,6 +424,14 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   <ChartBar size={20} weight={activeView === 'statistics' ? 'fill' : 'regular'} />
                   <span className="text-sm">Statistiche</span>
                 </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setActiveView('admin')}
+                  className={`gap-3 h-10 px-6 rounded-xl transition-all duration-300 ${activeView === 'admin' ? 'bg-amber-500 text-black font-bold shadow-lg shadow-amber-500/20 scale-105' : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'}`}
+                >
+                  <CreditCard size={20} weight={activeView === 'admin' ? 'fill' : 'regular'} />
+                  <span className="text-sm">Pagamenti</span>
+                </Button>
               </div>
               <div className="h-6 w-px bg-white/5 mx-2" />
               <Button
@@ -421,6 +459,308 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       <div className="container mx-auto px-4 py-8 relative z-10">
         {activeView === 'statistics' ? (
           <AdminStatistics onImpersonate={(id) => setImpersonatedRestaurantId(id)} />
+        ) : activeView === 'admin' ? (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-3xl font-bold text-white">Gestione <span className="text-amber-500">Pagamenti</span></h2>
+              <p className="text-zinc-500 mt-1 uppercase tracking-widest text-[10px] font-bold">Abbonamenti e Bonus</p>
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {(['all', 'paying', 'not_paying', 'suspended'] as const).map(filter => (
+                <Button
+                  key={filter}
+                  variant={adminFilter === filter ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAdminFilter(filter)}
+                  className={adminFilter === filter ? 'bg-amber-500 text-black font-bold' : ''}
+                >
+                  {filter === 'all' && 'Tutti'}
+                  {filter === 'paying' && 'Paganti'}
+                  {filter === 'not_paying' && 'Non Paganti'}
+                  {filter === 'suspended' && 'Sospesi'}
+                </Button>
+              ))}
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-auto border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                onClick={() => setShowBonusDialog(true)}
+              >
+                <Gift size={16} className="mr-1.5" />
+                Assegna Bonus
+              </Button>
+            </div>
+
+            {/* Restaurant Payment Cards */}
+            <div className="grid gap-4">
+              {(restaurants || [])
+                .filter(r => {
+                  if (adminFilter === 'paying') return r.stripe_subscription_id
+                  if (adminFilter === 'not_paying') return !r.stripe_subscription_id && r.isActive
+                  if (adminFilter === 'suspended') return !r.isActive
+                  return true
+                })
+                .map(restaurant => {
+                  const payments = subscriptionPayments.filter(p => p.restaurant_id === restaurant.id)
+                  const bonuses = restaurantBonuses.filter(b => b.restaurant_id === restaurant.id && b.is_active)
+                  const lastPayment = payments[0]
+                  const activeBonus = bonuses.find(b => b.expires_at && new Date(b.expires_at) > new Date())
+                  const hasSubscription = !!restaurant.stripe_subscription_id
+
+                  return (
+                    <Card key={restaurant.id} className={`bg-zinc-900 border-white/5 rounded-xl overflow-hidden transition-all ${!restaurant.isActive ? 'border-red-500/20 bg-red-950/10' : hasSubscription ? 'border-emerald-500/10' : 'border-amber-500/10'}`}>
+                      <CardContent className="p-5">
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="flex items-center gap-4">
+                            {restaurant.logo_url ? (
+                              <img src={restaurant.logo_url} alt={restaurant.name} className="w-12 h-12 rounded-xl object-cover border border-white/10" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-zinc-950 flex items-center justify-center border border-white/5">
+                                <Buildings size={20} className="text-zinc-600" />
+                              </div>
+                            )}
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-bold text-white">{restaurant.name}</h3>
+                                {hasSubscription && <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">Abbonato</Badge>}
+                                {!restaurant.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Sospeso</Badge>}
+                                {activeBonus && <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-[10px]">Bonus Attivo</Badge>}
+                                {restaurant.enable_stripe_payments && <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-[10px]">Pag. Clienti</Badge>}
+                              </div>
+                              <div className="text-xs text-zinc-500 space-y-0.5">
+                                {restaurant.suspension_reason && (
+                                  <p className="text-red-400"><Warning size={12} className="inline mr-1" />{restaurant.suspension_reason}</p>
+                                )}
+                                {lastPayment && (
+                                  <p><CheckCircle size={12} className="inline mr-1 text-emerald-500" />Ultimo pagamento: €{lastPayment.amount} — {new Date(lastPayment.created_at || '').toLocaleDateString('it-IT')}</p>
+                                )}
+                                {activeBonus && (
+                                  <p className="text-purple-400"><Gift size={12} className="inline mr-1" />Bonus: {activeBonus.free_months} mesi gratis fino al {new Date(activeBonus.expires_at || '').toLocaleDateString('it-IT')}</p>
+                                )}
+                                {!hasSubscription && !activeBonus && (
+                                  <p className="text-amber-400"><Clock size={12} className="inline mr-1" />Nessun abbonamento attivo</p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {/* Bonus Button */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 text-purple-400 hover:bg-purple-500/10 rounded-lg"
+                              onClick={() => {
+                                setBonusRestaurantId(restaurant.id)
+                                setBonusMonths(1)
+                                setBonusReason('')
+                                setShowBonusDialog(true)
+                              }}
+                              title="Assegna Bonus"
+                            >
+                              <Gift size={18} />
+                            </Button>
+
+                            {/* Revoke Bonus */}
+                            {activeBonus && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-9 text-red-400 hover:bg-red-500/10 rounded-lg text-xs"
+                                onClick={async () => {
+                                  if (confirm(`Revocare il bonus di ${activeBonus.free_months} mesi per ${restaurant.name}?`)) {
+                                    try {
+                                      await DatabaseService.deactivateBonus(activeBonus.id)
+                                      toast.success('Bonus revocato')
+                                      refreshRestaurants()
+                                      DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
+                                    } catch (e: any) { toast.error(e.message) }
+                                  }
+                                }}
+                              >
+                                <Trash size={14} className="mr-1" /> Revoca Bonus
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Per-restaurant custom price ID */}
+                        <div className="mt-3 pt-3 border-t border-white/5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider shrink-0">Price ID:</span>
+                            <Input
+                              placeholder={stripePriceIdSaved || 'Usa prezzo globale'}
+                              defaultValue={(restaurant as any).stripe_price_id || ''}
+                              className="h-7 text-xs font-mono bg-black/30 border-white/5 px-2"
+                              onBlur={async (e) => {
+                                const val = e.target.value.trim()
+                                const currentVal = (restaurant as any).stripe_price_id || ''
+                                if (val !== currentVal) {
+                                  try {
+                                    await DatabaseService.adminUpdateRestaurant(restaurant.id, { stripe_price_id: val || null }, user)
+                                    toast.success(val ? `Price ID personalizzato salvato per ${restaurant.name}` : `${restaurant.name} userà il prezzo globale`)
+                                    refreshRestaurants()
+                                  } catch (e: any) { toast.error(e.message) }
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Payment History */}
+                        {payments.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-white/5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Storico Pagamenti</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {payments.slice(0, 6).map(p => (
+                                <div key={p.id} className={`px-2.5 py-1 rounded-md text-[10px] font-medium border ${p.status === 'paid' ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20' : p.status === 'failed' ? 'bg-red-500/5 text-red-400 border-red-500/20' : 'bg-zinc-800 text-zinc-400 border-white/5'}`}>
+                                  €{p.amount} — {new Date(p.created_at || '').toLocaleDateString('it-IT', { month: 'short', year: '2-digit' })} — {p.status === 'paid' ? 'Pagato' : p.status === 'failed' ? 'Fallito' : p.status}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+            </div>
+
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="bg-zinc-900 border-white/5">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-white">{restaurants?.length || 0}</p>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Totale</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-zinc-900 border-emerald-500/10">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-emerald-400">{restaurants?.filter(r => r.stripe_subscription_id).length || 0}</p>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Abbonati</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-zinc-900 border-red-500/10">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-red-400">{restaurants?.filter(r => !r.isActive).length || 0}</p>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Sospesi</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-zinc-900 border-amber-500/10">
+                <CardContent className="p-4 text-center">
+                  <p className="text-2xl font-bold text-amber-400">
+                    €{subscriptionPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(0)}
+                  </p>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Incassato</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Global Stripe Price ID */}
+            <div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 mt-4 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard size={18} className="text-emerald-500 shrink-0" />
+                  <span className="text-sm font-semibold text-white shrink-0">Stripe Price ID Globale:</span>
+                </div>
+                <Input
+                  placeholder="Incolla il Price ID da Stripe..."
+                  value={stripePriceId}
+                  onChange={(e) => setStripePriceId(e.target.value)}
+                  className="h-10 font-mono text-sm bg-black border-white/10 max-w-sm flex-1"
+                />
+                <Button
+                  disabled={!stripePriceId || stripePriceId === stripePriceIdSaved}
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 shrink-0 disabled:opacity-30 disabled:hover:bg-emerald-600 transition-all rounded-lg"
+                  onClick={async () => {
+                    try {
+                      await DatabaseService.setAppConfig('stripe_price_id', stripePriceId.trim())
+                      setStripePriceIdSaved(stripePriceId.trim())
+                      toast.success('Price ID globale salvato!')
+                    } catch (e: any) {
+                      toast.error('Errore: ' + e.message)
+                    }
+                  }}
+                >
+                  Salva Prezzo
+                </Button>
+              </div>
+              {stripePriceIdSaved && (
+                <p className="text-xs text-emerald-400 mt-2 ml-7 font-mono flex items-center gap-1.5">
+                  <CheckCircle size={14} className="inline" /> Prezzo attualmente attivo: <span className="font-bold text-white bg-black/50 px-2 py-0.5 rounded ml-1">{stripePriceIdSaved}</span>
+                </p>
+              )}
+              <p className="text-xs text-zinc-500 mt-2 ml-7">Questo prezzo verrà applicato per tutti i ristoranti durante la registrazione. Puoi sovrascriverlo per un singolo ristorante dal pannello sottostante.</p>
+            </div>
+
+            {/* Bonus Dialog */}
+            <Dialog open={showBonusDialog} onOpenChange={setShowBonusDialog}>
+              <DialogContent className="max-w-md bg-black/95 border-purple-500/20 text-white backdrop-blur-2xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2"><Gift size={20} className="text-purple-400" /> Assegna Bonus Gratuito</DialogTitle>
+                  <DialogDescription>Regala mensilità gratuite a un ristorante.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Ristorante</Label>
+                    <Select value={bonusRestaurantId} onValueChange={setBonusRestaurantId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona ristorante" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(restaurants || []).map(r => (
+                          <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Mesi gratuiti</Label>
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" size="icon" onClick={() => setBonusMonths(m => Math.max(1, m - 1))} className="h-10 w-10"><span className="text-lg">-</span></Button>
+                      <span className="text-2xl font-bold text-purple-400 w-12 text-center">{bonusMonths}</span>
+                      <Button variant="outline" size="icon" onClick={() => setBonusMonths(m => Math.min(24, m + 1))} className="h-10 w-10"><span className="text-lg">+</span></Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Motivo (opzionale)</Label>
+                    <Input
+                      placeholder="Es. Partner speciale, promozione lancio..."
+                      value={bonusReason}
+                      onChange={(e) => setBonusReason(e.target.value)}
+                    />
+                  </div>
+                  <Button
+                    className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl"
+                    disabled={!bonusRestaurantId}
+                    onClick={async () => {
+                      try {
+                        await DatabaseService.createRestaurantBonus({
+                          restaurant_id: bonusRestaurantId,
+                          free_months: bonusMonths,
+                          reason: bonusReason || undefined,
+                          granted_by: user.name || user.email,
+                        })
+                        toast.success(`Bonus di ${bonusMonths} mesi assegnato!`)
+                        setShowBonusDialog(false)
+                        refreshRestaurants()
+                        DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
+                      } catch (e: any) {
+                        toast.error('Errore: ' + e.message)
+                      }
+                    }}
+                  >
+                    <Gift size={18} className="mr-2" />
+                    Assegna {bonusMonths} {bonusMonths === 1 ? 'mese' : 'mesi'} gratis
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         ) : (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -430,6 +770,20 @@ export default function AdminDashboard({ user, onLogout }: Props) {
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Invite Link Generator */}
+                <Button
+                  variant="outline"
+                  className="h-11 px-4 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 rounded-xl"
+                  onClick={() => {
+                    setGeneratedLink('')
+                    setInviteFreeMonths(false)
+                    setInviteMonthsCount(1)
+                    setShowInviteDialog(true)
+                  }}
+                >
+                  <LinkIcon size={18} weight="bold" className="mr-2" />
+                  Genera Link
+                </Button>
                 {/* Search Bar */}
                 <div className="relative w-full md:w-64">
                   <MagnifyingGlass className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -521,6 +875,99 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     </div>
                   </DialogContent>
                 </Dialog>
+
+                {/* Invite Link Dialog */}
+                <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+                  <DialogContent className="sm:max-w-[420px] bg-zinc-950 border-amber-500/20 text-white">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2"><Rocket size={20} className="text-amber-500" /> Link di Registrazione</DialogTitle>
+                      <DialogDescription className="text-zinc-400">Genera un link per far registrare un ristorante autonomamente.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="invite-free-months"
+                          checked={inviteFreeMonths}
+                          onChange={(e) => setInviteFreeMonths(e.target.checked)}
+                          className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                        />
+                        <Label htmlFor="invite-free-months" className="text-sm cursor-pointer">Mesi gratis</Label>
+                        {inviteFreeMonths && (
+                          <Input
+                            type="number"
+                            min={1}
+                            max={24}
+                            value={inviteMonthsCount}
+                            onChange={(e) => setInviteMonthsCount(parseInt(e.target.value) || 1)}
+                            className="w-20 h-9 bg-zinc-900 border-white/10"
+                          />
+                        )}
+                      </div>
+
+                      {generatedLink ? (
+                        <div className="space-y-3">
+                          <div className="p-3 bg-zinc-900 rounded-xl border border-white/10 flex items-center gap-2">
+                            <input
+                              readOnly
+                              value={generatedLink}
+                              className="flex-1 bg-transparent text-sm text-white font-mono outline-none"
+                            />
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 shrink-0 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+                              onClick={() => {
+                                if (navigator.clipboard && window.isSecureContext) {
+                                  navigator.clipboard.writeText(generatedLink).then(() => {
+                                    toast.success('Link copiato!')
+                                  }).catch(() => {
+                                    toast.error('Impossibile copiare. Selezionalo e copialo manualmente.')
+                                  })
+                                } else {
+                                  // Fallback per ambienti non sicuri (http) o dispositivi vecchi
+                                  toast.success('Seleziona il link qui sopra e copialo.', { duration: 4000 })
+                                }
+                              }}
+                            >
+                              <Copy size={16} />
+                            </Button>
+                          </div>
+                          {inviteFreeMonths && (
+                            <p className="text-xs text-emerald-400 flex items-center gap-1">
+                              <CheckCircle size={14} weight="fill" />
+                              Il ristorante avrà {inviteMonthsCount} {inviteMonthsCount === 1 ? 'mese' : 'mesi'} gratis
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <Button
+                          className="w-full h-11 bg-amber-500 text-black font-bold hover:bg-amber-400 rounded-xl shadow-lg shadow-amber-500/10 transition-all active:scale-95"
+                          disabled={generatingLink}
+                          onClick={async () => {
+                            setGeneratingLink(true)
+                            try {
+                              const freeMonths = inviteFreeMonths ? inviteMonthsCount : 0
+                              const { token } = await DatabaseService.createRegistrationToken(freeMonths)
+                              const link = `${window.location.origin}/register/${token}`
+                              setGeneratedLink(link)
+                              if (navigator.clipboard && window.isSecureContext) {
+                                navigator.clipboard.writeText(link).catch(() => { })
+                              }
+                              toast.success('Link generato!')
+                            } catch (err: any) {
+                              toast.error('Errore: ' + (err.message || 'Riprova'))
+                            } finally {
+                              setGeneratingLink(false)
+                            }
+                          }}
+                        >
+                          {generatingLink ? 'Generazione...' : 'Genera Link'}
+                        </Button>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
 
@@ -532,49 +979,50 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 return (
                   <Card key={restaurant.id} className="bg-zinc-900 border border-white/5 rounded-xl overflow-hidden hover:border-amber-500/20 transition-all group shadow-lg mb-4 ring-1 ring-white/5">
                     <CardContent className="p-0">
-                      <div className={`flex flex-col md:flex-row items-center p-6 gap-6 transition-all duration-300 ${!restaurant.isActive ? 'opacity-50 grayscale' : ''}`}>
+                      <div className={`flex flex-col md:flex-row items-center p-4 gap-4 transition-all duration-300 ${!restaurant.isActive ? 'opacity-50 grayscale' : ''}`}>
 
                         {/* Left: Logo */}
                         <div className="flex-shrink-0">
                           {restaurant.logo_url ? (
-                            <img src={restaurant.logo_url} alt={restaurant.name} className="w-16 h-16 rounded-xl object-cover border border-white/10 bg-black shadow-inner" />
+                            <img src={restaurant.logo_url} alt={restaurant.name} className="w-12 h-12 rounded-lg object-cover border border-white/10 bg-black shadow-inner" />
                           ) : (
-                            <div className="w-16 h-16 rounded-xl bg-zinc-950 flex items-center justify-center border border-white/5 shadow-inner">
-                              <Buildings size={24} className="text-zinc-600" />
+                            <div className="w-12 h-12 rounded-lg bg-zinc-950 flex items-center justify-center border border-white/5 shadow-inner">
+                              <Buildings size={20} className="text-zinc-600" />
                             </div>
                           )}
                         </div>
 
                         {/* Center: Info */}
-                        <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                          <div className="space-y-1.5 leadin-tight">
-                            <div className="flex items-center gap-2.5">
-                              <h3 className="text-lg font-semibold tracking-tight text-white">{restaurant.name}</h3>
+                        <div className="flex-1 min-w-0 flex flex-col md:flex-row md:items-center gap-4">
+                          <div className="space-y-0.5" style={{ minWidth: '200px' }}>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-semibold tracking-tight text-white mb-0 leading-none">{restaurant.name}</h3>
                               {restaurant.isActive && (
-                                <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                               )}
                             </div>
-                            <div className="text-sm font-medium text-zinc-400 flex flex-col gap-0.5">
-                              <span>{restaurant.email}</span>
-                              <span className="text-zinc-500 text-xs">{restaurant.phone || 'N/D'}</span>
+                            <div className="text-xs font-medium text-zinc-400 flex items-center gap-2">
+                              <span className="truncate max-w-[150px]">{restaurant.email}</span>
                             </div>
                           </div>
 
                           {/* Credentials (Compact & Clean) */}
                           {restaurantUser && (
-                            <div className="flex items-center gap-4 bg-black/20 px-4 py-3 rounded-lg border border-white/5">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Proprietario</span>
-                                <span className="text-sm font-medium text-zinc-200">{restaurantUser.name}</span>
+                            <div className="flex items-center gap-3 bg-black/20 px-3 py-1.5 rounded-md border border-white/5 flex-1">
+                              <div className="flex items-center gap-2 text-xs truncate">
+                                <span className="uppercase font-bold text-zinc-500 tracking-wider text-[9px] mr-1">User:</span>
+                                <span className="font-medium text-zinc-300">{restaurantUser.name}</span>
                               </div>
-                              <div className="h-8 w-px bg-white/5" />
-                              <div className="flex items-center gap-3 flex-1 justify-end">
-                                <div className="font-mono text-xs text-amber-500 tracking-wider">
-                                  {isPasswordVisible ? restaurantUser.password_hash : '••••••••'}
+                              <div className="h-4 w-px bg-white/10 mx-auto" />
+                              <div className="flex items-center gap-2 justify-end">
+                                <span className="uppercase font-bold text-zinc-500 tracking-wider text-[9px]">Pass:</span>
+                                <div className="font-mono text-sm text-amber-500 tracking-wider min-w-[60px] text-right">
+                                  {isPasswordVisible ? (restaurantUser.raw_password || restaurantUser.password_hash?.substring(0, 8) + '...') : '••••••••'}
                                 </div>
                                 <button
                                   onClick={() => togglePasswordVisibility(restaurant.id)}
-                                  className="text-zinc-500 hover:text-white transition-colors"
+                                  className="text-zinc-500 hover:text-white transition-colors ml-1"
+                                  title="Mostra password vera"
                                 >
                                   {isPasswordVisible ? <EyeSlash size={14} /> : <Eye size={14} />}
                                 </button>
@@ -584,59 +1032,55 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         </div>
 
                         {/* Right: Actions */}
-                        <div className="flex items-center gap-2 flex-shrink-0 border-l border-white/5 pl-6 ml-2">
+                        <div className="flex items-center gap-1 flex-shrink-0 md:border-l border-white/5 md:pl-4 md:ml-2">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10"
+                            className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-white/5 rounded-md"
                             onClick={() => setImpersonatedRestaurantId(restaurant.id)}
                             title="Accedi alla Dashboard"
                           >
-                            <SignIn size={18} />
+                            <SignIn size={16} />
                           </Button>
 
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg border border-transparent hover:border-white/10"
+                            className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-white/5 rounded-md"
                             onClick={() => handlePopulateData(restaurant.id)}
                             title="Popola Dati"
                           >
-                            <Database size={18} />
+                            <Database size={16} />
                           </Button>
 
                           <Button
                             variant="ghost"
                             size="icon"
-                            className={`h-9 w-9 rounded-lg border border-transparent ${restaurant.isActive ? 'text-zinc-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20' : 'text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/20'}`}
+                            className={`h-8 w-8 rounded-md ${restaurant.isActive ? 'text-zinc-400 hover:text-red-400 hover:bg-red-500/10' : 'text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
                             onClick={() => handleToggleActive(restaurant)}
                             title={restaurant.isActive ? "Disattiva" : "Attiva"}
                           >
-                            {restaurant.isActive ? (
-                              <Eye size={18} />
-                            ) : (
-                              <EyeSlash size={20} />
-                            )}
+                            {restaurant.isActive ? <Eye size={16} /> : <EyeSlash size={16} />}
                           </Button>
 
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-10 w-10 text-zinc-500 hover:text-white hover:bg-white/5 rounded-xl"
+                            className="h-8 w-8 text-zinc-500 hover:text-white hover:bg-white/5 rounded-md"
                             onClick={() => handleEditRestaurant(restaurant)}
                             title="Modifica"
                           >
-                            <PencilSimple size={20} />
+                            <PencilSimple size={16} />
                           </Button>
 
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-10 w-10 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-xl"
+                            className="h-8 w-8 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-md"
                             onClick={() => handleDeleteRestaurant(restaurant.id)}
                             title="Elimina"
                           >
-                            <Trash size={20} />
+                            <Trash size={16} />
                           </Button>
                         </div>
 
@@ -654,12 +1098,13 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 </div>
               )}
             </div>
-          </div>
-        )}
-      </div>
+          </div >
+        )
+        }
+      </div >
 
       {/* Edit Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+      < Dialog open={showEditDialog} onOpenChange={setShowEditDialog} >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Modifica Ristorante</DialogTitle>
@@ -739,7 +1184,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
             </div>
           )}
         </DialogContent>
-      </Dialog>
-    </div>
+      </Dialog >
+    </div >
   )
 }

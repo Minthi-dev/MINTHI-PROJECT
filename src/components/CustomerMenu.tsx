@@ -58,7 +58,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { DishPlaceholder } from '@/components/ui/DishPlaceholder'
 // Icons
-import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle } from '@phosphor-icons/react'
+import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users } from '@phosphor-icons/react'
 import {
   ShoppingBasket, Utensils, ChefHat, Search,
   RefreshCw, AlertCircle, ChevronUp, ChevronDown, Layers, ArrowLeft, Send,
@@ -234,18 +234,16 @@ const DishCard = React.memo(({
     }}
     onClick={() => onSelect(dish)}
   >
-    <div className="w-18 h-18 shrink-0 relative rounded-lg overflow-hidden shadow-inner" style={{ background: `linear-gradient(to bottom right, ${theme.cardBg}, ${theme.pageBg})`, border: `1px solid ${theme.cardBorder}` }}>
-      {dish.image_url ? (
+    {dish.image_url && (
+      <div className="w-18 h-18 shrink-0 relative rounded-lg overflow-hidden shadow-inner" style={{ background: `linear-gradient(to bottom right, ${theme.cardBg}, ${theme.pageBg})`, border: `1px solid ${theme.cardBorder}` }}>
         <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" />
-      ) : (
-        <DishPlaceholder className="group-hover:scale-110 transition-transform duration-700" iconSize={24} variant="pot" bgColor={theme.pageBg} gradientFrom={theme.cardBg} accentGlow={theme.primaryAlpha(0.1)} iconColor={theme.textMuted} borderColor={theme.cardBorder} />
-      )}
-      {dish.allergens && dish.allergens.length > 0 && (
-        <div className="absolute bottom-1 right-1 p-0.5 rounded-full shadow-sm" style={{ backgroundColor: 'rgba(9,9,11,0.9)', border: `1px solid ${theme.primaryAlpha(0.2)}` }}>
-          <Info className="w-2.5 h-2.5" style={{ color: theme.primary }} />
-        </div>
-      )}
-    </div>
+        {dish.allergens && dish.allergens.length > 0 && (
+          <div className="absolute bottom-1 right-1 p-0.5 rounded-full shadow-sm" style={{ backgroundColor: 'rgba(9,9,11,0.9)', border: `1px solid ${theme.primaryAlpha(0.2)}` }}>
+            <Info className="w-2.5 h-2.5" style={{ color: theme.primary }} />
+          </div>
+        )}
+      </div>
+    )}
 
     <div className="flex-1 min-w-0 py-0.5">
       <h3 className="font-normal text-base leading-tight line-clamp-1 mb-1 tracking-wide" style={{ color: theme.textPrimary, fontFamily: theme.headerFont }}>{dish.name}</h3>
@@ -735,8 +733,22 @@ const CustomerMenuBase = () => {
   }, [restaurantId])
 
   const handlePinSubmit = async (enteredPin: string) => {
-    // Retry joining session if missing (connection recovery)
-    if (!activeSession) {
+    const cleanEnteredPin = enteredPin.trim()
+
+    // Always fetch the freshest session from DB to avoid React state staleness
+    let latestSession: any = null
+
+    if (sessionId) {
+      latestSession = await DatabaseService.getSessionById(sessionId)
+    } else if (tableId) {
+      latestSession = await DatabaseService.getActiveSession(tableId)
+    } else if (activeSession?.id) {
+      latestSession = await DatabaseService.getSessionById(activeSession.id)
+    }
+
+    if (!latestSession) {
+      // No session found at all
+      toast.dismiss()
       if (tableId && restaurantId) {
         toast.loading("Tentativo di connessione al tavolo...")
         const joined = await joinSession(tableId, restaurantId)
@@ -745,46 +757,30 @@ const CustomerMenuBase = () => {
           toast.error("Impossibile connettersi. Scansiona di nuovo il QR.")
           return
         }
-        // If joined successfully, we need to wait for activeSession to update in the effect
-        // But we can't wait for React state here easily without refactoring. 
-        // For now, let's ask user to click again once connected, or rely on the fact that joinSession sets state.
-        // However, joinSession updates Context state, which updates formatted activeSession asynchronously.
-
-        // Let's just return h let the user click again (or auto-submit if we could)
-        // Better UX: check session via DB directly here to verify PIN immediately
-        const session = await DatabaseService.getSessionById(sessionId || (await DatabaseService.getActiveSession(tableId))?.id!)
-        if (session && enteredPin === session.session_pin) {
-          toast.dismiss()
-          setActiveSession(session)
-          setIsAuthenticated(true)
-          localStorage.setItem('sessionPin', enteredPin)
-          localStorage.setItem('customerSessionId', session.id)
-          toast.success("Accesso effettuato!")
-          return
-        } else {
-          toast.dismiss()
-          setPinError(true)
-          toast.error("PIN non valido")
-          pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
-          setPin(['', '', '', ''])
-          return
-        }
+        // If joinSession worked, it means a NEW session was created implicitly.
+        // We fetch it again now.
+        latestSession = await DatabaseService.getActiveSession(tableId)
       } else {
         toast.error("Dati tavolo mancanti. Riprova a scansionare il QR.")
         return
       }
     }
 
-    if (activeSession && enteredPin === activeSession.session_pin) {
+    if (latestSession && cleanEnteredPin === String(latestSession.session_pin).trim()) {
+      toast.dismiss()
+      setActiveSession(latestSession)
       setIsAuthenticated(true)
-      localStorage.setItem('sessionPin', enteredPin)
-      localStorage.setItem('customerSessionId', activeSession.id)
+      localStorage.setItem('sessionPin', cleanEnteredPin)
+      localStorage.setItem('customerSessionId', latestSession.id)
       toast.success("Accesso effettuato!")
-    } else if (activeSession) {
+      return
+    } else {
+      toast.dismiss()
       setPinError(true)
-      toast.error("PIN non valido")
+      toast.error("PIN errato o scaduto. Riprova.")
       pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
       setPin(['', '', '', ''])
+      return
     }
   }
 
@@ -1035,6 +1031,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const timersRef = React.useRef<ReturnType<typeof setTimeout>[]>([])
   const [activeWaitCourse, setActiveWaitCourse] = useState(1) // Waiter Mode: Selected course for new items
   const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Default to true
+  const [isProcessingStripePayment, setIsProcessingStripePayment] = useState(false)
+  const [showPaymentOptions, setShowPaymentOptions] = useState(false)
+  const [stripePaymentSplitCount, setStripePaymentSplitCount] = useState(1)
+  const [stripePaymentSuccess, setStripePaymentSuccess] = useState(false)
 
   // Cleanup all pending timers on unmount
   React.useEffect(() => {
@@ -1583,6 +1583,110 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }
 
 
+  // Check for payment success/cancel from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('payment') === 'success') {
+      setStripePaymentSuccess(true)
+      toast.success('Pagamento completato con successo!', { duration: 5000 })
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname)
+    } else if (params.get('payment') === 'cancelled') {
+      toast.error('Pagamento annullato', { duration: 3000 })
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
+  // Handle Stripe payment
+  const handleStripePayment = async (mode: 'full' | 'split', splitCount?: number) => {
+    if (!fullRestaurant || !activeSession || previousOrders.length === 0) return
+    setIsProcessingStripePayment(true)
+
+    try {
+      // Calculate total with coperto
+      let total = previousOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
+      const orderIds = previousOrders.filter(o => o.status !== 'PAID' && o.status !== 'CANCELLED').map(o => o.id)
+
+      if (orderIds.length === 0) {
+        toast.error('Nessun ordine da pagare')
+        return
+      }
+
+      // Build line items from orders
+      const items: { name: string, price: number, quantity: number }[] = []
+
+      if (mode === 'split' && splitCount && splitCount > 1) {
+        // Alla romana - divide total by split count
+        const perPerson = Math.ceil((total / splitCount) * 100) / 100
+        items.push({
+          name: `Quota alla romana (1/${splitCount})`,
+          price: perPerson,
+          quantity: 1
+        })
+      } else {
+        // Full payment - list all items
+        previousOrders.forEach(order => {
+          order.items?.forEach((item: any) => {
+            if (item.status === 'PAID' || item.status === 'CANCELLED') return
+            const dishName = item.dish?.name || dishes.find(d => d.id === item.dish_id)?.name || 'Piatto'
+            items.push({
+              name: dishName,
+              price: item.dish?.price || 0,
+              quantity: item.quantity || 1
+            })
+          })
+        })
+
+        // Add coperto if applicable
+        const isCopertoEnabled = activeSession?.coperto_enabled ?? true
+        if (isCopertoEnabled && fullRestaurant) {
+          const currentCoperto = getCurrentCopertoPrice(
+            fullRestaurant,
+            fullRestaurant.lunch_time_start || '12:00',
+            fullRestaurant.dinner_time_start || '19:00'
+          ).price
+          if (currentCoperto > 0) {
+            items.push({
+              name: 'Coperto',
+              price: currentCoperto,
+              quantity: activeSession.customer_count || 1
+            })
+          }
+        }
+      }
+
+      if (items.length === 0) {
+        toast.error('Nessun articolo da pagare')
+        return
+      }
+
+      const totalToPay = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+
+      toast.loading('Reindirizzamento a Stripe...', { id: 'stripe-pay' })
+
+      const { url } = await DatabaseService.createStripeCustomerPayment({
+        restaurantId: fullRestaurant.id,
+        tableSessionId: activeSession.id,
+        orderIds,
+        items,
+        totalAmount: totalToPay,
+        splitLabel: mode === 'split' ? `Alla romana (1/${splitCount})` : 'Pagamento completo',
+        tableId: tableId || '',
+      })
+
+      if (url) {
+        window.location.href = url
+      } else {
+        toast.error('Errore: nessun link di pagamento ricevuto', { id: 'stripe-pay' })
+      }
+    } catch (error: any) {
+      console.error('Stripe payment error:', error)
+      toast.error('Errore durante il pagamento: ' + (error.message || 'Riprova'), { id: 'stripe-pay' })
+    } finally {
+      setIsProcessingStripePayment(false)
+    }
+  }
+
   // RENDER HELPERS - LUXURY THEME
   if (isLoading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: theme.pageBgGradient, ...theme.cssVars }}>
@@ -1827,12 +1931,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                             )}
                             <div className="rounded-xl p-3 flex gap-3 shadow-sm relative overflow-hidden" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
                               {/* Image if available */}
-                              {item.dish?.image_url ? (
+                              {item.dish?.image_url && (
                                 <img src={item.dish.image_url} className="w-16 h-16 rounded-lg object-cover" style={{ backgroundColor: theme.inputBg }} />
-                              ) : (
-                                <div className="w-16 h-16 rounded-lg flex items-center justify-center" style={{ backgroundColor: theme.inputBg, color: theme.textMuted }}>
-                                  <ForkKnife weight="duotone" size={24} />
-                                </div>
                               )}
                               <div className="flex-1 min-w-0 flex flex-col justify-between">
                                 <div className="flex justify-between items-start gap-2">
@@ -1915,6 +2015,120 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                         </div>
                       </div>
                     ))}
+
+                    {/* STRIPE PAYMENT SECTION */}
+                    {fullRestaurant?.enable_stripe_payments && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && !stripePaymentSuccess && (
+                      <div className="pt-4 space-y-3" style={{ borderTop: `1px solid ${theme.divider}` }}>
+                        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.primary }}>Paga Online</h3>
+
+                        {!showPaymentOptions ? (
+                          <Button
+                            className="w-full font-bold h-14 rounded-xl text-lg shadow-lg"
+                            style={{
+                              background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)',
+                              color: '#ffffff',
+                              boxShadow: '0 10px 25px -5px rgba(99, 91, 255, 0.4)',
+                            }}
+                            onClick={() => setShowPaymentOptions(true)}
+                            disabled={isProcessingStripePayment}
+                          >
+                            <CreditCard size={22} className="mr-2" />
+                            Paga con Carta
+                          </Button>
+                        ) : (
+                          <div className="space-y-3 animate-in slide-in-from-bottom-2">
+                            {/* Pay full */}
+                            <Button
+                              className="w-full font-bold h-12 rounded-xl text-base"
+                              style={{
+                                background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)',
+                                color: '#ffffff',
+                              }}
+                              onClick={() => handleStripePayment('full')}
+                              disabled={isProcessingStripePayment}
+                            >
+                              {isProcessingStripePayment ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
+                                  <span>Attendi...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <Wallet size={18} className="mr-2" />
+                                  Paga Tutto — €{historyTotal.toFixed(2)}
+                                </>
+                              )}
+                            </Button>
+
+                            {/* Alla Romana */}
+                            {(activeSession?.customer_count || 0) > 1 && (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    className="flex-1 font-bold h-12 rounded-xl text-sm"
+                                    style={{
+                                      borderColor: '#635BFF40',
+                                      color: '#635BFF',
+                                      backgroundColor: '#635BFF10',
+                                    }}
+                                    onClick={() => handleStripePayment('split', activeSession?.customer_count || 2)}
+                                    disabled={isProcessingStripePayment}
+                                  >
+                                    <Users size={16} className="mr-1.5" />
+                                    Alla Romana — €{(historyTotal / (activeSession?.customer_count || 2)).toFixed(2)}/pers.
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Custom split */}
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 p-1 rounded-lg flex-1" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
+                                <span className="text-xs px-2" style={{ color: theme.textMuted }}>Dividi in</span>
+                                <button onClick={() => setStripePaymentSplitCount(c => Math.max(2, c - 1))} className="w-8 h-8 rounded flex items-center justify-center" style={{ color: theme.textSecondary }}>
+                                  <Minus size={14} weight="bold" />
+                                </button>
+                                <span className="w-6 text-center font-bold text-sm" style={{ color: theme.textPrimary }}>{stripePaymentSplitCount}</span>
+                                <button onClick={() => setStripePaymentSplitCount(c => Math.min(20, c + 1))} className="w-8 h-8 rounded flex items-center justify-center" style={{ color: theme.textSecondary }}>
+                                  <Plus size={14} weight="bold" />
+                                </button>
+                              </div>
+                              <Button
+                                variant="outline"
+                                className="h-10 rounded-lg font-bold text-xs px-4"
+                                style={{ borderColor: '#635BFF40', color: '#635BFF' }}
+                                onClick={() => handleStripePayment('split', stripePaymentSplitCount)}
+                                disabled={isProcessingStripePayment || stripePaymentSplitCount < 2}
+                              >
+                                €{(historyTotal / stripePaymentSplitCount).toFixed(2)}
+                              </Button>
+                            </div>
+
+                            <Button
+                              variant="ghost"
+                              className="w-full text-xs h-8"
+                              style={{ color: theme.textMuted }}
+                              onClick={() => setShowPaymentOptions(false)}
+                            >
+                              Annulla
+                            </Button>
+
+                            <p className="text-[10px] text-center" style={{ color: theme.textMuted }}>
+                              Pagamento sicuro tramite Stripe
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {stripePaymentSuccess && (
+                      <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#10B98115', border: '1px solid #10B98130' }}>
+                        <CheckCircle size={32} weight="fill" className="mx-auto mb-2" style={{ color: '#10B981' }} />
+                        <p className="font-bold text-sm" style={{ color: '#10B981' }}>Pagamento completato!</p>
+                        <p className="text-xs mt-1" style={{ color: theme.textMuted }}>Il tavolo verrà liberato automaticamente.</p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1987,12 +2201,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     <img src={selectedDish.image_url} alt={selectedDish.name} className="w-full h-full object-cover" />
                     <div className="absolute inset-0" style={{ background: `linear-gradient(to top, ${theme.dialogBg}cc, transparent)` }} />
                   </div>
-                ) : (
-                  <div className="relative h-48 w-full">
-                    <DishPlaceholder iconSize={48} variant="pot" bgColor={theme.pageBg} gradientFrom={theme.cardBg} accentGlow={theme.primaryAlpha(0.1)} iconColor={theme.textMuted} borderColor={theme.cardBorder} />
-                    <div className="absolute inset-0" style={{ background: `linear-gradient(to top, ${theme.dialogBg}cc, transparent)` }} />
-                  </div>
-                )}
+                ) : null}
 
                 <div className="flex items-start justify-between p-5 pb-0">
                   <div>

@@ -261,7 +261,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             if (refreshSessionsDebounceRef.current) clearTimeout(refreshSessionsDebounceRef.current)
             supabase.removeChannel(channel)
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restaurantId])
 
     // ... (getTableTotal, getSplitTotal, getDetailedTableStatus functions remain same) ...
@@ -805,9 +805,52 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             : tables.filter(t => t.room_id === selectedRoomFilter), [tables, selectedRoomFilter])
 
     if (loading) return (
-        <div className="min-h-[100dvh] bg-zinc-950 flex flex-col items-center justify-center text-amber-500">
-            <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-4" />
-            <p className="font-medium tracking-widest uppercase text-xs">Caricamento...</p>
+        <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
+            {/* Ambient Background */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
+            </div>
+
+            <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="relative z-10 flex flex-col items-center gap-6"
+            >
+                <motion.div
+                    initial={{ rotate: -20 }}
+                    animate={{ rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
+                    className="w-24 h-24 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-[0_0_50px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="48" height="48" fill="currentColor">
+                        <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
+                    </svg>
+                </motion.div>
+
+                <motion.h1
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1"
+                >
+                    min<span className="font-bold text-emerald-400">thi</span>
+                </motion.h1>
+
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.6 }}
+                    className="flex flex-col items-center gap-4 mt-2"
+                >
+                    <div className="flex gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                    <p className="text-xs text-zinc-500 uppercase tracking-widest mt-2">Caricamento in corso...</p>
+                </motion.div>
+            </motion.div>
         </div>
     )
 

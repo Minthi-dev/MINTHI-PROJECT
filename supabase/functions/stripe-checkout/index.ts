@@ -36,6 +36,7 @@ serve(async (req) => {
             success_url: successUrl || `${req.headers.get("origin")}/dashboard?payment=success`,
             cancel_url: cancelUrl || `${req.headers.get("origin")}/dashboard?payment=cancelled`,
             metadata: {
+                paymentType: "subscription",
                 restaurantId: restaurantId,
             },
             client_reference_id: restaurantId,

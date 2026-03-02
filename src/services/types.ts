@@ -9,6 +9,7 @@ export interface User {
     email: string
     name?: string
     password_hash?: string
+    raw_password?: string
     role: UserRole
     created_at?: string
     restaurant_id?: string
@@ -60,6 +61,19 @@ export interface Restaurant {
     view_only_menu_enabled?: boolean
     menu_style?: 'elegant' | 'friendly' | 'minimal' | 'bold'
     menu_primary_color?: string
+    // Stripe Subscription
+    stripe_customer_id?: string
+    stripe_subscription_id?: string
+    stripe_price_id?: string
+    enable_stripe_payments?: boolean
+    suspension_reason?: string
+    subscription_status?: 'active' | 'past_due' | 'canceled' | 'trialing' | null
+    // Stripe Connect (ricevi pagamenti dai clienti)
+    stripe_connect_account_id?: string
+    stripe_connect_enabled?: boolean
+    // Dati fiscali
+    vat_number?: string
+    billing_name?: string
 }
 
 export interface DayMealConfig {
@@ -198,6 +212,7 @@ export interface Order {
     created_at: string
     updated_at?: string
     closed_at?: string
+    payment_method?: 'cash' | 'stripe' | null
     // Frontend helper
     items?: OrderItem[]
     table_id?: string // Helper
@@ -285,6 +300,31 @@ export interface RestaurantStaff {
     name: string
     username: string
     password?: string // Omitted in frontend queries usually, but needed for creation
+    is_active: boolean
+    created_at?: string
+}
+
+export interface SubscriptionPayment {
+    id: string
+    restaurant_id: string
+    stripe_payment_intent_id?: string
+    stripe_invoice_id?: string
+    amount: number
+    currency: string
+    status: 'pending' | 'paid' | 'failed' | 'refunded'
+    period_start?: string
+    period_end?: string
+    created_at?: string
+}
+
+export interface RestaurantBonus {
+    id: string
+    restaurant_id: string
+    free_months: number
+    reason?: string
+    granted_by?: string
+    granted_at?: string
+    expires_at?: string
     is_active: boolean
     created_at?: string
 }

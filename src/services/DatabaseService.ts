@@ -5,7 +5,7 @@ import { hashPassword } from '../utils/passwordUtils'
 export const DatabaseService = {
     // Users
     async getUsers() {
-        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash')
+        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash, raw_password')
         if (error) throw error
         return data as unknown as User[]
     },
@@ -631,7 +631,7 @@ export const DatabaseService = {
         const { data, error } = await supabase
             .from('orders')
             .select(`
-                id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
+                id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method,
                 items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at,
                     dish:dishes(id, name, price, category_id)
                 )
@@ -647,7 +647,7 @@ export const DatabaseService = {
         const { data, error } = await supabase
             .from('orders')
             .select(`
-                id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
+                id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method,
                 items:order_items(id, order_id, dish_id, quantity, status, note, course_number,
                     dish:dishes(id, name, price)
                 )
@@ -910,18 +910,252 @@ export const DatabaseService = {
         return data
     },
 
-    // Stripe
+    // Stripe - Abbonamento ristorante
     async createStripeSubscriptionCheckout(restaurantId: string, priceId: string) {
         const { data, error } = await supabase.functions.invoke('stripe-checkout', {
             body: {
                 restaurantId,
                 priceId,
-                successUrl: `${window.location.origin}/dashboard?payment=success`,
-                cancelUrl: `${window.location.origin}/dashboard?payment=cancelled`
+                successUrl: `${window.location.origin}/?payment=success`,
+                cancelUrl: `${window.location.origin}/?payment=cancelled`
             }
         });
 
         if (error) throw error;
         return data; // { sessionId: string, url: string }
-    }
+    },
+
+    // Stripe - Pagamento cliente dal menu
+    async createStripeCustomerPayment(params: {
+        restaurantId: string,
+        tableSessionId: string,
+        orderIds: string[],
+        items: { name: string, price: number, quantity: number }[],
+        totalAmount: number,
+        splitLabel?: string,
+        tableId?: string,
+    }) {
+        const { data, error } = await supabase.functions.invoke('stripe-customer-payment', {
+            body: {
+                restaurantId: params.restaurantId,
+                tableSessionId: params.tableSessionId,
+                orderIds: params.orderIds,
+                items: params.items,
+                totalAmount: params.totalAmount,
+                splitLabel: params.splitLabel || 'Pagamento',
+                successUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=success`,
+                cancelUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=cancelled`,
+            }
+        });
+
+        if (error) throw error;
+        return data; // { sessionId: string, url: string }
+    },
+
+    // Stripe - Toggle pagamenti clienti
+    async toggleStripePayments(restaurantId: string, enabled: boolean) {
+        const { error } = await supabase
+            .from('restaurants')
+            .update({ enable_stripe_payments: enabled })
+            .eq('id', restaurantId)
+        if (error) throw error
+    },
+
+    // Stripe - Billing Portal (gestisci abbonamento, scarica fatture, cambia metodo pagamento)
+    async createBillingPortalSession(restaurantId: string) {
+        const { data, error } = await supabase.functions.invoke('stripe-billing-portal', {
+            body: {
+                restaurantId,
+                returnUrl: `${window.location.origin}/?section=settings`,
+            }
+        });
+        if (error) throw error;
+        return data as { url: string };
+    },
+
+    // Stripe Connect - Onboarding per ricevere pagamenti dai clienti
+    async createStripeConnectOnboarding(restaurantId: string) {
+        const { data, error } = await supabase.functions.invoke('stripe-connect-onboarding', {
+            body: {
+                restaurantId,
+                returnUrl: `${window.location.origin}/?connect=success`,
+                refreshUrl: `${window.location.origin}/?connect=refresh`,
+            }
+        });
+        if (error) throw error;
+        return data as { url: string; accountId: string };
+    },
+
+    // Aggiorna dati fiscali del ristorante (P.IVA, ragione sociale)
+    async updateRestaurantPaymentInfo(restaurantId: string, info: { vat_number?: string; billing_name?: string }) {
+        const { error } = await supabase
+            .from('restaurants')
+            .update(info)
+            .eq('id', restaurantId)
+        if (error) throw error
+    },
+
+    // Admin - Subscription payments
+    async getSubscriptionPayments(restaurantId?: string) {
+        let query = supabase
+            .from('subscription_payments')
+            .select('*')
+            .order('created_at', { ascending: false })
+        if (restaurantId) {
+            query = query.eq('restaurant_id', restaurantId)
+        }
+        const { data, error } = await query
+        if (error) throw error
+        return data
+    },
+
+    // Admin - Restaurant bonuses
+    async getRestaurantBonuses(restaurantId?: string) {
+        let query = supabase
+            .from('restaurant_bonuses')
+            .select('*')
+            .order('granted_at', { ascending: false })
+        if (restaurantId) {
+            query = query.eq('restaurant_id', restaurantId)
+        }
+        const { data, error } = await query
+        if (error) throw error
+        return data
+    },
+
+    async createRestaurantBonus(bonus: {
+        restaurant_id: string,
+        free_months: number,
+        reason?: string,
+        granted_by?: string,
+    }) {
+        const expiresAt = new Date()
+        expiresAt.setMonth(expiresAt.getMonth() + bonus.free_months)
+
+        const { data, error } = await supabase
+            .from('restaurant_bonuses')
+            .insert({
+                ...bonus,
+                expires_at: expiresAt.toISOString(),
+                is_active: true,
+            })
+            .select()
+            .single()
+        if (error) throw error
+
+        // Riattiva il ristorante se era sospeso
+        await supabase
+            .from('restaurants')
+            .update({ is_active: true, suspension_reason: null })
+            .eq('id', bonus.restaurant_id)
+
+        return data
+    },
+
+    async deactivateBonus(bonusId: string) {
+        const { error } = await supabase
+            .from('restaurant_bonuses')
+            .update({ is_active: false })
+            .eq('id', bonusId)
+        if (error) throw error
+    },
+
+    // Admin - Sospendi/Riattiva ristorante manualmente
+    async suspendRestaurant(restaurantId: string, reason: string) {
+        const { error } = await supabase
+            .from('restaurants')
+            .update({ is_active: false, suspension_reason: reason })
+            .eq('id', restaurantId)
+        if (error) throw error
+    },
+
+    async reactivateRestaurant(restaurantId: string) {
+        const { error } = await supabase
+            .from('restaurants')
+            .update({ is_active: true, suspension_reason: null })
+            .eq('id', restaurantId)
+        if (error) throw error
+    },
+
+    // Mark orders as paid via stripe
+    async markOrdersPaidStripe(orderIds: string[]) {
+        for (const id of orderIds) {
+            const { error } = await supabase
+                .from('orders')
+                .update({ status: 'PAID', payment_method: 'stripe', closed_at: new Date().toISOString() })
+                .eq('id', id)
+            if (error) throw error
+        }
+    },
+
+    // App Config (global settings)
+    async getAppConfig(key: string): Promise<string | null> {
+        const { data, error } = await supabase
+            .from('app_config')
+            .select('value')
+            .eq('key', key)
+            .maybeSingle()
+        if (error) { console.warn('app_config read error:', error.message); return null }
+        return data?.value || null
+    },
+
+    async setAppConfig(key: string, value: string) {
+        const { error } = await supabase
+            .from('app_config')
+            .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+        if (error) throw error
+    },
+
+    // Registration Tokens (onboarding)
+    async createRegistrationToken(freeMonths: number = 0): Promise<{ token: string, id: string }> {
+        const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6)
+        const { data, error } = await supabase
+            .from('registration_tokens')
+            .insert({ token, free_months: freeMonths })
+            .select('id, token')
+            .single()
+        if (error) throw error
+        return data
+    },
+
+    async validateRegistrationToken(token: string) {
+        const { data, error } = await supabase
+            .from('registration_tokens')
+            .select('*')
+            .eq('token', token)
+            .maybeSingle()
+        if (error) throw error
+        if (!data) return null
+        if (data.expires_at && new Date(data.expires_at) < new Date()) return null
+        return data
+    },
+
+    async markTokenUsed(tokenId: string, restaurantId: string) {
+        const { error } = await supabase
+            .from('registration_tokens')
+            .update({ used: true, used_by_restaurant_id: restaurantId })
+            .eq('id', tokenId)
+        if (error) throw error
+    },
+
+    // Public restaurant registration (no auth required, uses service role via edge function or anon via RPC)
+    async registerRestaurant(data: { name: string, phone: string, email: string, username: string, password: string }) {
+        const hashedPassword = await hashPassword(data.password)
+
+        const { data: result, error } = await supabase.rpc('register_restaurant_secure', {
+            p_name: data.name,
+            p_phone: data.phone,
+            p_email: data.email,
+            p_username: data.username,
+            p_password_hash: hashedPassword,
+            p_raw_password: data.password
+        });
+
+        if (error) {
+            console.error("RPC Error:", error);
+            throw error;
+        }
+
+        return { id: result.restaurant_id };
+    },
 }

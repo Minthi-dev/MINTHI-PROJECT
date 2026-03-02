@@ -38,37 +38,75 @@ serve(async (req) => {
             return new Response(`Webhook Error: ${err.message}`, { status: 400 });
         }
 
-        // Gestione degli eventi Stripe
         switch (event.type) {
             case "checkout.session.completed": {
                 const session = event.data.object;
-                const restaurantId = session.metadata?.restaurantId || session.client_reference_id;
-                const customerId = session.customer;
-                const subscriptionId = session.subscription;
+                const paymentType = session.metadata?.paymentType;
 
-                if (restaurantId) {
-                    // Attiviamo il ristorante
-                    await supabase
-                        .from("restaurants")
-                        .update({
-                            stripe_customer_id: customerId,
-                            stripe_subscription_id: subscriptionId,
-                            isActive: true, // Ristorante sbloccato!
-                        })
-                        .eq("id", restaurantId);
+                if (paymentType === "customer_order") {
+                    // === PAGAMENTO CLIENTE (ordine dal menu) ===
+                    const restaurantId = session.metadata?.restaurantId;
+                    const sessionId = session.metadata?.tableSessionId;
+                    const orderIds = session.metadata?.orderIds ? JSON.parse(session.metadata.orderIds) : [];
 
-                    console.log(`Ristorante ${restaurantId} attivato con successo!`);
+                    if (restaurantId && orderIds.length > 0) {
+                        for (const orderId of orderIds) {
+                            await supabase
+                                .from("orders")
+                                .update({
+                                    status: "PAID",
+                                    payment_method: "stripe",
+                                    closed_at: new Date().toISOString(),
+                                })
+                                .eq("id", orderId);
+                        }
+
+                        if (sessionId) {
+                            const { data: remainingOrders } = await supabase
+                                .from("orders")
+                                .select("id")
+                                .eq("table_session_id", sessionId)
+                                .not("status", "in", '("PAID","CANCELLED")');
+
+                            if (!remainingOrders || remainingOrders.length === 0) {
+                                await supabase
+                                    .from("table_sessions")
+                                    .update({ status: "CLOSED", closed_at: new Date().toISOString() })
+                                    .eq("id", sessionId);
+                            }
+                        }
+                    }
+                } else {
+                    // === ATTIVAZIONE ABBONAMENTO ===
+                    const restaurantId = session.metadata?.restaurantId || session.client_reference_id;
+                    const customerId = session.customer;
+                    const subscriptionId = session.subscription;
+
+                    if (restaurantId) {
+                        await supabase
+                            .from("restaurants")
+                            .update({
+                                stripe_customer_id: customerId,
+                                stripe_subscription_id: subscriptionId,
+                                is_active: true,
+                                suspension_reason: null,
+                                subscription_status: "active",
+                            })
+                            .eq("id", restaurantId);
+
+                        console.log(`Ristorante ${restaurantId} attivato con abbonamento!`);
+                    }
                 }
                 break;
             }
 
-            case "customer.subscription.deleted":
-            case "customer.subscription.paused":
-            case "invoice.payment_failed": {
-                const subscription = event.data.object;
-                const customerId = subscription.customer;
+            case "invoice.paid": {
+                const invoice = event.data.object;
+                const customerId = invoice.customer;
 
-                // Disattiviamo il ristorante
+                // Salta fatture con amount = 0 (es. prime fatture di trial)
+                if ((invoice.amount_paid || 0) === 0) break;
+
                 const { data: restaurant } = await supabase
                     .from("restaurants")
                     .select("id")
@@ -77,11 +115,133 @@ serve(async (req) => {
 
                 if (restaurant) {
                     await supabase
+                        .from("subscription_payments")
+                        .insert({
+                            restaurant_id: restaurant.id,
+                            stripe_invoice_id: invoice.id,
+                            stripe_payment_intent_id: invoice.payment_intent,
+                            amount: (invoice.amount_paid || 0) / 100,
+                            currency: invoice.currency || "eur",
+                            status: "paid",
+                            period_start: invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null,
+                            period_end: invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null,
+                        });
+
+                    // Pagamento andato a buon fine: aggiorna status e riattiva se era past_due
+                    await supabase
                         .from("restaurants")
-                        .update({ isActive: false })
+                        .update({
+                            subscription_status: "active",
+                            is_active: true,
+                            suspension_reason: null,
+                        })
                         .eq("id", restaurant.id);
 
-                    console.log(`Ristorante ${restaurant.id} sospeso per mancato pagamento o abbonamento annullato.`);
+                    console.log(`Pagamento abbonamento registrato per ristorante ${restaurant.id}`);
+                }
+                break;
+            }
+
+            case "invoice.payment_failed": {
+                const invoice = event.data.object;
+                const customerId = invoice.customer;
+
+                const { data: restaurant } = await supabase
+                    .from("restaurants")
+                    .select("id")
+                    .eq("stripe_customer_id", customerId)
+                    .single();
+
+                if (restaurant) {
+                    await supabase
+                        .from("subscription_payments")
+                        .insert({
+                            restaurant_id: restaurant.id,
+                            stripe_invoice_id: invoice.id,
+                            amount: (invoice.amount_due || 0) / 100,
+                            currency: invoice.currency || "eur",
+                            status: "failed",
+                        });
+
+                    // Controlla bonus attivo
+                    const { data: activeBonus } = await supabase
+                        .from("restaurant_bonuses")
+                        .select("id")
+                        .eq("restaurant_id", restaurant.id)
+                        .eq("is_active", true)
+                        .gte("expires_at", new Date().toISOString())
+                        .limit(1);
+
+                    if (!activeBonus || activeBonus.length === 0) {
+                        // Segna come past_due ma NON sospendere subito — Stripe riprova automaticamente
+                        // Il ristorante riceverà l'avviso in dashboard finché non paga
+                        await supabase
+                            .from("restaurants")
+                            .update({
+                                subscription_status: "past_due",
+                            })
+                            .eq("id", restaurant.id);
+
+                        console.log(`Pagamento fallito per ristorante ${restaurant.id} — status: past_due`);
+                    }
+                }
+                break;
+            }
+
+            case "customer.subscription.deleted":
+            case "customer.subscription.paused": {
+                const subscription = event.data.object;
+                const customerId = subscription.customer;
+
+                const { data: restaurant } = await supabase
+                    .from("restaurants")
+                    .select("id")
+                    .eq("stripe_customer_id", customerId)
+                    .single();
+
+                if (restaurant) {
+                    const { data: activeBonus } = await supabase
+                        .from("restaurant_bonuses")
+                        .select("id, expires_at")
+                        .eq("restaurant_id", restaurant.id)
+                        .eq("is_active", true)
+                        .gte("expires_at", new Date().toISOString())
+                        .limit(1);
+
+                    if (activeBonus && activeBonus.length > 0) {
+                        // Bonus attivo: mantieni il ristorante online ma aggiorna lo status
+                        await supabase
+                            .from("restaurants")
+                            .update({ subscription_status: "canceled" })
+                            .eq("id", restaurant.id);
+                    } else {
+                        await supabase
+                            .from("restaurants")
+                            .update({
+                                is_active: false,
+                                subscription_status: "canceled",
+                                suspension_reason: event.type === "customer.subscription.deleted"
+                                    ? "Abbonamento annullato"
+                                    : "Abbonamento in pausa",
+                            })
+                            .eq("id", restaurant.id);
+                    }
+
+                    console.log(`Abbonamento ${event.type} per ristorante ${restaurant.id}`);
+                }
+                break;
+            }
+
+            case "account.updated": {
+                // Stripe Connect: aggiorna stato account del ristorante
+                const account = event.data.object;
+                if (account.charges_enabled) {
+                    await supabase
+                        .from("restaurants")
+                        .update({ stripe_connect_enabled: true })
+                        .eq("stripe_connect_account_id", account.id);
+
+                    console.log(`Stripe Connect abilitato per account ${account.id}`);
                 }
                 break;
             }

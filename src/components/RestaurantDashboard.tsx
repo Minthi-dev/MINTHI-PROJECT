@@ -1369,6 +1369,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleDeleteDish = (dishId: string) => {
+    const dish = dishes?.find(d => d.id === dishId)
+    if (!confirm(`Eliminare "${dish?.name || 'questo piatto'}" dal menu?`)) return
+
     setDishes(prev => prev.filter(d => d.id !== dishId))
 
     DatabaseService.deleteDish(dishId)
@@ -1608,17 +1611,54 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   if (!restaurantId) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4">
-        {/* Ambient Background for loading screen too */}
+      <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
+        {/* Ambient Background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
         </div>
-        <div className="relative z-10 w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]" />
-        <div className="relative z-10 flex flex-col items-center gap-2">
-          <p className="text-lg font-light tracking-[0.2em] uppercase text-white">MINTHI</p>
-          <p className="text-xs text-zinc-500 uppercase tracking-widest">Caricamento sistema...</p>
-        </div>
-        <Button variant="ghost" onClick={onLogout} className="relative z-10 mt-8 text-zinc-600 hover:text-amber-500 hover:bg-white/5 uppercase text-xs tracking-widest">
+
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="relative z-10 flex flex-col items-center gap-6"
+        >
+          <motion.div
+            initial={{ rotate: -20 }}
+            animate={{ rotate: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
+            className="w-24 h-24 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-[0_0_50px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="48" height="48" fill="currentColor">
+              <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
+            </svg>
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1"
+          >
+            min<span className="font-bold text-emerald-400">thi</span>
+          </motion.h1>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+            className="flex flex-col items-center gap-4 mt-2"
+          >
+            <div className="flex gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+            </div>
+            <p className="text-xs text-zinc-500 uppercase tracking-widest mt-2">Caricamento in corso...</p>
+          </motion.div>
+        </motion.div>
+
+        <Button variant="ghost" onClick={onLogout} className="relative z-10 mt-8 text-zinc-600 hover:text-amber-500 hover:bg-white/5 uppercase text-xs tracking-widest transition-colors">
           Torna al login
         </Button>
       </div>
@@ -1781,6 +1821,34 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               </motion.div>
             )}
           </AnimatePresence>
+          {/* Banner pagamento fallito — mostrato finché il pagamento non viene risolto */}
+          <AnimatePresence>
+            {currentRestaurant?.subscription_status === 'past_due' && (
+              <motion.div
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3 }}
+                className="mb-4"
+              >
+                <div className="flex items-center gap-3 p-4 bg-red-950/60 border border-red-500/40 rounded-2xl backdrop-blur-sm shadow-lg shadow-red-950/20">
+                  <WarningCircle className="text-red-400 shrink-0" weight="fill" size={24} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-red-300 text-sm">Pagamento abbonamento non andato a buon fine</p>
+                    <p className="text-xs text-red-400/70 mt-0.5">Aggiorna il metodo di pagamento per evitare la sospensione del servizio.</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setActiveTab('settings')}
+                    className="shrink-0 bg-red-500 hover:bg-red-600 text-white text-xs font-bold h-8 px-4"
+                  >
+                    Risolvi
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8 animate-in fade-in-30 duration-500">
             {/* Orders Tab */}
             <TabsContent value="orders" className="space-y-6">
@@ -1913,7 +1981,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             <CardHeader className="p-4 pb-2">
                               <div className="flex justify-between items-center">
                                 <CardTitle className="text-base text-zinc-200">Ordine #{order.id.slice(0, 8)}</CardTitle>
-                                <Badge variant="outline" className="border-white/10 text-zinc-500">{new Date(order.created_at).toLocaleString()}</Badge>
+                                <div className="flex items-center gap-2">
+                                  {(order as any).payment_method === 'stripe' && (
+                                    <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">Online</Badge>
+                                  )}
+                                  <Badge variant="outline" className="border-white/10 text-zinc-500">{new Date(order.created_at).toLocaleString()}</Badge>
+                                </div>
                               </div>
                               <CardDescription className="text-zinc-500">{restaurantTables.find(t => t.id === getTableIdFromOrder(order))?.number || 'N/D'}</CardDescription>
                             </CardHeader>
@@ -2211,6 +2284,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       <div className="flex items-center gap-2 mb-1">
                                         <span className="font-bold text-zinc-100">Tavolo {table?.number}</span>
                                         <Badge variant="outline" className="text-[10px] font-mono border-zinc-700 text-zinc-400">{session.session_pin}</Badge>
+                                        {sessionOrders.some((o: any) => o.payment_method === 'stripe') && (
+                                          <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20">Pagato Online</Badge>
+                                        )}
                                       </div>
                                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                         <span className="flex items-center gap-1">
@@ -3138,64 +3214,83 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             key={dish.id}
                             className={`group relative bg-zinc-900/80 rounded-2xl overflow-hidden border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/5 ${!dish.is_active ? 'opacity-50 grayscale' : ''}`}
                           >
-                            {/* Image Section */}
-                            <div className="relative aspect-[4/3] overflow-hidden bg-zinc-800">
-                              {dish.image_url ? (
+                            {/* Image Section (only if dish has an image) */}
+                            {dish.image_url ? (
+                              <div className="relative aspect-[4/3] overflow-hidden bg-zinc-800">
                                 <img
                                   src={dish.image_url}
                                   alt={dish.name}
                                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 />
-                              ) : (
-                                <DishPlaceholder className="group-hover:scale-105 transition-transform duration-500" iconSize={48} />
-                              )}
 
-                              {/* Price Badge */}
-                              <div className="absolute top-3 right-3">
-                                <span className="px-3 py-1.5 bg-zinc-950/90 backdrop-blur-sm rounded-full text-amber-400 font-bold text-sm shadow-lg">
-                                  €{dish.price.toFixed(2)}
-                                </span>
-                              </div>
-
-                              {/* AYCE Badge */}
-                              {dish.is_ayce && (
-                                <div className="absolute top-3 left-3">
-                                  <span className="px-2.5 py-1 bg-amber-500 text-zinc-950 font-bold text-xs rounded-full shadow-md uppercase tracking-wide">
-                                    AYCE
+                                {/* Price Badge */}
+                                <div className="absolute top-3 right-3">
+                                  <span className="px-3 py-1.5 bg-zinc-950/90 backdrop-blur-sm rounded-full text-amber-400 font-bold text-sm shadow-lg">
+                                    €{dish.price.toFixed(2)}
                                   </span>
                                 </div>
-                              )}
 
-                              {/* Hover Actions Overlay */}
-                              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end justify-center pb-4">
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    className="h-9 px-4 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded-full shadow-lg"
-                                    onClick={() => handleEditDish(dish)}
-                                  >
-                                    <PencilSimple size={16} className="mr-1.5" />
-                                    Modifica
-                                  </Button>
-                                  <Button
-                                    size="icon"
-                                    variant="secondary"
-                                    className={`h-9 w-9 rounded-full ${dish.is_active ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-700 hover:bg-zinc-600'}`}
-                                    onClick={() => handleToggleDish(dish.id)}
-                                  >
-                                    {dish.is_active ? <Eye size={16} className="text-amber-500" /> : <EyeSlash size={16} className="text-zinc-400" />}
-                                  </Button>
-                                  <Button
-                                    size="icon"
-                                    variant="destructive"
-                                    className="h-9 w-9 rounded-full"
-                                    onClick={() => handleDeleteDish(dish.id)}
-                                  >
-                                    <Trash size={16} />
-                                  </Button>
+                                {/* AYCE Badge */}
+                                {dish.is_ayce && (
+                                  <div className="absolute top-3 left-3">
+                                    <span className="px-2.5 py-1 bg-amber-500 text-zinc-950 font-bold text-xs rounded-full shadow-md uppercase tracking-wide">
+                                      AYCE
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Hover Actions Overlay */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end justify-center pb-4">
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="h-9 px-4 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded-full shadow-lg"
+                                      onClick={() => handleEditDish(dish)}
+                                    >
+                                      <PencilSimple size={16} className="mr-1.5" />
+                                      Modifica
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="secondary"
+                                      className={`h-9 w-9 rounded-full ${dish.is_active ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-700 hover:bg-zinc-600'}`}
+                                      onClick={() => handleToggleDish(dish.id)}
+                                    >
+                                      {dish.is_active ? <Eye size={16} className="text-amber-500" /> : <EyeSlash size={16} className="text-zinc-400" />}
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="destructive"
+                                      className="h-9 w-9 rounded-full"
+                                      onClick={() => handleDeleteDish(dish.id)}
+                                    >
+                                      <Trash size={16} />
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            ) : (
+                              /* No image: show inline action buttons instead of image placeholder */
+                              <div className="flex items-center justify-end gap-1.5 px-4 pt-3">
+                                {dish.is_ayce && (
+                                  <span className="px-2 py-0.5 bg-amber-500 text-zinc-950 font-bold text-[10px] rounded-full uppercase tracking-wide mr-auto">
+                                    AYCE
+                                  </span>
+                                )}
+                                <span className="px-2.5 py-1 bg-zinc-800 rounded-full text-amber-400 font-bold text-xs">
+                                  €{dish.price.toFixed(2)}
+                                </span>
+                                <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full text-zinc-500 hover:text-amber-400" onClick={() => handleEditDish(dish)}>
+                                  <PencilSimple size={14} />
+                                </Button>
+                                <Button size="icon" variant="ghost" className={`h-7 w-7 rounded-full ${dish.is_active ? 'text-zinc-500 hover:text-amber-400' : 'text-zinc-600'}`} onClick={() => handleToggleDish(dish.id)}>
+                                  {dish.is_active ? <Eye size={14} /> : <EyeSlash size={14} />}
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full text-zinc-500 hover:text-red-400" onClick={() => handleDeleteDish(dish.id)}>
+                                  <Trash size={14} />
+                                </Button>
+                              </div>
+                            )}
 
                             {/* Content Section */}
                             <div className="p-4">
@@ -3997,7 +4092,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       fontFamily: 'system-ui, -apple-system, sans-serif',
                       textAlign: 'center'
                     }}>
-                      {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : 'Scansiona per ordinare'}
+                      {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                     </p>
 
                     {/* QR Code */}
@@ -4246,7 +4341,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         fontFamily: 'system-ui, -apple-system, sans-serif',
                         textAlign: 'center'
                       }}>
-                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : 'Scansiona per ordinare'}
+                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                       </p>
                       {/* QR Code */}
                       < div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
