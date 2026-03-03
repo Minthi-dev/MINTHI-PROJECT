@@ -1138,7 +1138,12 @@ export const DatabaseService = {
         if (error) throw error
     },
 
-    async registerRestaurant(data: { name: string, phone: string, email: string, username: string, password: string, freeMonths?: number }) {
+    async registerRestaurant(data: {
+        name: string, phone: string, email: string, username: string, password: string,
+        freeMonths?: number,
+        billingName?: string, vatNumber?: string, billingAddress?: string,
+        billingCity?: string, billingCap?: string, billingProvince?: string, codiceUnivoco?: string
+    }) {
         const hashedPassword = await hashPassword(data.password)
 
         const { data: result, error } = await supabase.rpc('register_restaurant_secure', {
@@ -1148,7 +1153,14 @@ export const DatabaseService = {
             p_username: data.username,
             p_password_hash: hashedPassword,
             p_raw_password: data.password,
-            p_free_months: data.freeMonths || 0
+            p_free_months: data.freeMonths || 0,
+            p_billing_name: data.billingName || null,
+            p_vat_number: data.vatNumber || null,
+            p_billing_address: data.billingAddress || null,
+            p_billing_city: data.billingCity || null,
+            p_billing_cap: data.billingCap || null,
+            p_billing_province: data.billingProvince || null,
+            p_codice_univoco: data.codiceUnivoco || null,
         });
 
         if (error) {

@@ -94,7 +94,14 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     email: '',
     logo_url: '',
     username: '',
-    password: ''
+    password: '',
+    billingName: '',
+    vatNumber: '',
+    billingAddress: '',
+    billingCity: '',
+    billingCap: '',
+    billingProvince: '',
+    codiceUnivoco: '',
   })
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -188,6 +195,13 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         logo_url: finalLogoUrl,
         owner_id: userId,
         isActive: true,
+        billing_name: newRestaurant.billingName.trim() || undefined,
+        vat_number: newRestaurant.vatNumber.trim() || undefined,
+        billing_address: newRestaurant.billingAddress.trim() || undefined,
+        billing_city: newRestaurant.billingCity.trim() || undefined,
+        billing_cap: newRestaurant.billingCap.trim() || undefined,
+        billing_province: newRestaurant.billingProvince.trim() || undefined,
+        codice_univoco: newRestaurant.codiceUnivoco.trim() || undefined,
       }
 
       const hashedPw = await hashPassword(newRestaurant.password)
@@ -203,7 +217,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       await DatabaseService.createUser(restaurantUser)
       await DatabaseService.createRestaurant(restaurant)
 
-      setNewRestaurant({ name: '', phone: '', email: '', logo_url: '', username: '', password: '' })
+      setNewRestaurant({ name: '', phone: '', email: '', logo_url: '', username: '', password: '', billingName: '', vatNumber: '', billingAddress: '', billingCity: '', billingCap: '', billingProvince: '', codiceUnivoco: '' })
       setLogoFile(null)
       setShowRestaurantDialog(false)
       toast.success('Ristorante creato con successo')
@@ -858,7 +872,52 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         </div>
                       </div>
 
-                      <div className="space-y-2 pt-2 border-t">
+                      <div className="space-y-2 pt-2 border-t border-white/10">
+                        <Label>Dati Fiscali</Label>
+                        <Input
+                          placeholder="Nome Azienda / Ragione Sociale"
+                          value={newRestaurant.billingName}
+                          onChange={(e) => setNewRestaurant(prev => ({ ...prev, billingName: e.target.value }))}
+                        />
+                        <Input
+                          placeholder="Partita IVA"
+                          value={newRestaurant.vatNumber}
+                          onChange={(e) => setNewRestaurant(prev => ({ ...prev, vatNumber: e.target.value }))}
+                        />
+                        <Input
+                          placeholder="Via / Indirizzo"
+                          value={newRestaurant.billingAddress}
+                          onChange={(e) => setNewRestaurant(prev => ({ ...prev, billingAddress: e.target.value }))}
+                        />
+                        <div className="grid grid-cols-3 gap-2">
+                          <Input
+                            placeholder="Comune"
+                            value={newRestaurant.billingCity}
+                            onChange={(e) => setNewRestaurant(prev => ({ ...prev, billingCity: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="CAP"
+                            value={newRestaurant.billingCap}
+                            onChange={(e) => setNewRestaurant(prev => ({ ...prev, billingCap: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="Prov."
+                            value={newRestaurant.billingProvince}
+                            onChange={(e) => setNewRestaurant(prev => ({ ...prev, billingProvince: e.target.value.toUpperCase().slice(0, 2) }))}
+                            maxLength={2}
+                            className="uppercase"
+                          />
+                        </div>
+                        <Input
+                          placeholder="Codice Univoco SDI"
+                          value={newRestaurant.codiceUnivoco}
+                          onChange={(e) => setNewRestaurant(prev => ({ ...prev, codiceUnivoco: e.target.value.toUpperCase() }))}
+                          maxLength={7}
+                          className="uppercase font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-2 pt-2 border-t border-white/10">
                         <Label>Credenziali Proprietario</Label>
                         <Input
                           placeholder="Username"

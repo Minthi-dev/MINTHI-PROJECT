@@ -75,6 +75,11 @@ export interface Restaurant {
     // Dati fiscali
     vat_number?: string
     billing_name?: string
+    billing_city?: string
+    billing_address?: string
+    billing_cap?: string
+    billing_province?: string
+    codice_univoco?: string
 }
 
 export interface DayMealConfig {

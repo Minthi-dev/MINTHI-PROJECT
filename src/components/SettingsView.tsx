@@ -995,53 +995,6 @@ export function SettingsView({
                             </div>
                         </div>
 
-                        {/* 2. Dati Fiscali */}
-                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-5 sm:p-6">
-                                <div className="flex items-center gap-2.5 mb-4">
-                                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
-                                        <Receipt className="text-zinc-400" weight="bold" size={18} />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-semibold text-sm text-white">Dati Fiscali</h3>
-                                        <p className="text-[11px] text-zinc-500">Per la fatturazione ai clienti</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs text-zinc-500">Partita IVA</Label>
-                                        <Input
-                                            value={vatNumber}
-                                            onChange={(e) => setVatNumber(e.target.value)}
-                                            placeholder="IT12345678901"
-                                            className="bg-black/30 border-white/5 h-10 text-sm"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <Label className="text-xs text-zinc-500">Ragione Sociale</Label>
-                                        <Input
-                                            value={billingName}
-                                            onChange={(e) => setBillingName(e.target.value)}
-                                            placeholder="Ristorante Da Mario S.r.l."
-                                            className="bg-black/30 border-white/5 h-10 text-sm"
-                                        />
-                                    </div>
-                                    <Button
-                                        onClick={handleSavePaymentInfo}
-                                        disabled={savingPaymentInfo}
-                                        size="sm"
-                                        className="h-9 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg gap-1.5"
-                                    >
-                                        {savingPaymentInfo ? (
-                                            <><ArrowClockwise className="animate-spin" size={13} /> Salvataggio...</>
-                                        ) : (
-                                            <><Save size={13} /> Salva</>
-                                        )}
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
                     </motion.div>
                 </TabsContent>
 

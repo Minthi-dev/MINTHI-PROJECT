@@ -73,6 +73,14 @@ export default function RestaurantOnboarding() {
         username: '',
         password: '',
         confirmPassword: '',
+        // Dati fiscali
+        billingName: '',
+        vatNumber: '',
+        billingAddress: '',
+        billingCity: '',
+        billingCap: '',
+        billingProvince: '',
+        codiceUnivoco: '',
     })
 
     // Validate token on mount
@@ -93,6 +101,13 @@ export default function RestaurantOnboarding() {
         if (!form.username.trim()) return toast.error('Inserisci un username')
         if (form.password.length < 6) return toast.error('La password deve avere almeno 6 caratteri')
         if (form.password !== form.confirmPassword) return toast.error('Le password non coincidono')
+        if (!form.billingName.trim()) return toast.error('Inserisci il nome azienda')
+        if (!form.vatNumber.trim()) return toast.error('Inserisci la Partita IVA')
+        if (!form.billingAddress.trim()) return toast.error('Inserisci l\'indirizzo')
+        if (!form.billingCity.trim()) return toast.error('Inserisci il comune')
+        if (!form.billingCap.trim()) return toast.error('Inserisci il CAP')
+        if (!form.billingProvince.trim()) return toast.error('Inserisci la provincia')
+        if (!form.codiceUnivoco.trim()) return toast.error('Inserisci il codice univoco SDI')
         if (!tokenData) return toast.error('Token non valido')
 
         setSubmitting(true)
@@ -104,7 +119,14 @@ export default function RestaurantOnboarding() {
                 email: form.email.trim(),
                 username: form.username.trim(),
                 password: form.password,
-                freeMonths: tokenData.free_months || 0
+                freeMonths: tokenData.free_months || 0,
+                billingName: form.billingName.trim(),
+                vatNumber: form.vatNumber.trim(),
+                billingAddress: form.billingAddress.trim(),
+                billingCity: form.billingCity.trim(),
+                billingCap: form.billingCap.trim(),
+                billingProvince: form.billingProvince.trim(),
+                codiceUnivoco: form.codiceUnivoco.trim(),
             })
 
             // 3. If there were free months, it's already active, just redirect
@@ -380,6 +402,86 @@ export default function RestaurantOnboarding() {
                                         className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
                                         placeholder="info@ristorante.it"
                                     />
+                                </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-white/5">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mb-3">Dati Fiscali</p>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Nome Azienda *</label>
+                                        <input
+                                            type="text"
+                                            value={form.billingName}
+                                            onChange={(e) => setForm(f => ({ ...f, billingName: e.target.value }))}
+                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
+                                            placeholder="Ristorante Da Mario S.r.l."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">P. IVA *</label>
+                                        <input
+                                            type="text"
+                                            value={form.vatNumber}
+                                            onChange={(e) => setForm(f => ({ ...f, vatNumber: e.target.value }))}
+                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
+                                            placeholder="IT12345678901"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Via / Indirizzo *</label>
+                                        <input
+                                            type="text"
+                                            value={form.billingAddress}
+                                            onChange={(e) => setForm(f => ({ ...f, billingAddress: e.target.value }))}
+                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
+                                            placeholder="Via Roma 1"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Comune *</label>
+                                            <input
+                                                type="text"
+                                                value={form.billingCity}
+                                                onChange={(e) => setForm(f => ({ ...f, billingCity: e.target.value }))}
+                                                className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                placeholder="Milano"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">CAP *</label>
+                                            <input
+                                                type="text"
+                                                value={form.billingCap}
+                                                onChange={(e) => setForm(f => ({ ...f, billingCap: e.target.value }))}
+                                                className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                placeholder="20100"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Prov. *</label>
+                                            <input
+                                                type="text"
+                                                value={form.billingProvince}
+                                                onChange={(e) => setForm(f => ({ ...f, billingProvince: e.target.value.toUpperCase().slice(0, 2) }))}
+                                                className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors uppercase"
+                                                placeholder="MI"
+                                                maxLength={2}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Codice Univoco SDI *</label>
+                                        <input
+                                            type="text"
+                                            value={form.codiceUnivoco}
+                                            onChange={(e) => setForm(f => ({ ...f, codiceUnivoco: e.target.value.toUpperCase() }))}
+                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors uppercase font-mono"
+                                            placeholder="XXXXXXX"
+                                            maxLength={7}
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
