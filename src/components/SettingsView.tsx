@@ -905,396 +905,345 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-6 max-w-2xl mx-auto"
+                        className="space-y-5 max-w-xl mx-auto"
                     >
-                        {/* Toggle pagamenti online */}
-                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                            <h3 className="text-2xl font-bold mb-2 flex items-center gap-3">
-                                <CreditCard className="text-amber-500 w-8 h-8" weight="duotone" />
-                                Pagamenti Online Clienti
-                            </h3>
-                            <p className="text-sm text-zinc-400 mb-6">
-                                Permetti ai clienti di pagare direttamente dal QR code del menu con carta di credito tramite Stripe.
-                            </p>
-
-                            <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 mb-6">
-                                <div className="space-y-1">
-                                    <Label className="text-base font-semibold">Abilita Pagamenti al Tavolo</Label>
-                                    <p className="text-sm text-zinc-400">I clienti potranno pagare l'ordine dal loro telefono con carta di credito.</p>
-                                </div>
-                                <Switch
-                                    checked={stripePaymentsEnabled}
-                                    onCheckedChange={async (checked) => {
-                                        try {
-                                            await DatabaseService.toggleStripePayments(restaurantId, checked)
-                                            setStripePaymentsEnabled(checked)
-                                            toast.success(checked ? 'Pagamenti online attivati!' : 'Pagamenti online disattivati')
-                                        } catch (e: any) {
-                                            toast.error('Errore: ' + e.message)
-                                        }
-                                    }}
-                                    className="data-[state=checked]:bg-amber-500"
-                                />
-                            </div>
-
-                            {stripePaymentsEnabled && (
-                                <div className="space-y-4 animate-in slide-in-from-top-2">
-                                    <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
-                                        <h4 className="font-semibold text-amber-400 mb-2 flex items-center gap-2">
-                                            <CheckCircle weight="fill" size={18} />
-                                            Pagamenti attivi
-                                        </h4>
-                                        <p className="text-sm text-zinc-400">
-                                            I clienti vedranno il pulsante "Paga con Carta" nel menu. Possono scegliere di pagare:
-                                        </p>
-                                        <ul className="text-sm text-zinc-400 mt-2 space-y-1 ml-4 list-disc">
-                                            <li>Il conto completo</li>
-                                            <li>Alla romana (diviso in parti uguali)</li>
-                                            <li>Per piatti selezionati</li>
-                                        </ul>
+                        {/* 1. Pagamenti Online — Toggle + Connect */}
+                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                            <div className="p-5 sm:p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                                            <CreditCard className="text-amber-500" weight="bold" size={18} />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-sm text-white">Pagamenti al Tavolo</h3>
+                                            <p className="text-[11px] text-zinc-500">I clienti pagano dal menu con carta</p>
+                                        </div>
                                     </div>
-                                    <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
-                                        <p className="text-sm text-zinc-400">
-                                            <Info size={16} className="inline mr-1 text-blue-400" />
-                                            Il tavolo viene chiuso automaticamente dopo il pagamento completato.
-                                        </p>
-                                    </div>
+                                    <Switch
+                                        checked={stripePaymentsEnabled}
+                                        onCheckedChange={async (checked) => {
+                                            try {
+                                                await DatabaseService.toggleStripePayments(restaurantId, checked)
+                                                setStripePaymentsEnabled(checked)
+                                                toast.success(checked ? 'Pagamenti online attivati' : 'Pagamenti online disattivati')
+                                            } catch (e: any) {
+                                                toast.error('Errore: ' + e.message)
+                                            }
+                                        }}
+                                        className="data-[state=checked]:bg-amber-500"
+                                    />
                                 </div>
-                            )}
-                        </div>
 
-                        {/* Stripe Connect — ricevi pagamenti */}
-                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                            <h3 className="text-2xl font-bold mb-2 flex items-center gap-3">
-                                <Buildings className="text-violet-400 w-8 h-8" weight="duotone" />
-                                Ricevi Pagamenti dai Clienti
-                            </h3>
-                            <p className="text-sm text-zinc-400 mb-6">
-                                Collega il tuo account Stripe per ricevere direttamente i pagamenti dei clienti sul tuo conto bancario. Richiesto per abilitare i pagamenti al tavolo.
-                            </p>
+                                {stripePaymentsEnabled && (
+                                    <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
+                                        <div className="flex items-start gap-2.5 p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
+                                            <CheckCircle weight="fill" size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+                                            <p className="text-xs text-zinc-400 leading-relaxed">
+                                                Il pulsante <span className="text-white font-medium">"Paga con Carta"</span> apparirà nel menu. I clienti possono pagare tutto, alla romana, o importo personalizzato. Il tavolo si chiude dopo il pagamento.
+                                            </p>
+                                        </div>
 
-                            {/* Stato Connect */}
-                            {subscriptionInfo?.stripe_connect_enabled ? (
-                                <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-6">
-                                    <CheckCircle className="text-emerald-400 shrink-0" weight="fill" size={24} />
-                                    <div>
-                                        <p className="font-semibold text-emerald-400">Account Stripe collegato</p>
-                                        <p className="text-xs text-zinc-400 mt-0.5">Puoi ricevere pagamenti dai clienti sul tuo conto bancario.</p>
+                                        {/* Connect Status */}
+                                        <div className={`flex items-center justify-between p-3 rounded-lg border ${
+                                            subscriptionInfo?.stripe_connect_enabled
+                                                ? 'bg-emerald-500/5 border-emerald-500/10'
+                                                : subscriptionInfo?.stripe_connect_account_id
+                                                    ? 'bg-amber-500/5 border-amber-500/10'
+                                                    : 'bg-zinc-800/50 border-white/5'
+                                        }`}>
+                                            <div className="flex items-center gap-2.5">
+                                                {subscriptionInfo?.stripe_connect_enabled ? (
+                                                    <CheckCircle weight="fill" size={16} className="text-emerald-400" />
+                                                ) : subscriptionInfo?.stripe_connect_account_id ? (
+                                                    <Warning weight="fill" size={16} className="text-amber-400" />
+                                                ) : (
+                                                    <Buildings size={16} className="text-zinc-500" />
+                                                )}
+                                                <div>
+                                                    <p className="text-xs font-medium text-white">
+                                                        {subscriptionInfo?.stripe_connect_enabled
+                                                            ? 'Account collegato'
+                                                            : subscriptionInfo?.stripe_connect_account_id
+                                                                ? 'Configurazione incompleta'
+                                                                : 'Account non collegato'}
+                                                    </p>
+                                                    <p className="text-[10px] text-zinc-500">
+                                                        {subscriptionInfo?.stripe_connect_enabled
+                                                            ? 'I pagamenti arrivano sul tuo conto'
+                                                            : 'Collega Stripe per ricevere pagamenti'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                onClick={handleConnectOnboarding}
+                                                disabled={loadingConnectOnboarding}
+                                                size="sm"
+                                                variant={subscriptionInfo?.stripe_connect_enabled ? 'outline' : 'default'}
+                                                className={`h-8 text-xs rounded-lg gap-1.5 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white' : 'border-white/10 text-zinc-300'}`}
+                                            >
+                                                {loadingConnectOnboarding ? (
+                                                    <ArrowClockwise className="animate-spin" size={13} />
+                                                ) : (
+                                                    <ArrowSquareOut size={13} />
+                                                )}
+                                                {subscriptionInfo?.stripe_connect_enabled ? 'Gestisci' : subscriptionInfo?.stripe_connect_account_id ? 'Completa' : 'Collega'}
+                                            </Button>
+                                        </div>
                                     </div>
-                                </div>
-                            ) : subscriptionInfo?.stripe_connect_account_id ? (
-                                <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-6">
-                                    <Warning className="text-amber-400 shrink-0" weight="fill" size={24} />
-                                    <div>
-                                        <p className="font-semibold text-amber-400">Configurazione incompleta</p>
-                                        <p className="text-xs text-zinc-400 mt-0.5">Completa l'onboarding Stripe per attivare la ricezione dei pagamenti.</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-3 p-4 bg-zinc-800/50 border border-white/5 rounded-xl mb-6">
-                                    <Info className="text-zinc-400 shrink-0" size={22} />
-                                    <p className="text-sm text-zinc-400">Account Stripe non ancora collegato. Clicca "Collega Account" per iniziare.</p>
-                                </div>
-                            )}
-
-                            <Button
-                                onClick={handleConnectOnboarding}
-                                disabled={loadingConnectOnboarding}
-                                className="w-full bg-violet-600 hover:bg-violet-700 text-white font-semibold h-12 gap-2"
-                            >
-                                {loadingConnectOnboarding ? (
-                                    <><ArrowClockwise className="animate-spin" size={18} /> Caricamento...</>
-                                ) : subscriptionInfo?.stripe_connect_enabled ? (
-                                    <><ArrowSquareOut size={18} /> Gestisci Account Stripe</>
-                                ) : subscriptionInfo?.stripe_connect_account_id ? (
-                                    <><ArrowSquareOut size={18} /> Completa Configurazione Stripe</>
-                                ) : (
-                                    <><ArrowSquareOut size={18} /> Collega Account Stripe</>
                                 )}
-                            </Button>
+                            </div>
                         </div>
 
-                        {/* Dati fiscali */}
-                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                            <h3 className="text-2xl font-bold mb-2 flex items-center gap-3">
-                                <Receipt className="text-amber-500 w-8 h-8" weight="duotone" />
-                                Dati per la Fatturazione
-                            </h3>
-                            <p className="text-sm text-zinc-400 mb-6">
-                                Inserisci la Partita IVA e la ragione sociale per l'emissione delle fatture ai clienti.
-                            </p>
+                        {/* 2. Dati Fiscali */}
+                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                            <div className="p-5 sm:p-6">
+                                <div className="flex items-center gap-2.5 mb-4">
+                                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
+                                        <Receipt className="text-zinc-400" weight="bold" size={18} />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-semibold text-sm text-white">Dati Fiscali</h3>
+                                        <p className="text-[11px] text-zinc-500">Per la fatturazione ai clienti</p>
+                                    </div>
+                                </div>
 
-                            <div className="grid gap-4 max-w-md">
-                                <div className="space-y-2">
-                                    <Label className="text-zinc-400">Partita IVA</Label>
-                                    <Input
-                                        value={vatNumber}
-                                        onChange={(e) => setVatNumber(e.target.value)}
-                                        placeholder="Es. IT12345678901"
-                                        className="bg-black/20 border-white/10 h-12 focus:ring-amber-500/50"
-                                    />
+                                <div className="space-y-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs text-zinc-500">Partita IVA</Label>
+                                        <Input
+                                            value={vatNumber}
+                                            onChange={(e) => setVatNumber(e.target.value)}
+                                            placeholder="IT12345678901"
+                                            className="bg-black/30 border-white/5 h-10 text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-xs text-zinc-500">Ragione Sociale</Label>
+                                        <Input
+                                            value={billingName}
+                                            onChange={(e) => setBillingName(e.target.value)}
+                                            placeholder="Ristorante Da Mario S.r.l."
+                                            className="bg-black/30 border-white/5 h-10 text-sm"
+                                        />
+                                    </div>
+                                    <Button
+                                        onClick={handleSavePaymentInfo}
+                                        disabled={savingPaymentInfo}
+                                        size="sm"
+                                        className="h-9 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg gap-1.5"
+                                    >
+                                        {savingPaymentInfo ? (
+                                            <><ArrowClockwise className="animate-spin" size={13} /> Salvataggio...</>
+                                        ) : (
+                                            <><Save size={13} /> Salva</>
+                                        )}
+                                    </Button>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label className="text-zinc-400">Ragione Sociale / Nome Attività</Label>
-                                    <Input
-                                        value={billingName}
-                                        onChange={(e) => setBillingName(e.target.value)}
-                                        placeholder="Es. Ristorante Da Mario S.r.l."
-                                        className="bg-black/20 border-white/10 h-12 focus:ring-amber-500/50"
-                                    />
-                                </div>
-                                <Button
-                                    onClick={handleSavePaymentInfo}
-                                    disabled={savingPaymentInfo}
-                                    className="h-12 bg-amber-600 hover:bg-amber-700 text-white font-semibold gap-2 w-full sm:w-auto"
-                                >
-                                    {savingPaymentInfo ? (
-                                        <><ArrowClockwise className="animate-spin" size={16} /> Salvataggio...</>
-                                    ) : (
-                                        <><Save size={16} /> Salva Dati Fiscali</>
-                                    )}
-                                </Button>
                             </div>
                         </div>
                     </motion.div>
                 </TabsContent>
 
-                {/* Abbonamento ATTIVO */}
+                {/* Abbonamento */}
                 {subscriptionInfo?.stripe_subscription_id ? (
-                    <>
-                        {/* Status Card */}
-                        <div className={`p-6 sm:p-8 rounded-2xl backdrop-blur-sm border relative overflow-hidden ${subscriptionInfo.subscription_status === 'past_due'
-                            ? 'bg-red-950/30 border-red-500/30'
-                            : subscriptionInfo.subscription_status === 'canceled'
-                                ? 'bg-zinc-900/50 border-white/5'
-                                : 'bg-emerald-950/20 border-emerald-500/20'
-                            }`}>
-                            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/5 rounded-full blur-3xl -mr-24 -mt-24 pointer-events-none" />
-
-                            <div className="relative z-10">
-                                <div className="flex items-start justify-between gap-4 mb-6">
-                                    <div>
-                                        <h3 className="text-2xl font-bold flex items-center gap-3">
-                                            <CreditCard className={`w-8 h-8 ${subscriptionInfo.subscription_status === 'past_due' ? 'text-red-400' :
-                                                subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-400' :
-                                                    'text-emerald-400'
-                                                }`} weight="duotone" />
-                                            Abbonamento MINTHI
-                                        </h3>
-                                        <p className="text-sm text-zinc-400 mt-1">Piano mensile</p>
+                    <div className="max-w-xl mx-auto space-y-4 mt-1">
+                        {/* Active Subscription Card */}
+                        <div className={`rounded-2xl border overflow-hidden ${
+                            subscriptionInfo.subscription_status === 'past_due'
+                                ? 'bg-zinc-900/50 border-red-500/20'
+                                : subscriptionInfo.subscription_status === 'canceled'
+                                    ? 'bg-zinc-900/50 border-white/5'
+                                    : 'bg-zinc-900/50 border-emerald-500/10'
+                        }`}>
+                            <div className="p-5 sm:p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                            subscriptionInfo.subscription_status === 'past_due' ? 'bg-red-500/10'
+                                            : subscriptionInfo.subscription_status === 'canceled' ? 'bg-zinc-800'
+                                            : 'bg-emerald-500/10'
+                                        }`}>
+                                            <CreditCard className={`${
+                                                subscriptionInfo.subscription_status === 'past_due' ? 'text-red-400'
+                                                : subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-400'
+                                                : 'text-emerald-400'
+                                            }`} weight="bold" size={18} />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold text-sm text-white">Abbonamento MINTHI</h3>
+                                            <p className="text-[11px] text-zinc-500">Piano mensile</p>
+                                        </div>
                                     </div>
-
-                                    {/* Status badge */}
-                                    {subscriptionInfo.subscription_status === 'active' && (
-                                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 border border-emerald-500/30 rounded-full text-xs font-bold text-emerald-400 shrink-0">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                            ATTIVO
-                                        </span>
-                                    )}
-                                    {subscriptionInfo.subscription_status === 'past_due' && (
-                                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/15 border border-red-500/30 rounded-full text-xs font-bold text-red-400 shrink-0">
-                                            <WarningCircle weight="fill" size={14} />
-                                            PAGAMENTO FALLITO
-                                        </span>
-                                    )}
-                                    {subscriptionInfo.subscription_status === 'canceled' && (
-                                        <span className="px-3 py-1.5 bg-zinc-700/50 border border-zinc-600/30 rounded-full text-xs font-bold text-zinc-400 shrink-0">
-                                            ANNULLATO
-                                        </span>
-                                    )}
+                                    {/* Status */}
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
+                                        subscriptionInfo.subscription_status === 'active'
+                                            ? 'bg-emerald-500/10 text-emerald-400'
+                                            : subscriptionInfo.subscription_status === 'past_due'
+                                                ? 'bg-red-500/10 text-red-400'
+                                                : 'bg-zinc-800 text-zinc-400'
+                                    }`}>
+                                        {subscriptionInfo.subscription_status === 'active' && <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
+                                        {subscriptionInfo.subscription_status === 'past_due' && <><WarningCircle weight="fill" size={12} />Pagamento fallito</>}
+                                        {subscriptionInfo.subscription_status === 'canceled' && 'Annullato'}
+                                        {!subscriptionInfo.subscription_status && 'Attivo'}
+                                    </span>
                                 </div>
 
-                                {/* Avviso pagamento fallito */}
+                                {/* Past due warning */}
                                 {subscriptionInfo.subscription_status === 'past_due' && (
-                                    <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-xl mb-6">
-                                        <WarningCircle className="text-red-400 shrink-0 mt-0.5" weight="fill" size={20} />
-                                        <div>
-                                            <p className="font-semibold text-red-400 text-sm">Pagamento non andato a buon fine</p>
-                                            <p className="text-xs text-zinc-400 mt-1">
-                                                Il tuo metodo di pagamento non è riuscito. Aggiorna i dati di pagamento per evitare la sospensione del servizio.
-                                            </p>
-                                        </div>
+                                    <div className="flex items-start gap-2.5 p-3 bg-red-500/5 rounded-lg border border-red-500/10 mb-4">
+                                        <WarningCircle weight="fill" size={15} className="text-red-400 mt-0.5 shrink-0" />
+                                        <p className="text-xs text-zinc-400 leading-relaxed">
+                                            <span className="text-red-400 font-medium">Pagamento non riuscito.</span> Aggiorna il metodo di pagamento per evitare la sospensione.
+                                        </p>
                                     </div>
                                 )}
 
-                                {/* Prossimo pagamento */}
+                                {/* Next billing */}
                                 {nextPaymentDate && subscriptionInfo.subscription_status !== 'canceled' && (
-                                    <div className="flex items-center gap-3 p-4 bg-black/30 rounded-xl mb-6">
-                                        <Clock className="text-zinc-400 shrink-0" weight="duotone" size={20} />
-                                        <div>
-                                            <p className="text-xs text-zinc-500 uppercase tracking-wider">Prossimo addebito</p>
-                                            <p className="font-semibold text-zinc-200 mt-0.5">
-                                                {nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}
-                                            </p>
-                                        </div>
+                                    <div className="flex items-center gap-2 p-3 bg-black/20 rounded-lg mb-4">
+                                        <Clock size={14} className="text-zinc-500 shrink-0" />
+                                        <p className="text-xs text-zinc-400">
+                                            Prossimo addebito: <span className="text-white font-medium">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                        </p>
                                     </div>
                                 )}
 
-                                {/* Azioni abbonamento */}
-                                <div className="grid gap-3 sm:grid-cols-2">
+                                {/* Actions */}
+                                <div className="flex gap-2">
                                     <Button
                                         onClick={handleOpenBillingPortal}
                                         disabled={loadingBillingPortal}
-                                        className="h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2"
+                                        size="sm"
+                                        className="flex-1 h-9 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg gap-1.5"
                                     >
                                         {loadingBillingPortal ? (
-                                            <><ArrowClockwise className="animate-spin" size={16} /> Caricamento...</>
+                                            <ArrowClockwise className="animate-spin" size={13} />
                                         ) : (
-                                            <><ArrowSquareOut size={16} /> Gestisci Abbonamento</>
+                                            <ArrowSquareOut size={13} />
                                         )}
+                                        Gestisci Abbonamento
                                     </Button>
                                     <Button
                                         onClick={handleOpenBillingPortal}
                                         disabled={loadingBillingPortal}
+                                        size="sm"
                                         variant="outline"
-                                        className="h-12 border-white/10 hover:bg-white/5 hover:text-white text-zinc-300 font-semibold gap-2"
+                                        className="h-9 text-xs border-white/5 text-zinc-400 hover:text-white rounded-lg gap-1.5"
                                     >
-                                        <Receipt size={16} />
-                                        Scarica Fatture
+                                        <Receipt size={13} />
+                                        Fatture
                                     </Button>
                                 </div>
-                                <p className="text-xs text-zinc-500 mt-3 flex items-center gap-1">
-                                    <CreditCard size={12} />
-                                    Gestisci metodo di pagamento, fatture e cancellazione dal portale Stripe
-                                </p>
                             </div>
                         </div>
 
-                        {/* Storico Pagamenti */}
+                        {/* Payment History */}
                         {subscriptionPayments.length > 0 && (
-                            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                                <h3 className="text-xl font-bold mb-6 flex items-center gap-3">
-                                    <Receipt className="text-amber-500 w-6 h-6" weight="duotone" />
-                                    Storico Pagamenti
-                                </h3>
-                                <div className="space-y-2">
-                                    {subscriptionPayments.slice(0, 12).map((payment) => (
-                                        <div
-                                            key={payment.id}
-                                            className="flex items-center justify-between p-4 bg-black/20 rounded-xl border border-white/5 hover:border-white/10 transition-colors"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${payment.status === 'paid'
-                                                    ? 'bg-emerald-500/15 text-emerald-400'
-                                                    : payment.status === 'failed'
-                                                        ? 'bg-red-500/15 text-red-400'
-                                                        : 'bg-zinc-700/50 text-zinc-400'
-                                                    }`}>
-                                                    {payment.status === 'paid' ? (
-                                                        <CheckCircle weight="fill" size={16} />
-                                                    ) : payment.status === 'failed' ? (
-                                                        <WarningCircle weight="fill" size={16} />
-                                                    ) : (
-                                                        <Clock weight="duotone" size={16} />
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-medium text-zinc-200">
+                            <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                                <div className="p-5 sm:p-6">
+                                    <h3 className="text-sm font-semibold text-white mb-3">Storico Pagamenti</h3>
+                                    <div className="space-y-1.5">
+                                        {subscriptionPayments.slice(0, 8).map((payment) => (
+                                            <div
+                                                key={payment.id}
+                                                className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/[0.02] transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                                        payment.status === 'paid' ? 'bg-emerald-500'
+                                                        : payment.status === 'failed' ? 'bg-red-500'
+                                                        : 'bg-zinc-600'
+                                                    }`} />
+                                                    <span className="text-xs text-zinc-300">
                                                         {payment.period_start
                                                             ? new Date(payment.period_start).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
                                                             : payment.created_at
-                                                                ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+                                                                ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
                                                                 : 'Abbonamento'}
-                                                    </p>
-                                                    <p className="text-xs text-zinc-500">
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-xs font-medium ${
+                                                        payment.status === 'paid' ? 'text-emerald-400'
+                                                        : payment.status === 'failed' ? 'text-red-400'
+                                                        : 'text-zinc-400'
+                                                    }`}>
+                                                        €{payment.amount.toFixed(2)}
+                                                    </span>
+                                                    <span className={`text-[10px] ${
+                                                        payment.status === 'paid' ? 'text-zinc-500'
+                                                        : 'text-red-400/60'
+                                                    }`}>
                                                         {payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : 'In attesa'}
-                                                    </p>
+                                                    </span>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className={`font-bold text-sm ${payment.status === 'paid' ? 'text-emerald-400' :
-                                                    payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'
-                                                    }`}>
-                                                    €{payment.amount.toFixed(2)}
-                                                </p>
-                                                <p className="text-xs text-zinc-600 uppercase">{payment.currency}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                {subscriptionPayments.length > 12 && (
-                                    <p className="text-xs text-zinc-500 text-center mt-4">
-                                        Visualizza tutte le fatture nel portale Stripe
-                                    </p>
-                                )}
-                            </div>
-                        )}
-                    </>
-                ) : (
-                    /* ABBONAMENTO NON ATTIVO — mostra form attivazione */
-                    <div className="p-8 rounded-2xl bg-zinc-900/50 border border-emerald-500/20 backdrop-blur-sm text-center relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
-                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -ml-32 -mb-32 pointer-events-none" />
-
-                        <div className="relative z-10 flex flex-col items-center">
-                            <CreditCard className="text-emerald-500 w-16 h-16 mb-4" weight="duotone" />
-                            <h3 className="text-3xl font-bold mb-2">Abbonamento MINTHI</h3>
-                            <p className="text-zinc-400 mb-8 max-w-md mx-auto">
-                                Attiva l'abbonamento per sbloccare tutte le funzionalità premium del tuo gestionale.
-                            </p>
-
-                            <div className="bg-black/40 border border-white/5 rounded-2xl p-6 w-full max-w-sm mb-8 relative">
-                                <div className="absolute -top-3 right-4 bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                                    PIANO MENSILE
-                                </div>
-                                <div className="flex justify-between items-end mb-4">
-                                    <div className="text-left">
-                                        <p className="text-sm text-zinc-400 mb-1">Costo</p>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="text-3xl font-bold text-white">€49</span>
-                                            <span className="text-zinc-500">/mese</span>
-                                        </div>
+                                        ))}
                                     </div>
                                 </div>
-                                <ul className="text-left space-y-3 mt-6">
-                                    {[
-                                        'Ordini e tavoli illimitati',
-                                        'Menu digitale QR code',
-                                        'Supporto clienti prioritario',
-                                        'Statistiche avanzate'
-                                    ].map((feature, i) => (
-                                        <li key={i} className="flex items-center gap-3 text-sm text-zinc-300">
-                                            <CheckCircle className="text-emerald-500 shrink-0" weight="fill" />
-                                            {feature}
-                                        </li>
-                                    ))}
-                                </ul>
                             </div>
+                        )}
+                    </div>
+                ) : (
+                    /* No subscription */
+                    <div className="max-w-xl mx-auto mt-1">
+                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                            <div className="p-6 sm:p-8 text-center">
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+                                    <CreditCard className="text-emerald-500" weight="bold" size={24} />
+                                </div>
+                                <h3 className="text-xl font-bold text-white mb-1">Abbonamento MINTHI</h3>
+                                <p className="text-sm text-zinc-500 mb-6">Sblocca tutte le funzionalità del gestionale</p>
 
-                            <Button
-                                size="lg"
-                                className="w-full max-w-sm bg-emerald-600 hover:bg-emerald-700 text-white text-lg h-14 font-semibold shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)]"
-                                onClick={async () => {
-                                    try {
-                                        const { data: restaurantData } = await supabase
-                                            .from('restaurants')
-                                            .select('stripe_price_id')
-                                            .eq('id', restaurantId)
-                                            .single();
+                                <div className="bg-black/30 rounded-xl p-5 mb-6 text-left">
+                                    <div className="flex items-baseline gap-1 mb-4">
+                                        <span className="text-2xl font-bold text-white">€49</span>
+                                        <span className="text-zinc-500 text-sm">/mese</span>
+                                    </div>
+                                    <div className="space-y-2.5">
+                                        {['Ordini e tavoli illimitati', 'Menu digitale QR code', 'Supporto prioritario', 'Statistiche avanzate'].map((f, i) => (
+                                            <div key={i} className="flex items-center gap-2 text-sm text-zinc-300">
+                                                <CheckCircle className="text-emerald-500 shrink-0" weight="fill" size={14} />
+                                                {f}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
 
-                                        let priceId = restaurantData?.stripe_price_id;
-                                        if (!priceId) {
-                                            priceId = await DatabaseService.getAppConfig('stripe_price_id');
+                                <Button
+                                    className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
+                                    onClick={async () => {
+                                        try {
+                                            const { data: restaurantData } = await supabase
+                                                .from('restaurants')
+                                                .select('stripe_price_id')
+                                                .eq('id', restaurantId)
+                                                .single();
+
+                                            let priceId = restaurantData?.stripe_price_id;
+                                            if (!priceId) {
+                                                priceId = await DatabaseService.getAppConfig('stripe_price_id');
+                                            }
+                                            if (!priceId) {
+                                                toast.error("L'amministratore non ha ancora configurato il Price ID di Stripe. Contatta il supporto.");
+                                                return;
+                                            }
+
+                                            toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
+                                            const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
+                                            window.location.href = url;
+                                        } catch (e: any) {
+                                            console.error(e);
+                                            toast.error("Errore: " + e.message, { id: "stripe-checkout" });
                                         }
-                                        if (!priceId) {
-                                            toast.error("L'amministratore non ha ancora configurato il Price ID di Stripe. Contatta il supporto.");
-                                            return;
-                                        }
-
-                                        toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
-                                        const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
-                                        window.location.href = url;
-                                    } catch (e: any) {
-                                        console.error(e);
-                                        toast.error("Errore durante la connessione a Stripe: " + e.message, { id: "stripe-checkout" });
-                                    }
-                                }}
-                            >
-                                Attiva Abbonamento
-                            </Button>
-                            <p className="text-xs text-zinc-500 mt-4 flex items-center justify-center gap-1">
-                                <CreditCard size={14} /> Pagamenti sicuri gestiti da Stripe
-                            </p>
+                                    }}
+                                >
+                                    Attiva Abbonamento
+                                </Button>
+                                <p className="text-[11px] text-zinc-600 mt-3">Pagamenti sicuri gestiti da Stripe</p>
+                            </div>
                         </div>
                     </div>
                 )}

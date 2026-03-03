@@ -301,6 +301,9 @@ export default function LoginPage({ onLogin }: Props) {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="Inserisci ID..."
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="bg-black/50 border-white/10 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 text-indigo-50 placeholder:text-zinc-700 h-12 transition-all pl-4 rounded-xl"
                 />
               </div>
@@ -316,6 +319,9 @@ export default function LoginPage({ onLogin }: Props) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="bg-black/50 border-white/10 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 text-indigo-50 placeholder:text-zinc-700 h-12 pr-10 transition-all pl-4 rounded-xl"
                 />
                 <button

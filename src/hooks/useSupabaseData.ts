@@ -73,9 +73,14 @@ export function useSupabaseData<T>(
                             setData((prev) => [...prev, newItem])
                         } else if (payload.eventType === 'UPDATE') {
                             const updatedItem = currentMapper ? currentMapper(payload.new) : payload.new as T
-                            setData((prev) =>
-                                prev.map((item: any) => (item.id === (payload.new as any).id ? updatedItem : item))
-                            )
+                            setData((prev) => {
+                                const exists = prev.some((item: any) => item.id === (payload.new as any).id)
+                                if (exists) {
+                                    return prev.map((item: any) => (item.id === (payload.new as any).id ? updatedItem : item))
+                                }
+                                // Item not in state yet (was previously invisible due to RLS) — add it
+                                return [...prev, updatedItem]
+                            })
                         } else if (payload.eventType === 'DELETE') {
                             setData((prev) => prev.filter((item: any) => item.id !== payload.old.id))
                         }

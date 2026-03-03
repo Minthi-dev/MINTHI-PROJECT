@@ -40,13 +40,20 @@ serve(async (req) => {
         // Verifica che il ristorante abbia i pagamenti Stripe abilitati
         const { data: restaurant } = await supabase
             .from("restaurants")
-            .select("id, name, enable_stripe_payments, stripe_customer_id")
+            .select("id, name, enable_stripe_payments, stripe_customer_id, stripe_connect_account_id, stripe_connect_enabled")
             .eq("id", restaurantId)
             .single();
 
         if (!restaurant || !restaurant.enable_stripe_payments) {
             return new Response(
                 JSON.stringify({ error: "Pagamenti online non abilitati per questo ristorante" }),
+                { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        if (!restaurant.stripe_connect_account_id || !restaurant.stripe_connect_enabled) {
+            return new Response(
+                JSON.stringify({ error: "Il ristorante non ha ancora configurato l'account di pagamento per ricevere fondi" }),
                 { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
@@ -63,13 +70,18 @@ serve(async (req) => {
             quantity: item.quantity,
         }));
 
-        // Crea la sessione di checkout
+        // Crea la sessione di checkout — i fondi vanno direttamente al conto Stripe Connect del ristorante
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "payment",
             line_items: lineItems,
             success_url: successUrl || `${req.headers.get("origin")}/client/payment-success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: cancelUrl || `${req.headers.get("origin")}/client/payment-cancelled`,
+            payment_intent_data: {
+                transfer_data: {
+                    destination: restaurant.stripe_connect_account_id,
+                },
+            },
             metadata: {
                 paymentType: "customer_order",
                 restaurantId,

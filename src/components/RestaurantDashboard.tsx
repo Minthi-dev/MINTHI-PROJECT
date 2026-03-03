@@ -149,6 +149,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const restaurantCategories = categories || []
   const restaurantDishes = dishes || []
   const restaurantTables = tables || []
+  const restaurantTablesRef = useRef<Table[]>(restaurantTables)
+  useEffect(() => { restaurantTablesRef.current = restaurantTables }, [restaurantTables])
   const restaurantOrders = orders || []
   const restaurantCompletedOrders = useMemo(() => orders?.filter(o => o.status === 'completed') || [], [orders])
 
@@ -543,6 +545,30 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           soundManager.play(selectedSoundRef.current)
           toast.info('Nuovo ordine ricevuto!', { icon: '🔔' })
         }
+        // Notify when a customer pays online via Stripe (avoid duplicate toasts)
+        if (
+          payload.eventType === 'UPDATE' &&
+          (payload.new as any).payment_method === 'stripe' &&
+          (payload.new as any).status === 'PAID' &&
+          !notifiedStripeOrdersRef.current.has((payload.new as any).id)
+        ) {
+          notifiedStripeOrdersRef.current.add((payload.new as any).id)
+          const amount = (payload.new as any).total_amount
+          const sessionId = (payload.new as any).table_session_id
+          // Look up table number from sessions state (use ref for async safety)
+          supabase
+            .from('table_sessions')
+            .select('table_id')
+            .eq('id', sessionId)
+            .single()
+            .then(({ data: sessionData }) => {
+              const tableNumber = restaurantTablesRef.current?.find((t: any) => t.id === sessionData?.table_id)?.number || '?'
+              toast.success(
+                `💳 Tavolo ${tableNumber} ha pagato online! ${amount ? `€${Number(amount).toFixed(2)}` : ''}`,
+                { duration: 8000 }
+              )
+            })
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
         // Also refresh when order items change (new items added, status updated, etc.)
@@ -639,6 +665,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [tableHistoryDateFilter, setTableHistoryDateFilter] = useState<'today' | 'week' | 'month' | 'all'>('week')
   const [tableHistoryMinTotal, setTableHistoryMinTotal] = useState('')
   const [tableHistoryMinCovers, setTableHistoryMinCovers] = useState('')
+  const [expandedHistorySessionId, setExpandedHistorySessionId] = useState<string | null>(null)
+  const notifiedStripeOrdersRef = useRef<Set<string>>(new Set())
   const [tableHistorySort, setTableHistorySort] = useState<'recent' | 'amount' | 'duration' | 'covers'>('recent')
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false)
   const [currentSessionPin, setCurrentSessionPin] = useState<string>('')
@@ -2273,60 +2301,98 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           }
 
                           return closedSessions.map(({ session, table, sessionOrders, totalAmount, totalItems, openDate, closeDate, duration }) => {
+                            const isExpanded = expandedHistorySessionId === session.id
+                            // Flatten all items across all orders for this session
+                            const allItems = sessionOrders.flatMap((o: any) => (o.items || []).map((item: any) => ({ ...item, orderId: o.id })))
                             return (
-                              <div key={session.id} className="p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors border border-border/50">
-                                <div className="flex items-start justify-between gap-4 flex-wrap">
-                                  <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center">
-                                      <span className="text-lg font-bold text-primary">{table?.number || '?'}</span>
+                              <div key={session.id} className="rounded-xl bg-muted/30 border border-border/50 overflow-hidden">
+                                {/* Summary row — click to expand/collapse bill */}
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedHistorySessionId(isExpanded ? null : session.id)}
+                                  className="w-full p-4 text-left hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                                    <div className="flex items-center gap-4">
+                                      <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center">
+                                        <span className="text-lg font-bold text-primary">{table?.number || '?'}</span>
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="font-bold text-zinc-100">Tavolo {table?.number}</span>
+                                          <Badge variant="outline" className="text-[10px] font-mono border-zinc-700 text-zinc-400">{session.session_pin}</Badge>
+                                          {sessionOrders.some((o: any) => o.payment_method === 'stripe') && (
+                                            <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">💳 Pagato Online</Badge>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                          <span className="flex items-center gap-1">
+                                            <Calendar size={12} />
+                                            {openDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                          </span>
+                                          <span className="flex items-center gap-1">
+                                            <Clock size={12} />
+                                            {openDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                                            {closeDate && ` - ${closeDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`}
+                                          </span>
+                                          {duration > 0 && <span>({duration} min)</span>}
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-zinc-100">Tavolo {table?.number}</span>
-                                        <Badge variant="outline" className="text-[10px] font-mono border-zinc-700 text-zinc-400">{session.session_pin}</Badge>
-                                        {sessionOrders.some((o: any) => o.payment_method === 'stripe') && (
-                                          <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20">Pagato Online</Badge>
+                                    <div className="flex items-center gap-4">
+                                      <div className="flex items-center gap-6">
+                                        <div className="text-center">
+                                          <p className="text-xs text-muted-foreground">Coperti</p>
+                                          <p className="font-bold text-lg">{session.customer_count || '-'}</p>
+                                        </div>
+                                        <div className="text-center">
+                                          <p className="text-xs text-muted-foreground">Piatti</p>
+                                          <p className="font-bold text-lg">{totalItems}</p>
+                                        </div>
+                                        <div className="text-center min-w-[80px]">
+                                          <p className="text-xs text-muted-foreground">Totale</p>
+                                          <p className="font-bold text-lg text-amber-500">€{totalAmount.toFixed(2)}</p>
+                                        </div>
+                                      </div>
+                                      <CaretRight size={16} className={`text-zinc-500 transition-transform shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
+                                    </div>
+                                  </div>
+                                </button>
+
+                                {/* Expanded bill detail */}
+                                {isExpanded && (
+                                  <div className="border-t border-border/50 px-4 pb-4 pt-3 space-y-1">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Conto dettagliato</p>
+                                    {allItems.length === 0 ? (
+                                      <p className="text-xs text-zinc-500 italic">Nessun dettaglio disponibile</p>
+                                    ) : (
+                                      <>
+                                        {allItems.map((item: any, idx: number) => (
+                                          <div key={item.id || idx} className="flex items-center justify-between text-sm py-1 border-b border-white/5 last:border-0">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-zinc-400 text-xs w-5 text-center">{item.quantity}×</span>
+                                              <span className="text-zinc-200">{item.dish?.name || 'Piatto eliminato'}</span>
+                                              {item.note && <span className="text-[10px] text-zinc-500 italic">({item.note})</span>}
+                                            </div>
+                                            <span className="text-zinc-300 font-mono text-xs">
+                                              €{((item.dish?.price || 0) * item.quantity).toFixed(2)}
+                                            </span>
+                                          </div>
+                                        ))}
+                                        <div className="flex items-center justify-between pt-2 border-t border-amber-500/30 mt-1">
+                                          <span className="text-sm font-bold text-zinc-100">Totale</span>
+                                          <span className="text-base font-bold text-amber-500">€{totalAmount.toFixed(2)}</span>
+                                        </div>
+                                        {session.customer_count && (
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs text-zinc-500">A coperto ({session.customer_count} coperti)</span>
+                                            <span className="text-xs text-zinc-400">€{(totalAmount / session.customer_count).toFixed(2)}</span>
+                                          </div>
                                         )}
-                                      </div>
-                                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                        <span className="flex items-center gap-1">
-                                          <Calendar size={12} />
-                                          {openDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                        </span>
-                                        <span className="flex items-center gap-1">
-                                          <Clock size={12} />
-                                          {openDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                                          {closeDate && ` - ${closeDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`}
-                                        </span>
-                                        {duration > 0 && <span>({duration} min)</span>}
-                                      </div>
-                                    </div>
+                                      </>
+                                    )}
                                   </div>
-                                  <div className="flex items-center gap-6">
-                                    <div className="text-center">
-                                      <p className="text-xs text-muted-foreground">Coperti</p>
-                                      <p className="font-bold text-lg">{session.customer_count || '-'}</p>
-                                    </div>
-                                    <div className="text-center">
-                                      <p className="text-xs text-muted-foreground">Ordini</p>
-                                      <p className="font-bold text-lg">{sessionOrders.length}</p>
-                                    </div>
-                                    <div className="text-center">
-                                      <p className="text-xs text-muted-foreground">Piatti</p>
-                                      <p className="font-bold text-lg">{totalItems}</p>
-                                    </div>
-                                    <div className="text-center min-w-[80px]">
-                                      <p className="text-xs text-muted-foreground">Totale</p>
-                                      <p className="font-bold text-lg text-amber-500">€{totalAmount.toFixed(2)}</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-                                    <span className="px-2 py-1 bg-background/50 rounded-md border border-border/50">€{session.customer_count ? (totalAmount / session.customer_count).toFixed(2) : '0.00'} a coperto</span>
-                                    {duration > 0 && <span className="px-2 py-1 bg-background/50 rounded-md border border-border/50">Durata {duration} min</span>}
-                                    <span className="px-2 py-1 bg-background/50 rounded-md border border-border/50">{totalItems} piatti totali</span>
-                                    {sessionOrders.length > 0 && <span className="px-2 py-1 bg-background/50 rounded-md border border-border/50">~{Math.round(duration / sessionOrders.length || 0)} min/ordine</span>}
-                                  </div>
-                                </div>
+                                )}
                               </div>
                             )
                           })

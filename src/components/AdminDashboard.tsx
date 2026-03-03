@@ -33,7 +33,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     undefined,
     (r: any) => ({ ...r, isActive: r.is_active })
   )
-  const [users] = useSupabaseData<User>('users', [])
+  const [users, , refreshUsers] = useSupabaseData<User>('users', [])
   const [salesByRestaurant, setSalesByRestaurant] = useState<Record<string, number>>({})
   const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin'>('restaurants')
 
@@ -207,7 +207,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       setLogoFile(null)
       setShowRestaurantDialog(false)
       toast.success('Ristorante creato con successo')
-      await refreshRestaurants()
+      await Promise.all([refreshRestaurants(), refreshUsers()])
     } catch (error: any) {
       console.error('Error creating restaurant:', error)
       if (error.code === '23505' || error.status === 409 || error.message?.includes('duplicate key')) {
@@ -463,42 +463,105 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         {activeView === 'statistics' ? (
           <AdminStatistics onImpersonate={(id) => setImpersonatedRestaurantId(id)} />
         ) : activeView === 'admin' ? (
-          <div className="space-y-8">
-            <div>
-              <h2 className="text-3xl font-bold text-white">Gestione <span className="text-amber-500">Pagamenti</span></h2>
-              <p className="text-zinc-500 mt-1 uppercase tracking-widest text-[10px] font-bold">Abbonamenti e Bonus</p>
-            </div>
-
-            {/* Filters */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {(['all', 'paying', 'not_paying', 'suspended'] as const).map(filter => (
-                <Button
-                  key={filter}
-                  variant={adminFilter === filter ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setAdminFilter(filter)}
-                  className={adminFilter === filter ? 'bg-amber-500 text-black font-bold' : ''}
-                >
-                  {filter === 'all' && 'Tutti'}
-                  {filter === 'paying' && 'Paganti'}
-                  {filter === 'not_paying' && 'Non Paganti'}
-                  {filter === 'suspended' && 'Sospesi'}
-                </Button>
-              ))}
-
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Pagamenti</h2>
+                <p className="text-zinc-500 text-sm mt-0.5">Gestione abbonamenti e bonus</p>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
-                className="ml-auto border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 rounded-lg h-9"
                 onClick={() => setShowBonusDialog(true)}
               >
-                <Gift size={16} className="mr-1.5" />
+                <Gift size={15} className="mr-1.5" />
                 Assegna Bonus
               </Button>
             </div>
 
-            {/* Restaurant Payment Cards */}
-            <div className="grid gap-4">
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
+                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider mb-1">Totale</p>
+                <p className="text-2xl font-bold text-white">{restaurants?.length || 0}</p>
+              </div>
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-emerald-500/10">
+                <p className="text-[11px] text-emerald-500/70 font-medium uppercase tracking-wider mb-1">Abbonati</p>
+                <p className="text-2xl font-bold text-emerald-400">{restaurants?.filter(r => r.stripe_subscription_id).length || 0}</p>
+              </div>
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/10">
+                <p className="text-[11px] text-amber-500/70 font-medium uppercase tracking-wider mb-1">Non abbonati</p>
+                <p className="text-2xl font-bold text-amber-400">{restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0}</p>
+              </div>
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-red-500/10">
+                <p className="text-[11px] text-red-500/70 font-medium uppercase tracking-wider mb-1">Sospesi</p>
+                <p className="text-2xl font-bold text-red-400">{restaurants?.filter(r => !r.isActive).length || 0}</p>
+              </div>
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
+                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider mb-1">Incassato</p>
+                <p className="text-2xl font-bold text-white">€{subscriptionPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(0)}</p>
+              </div>
+            </div>
+
+            {/* Global Stripe Price ID — compact */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900/50 border border-white/5">
+              <CreditCard size={16} className="text-zinc-500 shrink-0" />
+              <span className="text-xs text-zinc-400 shrink-0">Price ID:</span>
+              <Input
+                placeholder="price_..."
+                value={stripePriceId}
+                onChange={(e) => setStripePriceId(e.target.value)}
+                className="h-8 font-mono text-xs bg-black/40 border-white/5 flex-1 max-w-xs"
+              />
+              <Button
+                disabled={!stripePriceId || stripePriceId === stripePriceIdSaved}
+                size="sm"
+                className="bg-white/10 hover:bg-white/15 text-white text-xs h-8 px-3 shrink-0 disabled:opacity-20 rounded-lg"
+                onClick={async () => {
+                  try {
+                    await DatabaseService.setAppConfig('stripe_price_id', stripePriceId.trim())
+                    setStripePriceIdSaved(stripePriceId.trim())
+                    toast.success('Price ID salvato')
+                  } catch (e: any) { toast.error(e.message) }
+                }}
+              >
+                Salva
+              </Button>
+              {stripePriceIdSaved && (
+                <CheckCircle size={14} className="text-emerald-500 shrink-0" weight="fill" />
+              )}
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center gap-1.5">
+              {(['all', 'paying', 'not_paying', 'suspended'] as const).map(filter => {
+                const count = filter === 'all' ? (restaurants?.length || 0)
+                  : filter === 'paying' ? (restaurants?.filter(r => r.stripe_subscription_id).length || 0)
+                  : filter === 'not_paying' ? (restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0)
+                  : (restaurants?.filter(r => !r.isActive).length || 0)
+                return (
+                  <button
+                    key={filter}
+                    onClick={() => setAdminFilter(filter)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${adminFilter === filter
+                      ? 'bg-white text-black'
+                      : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {filter === 'all' && 'Tutti'}
+                    {filter === 'paying' && 'Abbonati'}
+                    {filter === 'not_paying' && 'Non abbonati'}
+                    {filter === 'suspended' && 'Sospesi'}
+                    <span className={`ml-1.5 ${adminFilter === filter ? 'text-black/50' : 'text-zinc-600'}`}>{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Restaurant List */}
+            <div className="space-y-2">
               {(restaurants || [])
                 .filter(r => {
                   if (adminFilter === 'paying') return r.stripe_subscription_id
@@ -509,210 +572,148 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 .map(restaurant => {
                   const payments = subscriptionPayments.filter(p => p.restaurant_id === restaurant.id)
                   const bonuses = restaurantBonuses.filter(b => b.restaurant_id === restaurant.id && b.is_active)
-                  const lastPayment = payments[0]
+                  const lastPayment = payments.find(p => p.status === 'paid')
                   const activeBonus = bonuses.find(b => b.expires_at && new Date(b.expires_at) > new Date())
                   const hasSubscription = !!restaurant.stripe_subscription_id
+                  const status = !restaurant.isActive ? 'suspended'
+                    : restaurant.subscription_status === 'past_due' ? 'past_due'
+                    : hasSubscription ? 'active'
+                    : activeBonus ? 'bonus'
+                    : 'none'
 
                   return (
-                    <Card key={restaurant.id} className={`bg-zinc-900 border-white/5 rounded-xl overflow-hidden transition-all ${!restaurant.isActive ? 'border-red-500/20 bg-red-950/10' : hasSubscription ? 'border-emerald-500/10' : 'border-amber-500/10'}`}>
-                      <CardContent className="p-5">
-                        <div className="flex items-start justify-between gap-4 flex-wrap">
-                          <div className="flex items-center gap-4">
-                            {restaurant.logo_url ? (
-                              <img src={restaurant.logo_url} alt={restaurant.name} className="w-12 h-12 rounded-xl object-cover border border-white/10" />
-                            ) : (
-                              <div className="w-12 h-12 rounded-xl bg-zinc-950 flex items-center justify-center border border-white/5">
-                                <Buildings size={20} className="text-zinc-600" />
-                              </div>
-                            )}
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-bold text-white">{restaurant.name}</h3>
-                                {hasSubscription && <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px]">Abbonato</Badge>}
-                                {!restaurant.isActive && <Badge className="bg-red-500/10 text-red-400 border-red-500/30 text-[10px]">Sospeso</Badge>}
-                                {activeBonus && <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-[10px]">Bonus Attivo</Badge>}
-                                {restaurant.enable_stripe_payments && <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/30 text-[10px]">Pag. Clienti</Badge>}
-                              </div>
-                              <div className="text-xs text-zinc-500 space-y-0.5">
-                                {restaurant.suspension_reason && (
-                                  <p className="text-red-400"><Warning size={12} className="inline mr-1" />{restaurant.suspension_reason}</p>
-                                )}
-                                {lastPayment && (
-                                  <p><CheckCircle size={12} className="inline mr-1 text-emerald-500" />Ultimo pagamento: €{lastPayment.amount} — {new Date(lastPayment.created_at || '').toLocaleDateString('it-IT')}</p>
-                                )}
-                                {activeBonus && (
-                                  <p className="text-purple-400"><Gift size={12} className="inline mr-1" />Bonus: {activeBonus.free_months} mesi gratis fino al {new Date(activeBonus.expires_at || '').toLocaleDateString('it-IT')}</p>
-                                )}
-                                {!hasSubscription && !activeBonus && (
-                                  <p className="text-amber-400"><Clock size={12} className="inline mr-1" />Nessun abbonamento attivo</p>
-                                )}
-                              </div>
-                            </div>
+                    <div key={restaurant.id} className={`group p-4 rounded-xl border transition-all hover:bg-white/[0.02] ${
+                      status === 'suspended' ? 'bg-red-950/5 border-red-500/10'
+                      : status === 'active' ? 'bg-zinc-900/50 border-emerald-500/10'
+                      : status === 'past_due' ? 'bg-zinc-900/50 border-amber-500/15'
+                      : 'bg-zinc-900/50 border-white/5'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        {/* Logo */}
+                        {restaurant.logo_url ? (
+                          <img src={restaurant.logo_url} alt="" className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
+                            <Buildings size={16} className="text-zinc-600" />
                           </div>
+                        )}
 
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            {/* Bonus Button */}
+                            <h3 className="font-semibold text-sm text-white truncate">{restaurant.name}</h3>
+                            {/* Status indicator */}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                              status === 'active' ? 'bg-emerald-500/10 text-emerald-400'
+                              : status === 'past_due' ? 'bg-amber-500/10 text-amber-400'
+                              : status === 'suspended' ? 'bg-red-500/10 text-red-400'
+                              : status === 'bonus' ? 'bg-purple-500/10 text-purple-400'
+                              : 'bg-zinc-800 text-zinc-500'
+                            }`}>
+                              {status === 'active' && <><span className="w-1 h-1 rounded-full bg-emerald-400" />Attivo</>}
+                              {status === 'past_due' && 'Pagamento fallito'}
+                              {status === 'suspended' && 'Sospeso'}
+                              {status === 'bonus' && 'Bonus'}
+                              {status === 'none' && 'Nessun piano'}
+                            </span>
+                            {restaurant.enable_stripe_payments && (
+                              <span className="text-[10px] text-blue-400/60 font-medium">Connect</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-zinc-500">
+                            {lastPayment && (
+                              <span>Ultimo: €{lastPayment.amount} il {new Date(lastPayment.created_at || '').toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
+                            )}
+                            {activeBonus && (
+                              <span className="text-purple-400/70">{activeBonus.free_months}m gratis fino {new Date(activeBonus.expires_at || '').toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
+                            )}
+                            {restaurant.suspension_reason && (
+                              <span className="text-red-400/70">{restaurant.suspension_reason}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Payment history pills */}
+                        {payments.length > 0 && (
+                          <div className="hidden md:flex items-center gap-1 shrink-0">
+                            {payments.slice(0, 4).map(p => (
+                              <div
+                                key={p.id}
+                                title={`€${p.amount} — ${new Date(p.created_at || '').toLocaleDateString('it-IT')} — ${p.status === 'paid' ? 'Pagato' : 'Fallito'}`}
+                                className={`w-2 h-2 rounded-full ${p.status === 'paid' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-purple-400 hover:bg-purple-500/10 rounded-lg"
+                            onClick={() => {
+                              setBonusRestaurantId(restaurant.id)
+                              setBonusMonths(1)
+                              setBonusReason('')
+                              setShowBonusDialog(true)
+                            }}
+                            title="Assegna Bonus"
+                          >
+                            <Gift size={15} />
+                          </Button>
+                          {activeBonus && (
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-9 w-9 text-purple-400 hover:bg-purple-500/10 rounded-lg"
-                              onClick={() => {
-                                setBonusRestaurantId(restaurant.id)
-                                setBonusMonths(1)
-                                setBonusReason('')
-                                setShowBonusDialog(true)
-                              }}
-                              title="Assegna Bonus"
-                            >
-                              <Gift size={18} />
-                            </Button>
-
-                            {/* Revoke Bonus */}
-                            {activeBonus && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-9 text-red-400 hover:bg-red-500/10 rounded-lg text-xs"
-                                onClick={async () => {
-                                  if (confirm(`Revocare il bonus di ${activeBonus.free_months} mesi per ${restaurant.name}?`)) {
-                                    try {
-                                      await DatabaseService.deactivateBonus(activeBonus.id)
-                                      toast.success('Bonus revocato')
-                                      refreshRestaurants()
-                                      DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
-                                    } catch (e: any) { toast.error(e.message) }
-                                  }
-                                }}
-                              >
-                                <Trash size={14} className="mr-1" /> Revoca Bonus
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Per-restaurant custom price ID */}
-                        <div className="mt-3 pt-3 border-t border-white/5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider shrink-0">Price ID:</span>
-                            <Input
-                              placeholder={stripePriceIdSaved || 'Usa prezzo globale'}
-                              defaultValue={(restaurant as any).stripe_price_id || ''}
-                              className="h-7 text-xs font-mono bg-black/30 border-white/5 px-2"
-                              onBlur={async (e) => {
-                                const val = e.target.value.trim()
-                                const currentVal = (restaurant as any).stripe_price_id || ''
-                                if (val !== currentVal) {
+                              className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
+                              onClick={async () => {
+                                if (confirm(`Revocare il bonus per ${restaurant.name}?`)) {
                                   try {
-                                    await DatabaseService.adminUpdateRestaurant(restaurant.id, { stripe_price_id: val || null }, user)
-                                    toast.success(val ? `Price ID personalizzato salvato per ${restaurant.name}` : `${restaurant.name} userà il prezzo globale`)
+                                    await DatabaseService.deactivateBonus(activeBonus.id)
+                                    toast.success('Bonus revocato')
                                     refreshRestaurants()
+                                    DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
                                   } catch (e: any) { toast.error(e.message) }
                                 }
                               }}
-                            />
-                          </div>
+                              title="Revoca Bonus"
+                            >
+                              <Trash size={14} />
+                            </Button>
+                          )}
                         </div>
-
-                        {/* Payment History */}
-                        {payments.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-white/5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Storico Pagamenti</p>
-                            <div className="flex gap-2 flex-wrap">
-                              {payments.slice(0, 6).map(p => (
-                                <div key={p.id} className={`px-2.5 py-1 rounded-md text-[10px] font-medium border ${p.status === 'paid' ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20' : p.status === 'failed' ? 'bg-red-500/5 text-red-400 border-red-500/20' : 'bg-zinc-800 text-zinc-400 border-white/5'}`}>
-                                  €{p.amount} — {new Date(p.created_at || '').toLocaleDateString('it-IT', { month: 'short', year: '2-digit' })} — {p.status === 'paid' ? 'Pagato' : p.status === 'failed' ? 'Fallito' : p.status}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   )
                 })}
-            </div>
 
-            {/* Summary Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="bg-zinc-900 border-white/5">
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-white">{restaurants?.length || 0}</p>
-                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Totale</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-zinc-900 border-emerald-500/10">
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-emerald-400">{restaurants?.filter(r => r.stripe_subscription_id).length || 0}</p>
-                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Abbonati</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-zinc-900 border-red-500/10">
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-red-400">{restaurants?.filter(r => !r.isActive).length || 0}</p>
-                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Sospesi</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-zinc-900 border-amber-500/10">
-                <CardContent className="p-4 text-center">
-                  <p className="text-2xl font-bold text-amber-400">
-                    €{subscriptionPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(0)}
-                  </p>
-                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-wider">Incassato</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Global Stripe Price ID */}
-            <div className="p-4 rounded-xl bg-zinc-900/50 border border-white/5 mt-4 mb-6">
-              <div className="flex flex-col md:flex-row md:items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <CreditCard size={18} className="text-emerald-500 shrink-0" />
-                  <span className="text-sm font-semibold text-white shrink-0">Stripe Price ID Globale:</span>
+              {/* Empty state */}
+              {(restaurants || []).filter(r => {
+                if (adminFilter === 'paying') return r.stripe_subscription_id
+                if (adminFilter === 'not_paying') return !r.stripe_subscription_id && r.isActive
+                if (adminFilter === 'suspended') return !r.isActive
+                return true
+              }).length === 0 && (
+                <div className="text-center py-12 text-zinc-500 text-sm">
+                  Nessun ristorante trovato per questo filtro.
                 </div>
-                <Input
-                  placeholder="Incolla il Price ID da Stripe..."
-                  value={stripePriceId}
-                  onChange={(e) => setStripePriceId(e.target.value)}
-                  className="h-10 font-mono text-sm bg-black border-white/10 max-w-sm flex-1"
-                />
-                <Button
-                  disabled={!stripePriceId || stripePriceId === stripePriceIdSaved}
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 px-6 shrink-0 disabled:opacity-30 disabled:hover:bg-emerald-600 transition-all rounded-lg"
-                  onClick={async () => {
-                    try {
-                      await DatabaseService.setAppConfig('stripe_price_id', stripePriceId.trim())
-                      setStripePriceIdSaved(stripePriceId.trim())
-                      toast.success('Price ID globale salvato!')
-                    } catch (e: any) {
-                      toast.error('Errore: ' + e.message)
-                    }
-                  }}
-                >
-                  Salva Prezzo
-                </Button>
-              </div>
-              {stripePriceIdSaved && (
-                <p className="text-xs text-emerald-400 mt-2 ml-7 font-mono flex items-center gap-1.5">
-                  <CheckCircle size={14} className="inline" /> Prezzo attualmente attivo: <span className="font-bold text-white bg-black/50 px-2 py-0.5 rounded ml-1">{stripePriceIdSaved}</span>
-                </p>
               )}
-              <p className="text-xs text-zinc-500 mt-2 ml-7">Questo prezzo verrà applicato per tutti i ristoranti durante la registrazione. Puoi sovrascriverlo per un singolo ristorante dal pannello sottostante.</p>
             </div>
 
             {/* Bonus Dialog */}
             <Dialog open={showBonusDialog} onOpenChange={setShowBonusDialog}>
-              <DialogContent className="max-w-md bg-black/95 border-purple-500/20 text-white backdrop-blur-2xl">
+              <DialogContent className="max-w-sm bg-zinc-950 border-white/10 text-white">
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2"><Gift size={20} className="text-purple-400" /> Assegna Bonus Gratuito</DialogTitle>
-                  <DialogDescription>Regala mensilità gratuite a un ristorante.</DialogDescription>
+                  <DialogTitle className="flex items-center gap-2 text-base"><Gift size={18} className="text-purple-400" /> Assegna Bonus</DialogTitle>
+                  <DialogDescription className="text-zinc-500 text-sm">Regala mensilità gratuite a un ristorante.</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label>Ristorante</Label>
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Ristorante</Label>
                     <Select value={bonusRestaurantId} onValueChange={setBonusRestaurantId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleziona ristorante" />
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Seleziona..." />
                       </SelectTrigger>
                       <SelectContent>
                         {(restaurants || []).map(r => (
@@ -721,24 +722,25 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Mesi gratuiti</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Mesi gratuiti</Label>
                     <div className="flex items-center gap-3">
-                      <Button variant="outline" size="icon" onClick={() => setBonusMonths(m => Math.max(1, m - 1))} className="h-10 w-10"><span className="text-lg">-</span></Button>
-                      <span className="text-2xl font-bold text-purple-400 w-12 text-center">{bonusMonths}</span>
-                      <Button variant="outline" size="icon" onClick={() => setBonusMonths(m => Math.min(24, m + 1))} className="h-10 w-10"><span className="text-lg">+</span></Button>
+                      <Button variant="outline" size="icon" onClick={() => setBonusMonths(m => Math.max(1, m - 1))} className="h-9 w-9 rounded-lg"><span className="text-base">-</span></Button>
+                      <span className="text-xl font-bold text-purple-400 w-10 text-center">{bonusMonths}</span>
+                      <Button variant="outline" size="icon" onClick={() => setBonusMonths(m => Math.min(24, m + 1))} className="h-9 w-9 rounded-lg"><span className="text-base">+</span></Button>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Motivo (opzionale)</Label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Motivo (opzionale)</Label>
                     <Input
-                      placeholder="Es. Partner speciale, promozione lancio..."
+                      placeholder="Es. Partner speciale..."
                       value={bonusReason}
                       onChange={(e) => setBonusReason(e.target.value)}
+                      className="h-10"
                     />
                   </div>
                   <Button
-                    className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl"
+                    className="w-full h-11 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl"
                     disabled={!bonusRestaurantId}
                     onClick={async () => {
                       try {
@@ -757,7 +759,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                       }
                     }}
                   >
-                    <Gift size={18} className="mr-2" />
                     Assegna {bonusMonths} {bonusMonths === 1 ? 'mese' : 'mesi'} gratis
                   </Button>
                 </div>
