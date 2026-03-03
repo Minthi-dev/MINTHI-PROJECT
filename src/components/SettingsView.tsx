@@ -905,19 +905,19 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-5 max-w-xl mx-auto"
+                        className="space-y-6"
                     >
                         {/* 1. Pagamenti Online — Toggle + Connect */}
                         <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-5 sm:p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                                            <CreditCard className="text-amber-500" weight="bold" size={18} />
+                            <div className="p-6 sm:p-8">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
+                                            <CreditCard weight="duotone" size={32} />
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-sm text-white">Pagamenti al Tavolo</h3>
-                                            <p className="text-[11px] text-zinc-500">I clienti pagano dal menu con carta</p>
+                                            <h3 className="text-2xl font-bold text-white">Pagamenti al Tavolo</h3>
+                                            <p className="text-sm text-zinc-400 mt-1">I clienti pagano direttamente dal menu digitale con carta</p>
                                         </div>
                                     </div>
                                     <Switch
@@ -936,58 +936,56 @@ export function SettingsView({
                                 </div>
 
                                 {stripePaymentsEnabled && (
-                                    <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
-                                        <div className="flex items-start gap-2.5 p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
-                                            <CheckCircle weight="fill" size={15} className="text-emerald-500 mt-0.5 shrink-0" />
-                                            <p className="text-xs text-zinc-400 leading-relaxed">
-                                                Il pulsante <span className="text-white font-medium">"Paga con Carta"</span> apparirà nel menu. I clienti possono pagare tutto, alla romana, o importo personalizzato. Il tavolo si chiude dopo il pagamento.
+                                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                        <div className="flex items-start gap-3 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                                            <CheckCircle weight="fill" size={20} className="text-emerald-500 mt-0.5 shrink-0" />
+                                            <p className="text-sm text-zinc-400 leading-relaxed">
+                                                Il pulsante <span className="text-white font-medium">"Paga con Carta"</span> apparirà nel menu. I clienti possono pagare tutto, alla romana, o importo personalizzato. Il tavolo si chiude automaticamente dopo il pagamento.
                                             </p>
                                         </div>
 
                                         {/* Connect Status */}
-                                        <div className={`flex items-center justify-between p-3 rounded-lg border ${
-                                            subscriptionInfo?.stripe_connect_enabled
+                                        <div className={`flex items-center justify-between p-4 rounded-xl border ${subscriptionInfo?.stripe_connect_enabled
                                                 ? 'bg-emerald-500/5 border-emerald-500/10'
                                                 : subscriptionInfo?.stripe_connect_account_id
                                                     ? 'bg-amber-500/5 border-amber-500/10'
                                                     : 'bg-zinc-800/50 border-white/5'
-                                        }`}>
-                                            <div className="flex items-center gap-2.5">
+                                            }`}>
+                                            <div className="flex items-center gap-3">
                                                 {subscriptionInfo?.stripe_connect_enabled ? (
-                                                    <CheckCircle weight="fill" size={16} className="text-emerald-400" />
+                                                    <CheckCircle weight="fill" size={24} className="text-emerald-400" />
                                                 ) : subscriptionInfo?.stripe_connect_account_id ? (
-                                                    <Warning weight="fill" size={16} className="text-amber-400" />
+                                                    <Warning weight="fill" size={24} className="text-amber-400" />
                                                 ) : (
-                                                    <Buildings size={16} className="text-zinc-500" />
+                                                    <Buildings size={24} className="text-zinc-500" />
                                                 )}
                                                 <div>
-                                                    <p className="text-xs font-medium text-white">
+                                                    <p className="text-base font-semibold text-white">
                                                         {subscriptionInfo?.stripe_connect_enabled
                                                             ? 'Account collegato'
                                                             : subscriptionInfo?.stripe_connect_account_id
                                                                 ? 'Configurazione incompleta'
                                                                 : 'Account non collegato'}
                                                     </p>
-                                                    <p className="text-[10px] text-zinc-500">
+                                                    <p className="text-sm text-zinc-500 mt-0.5">
                                                         {subscriptionInfo?.stripe_connect_enabled
-                                                            ? 'I pagamenti arrivano sul tuo conto'
-                                                            : 'Collega Stripe per ricevere pagamenti'}
+                                                            ? 'I pagamenti arrivano direttamente sul tuo conto'
+                                                            : 'Collega il tuo account Stripe per ricevere pagamenti'}
                                                     </p>
                                                 </div>
                                             </div>
                                             <Button
                                                 onClick={handleConnectOnboarding}
                                                 disabled={loadingConnectOnboarding}
-                                                size="sm"
                                                 variant={subscriptionInfo?.stripe_connect_enabled ? 'outline' : 'default'}
-                                                className={`h-8 text-xs rounded-lg gap-1.5 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white' : 'border-white/10 text-zinc-300'}`}
+                                                className={`h-11 px-5 text-sm rounded-xl gap-2 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-[0_0_15px_-3px_rgba(139,92,246,0.4)]' : 'border-white/10 text-zinc-300'}`}
                                             >
                                                 {loadingConnectOnboarding ? (
-                                                    <ArrowClockwise className="animate-spin" size={13} />
+                                                    <ArrowClockwise className="animate-spin" size={18} />
                                                 ) : (
-                                                    <ArrowSquareOut size={13} />
+                                                    <ArrowSquareOut size={18} />
                                                 )}
-                                                {subscriptionInfo?.stripe_connect_enabled ? 'Gestisci' : subscriptionInfo?.stripe_connect_account_id ? 'Completa' : 'Collega'}
+                                                {subscriptionInfo?.stripe_connect_enabled ? 'Gestisci' : subscriptionInfo?.stripe_connect_account_id ? 'Completa' : 'Collega Account Stripe'}
                                             </Button>
                                         </div>
                                     </div>
@@ -995,212 +993,201 @@ export function SettingsView({
                             </div>
                         </div>
 
-                    </motion.div>
-                </TabsContent>
-
-                {/* Abbonamento */}
-                {subscriptionInfo?.stripe_subscription_id ? (
-                    <div className="max-w-xl mx-auto space-y-4 mt-1">
-                        {/* Active Subscription Card */}
-                        <div className={`rounded-2xl border overflow-hidden ${
-                            subscriptionInfo.subscription_status === 'past_due'
-                                ? 'bg-zinc-900/50 border-red-500/20'
-                                : subscriptionInfo.subscription_status === 'canceled'
-                                    ? 'bg-zinc-900/50 border-white/5'
-                                    : 'bg-zinc-900/50 border-emerald-500/10'
-                        }`}>
-                            <div className="p-5 sm:p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                                            subscriptionInfo.subscription_status === 'past_due' ? 'bg-red-500/10'
-                                            : subscriptionInfo.subscription_status === 'canceled' ? 'bg-zinc-800'
-                                            : 'bg-emerald-500/10'
-                                        }`}>
-                                            <CreditCard className={`${
-                                                subscriptionInfo.subscription_status === 'past_due' ? 'text-red-400'
-                                                : subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-400'
-                                                : 'text-emerald-400'
-                                            }`} weight="bold" size={18} />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold text-sm text-white">Abbonamento MINTHI</h3>
-                                            <p className="text-[11px] text-zinc-500">Piano mensile</p>
-                                        </div>
-                                    </div>
-                                    {/* Status */}
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
-                                        subscriptionInfo.subscription_status === 'active'
-                                            ? 'bg-emerald-500/10 text-emerald-400'
-                                            : subscriptionInfo.subscription_status === 'past_due'
-                                                ? 'bg-red-500/10 text-red-400'
-                                                : 'bg-zinc-800 text-zinc-400'
+                        {/* 2. Abbonamento */}
+                        {subscriptionInfo?.stripe_subscription_id ? (
+                            <div className="space-y-6">
+                                {/* Active Subscription Card */}
+                                <div className={`rounded-2xl border overflow-hidden ${subscriptionInfo.subscription_status === 'past_due'
+                                        ? 'bg-zinc-900/50 border-red-500/20'
+                                        : subscriptionInfo.subscription_status === 'canceled'
+                                            ? 'bg-zinc-900/50 border-white/5'
+                                            : 'bg-zinc-900/50 border-emerald-500/10'
                                     }`}>
-                                        {subscriptionInfo.subscription_status === 'active' && <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
-                                        {subscriptionInfo.subscription_status === 'past_due' && <><WarningCircle weight="fill" size={12} />Pagamento fallito</>}
-                                        {subscriptionInfo.subscription_status === 'canceled' && 'Annullato'}
-                                        {!subscriptionInfo.subscription_status && 'Attivo'}
-                                    </span>
-                                </div>
-
-                                {/* Past due warning */}
-                                {subscriptionInfo.subscription_status === 'past_due' && (
-                                    <div className="flex items-start gap-2.5 p-3 bg-red-500/5 rounded-lg border border-red-500/10 mb-4">
-                                        <WarningCircle weight="fill" size={15} className="text-red-400 mt-0.5 shrink-0" />
-                                        <p className="text-xs text-zinc-400 leading-relaxed">
-                                            <span className="text-red-400 font-medium">Pagamento non riuscito.</span> Aggiorna il metodo di pagamento per evitare la sospensione.
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/* Next billing */}
-                                {nextPaymentDate && subscriptionInfo.subscription_status !== 'canceled' && (
-                                    <div className="flex items-center gap-2 p-3 bg-black/20 rounded-lg mb-4">
-                                        <Clock size={14} className="text-zinc-500 shrink-0" />
-                                        <p className="text-xs text-zinc-400">
-                                            Prossimo addebito: <span className="text-white font-medium">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/* Actions */}
-                                <div className="flex gap-2">
-                                    <Button
-                                        onClick={handleOpenBillingPortal}
-                                        disabled={loadingBillingPortal}
-                                        size="sm"
-                                        className="flex-1 h-9 bg-white/10 hover:bg-white/15 text-white text-xs font-medium rounded-lg gap-1.5"
-                                    >
-                                        {loadingBillingPortal ? (
-                                            <ArrowClockwise className="animate-spin" size={13} />
-                                        ) : (
-                                            <ArrowSquareOut size={13} />
-                                        )}
-                                        Gestisci Abbonamento
-                                    </Button>
-                                    <Button
-                                        onClick={handleOpenBillingPortal}
-                                        disabled={loadingBillingPortal}
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-9 text-xs border-white/5 text-zinc-400 hover:text-white rounded-lg gap-1.5"
-                                    >
-                                        <Receipt size={13} />
-                                        Fatture
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Payment History */}
-                        {subscriptionPayments.length > 0 && (
-                            <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                                <div className="p-5 sm:p-6">
-                                    <h3 className="text-sm font-semibold text-white mb-3">Storico Pagamenti</h3>
-                                    <div className="space-y-1.5">
-                                        {subscriptionPayments.slice(0, 8).map((payment) => (
-                                            <div
-                                                key={payment.id}
-                                                className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white/[0.02] transition-colors"
-                                            >
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                                        payment.status === 'paid' ? 'bg-emerald-500'
-                                                        : payment.status === 'failed' ? 'bg-red-500'
-                                                        : 'bg-zinc-600'
-                                                    }`} />
-                                                    <span className="text-xs text-zinc-300">
-                                                        {payment.period_start
-                                                            ? new Date(payment.period_start).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
-                                                            : payment.created_at
-                                                                ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
-                                                                : 'Abbonamento'}
-                                                    </span>
+                                    <div className="p-6 sm:p-8">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-3 rounded-xl flex items-center justify-center ${subscriptionInfo.subscription_status === 'past_due' ? 'bg-red-500/10'
+                                                        : subscriptionInfo.subscription_status === 'canceled' ? 'bg-zinc-800'
+                                                            : 'bg-emerald-500/10'
+                                                    }`}>
+                                                    <CreditCard className={`${subscriptionInfo.subscription_status === 'past_due' ? 'text-red-400'
+                                                            : subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-400'
+                                                                : 'text-emerald-400'
+                                                        }`} weight="duotone" size={28} />
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`text-xs font-medium ${
-                                                        payment.status === 'paid' ? 'text-emerald-400'
-                                                        : payment.status === 'failed' ? 'text-red-400'
-                                                        : 'text-zinc-400'
-                                                    }`}>
-                                                        €{payment.amount.toFixed(2)}
-                                                    </span>
-                                                    <span className={`text-[10px] ${
-                                                        payment.status === 'paid' ? 'text-zinc-500'
-                                                        : 'text-red-400/60'
-                                                    }`}>
-                                                        {payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : 'In attesa'}
-                                                    </span>
+                                                <div>
+                                                    <h3 className="text-xl font-bold text-white">Abbonamento MINTHI</h3>
+                                                    <p className="text-sm text-zinc-500 mt-0.5">Piano mensile</p>
                                                 </div>
                                             </div>
-                                        ))}
+                                            {/* Status */}
+                                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${subscriptionInfo.subscription_status === 'active'
+                                                    ? 'bg-emerald-500/10 text-emerald-400'
+                                                    : subscriptionInfo.subscription_status === 'past_due'
+                                                        ? 'bg-red-500/10 text-red-400'
+                                                        : 'bg-zinc-800 text-zinc-400'
+                                                }`}>
+                                                {subscriptionInfo.subscription_status === 'active' && <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
+                                                {subscriptionInfo.subscription_status === 'past_due' && <><WarningCircle weight="fill" size={16} />Pagamento fallito</>}
+                                                {subscriptionInfo.subscription_status === 'canceled' && 'Annullato'}
+                                                {!subscriptionInfo.subscription_status && 'Attivo'}
+                                            </span>
+                                        </div>
+
+                                        {/* Past due warning */}
+                                        {subscriptionInfo.subscription_status === 'past_due' && (
+                                            <div className="flex items-start gap-3 p-4 bg-red-500/5 rounded-xl border border-red-500/10 mb-5">
+                                                <WarningCircle weight="fill" size={20} className="text-red-400 mt-0.5 shrink-0" />
+                                                <p className="text-sm text-zinc-400 leading-relaxed">
+                                                    <span className="text-red-400 font-medium">Pagamento non riuscito.</span> Aggiorna il metodo di pagamento per evitare la sospensione del servizio.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Next billing */}
+                                        {nextPaymentDate && subscriptionInfo.subscription_status !== 'canceled' && (
+                                            <div className="flex items-center gap-3 p-4 bg-black/20 rounded-xl mb-5">
+                                                <Clock size={20} className="text-zinc-500 shrink-0" />
+                                                <p className="text-sm text-zinc-400">
+                                                    Prossimo addebito: <span className="text-white font-medium">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Actions */}
+                                        <div className="flex gap-3">
+                                            <Button
+                                                onClick={handleOpenBillingPortal}
+                                                disabled={loadingBillingPortal}
+                                                className="flex-1 h-11 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-xl gap-2"
+                                            >
+                                                {loadingBillingPortal ? (
+                                                    <ArrowClockwise className="animate-spin" size={18} />
+                                                ) : (
+                                                    <ArrowSquareOut size={18} />
+                                                )}
+                                                Gestisci Abbonamento
+                                            </Button>
+                                            <Button
+                                                onClick={handleOpenBillingPortal}
+                                                disabled={loadingBillingPortal}
+                                                variant="outline"
+                                                className="h-11 text-sm border-white/10 text-zinc-400 hover:text-white rounded-xl gap-2 px-5"
+                                            >
+                                                <Receipt size={18} />
+                                                Fatture
+                                            </Button>
+                                        </div>
                                     </div>
+                                </div>
+
+                                {/* Payment History */}
+                                {subscriptionPayments.length > 0 && (
+                                    <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                                        <div className="p-6 sm:p-8">
+                                            <h3 className="text-lg font-bold text-white mb-4">Storico Pagamenti</h3>
+                                            <div className="space-y-2">
+                                                {subscriptionPayments.slice(0, 8).map((payment) => (
+                                                    <div
+                                                        key={payment.id}
+                                                        className="flex items-center justify-between py-3 px-4 rounded-xl hover:bg-white/[0.02] transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${payment.status === 'paid' ? 'bg-emerald-500'
+                                                                    : payment.status === 'failed' ? 'bg-red-500'
+                                                                        : 'bg-zinc-600'
+                                                                }`} />
+                                                            <span className="text-sm text-zinc-300">
+                                                                {payment.period_start
+                                                                    ? new Date(payment.period_start).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+                                                                    : payment.created_at
+                                                                        ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
+                                                                        : 'Abbonamento'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className={`text-sm font-semibold ${payment.status === 'paid' ? 'text-emerald-400'
+                                                                    : payment.status === 'failed' ? 'text-red-400'
+                                                                        : 'text-zinc-400'
+                                                                }`}>
+                                                                €{payment.amount.toFixed(2)}
+                                                            </span>
+                                                            <span className={`text-xs font-medium ${payment.status === 'paid' ? 'text-zinc-500'
+                                                                    : 'text-red-400/60'
+                                                                }`}>
+                                                                {payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : 'In attesa'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            /* No subscription */
+                            <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                                <div className="p-6 sm:p-8 text-center">
+                                    <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-5">
+                                        <CreditCard className="text-emerald-500" weight="bold" size={32} />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white mb-2">Abbonamento MINTHI</h3>
+                                    <p className="text-base text-zinc-500 mb-6">Sblocca tutte le funzionalità del gestionale</p>
+
+                                    <div className="bg-black/30 rounded-xl p-6 mb-6 text-left">
+                                        <div className="flex items-baseline gap-1 mb-5">
+                                            <span className="text-3xl font-bold text-white">€49</span>
+                                            <span className="text-zinc-500 text-base">/mese</span>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {['Ordini e tavoli illimitati', 'Menu digitale QR code', 'Supporto prioritario', 'Statistiche avanzate'].map((f, i) => (
+                                                <div key={i} className="flex items-center gap-3 text-base text-zinc-300">
+                                                    <CheckCircle className="text-emerald-500 shrink-0" weight="fill" size={20} />
+                                                    {f}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-base rounded-xl shadow-[0_0_20px_-3px_rgba(16,185,129,0.4)]"
+                                        onClick={async () => {
+                                            try {
+                                                const { data: restaurantData } = await supabase
+                                                    .from('restaurants')
+                                                    .select('stripe_price_id')
+                                                    .eq('id', restaurantId)
+                                                    .single();
+
+                                                let priceId = restaurantData?.stripe_price_id;
+                                                if (!priceId) {
+                                                    priceId = await DatabaseService.getAppConfig('stripe_price_id');
+                                                }
+                                                if (!priceId) {
+                                                    toast.error("L'amministratore non ha ancora configurato il Price ID di Stripe. Contatta il supporto.");
+                                                    return;
+                                                }
+
+                                                toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
+                                                const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
+                                                window.location.href = url;
+                                            } catch (e: any) {
+                                                console.error(e);
+                                                toast.error("Errore: " + e.message, { id: "stripe-checkout" });
+                                            }
+                                        }}
+                                    >
+                                        Attiva Abbonamento
+                                    </Button>
+                                    <p className="text-xs text-zinc-600 mt-3">Pagamenti sicuri gestiti da Stripe</p>
                                 </div>
                             </div>
                         )}
-                    </div>
-                ) : (
-                    /* No subscription */
-                    <div className="max-w-xl mx-auto mt-1">
-                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-6 sm:p-8 text-center">
-                                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
-                                    <CreditCard className="text-emerald-500" weight="bold" size={24} />
-                                </div>
-                                <h3 className="text-xl font-bold text-white mb-1">Abbonamento MINTHI</h3>
-                                <p className="text-sm text-zinc-500 mb-6">Sblocca tutte le funzionalità del gestionale</p>
 
-                                <div className="bg-black/30 rounded-xl p-5 mb-6 text-left">
-                                    <div className="flex items-baseline gap-1 mb-4">
-                                        <span className="text-2xl font-bold text-white">€49</span>
-                                        <span className="text-zinc-500 text-sm">/mese</span>
-                                    </div>
-                                    <div className="space-y-2.5">
-                                        {['Ordini e tavoli illimitati', 'Menu digitale QR code', 'Supporto prioritario', 'Statistiche avanzate'].map((f, i) => (
-                                            <div key={i} className="flex items-center gap-2 text-sm text-zinc-300">
-                                                <CheckCircle className="text-emerald-500 shrink-0" weight="fill" size={14} />
-                                                {f}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <Button
-                                    className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
-                                    onClick={async () => {
-                                        try {
-                                            const { data: restaurantData } = await supabase
-                                                .from('restaurants')
-                                                .select('stripe_price_id')
-                                                .eq('id', restaurantId)
-                                                .single();
-
-                                            let priceId = restaurantData?.stripe_price_id;
-                                            if (!priceId) {
-                                                priceId = await DatabaseService.getAppConfig('stripe_price_id');
-                                            }
-                                            if (!priceId) {
-                                                toast.error("L'amministratore non ha ancora configurato il Price ID di Stripe. Contatta il supporto.");
-                                                return;
-                                            }
-
-                                            toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
-                                            const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
-                                            window.location.href = url;
-                                        } catch (e: any) {
-                                            console.error(e);
-                                            toast.error("Errore: " + e.message, { id: "stripe-checkout" });
-                                        }
-                                    }}
-                                >
-                                    Attiva Abbonamento
-                                </Button>
-                                <p className="text-[11px] text-zinc-600 mt-3">Pagamenti sicuri gestiti da Stripe</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-      </Tabs>
-    </div>
-  )
+                    </motion.div>
+                </TabsContent>
+            </Tabs>
+        </div>
+    )
 }

@@ -921,7 +921,7 @@ export const DatabaseService = {
             }
         });
 
-        if (error) throw error;
+        if (error) throw new Error(data?.error || error.message || 'Errore durante il checkout');
         return data; // { sessionId: string, url: string }
     },
 
@@ -948,7 +948,7 @@ export const DatabaseService = {
             }
         });
 
-        if (error) throw error;
+        if (error) throw new Error(data?.error || error.message || 'Errore durante il pagamento');
         return data; // { sessionId: string, url: string }
     },
 
@@ -969,7 +969,7 @@ export const DatabaseService = {
                 returnUrl: `${window.location.origin}/?section=settings`,
             }
         });
-        if (error) throw error;
+        if (error) throw new Error(data?.error || error.message || 'Errore portale di fatturazione');
         return data as { url: string };
     },
 
@@ -982,7 +982,7 @@ export const DatabaseService = {
                 refreshUrl: `${window.location.origin}/?connect=refresh`,
             }
         });
-        if (error) throw error;
+        if (error) throw new Error(data?.error || error.message || 'Errore connessione Stripe');
         return data as { url: string; accountId: string };
     },
 
