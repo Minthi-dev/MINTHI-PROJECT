@@ -78,11 +78,25 @@ serve(async (req) => {
                     }
                 } else {
                     // === ATTIVAZIONE ABBONAMENTO ===
-                    const restaurantId = session.metadata?.restaurantId || session.client_reference_id;
+                    const pendingRegistrationId = session.metadata?.pendingRegistrationId;
+                    const restaurantId = session.metadata?.restaurantId || (!pendingRegistrationId ? session.client_reference_id : null);
                     const customerId = session.customer;
                     const subscriptionId = session.subscription;
 
-                    if (restaurantId) {
+                    if (pendingRegistrationId) {
+                        // Nuova registrazione: crea utente + ristorante dal pending
+                        const { error: rpcError } = await supabase.rpc("complete_pending_registration", {
+                            p_pending_id: pendingRegistrationId,
+                            p_stripe_customer_id: customerId,
+                            p_stripe_subscription_id: subscriptionId,
+                        });
+                        if (rpcError) {
+                            console.error(`Errore complete_pending_registration ${pendingRegistrationId}:`, rpcError);
+                        } else {
+                            console.log(`Ristorante creato da pending registration ${pendingRegistrationId}`);
+                        }
+                    } else if (restaurantId) {
+                        // Ristorante esistente: aggiorna stato abbonamento
                         await supabase
                             .from("restaurants")
                             .update({

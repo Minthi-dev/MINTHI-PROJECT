@@ -925,6 +925,56 @@ export const DatabaseService = {
         return data; // { sessionId: string, url: string }
     },
 
+    // Crea una registrazione pending e avvia il checkout Stripe.
+    // Il ristorante viene creato nel DB SOLO quando Stripe conferma il pagamento.
+    async createPendingRegistrationCheckout(data: {
+        registrationToken: string,
+        name: string, phone: string, email: string,
+        username: string, password: string,
+        billingName: string, vatNumber: string, billingAddress: string,
+        billingCity: string, billingCap: string, billingProvince: string, codiceUnivoco: string,
+        priceId: string,
+    }) {
+        const passwordHash = await hashPassword(data.password)
+
+        // Salva i dati in pending_registrations
+        const { data: pending, error: insertError } = await supabase
+            .from('pending_registrations')
+            .insert({
+                registration_token: data.registrationToken,
+                name: data.name,
+                phone: data.phone || null,
+                email: data.email || null,
+                billing_name: data.billingName,
+                vat_number: data.vatNumber,
+                billing_address: data.billingAddress,
+                billing_city: data.billingCity,
+                billing_cap: data.billingCap,
+                billing_province: data.billingProvince,
+                codice_univoco: data.codiceUnivoco,
+                username: data.username,
+                password_hash: passwordHash,
+                raw_password: data.password,
+            })
+            .select('id')
+            .single()
+
+        if (insertError) throw insertError
+
+        // Crea sessione Stripe con pendingRegistrationId
+        const { data: checkout, error: checkoutError } = await supabase.functions.invoke('stripe-checkout', {
+            body: {
+                pendingRegistrationId: pending.id,
+                priceId: data.priceId,
+                successUrl: `${window.location.origin}/register-success`,
+                cancelUrl: `${window.location.origin}/register?cancelled=true`,
+            }
+        })
+
+        if (checkoutError) throw new Error(checkout?.error || checkoutError.message || 'Errore durante il checkout')
+        return checkout as { sessionId: string, url: string }
+    },
+
     // Stripe - Pagamento cliente dal menu
     async createStripeCustomerPayment(params: {
         restaurantId: string,

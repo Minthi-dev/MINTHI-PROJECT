@@ -8,38 +8,36 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
 });
 
 serve(async (req) => {
-    // Gestione preflight CORS
     if (req.method === "OPTIONS") {
         return new Response("ok", { headers: corsHeaders });
     }
 
     try {
-        const { priceId, restaurantId, successUrl, cancelUrl } = await req.json();
+        const { priceId, restaurantId, pendingRegistrationId, successUrl, cancelUrl } = await req.json();
 
-        if (!priceId || !restaurantId) {
-            return new Response(JSON.stringify({ error: "Mancano parametri necessari (priceId, restaurantId)" }), {
+        if (!priceId || (!restaurantId && !pendingRegistrationId)) {
+            return new Response(JSON.stringify({ error: "Mancano parametri: priceId e (restaurantId o pendingRegistrationId)" }), {
                 status: 400,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
 
-        // Creazione della sessione di Checkout
+        // Metadati: distingue registrazione nuova (pending) da ristorante esistente
+        const metadata: Record<string, string> = { paymentType: "subscription" };
+        if (pendingRegistrationId) {
+            metadata.pendingRegistrationId = pendingRegistrationId;
+        } else {
+            metadata.restaurantId = restaurantId;
+        }
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "subscription",
-            line_items: [
-                {
-                    price: priceId,
-                    quantity: 1,
-                },
-            ],
-            success_url: successUrl || `${req.headers.get("origin")}/dashboard?payment=success`,
-            cancel_url: cancelUrl || `${req.headers.get("origin")}/dashboard?payment=cancelled`,
-            metadata: {
-                paymentType: "subscription",
-                restaurantId: restaurantId,
-            },
-            client_reference_id: restaurantId,
+            line_items: [{ price: priceId, quantity: 1 }],
+            success_url: successUrl || `${req.headers.get("origin")}/register-success`,
+            cancel_url: cancelUrl || `${req.headers.get("origin")}/register-cancelled`,
+            metadata,
+            client_reference_id: pendingRegistrationId || restaurantId,
         });
 
         return new Response(JSON.stringify({ sessionId: session.id, url: session.url }), {

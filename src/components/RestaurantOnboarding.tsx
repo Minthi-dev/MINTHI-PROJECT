@@ -112,14 +112,45 @@ export default function RestaurantOnboarding() {
 
         setSubmitting(true)
         try {
-            // 1. Create restaurant + owner user + auto-apply bonus if present
-            const restaurant = await DatabaseService.registerRestaurant({
+            // Caso bonus (mesi gratis): crea subito utente + ristorante, nessun pagamento
+            if (tokenData.free_months > 0) {
+                await DatabaseService.registerRestaurant({
+                    name: form.name.trim(),
+                    phone: form.phone.trim(),
+                    email: form.email.trim(),
+                    username: form.username.trim(),
+                    password: form.password,
+                    freeMonths: tokenData.free_months,
+                    billingName: form.billingName.trim(),
+                    vatNumber: form.vatNumber.trim(),
+                    billingAddress: form.billingAddress.trim(),
+                    billingCity: form.billingCity.trim(),
+                    billingCap: form.billingCap.trim(),
+                    billingProvince: form.billingProvince.trim(),
+                    codiceUnivoco: form.codiceUnivoco.trim(),
+                })
+                toast.success(`Registrazione completata! Hai ${tokenData.free_months} mesi gratis.`)
+                navigate('/')
+                return
+            }
+
+            // Caso senza bonus: salva dati in pending_registrations e vai su Stripe.
+            // Il ristorante viene creato NEL DB solo DOPO che Stripe conferma il pagamento.
+            const priceId = await DatabaseService.getAppConfig('stripe_price_id')
+            if (!priceId) {
+                toast.error('Errore di configurazione. Contatta il supporto.')
+                setSubmitting(false)
+                return
+            }
+
+            toast.loading('Preparazione pagamento...', { id: 'stripe' })
+            const { url } = await DatabaseService.createPendingRegistrationCheckout({
+                registrationToken: tokenData.token,
                 name: form.name.trim(),
                 phone: form.phone.trim(),
                 email: form.email.trim(),
                 username: form.username.trim(),
                 password: form.password,
-                freeMonths: tokenData.free_months || 0,
                 billingName: form.billingName.trim(),
                 vatNumber: form.vatNumber.trim(),
                 billingAddress: form.billingAddress.trim(),
@@ -127,34 +158,15 @@ export default function RestaurantOnboarding() {
                 billingCap: form.billingCap.trim(),
                 billingProvince: form.billingProvince.trim(),
                 codiceUnivoco: form.codiceUnivoco.trim(),
+                priceId,
             })
-
-            // 3. If there were free months, it's already active, just redirect
-            if (tokenData.free_months > 0) {
-                toast.success(`Registrazione completata! Hai ${tokenData.free_months} mesi gratis.`)
-                navigate('/')
-                return
-            }
-
-            // 4. No bonus → redirect to Stripe checkout
-            toast.loading('Preparazione pagamento...', { id: 'stripe' })
-
-            // Get price ID
-            const priceId = await DatabaseService.getAppConfig('stripe_price_id')
-            if (!priceId) {
-                toast.dismiss('stripe')
-                toast.error('Errore di configurazione. Contatta il supporto.')
-                setSubmitting(false)
-                return
-            }
-
-            const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurant.id, priceId)
             toast.dismiss('stripe')
             window.location.href = url
         } catch (err: any) {
+            toast.dismiss('stripe')
             console.error('Registration error:', err)
             if (err.message?.includes('duplicate') || err.message?.includes('unique') || err.message?.includes('Esiste già')) {
-                toast.error('Utente o Ristorante già esistente con questi dati. Prova un altro username o email.')
+                toast.error('Username o email già in uso. Prova con dati diversi.')
             } else {
                 toast.error('Errore durante la registrazione: ' + (err.message || 'Riprova'))
             }
