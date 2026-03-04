@@ -683,7 +683,7 @@ export const DatabaseService = {
     async getAllTableSessions(restaurantId?: string) {
         let query = supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled, receipt_issued')
             .order('opened_at', { ascending: false })
             .limit(1000)
         if (restaurantId) {
@@ -692,6 +692,14 @@ export const DatabaseService = {
         const { data, error } = await query
         if (error) throw error
         return data as unknown as TableSession[]
+    },
+
+    async updateSessionReceiptIssued(sessionId: string, issued: boolean) {
+        const { error } = await supabase
+            .from('table_sessions')
+            .update({ receipt_issued: issued })
+            .eq('id', sessionId)
+        if (error) throw error
     },
 
     async getSessionOrderCount(sessionId: string) {
@@ -1034,7 +1042,21 @@ export const DatabaseService = {
                 refreshUrl: `${window.location.origin}/?connect=refresh`,
             }
         });
-        if (error) throw new Error(data?.error || error.message || 'Errore connessione Stripe');
+        if (error) {
+            // Extract actual error from response body when available
+            let errorMsg = 'Errore connessione Stripe';
+            try {
+                if (data?.error) {
+                    errorMsg = data.error;
+                } else if ((error as any).context) {
+                    const body = await (error as any).context.json();
+                    if (body?.error) errorMsg = body.error;
+                } else if (error.message && !error.message.includes('non-2xx')) {
+                    errorMsg = error.message;
+                }
+            } catch { /* ignore parse errors */ }
+            throw new Error(errorMsg);
+        }
         return data as { url: string; accountId: string };
     },
 

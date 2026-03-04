@@ -56,7 +56,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { DishPlaceholder } from '@/components/ui/DishPlaceholder'
 // Icons
 import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users } from '@phosphor-icons/react'
 import {
@@ -234,9 +233,9 @@ const DishCard = React.memo(({
     }}
     onClick={() => onSelect(dish)}
   >
-    {dish.image_url && (
+    {dish.image_url?.trim() && (
       <div className="w-18 h-18 shrink-0 relative rounded-lg overflow-hidden shadow-inner" style={{ background: `linear-gradient(to bottom right, ${theme.cardBg}, ${theme.pageBg})`, border: `1px solid ${theme.cardBorder}` }}>
-        <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" />
+        <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
         {dish.allergens && dish.allergens.length > 0 && (
           <div className="absolute bottom-1 right-1 p-0.5 rounded-full shadow-sm" style={{ backgroundColor: 'rgba(9,9,11,0.9)', border: `1px solid ${theme.primaryAlpha(0.2)}` }}>
             <Info className="w-2.5 h-2.5" style={{ color: theme.primary }} />
@@ -379,6 +378,7 @@ const CustomerMenuBase = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authChecking, setAuthChecking] = useState(true)
   const [isInitLoading, setIsInitLoading] = useState(true) // Prevent PIN flicker during init
+  const [isAuthenticating, setIsAuthenticating] = useState(false) // Prevent PIN flicker during submit
 
   // Safe timeout for initialization
   useEffect(() => {
@@ -586,6 +586,12 @@ const CustomerMenuBase = () => {
 
   // Auto-authenticate from context if session matches
   useEffect(() => {
+    // Skip auto-check if we already proved authentication or if we are actively submitting
+    if (isAuthenticated) {
+      setAuthChecking(false)
+      return
+    }
+
     if (sessionId && restaurantId) {
       const checkSession = async () => {
         // Fetch session details to get the correct PIN
@@ -605,8 +611,8 @@ const CustomerMenuBase = () => {
             // Context has a valid PIN that matches DB - auto authenticate
             setIsAuthenticated(true)
           } else {
-            // Need PIN
-            if (!isViewOnly) {
+            // Only set false if we haven't already passed auth manually
+            if (!isAuthenticated && !isViewOnly) {
               setIsAuthenticated(false)
             }
           }
@@ -622,7 +628,8 @@ const CustomerMenuBase = () => {
       // This handles invalid table/no session cases where we show specific errors
       setAuthChecking(false)
     }
-  }, [sessionId, restaurantId, sessionLoading, tableId, sessionPin, isViewOnly])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, restaurantId, sessionLoading, tableId, isViewOnly])
 
   // Real-time subscription to detect when session is closed (table paid/emptied)
   // This ensures authenticated customers are immediately redirected to PIN screen
@@ -715,6 +722,7 @@ const CustomerMenuBase = () => {
   }, [restaurantId])
 
   const handlePinSubmit = async (enteredPin: string) => {
+    setIsAuthenticating(true)
     const cleanEnteredPin = enteredPin.trim()
 
     // Always fetch the freshest session from DB to avoid React state staleness
@@ -750,6 +758,7 @@ const CustomerMenuBase = () => {
         setPinError(true)
         pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
         setPin(['', '', '', ''])
+        setIsAuthenticating(false)
         return
       }
     }
@@ -760,6 +769,9 @@ const CustomerMenuBase = () => {
       setIsAuthenticated(true)
       savePin(cleanEnteredPin) // Store via context instead of raw localstorage
       toast.success("Accesso effettuato!")
+
+      // Delay releasing the authenticating lock to let React render the menu
+      setTimeout(() => setIsAuthenticating(false), 500)
       return
     } else {
       toast.dismiss()
@@ -767,6 +779,7 @@ const CustomerMenuBase = () => {
       toast.error("PIN errato o scaduto. Riprova.")
       pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
       setPin(['', '', '', ''])
+      setIsAuthenticating(false)
       return
     }
   }
@@ -844,7 +857,7 @@ const CustomerMenuBase = () => {
     </div>
   )
 
-  if (sessionLoading || authChecking || isInitLoading) return (
+  if (sessionLoading || authChecking || isInitLoading || isAuthenticating) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: theme.pageBgGradient, ...theme.cssVars }}>
       <div className="flex flex-col items-center gap-6">
         <div className="relative">
@@ -1013,6 +1026,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   const [maxCourse, setMaxCourse] = useState(1)
   const [currentCourse, setCurrentCourse] = useState(1)
+  const dragCourseRef = useRef<Record<string, number>>({})
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [isCartAnimating, setIsCartAnimating] = useState(false)
   const timersRef = React.useRef<ReturnType<typeof setTimeout>[]>([])
@@ -1399,7 +1413,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event
     const item = cart.find(i => i.id === active.id)
-    if (item) setActiveDragItem(item)
+    if (item) {
+      setActiveDragItem(item)
+      dragCourseRef.current[item.id] = item.course_number || 1
+    }
   }
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -1408,49 +1425,43 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
     const activeId = active.id as string
     const overId = over.id as string
+    const currentCourseForItem = dragCourseRef.current[activeId]
+    if (currentCourseForItem === undefined) return
 
-    // Find active item
-    const activeItem = cart.find(i => i.id === activeId)
-    if (!activeItem) return
-
-    const optimisticUpdate = (newCourse: number) => {
+    const applyMove = (newCourse: number) => {
+      if (dragCourseRef.current[activeId] === newCourse) return
+      dragCourseRef.current[activeId] = newCourse
       setCart(items => items.map(item =>
         item.id === activeId ? { ...item, course_number: newCourse } : item
       ))
     }
 
-    // 1. Drop on New Course Zone
     if (overId === 'new-course-zone') {
-      const target = maxCourse + 1
-      if (activeItem.course_number !== target) {
-        optimisticUpdate(target)
-      }
-      return
-    }
-
-    // 2. Drop on Course Container
-    if (overId.startsWith('course-')) {
+      applyMove(maxCourse + 1)
+    } else if (overId.startsWith('course-')) {
       const courseNum = parseInt(overId.split('-')[1])
-      if (!isNaN(courseNum) && activeItem.course_number !== courseNum) {
-        optimisticUpdate(courseNum)
-      }
-      return
-    }
-
-    // 3. Drop on Item
-    const overItem = cart.find(i => i.id === overId)
-    if (overItem && activeItem.course_number !== overItem.course_number) {
-      optimisticUpdate(overItem.course_number || 1)
+      if (!isNaN(courseNum)) applyMove(courseNum)
+    } else {
+      const overItem = cart.find(i => i.id === overId)
+      if (overItem) applyMove(overItem.course_number || 1)
     }
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
+    const draggedItemOriginalState = activeDragItem
     setActiveDragItem(null)
 
-    if (!over) return
-
     const activeId = active.id as string
+
+    if (!over) {
+      if (draggedItemOriginalState) {
+        setCart(items => items.map(item => item.id === activeId ? { ...item, course_number: draggedItemOriginalState.course_number } : item))
+      }
+      delete dragCourseRef.current[activeId]
+      return
+    }
+
     const overId = over.id as string
 
     let finalCourse: number | null = null
@@ -1466,9 +1477,39 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       }
     }
 
+    delete dragCourseRef.current[activeId]
 
     if (finalCourse !== null && !isNaN(finalCourse)) {
+      if (finalCourse > maxCourse) {
+        setMaxCourse(finalCourse)
+      }
       await moveItemToCourse(activeId, finalCourse)
+    }
+  }
+
+  const removeCourse = async (courseNumToDelete: number) => {
+    const itemsToUpdate = cart.filter(i => (i.course_number || 1) > courseNumToDelete)
+
+    // Optimistic UI updates
+    setCart(items => items.map(item => {
+      if ((item.course_number || 1) > courseNumToDelete) {
+        return { ...item, course_number: (item.course_number || 1) - 1 }
+      }
+      return item
+    }))
+    setMaxCourse(prev => prev > 1 ? prev - 1 : 1)
+
+    // DB updates (batch)
+    try {
+      await Promise.all(
+        itemsToUpdate.map(item =>
+          DatabaseService.updateCartItem(item.id, { course_number: (item.course_number || 1) - 1 })
+        )
+      )
+      toast.success(`Portata ${courseNumToDelete} rimossa e le successive scalate.`, { duration: 2000 })
+    } catch (err) {
+      console.error("Error updating courses after deletion", err)
+      toast.error("Errore durante la rimozione della portata")
     }
   }
 
@@ -1918,8 +1959,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                             )}
                             <div className="rounded-xl p-3 flex gap-3 shadow-sm relative overflow-hidden" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
                               {/* Image if available */}
-                              {item.dish?.image_url && (
-                                <img src={item.dish.image_url} className="w-16 h-16 rounded-lg object-cover" style={{ backgroundColor: theme.inputBg }} />
+                              {item.dish?.image_url?.trim() && (
+                                <img src={item.dish.image_url} className="w-16 h-16 rounded-lg object-cover" style={{ backgroundColor: theme.inputBg }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                               )}
                               <div className="flex-1 min-w-0 flex flex-col justify-between">
                                 <div className="flex justify-between items-start gap-2">
@@ -1957,27 +1998,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     </div>
                   )}
 
-                  {/* DIVIDE IN PORTATE BUTTON */}
-                  {cart.length > 0 && courseSplittingEnabled && (
-                    <div className="pt-2 pb-1">
-                      <Button
-                        variant="outline"
-                        className="w-full font-bold h-12 rounded-xl shadow-sm border-dashed gap-2 transition-all"
-                        style={{
-                          borderColor: theme.primary,
-                          color: theme.primary,
-                          backgroundColor: theme.primaryAlpha(0.05)
-                        }}
-                        onClick={() => {
-                          setIsCartOpen(false)
-                          setShowCourseDivisionModal(true)
-                        }}
-                      >
-                        <Layers size={20} />
-                        <span className="uppercase tracking-wide text-sm">Dividi in Portate</span>
-                      </Button>
-                    </div>
-                  )}
+                  {/* DIVIDE IN PORTATE BUTTON moved to footer */}
                 </div>
                 {previousOrders.length > 0 && (
                   <div className="pt-6 space-y-4" style={{ borderTop: `1px solid ${theme.divider}` }}>
@@ -1994,8 +2015,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                               <span className="line-clamp-1 flex-1 pr-2">
                                 <span className="font-bold" style={{ color: theme.textSecondary }}>{item.quantity}x</span> {(item.dish || dishes.find(d => d.id === item.dish_id))?.name || 'Piatto'}
                               </span>
-                              <span className={`whitespace-nowrap ${item.status === 'SERVED' ? 'font-medium' : ''}`} style={{ color: item.status === 'SERVED' ? '#10B981' : theme.primary }}>
-                                {item.status === 'SERVED' ? 'Servito' : 'In prep.'}
+                              <span className={`whitespace-nowrap ${['SERVED', 'READY'].includes(item.status) ? 'font-medium' : ''}`} style={{ color: item.status === 'SERVED' ? '#10B981' : item.status === 'READY' ? '#10B981' : theme.primary }}>
+                                {item.status === 'SERVED' ? 'Servito' : item.status === 'READY' ? 'Pronto' : 'In prep.'}
                               </span>
                             </div>
                           ))}
@@ -2151,6 +2172,28 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     )
                   })()}
 
+                  {/* DIVIDE IN PORTATE BUTTON */}
+                  {courseSplittingEnabled && (
+                    <div className="mb-3">
+                      <Button
+                        variant="outline"
+                        className="w-full font-bold h-12 rounded-xl shadow-sm border-dashed gap-2 transition-all"
+                        style={{
+                          borderColor: theme.primary,
+                          color: theme.primary,
+                          backgroundColor: theme.primaryAlpha(0.05)
+                        }}
+                        onClick={() => {
+                          setIsCartOpen(false)
+                          setShowCourseDivisionModal(true)
+                        }}
+                      >
+                        <Layers size={20} />
+                        <span className="uppercase tracking-wide text-sm">Dividi in Portate</span>
+                      </Button>
+                    </div>
+                  )}
+
                   <Button
                     className="w-full font-bold h-12 rounded-xl"
                     style={theme.floatingCartStyle}
@@ -2183,9 +2226,9 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
             {selectedDish && (
               <div className="flex flex-col h-full" style={{ backgroundColor: theme.dialogBg, color: theme.textPrimary }}>
-                {selectedDish.image_url ? (
+                {selectedDish.image_url?.trim() ? (
                   <div className="relative h-48 w-full">
-                    <img src={selectedDish.image_url} alt={selectedDish.name} className="w-full h-full object-cover" />
+                    <img src={selectedDish.image_url} alt={selectedDish.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
                     <div className="absolute inset-0" style={{ background: `linear-gradient(to top, ${theme.dialogBg}cc, transparent)` }} />
                   </div>
                 ) : null}
@@ -2332,9 +2375,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
             <DialogHeader className="p-4 backdrop-blur-xl flex-none space-y-1" style={{ borderBottom: `1px solid ${theme.divider}`, backgroundColor: theme.cardBg }}>
               <div className="flex justify-between items-center">
                 <DialogTitle className="text-xl font-light tracking-wide uppercase" style={{ fontFamily: theme.headerFont, color: theme.primary }}>Dividi Portate</DialogTitle>
-                <Button variant="ghost" size="icon" onClick={() => setShowCourseDivisionModal(false)} className="-mr-2 rounded-full h-10 w-10" style={{ color: theme.textSecondary }}>
-                  <X className="w-5 h-5" />
-                </Button>
               </div>
               <DialogDescription className="text-xs tracking-wide" style={{ color: theme.textSecondary }}>Trascina i piatti nelle portate desiderate</DialogDescription>
             </DialogHeader>
@@ -2356,9 +2396,21 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                         className="rounded-2xl p-4 shadow-sm border"
                         style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder }}
                       >
-                        <h4 className="text-sm font-bold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: theme.textPrimary }}>
-                          <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs" style={{ backgroundColor: theme.primaryAlpha(0.1), color: theme.primary }}>{courseNum}</span>
-                          Portata {courseNum}
+                        <h4 className="text-sm font-bold uppercase tracking-widest mb-3 flex items-center justify-between" style={{ color: theme.textPrimary }}>
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs" style={{ backgroundColor: theme.primaryAlpha(0.1), color: theme.primary }}>{courseNum}</span>
+                            Portata {courseNum}
+                          </div>
+                          {courseItems.length === 0 && maxCourse > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 rounded-full text-zinc-400 hover:text-red-500 hover:bg-red-500/10"
+                              onClick={() => removeCourse(courseNum)}
+                            >
+                              <X size={14} />
+                            </Button>
+                          )}
                         </h4>
 
                         <div className="flex flex-col gap-2 min-h-[60px]">

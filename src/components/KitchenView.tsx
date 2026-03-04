@@ -6,7 +6,6 @@ import { Check, Clock, Info } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import { TableSession } from '../services/types'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { DishPlaceholder } from '@/components/ui/DishPlaceholder'
 
 interface KitchenViewProps {
     orders: Order[]
@@ -394,10 +393,8 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                     <div>
                         {selectedDishInfo?.dish ? (
                             <div className="space-y-4">
-                                {selectedDishInfo.dish.image_url ? (
-                                    <img src={selectedDishInfo.dish.image_url} alt="Dish" className="w-full h-48 object-cover rounded-xl" />
-                                ) : (
-                                    <DishPlaceholder className="h-48 rounded-xl" iconSize={40} />
+                                {selectedDishInfo.dish.image_url?.trim() && (
+                                    <img src={selectedDishInfo.dish.image_url} alt="Dish" className="w-full h-48 object-cover rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                                 )}
                                 <p className="text-lg text-slate-300">{selectedDishInfo.dish.description || 'Nessuna descrizione.'}</p>
                                 {selectedDishInfo.dish.allergens && selectedDishInfo.dish.allergens.length > 0 && (

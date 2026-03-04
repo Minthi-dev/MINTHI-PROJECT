@@ -16,7 +16,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
-import { DishPlaceholder } from "@/components/ui/DishPlaceholder"
 import type { Restaurant, Dish, Category, Room } from "@/services/types"
 
 // --- TYPES ---
@@ -698,13 +697,11 @@ const PublicReservationPage = () => {
                                     <div className="space-y-4">
                                         {catDishes.map(dish => (
                                             <div key={dish.id} className="flex gap-4 items-start">
+                                                {dish.image_url?.trim() && (
                                                 <div className="w-20 h-20 rounded-lg overflow-hidden shrink-0 bg-zinc-900 shadow-inner border border-white/5">
-                                                    {dish.image_url ? (
-                                                        <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <DishPlaceholder iconSize={24} />
-                                                    )}
+                                                    <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
                                                 </div>
+                                                )}
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex justify-between items-start gap-2">
                                                         <h4 className="font-medium text-white truncate pr-2">{dish.name}</h4>

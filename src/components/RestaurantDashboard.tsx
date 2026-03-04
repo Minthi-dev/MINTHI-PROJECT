@@ -17,7 +17,6 @@ import { Badge } from './ui/badge'
 import { Separator } from './ui/separator'
 import { ScrollArea } from './ui/scroll-area'
 import { Textarea } from './ui/textarea'
-import { DishPlaceholder } from './ui/DishPlaceholder'
 import { hashPassword } from '../utils/passwordUtils'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
@@ -152,7 +151,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     DatabaseService.getRestaurantDiscounts(restaurantId).then(discounts => {
       const active = discounts.find((d: any) => d.is_active)
       setActiveDiscount(active || null)
-    }).catch(() => {})
+    }).catch(() => { })
   }, [restaurantId])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
@@ -1889,7 +1888,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     size="sm"
                     variant="ghost"
                     onClick={async () => {
-                      await DatabaseService.dismissDiscountBanner(activeDiscount.id).catch(() => {})
+                      await DatabaseService.dismissDiscountBanner(activeDiscount.id).catch(() => { })
                       setActiveDiscount((d: any) => d ? { ...d, banner_dismissed: true } : null)
                     }}
                     className="shrink-0 text-zinc-500 hover:text-white h-8 w-8 p-0 rounded-lg"
@@ -2372,9 +2371,39 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       <div>
                                         <div className="flex items-center gap-2 mb-1">
                                           <span className="font-bold text-zinc-100">Tavolo {table?.number}</span>
+                                          {table?.room_id && rooms?.find(r => r.id === table.room_id)?.name && (
+                                            <Badge variant="outline" className="text-[10px] font-medium border-amber-500/30 text-amber-500/80">
+                                              {rooms.find(r => r.id === table.room_id)?.name}
+                                            </Badge>
+                                          )}
                                           <Badge variant="outline" className="text-[10px] font-mono border-zinc-700 text-zinc-400">{session.session_pin}</Badge>
                                           {sessionOrders.some((o: any) => o.payment_method === 'stripe') && (
-                                            <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">💳 Pagato Online</Badge>
+                                            <div className="flex items-center gap-2">
+                                              <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">💳 Pagato Online</Badge>
+                                              {!session.receipt_issued ? (
+                                                <Button
+                                                  size="sm"
+                                                  className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                                                  onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    try {
+                                                      await DatabaseService.updateSessionReceiptIssued(session.id, true);
+                                                      toast.success('Scontrino confermato per questo tavolo!');
+                                                      refreshSessions();
+                                                    } catch (err) {
+                                                      toast.error('Errore durante la conferma dello scontrino');
+                                                    }
+                                                  }}
+                                                >
+                                                  <CheckCircle weight="fill" className="mr-1" size={12} />
+                                                  Conferma Scontrino
+                                                </Button>
+                                              ) : (
+                                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30 flex items-center gap-1">
+                                                  <CheckCircle weight="fill" size={10} /> Registrato
+                                                </Badge>
+                                              )}
+                                            </div>
                                           )}
                                         </div>
                                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -2743,6 +2772,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       const session = getOpenSessionForTable(table.id)
                       const isActive = session?.status === 'OPEN'
                       const activeOrder = restaurantOrders.find(o => getTableIdFromOrder(o) === table.id)
+                      const allTableOrders = restaurantOrders.filter(o => getTableIdFromOrder(o) === table.id)
+                      const hasStripePaymentToConfirm = session && allTableOrders.some(o => o.payment_method === 'stripe' && o.status === 'PAID') && !session.receipt_issued
 
                       return (
                         <Card
@@ -2751,6 +2782,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             ? 'opacity-60 grayscale'
                             : (() => {
                               const status = getDetailedTableStatus(table.id)
+                              if (hasStripePaymentToConfirm) return 'bg-purple-900/40 border-purple-500/70 shadow-[0_0_20px_-5px_rgba(168,85,247,0.5)] animate-pulse-slow' // Purple Stripe
                               if (status === 'free') return 'bg-black/40 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.1)] hover:border-emerald-500/40' // Green (Free)
                               if (status === 'waiting') return 'bg-red-900/20 border-red-500/50 shadow-[0_0_15px_-5px_rgba(239,68,68,0.3)]' // Red (Waiting for food)
                               return 'bg-amber-900/20 border-amber-500/50 shadow-[0_0_15px_-5px_rgba(245,158,11,0.3)]' // Yellow (Eating)
@@ -2818,6 +2850,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati
                                     </Badge>
                                   )}
+                                  {hasStripePaymentToConfirm && (
+                                    <Badge variant="outline" className="text-[10px] bg-purple-500/20 border-purple-500/50 text-purple-200 mt-1">
+                                      💳 Pagato Online
+                                    </Badge>
+                                  )}
                                 </>
                               ) : (
                                 <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-all duration-300">
@@ -2829,19 +2866,41 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                             <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2">
                               {isActive ? (
-                                <div className="grid grid-cols-2 gap-2">
-                                  <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleShowTableQr(table); }} className="shadow-sm hover:shadow transition-shadow h-8 text-xs">
-                                    <QrCode size={14} className="mr-1.5" />
-                                    QR
-                                  </Button>
-                                  <Button
-                                    className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-sm hover:shadow transition-all h-8 text-xs"
-                                    size="sm"
-                                    onClick={(e) => { e.stopPropagation(); setSelectedTableForActions(table); setShowTableBillDialog(true); }}
-                                  >
-                                    <Receipt size={14} className="mr-1.5" />
-                                    Conto
-                                  </Button>
+                                <div className={`grid gap-2 ${hasStripePaymentToConfirm ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                  {hasStripePaymentToConfirm ? (
+                                    <Button
+                                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-8 text-xs font-bold"
+                                      size="sm"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          await DatabaseService.updateSessionReceiptIssued(session.id, true);
+                                          toast.success('Scontrino confermato!');
+                                          refreshData();
+                                        } catch (err) {
+                                          toast.error('Errore nella conferma');
+                                        }
+                                      }}
+                                    >
+                                      <CheckCircle size={14} weight="fill" className="mr-1.5" />
+                                      Conferma Scontrino
+                                    </Button>
+                                  ) : (
+                                    <>
+                                      <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleShowTableQr(table); }} className="shadow-sm hover:shadow transition-shadow h-8 text-xs">
+                                        <QrCode size={14} className="mr-1.5" />
+                                        QR
+                                      </Button>
+                                      <Button
+                                        className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-sm hover:shadow transition-all h-8 text-xs"
+                                        size="sm"
+                                        onClick={(e) => { e.stopPropagation(); setSelectedTableForActions(table); setShowTableBillDialog(true); }}
+                                      >
+                                        <Receipt size={14} className="mr-1.5" />
+                                        Conto
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
                               ) : (
                                 <Button
@@ -3333,12 +3392,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             className={`group relative bg-zinc-900/80 rounded-2xl overflow-hidden border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/5 ${!dish.is_active ? 'opacity-50 grayscale' : ''}`}
                           >
                             {/* Image Section (only if dish has an image) */}
-                            {dish.image_url ? (
+                            {dish.image_url?.trim() ? (
                               <div className="relative aspect-[4/3] overflow-hidden bg-zinc-800">
                                 <img
                                   src={dish.image_url}
                                   alt={dish.name}
                                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                  onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }}
                                 />
 
                                 {/* Price Badge */}
@@ -4344,7 +4404,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     {section.dishes.map(dish => (
                       <div key={dish.id} style={{ display: 'flex', gap: '15px', alignItems: 'flex-start', pageBreakInside: 'avoid' }}>
-                        {dish.image_url && (
+                        {dish.image_url?.trim() && (
                           <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
                             <img src={dish.image_url} alt={dish.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           </div>

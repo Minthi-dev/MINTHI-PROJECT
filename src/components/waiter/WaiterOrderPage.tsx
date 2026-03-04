@@ -17,7 +17,6 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
-import { DishPlaceholder } from '@/components/ui/DishPlaceholder'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getCurrentCopertoPrice } from '../../utils/pricingUtils'
 
@@ -487,14 +486,12 @@ const WaiterOrderPage = () => {
                                     }`}
                                 onClick={() => handleAddClick(dish)}
                             >
-                                {/* Image / Placeholder */}
+                                {/* Image */}
+                                {dish.image_url?.trim() && (
                                 <div className="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden bg-zinc-900 border border-white/5 relative">
-                                    {dish.image_url ? (
-                                        <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover" loading="lazy" />
-                                    ) : (
-                                        <DishPlaceholder iconSize={20} className="text-zinc-700" variant="fork" />
-                                    )}
+                                    <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
                                 </div>
+                                )}
 
                                 {/* Info */}
                                 <div className="flex-1 min-w-0">
@@ -762,13 +759,9 @@ const WaiterOrderPage = () => {
                     </VisuallyHidden>
                     {selectedDishForDetail && (
                         <>
-                            <div className="h-48 relative">
-                                {selectedDishForDetail.image_url ? (
-                                    <img src={selectedDishForDetail.image_url} alt={selectedDishForDetail.name} className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
-                                        <DishPlaceholder iconSize={64} className="text-zinc-800" variant="fork" />
-                                    </div>
+                            <div className={`${selectedDishForDetail.image_url?.trim() ? 'h-48' : 'h-16'} relative`}>
+                                {selectedDishForDetail.image_url?.trim() && (
+                                    <img src={selectedDishForDetail.image_url} alt={selectedDishForDetail.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
                                 )}
                                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
                                 <div className="absolute bottom-4 left-4 right-4">
