@@ -8,8 +8,10 @@ interface SessionContextType {
     currentTableId: string | null;
     sessionId: string | null;
     sessionStatus: 'OPEN' | 'CLOSED' | 'PAID' | null;
+    sessionPin: string | null;
     loading: boolean;
     joinSession: (tableId: string, restaurantId: string) => Promise<boolean>;
+    savePin: (pin: string) => void;
     exitSession: () => void;
 }
 
@@ -22,6 +24,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // State
     const [currentTableId, setCurrentTableId] = useState<string | null>(() => localStorage.getItem('tableId'));
     const [sessionId, setSessionId] = useState<string | null>(() => localStorage.getItem('sessionId'));
+    const [sessionPin, setSessionPin] = useState<string | null>(() => localStorage.getItem('sessionPin'));
     const [sessionStatus, setSessionStatus] = useState<'OPEN' | 'CLOSED' | 'PAID' | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -57,6 +60,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 exitSession();
             } else {
                 setSessionStatus(data.status);
+                // On valid session, keep the pin loaded from local storage
             }
         };
         checkSessionStatus();
@@ -149,9 +153,15 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     }, []);
 
+    const savePin = useCallback((pin: string) => {
+        setSessionPin(pin);
+        localStorage.setItem('sessionPin', pin);
+    }, []);
+
     const exitSession = useCallback(() => {
         setSessionId(null);
         setCurrentTableId(null);
+        setSessionPin(null);
         setSessionStatus(null);
         localStorage.removeItem('tableId');
         localStorage.removeItem('sessionId');
@@ -160,7 +170,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }, []);
 
     return (
-        <SessionContext.Provider value={{ currentTableId, sessionId, sessionStatus, loading, joinSession, exitSession }}>
+        <SessionContext.Provider value={{ currentTableId, sessionId, sessionPin, sessionStatus, loading, joinSession, savePin, exitSession }}>
             {children}
         </SessionContext.Provider>
     );

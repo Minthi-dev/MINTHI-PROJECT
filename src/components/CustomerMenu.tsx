@@ -364,21 +364,18 @@ const CustomerMenuBase = () => {
   const navigate = useNavigate()
 
   // 2. Use Session Context
-  const {
-    sessionId,
-    sessionStatus,
-    joinSession,
-    loading: sessionLoading
-  } = useSession()
+  const { sessionId, sessionStatus, loading: sessionLoading, joinSession, exitSession, sessionPin, savePin } = useSession()
 
   // Timer cleanup for this component scope
   const pinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { return () => { if (pinTimerRef.current) clearTimeout(pinTimerRef.current) } }, [])
 
   // Local state for PIN entry/validation
-  const [pin, setPin] = useState(['', '', '', '']) // 4 digit pin state
-  const [inputPin, setInputPin] = useState('')
+  const [pin, setPin] = useState(['', '', '', ''])
   const [pinError, setPinError] = useState(false)
+  const [inputPin, setInputPin] = useState('')
+
+  const [activeSession, setActiveSession] = useState<TableSession | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authChecking, setAuthChecking] = useState(true)
   const [isInitLoading, setIsInitLoading] = useState(true) // Prevent PIN flicker during init
@@ -395,7 +392,6 @@ const CustomerMenuBase = () => {
   }, [isInitLoading])
 
   // Data hooks
-  const [activeSession, setActiveSession] = useState<TableSession | null>(null)
   const [restaurantId, setRestaurantId] = useState<string | null>(() => localStorage.getItem('restaurantId')) // Init from localStorage
   const [restaurantName, setRestaurantName] = useState<string>('') // Restaurant name for PIN screen
   const [fullRestaurant, setFullRestaurant] = useState<Restaurant | null>(null)
@@ -588,7 +584,7 @@ const CustomerMenuBase = () => {
     }
   }, [tableId, sessionId, joinSession, restaurantId])
 
-  // Auto-authenticate from localStorage if session matches
+  // Auto-authenticate from context if session matches
   useEffect(() => {
     if (sessionId && restaurantId) {
       const checkSession = async () => {
@@ -598,34 +594,24 @@ const CustomerMenuBase = () => {
         if (session) {
           setActiveSession(session)
 
-          // Check if saved session matches current session AND PIN is correct
-          const savedSessionId = localStorage.getItem('customerSessionId')
-          const savedPin = localStorage.getItem('sessionPin')
-
           // Verify session status - if CLOSED, force logout/re-auth
           if (session.status === 'CLOSED') {
-            localStorage.removeItem('customerSessionId')
-            localStorage.removeItem('sessionPin')
             setIsAuthenticated(false)
             setAuthChecking(false)
             return
           }
 
-          if (savedSessionId === sessionId && savedPin === session.session_pin) {
-            // Session is still the same and PIN matches - auto authenticate
+          if (sessionPin && sessionPin === session.session_pin) {
+            // Context has a valid PIN that matches DB - auto authenticate
             setIsAuthenticated(true)
-          } else if (savedSessionId !== sessionId) {
-            // Session changed (table was reset) - clear old credentials
-            localStorage.removeItem('customerSessionId')
-            localStorage.removeItem('sessionPin')
-            if (!isViewOnly) setIsAuthenticated(false)
-            // CRITICAL: Do NOT navigate away. Just show PIN screen by setting auth to false.
+          } else {
+            // Need PIN
+            if (!isViewOnly) {
+              setIsAuthenticated(false)
+            }
           }
         } else {
           // Session invalid or closed/deleted
-          localStorage.removeItem('customerSessionId')
-          localStorage.removeItem('customerSessionId')
-          localStorage.removeItem('sessionPin')
           if (!isViewOnly) setIsAuthenticated(false)
         }
         setAuthChecking(false)
@@ -636,7 +622,7 @@ const CustomerMenuBase = () => {
       // This handles invalid table/no session cases where we show specific errors
       setAuthChecking(false)
     }
-  }, [sessionId, restaurantId, sessionLoading, tableId])
+  }, [sessionId, restaurantId, sessionLoading, tableId, sessionPin, isViewOnly])
 
   // Real-time subscription to detect when session is closed (table paid/emptied)
   // This ensures authenticated customers are immediately redirected to PIN screen
@@ -660,9 +646,7 @@ const CustomerMenuBase = () => {
           const updatedSession = payload.new as any
           // Double-check session ID matches before logging out
           if (updatedSession.id === currentSessionId && updatedSession.status === 'CLOSED') {
-            // Session closed - force logout
-            localStorage.removeItem('customerSessionId')
-            localStorage.removeItem('sessionPin')
+            // Session closed - force logout handled by session context effect usually, but we sync state here
             setIsAuthenticated(false)
             setActiveSession(null)
             setPin(['', '', '', ''])
@@ -678,8 +662,6 @@ const CustomerMenuBase = () => {
           const deletedSession = payload.old as any
           // Only log out if the deleted session is OUR session
           if (deletedSession?.id === currentSessionId) {
-            localStorage.removeItem('customerSessionId')
-            localStorage.removeItem('sessionPin')
             setIsAuthenticated(false)
             setActiveSession(null)
             setPin(['', '', '', ''])
@@ -755,6 +737,9 @@ const CustomerMenuBase = () => {
         if (!joined) {
           toast.dismiss()
           toast.error("Impossibile connettersi. Scansiona di nuovo il QR.")
+          setPinError(true)
+          pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
+          setPin(['', '', '', ''])
           return
         }
         // If joinSession worked, it means a NEW session was created implicitly.
@@ -762,6 +747,9 @@ const CustomerMenuBase = () => {
         latestSession = await DatabaseService.getActiveSession(tableId)
       } else {
         toast.error("Dati tavolo mancanti. Riprova a scansionare il QR.")
+        setPinError(true)
+        pinTimerRef.current = setTimeout(() => setPinError(false), 2000)
+        setPin(['', '', '', ''])
         return
       }
     }
@@ -770,8 +758,7 @@ const CustomerMenuBase = () => {
       toast.dismiss()
       setActiveSession(latestSession)
       setIsAuthenticated(true)
-      localStorage.setItem('sessionPin', cleanEnteredPin)
-      localStorage.setItem('customerSessionId', latestSession.id)
+      savePin(cleanEnteredPin) // Store via context instead of raw localstorage
       toast.success("Accesso effettuato!")
       return
     } else {
