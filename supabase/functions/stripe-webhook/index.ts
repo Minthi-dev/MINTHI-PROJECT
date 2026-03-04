@@ -16,26 +16,41 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 serve(async (req) => {
     try {
         const signature = req.headers.get("Stripe-Signature");
-        const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+        const platformSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+        const connectSecret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET");
 
-        if (!signature || !webhookSecret) {
+        if (!signature || (!platformSecret && !connectSecret)) {
             return new Response("Manca la firma o il segreto del webhook", { status: 400 });
         }
 
         const body = await req.text();
         let event;
 
-        try {
-            event = await stripe.webhooks.constructEventAsync(
-                body,
-                signature,
-                webhookSecret,
-                undefined,
-                cryptoProvider
-            );
-        } catch (err) {
-            console.error(`Webhook Error: ${err.message}`);
-            return new Response(`Webhook Error: ${err.message}`, { status: 400 });
+        // Dual signing secret: prova prima platform, poi Connect
+        // Gli eventi platform (subscription) usano STRIPE_WEBHOOK_SECRET
+        // Gli eventi Connect (pagamenti clienti, account.updated) usano STRIPE_CONNECT_WEBHOOK_SECRET
+        const secretsToTry = [platformSecret, connectSecret].filter(Boolean) as string[];
+        let verified = false;
+
+        for (const secret of secretsToTry) {
+            try {
+                event = await stripe.webhooks.constructEventAsync(
+                    body,
+                    signature,
+                    secret,
+                    undefined,
+                    cryptoProvider
+                );
+                verified = true;
+                break;
+            } catch {
+                // Prova il prossimo secret
+            }
+        }
+
+        if (!verified || !event) {
+            console.error("Webhook signature verification failed with all secrets");
+            return new Response("Webhook signature verification failed", { status: 400 });
         }
 
         switch (event.type) {
@@ -281,15 +296,14 @@ serve(async (req) => {
 
             case "account.updated": {
                 // Stripe Connect: aggiorna stato account del ristorante
+                // Gestisce sia abilitazione che disabilitazione
                 const account = event.data.object;
-                if (account.charges_enabled) {
-                    await supabase
-                        .from("restaurants")
-                        .update({ stripe_connect_enabled: true })
-                        .eq("stripe_connect_account_id", account.id);
+                await supabase
+                    .from("restaurants")
+                    .update({ stripe_connect_enabled: account.charges_enabled === true })
+                    .eq("stripe_connect_account_id", account.id);
 
-                    console.log(`Stripe Connect abilitato per account ${account.id}`);
-                }
+                console.log(`Stripe Connect account ${account.id}: charges_enabled=${account.charges_enabled}`);
                 break;
             }
         }

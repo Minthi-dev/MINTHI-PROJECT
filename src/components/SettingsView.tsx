@@ -38,6 +38,8 @@ import { supabase } from '@/lib/supabase'
 import type { WeeklyCopertoSchedule, WeeklyAyceSchedule, RestaurantStaff, WeeklyServiceSchedule, SubscriptionPayment } from '@/services/types'
 import { createDefaultCopertoSchedule, createDefaultAyceSchedule } from '@/utils/pricingUtils'
 import { toast } from 'sonner'
+import { loadConnectAndInitialize } from '@stripe/connect-js'
+import { ConnectComponentsProvider, ConnectAccountOnboarding } from '@stripe/react-connect-js'
 import { Save, UserPlus, Pencil, Trash as TrashIcon, UserMinus, Key } from 'lucide-react'
 
 interface SettingsViewProps {
@@ -254,12 +256,38 @@ export function SettingsView({
     }
 
     const [connectSetupNeeded, setConnectSetupNeeded] = useState(false)
+    const [stripeConnectInstance, setStripeConnectInstance] = useState<any>(null)
+    const [showOnboardingEmbed, setShowOnboardingEmbed] = useState(false)
+
     const handleConnectOnboarding = async () => {
         setLoadingConnectOnboarding(true)
         setConnectSetupNeeded(false)
         try {
-            const { url } = await DatabaseService.createStripeConnectOnboarding(restaurantId)
-            window.location.href = url
+            // Step 1: Crea account Express se non esiste
+            await DatabaseService.createStripeConnectOnboarding(restaurantId)
+
+            // Step 2: Inizializza embedded onboarding
+            const publishableKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY
+            if (!publishableKey) {
+                throw new Error('Chiave pubblica Stripe non configurata')
+            }
+
+            const connectInstance = loadConnectAndInitialize({
+                publishableKey,
+                fetchClientSecret: async () => {
+                    const { clientSecret } = await DatabaseService.createStripeAccountSession(restaurantId)
+                    return clientSecret
+                },
+                appearance: {
+                    overlays: 'dialog',
+                    variables: {
+                        colorPrimary: '#8b5cf6',
+                    },
+                },
+            })
+
+            setStripeConnectInstance(connectInstance)
+            setShowOnboardingEmbed(true)
         } catch (e: any) {
             const msg = e.message || ''
             if (msg.includes("signed up for Connect") || msg.includes("new accounts")) {
@@ -270,6 +298,13 @@ export function SettingsView({
         } finally {
             setLoadingConnectOnboarding(false)
         }
+    }
+
+    const handleOnboardingExit = () => {
+        setShowOnboardingEmbed(false)
+        setStripeConnectInstance(null)
+        loadPaymentData()
+        toast.success('Onboarding completato! Verifica in corso...')
     }
 
     const handleSavePaymentInfo = async () => {
@@ -995,20 +1030,46 @@ export function SettingsView({
                                                     </p>
                                                 </div>
                                             </div>
-                                            <Button
-                                                onClick={handleConnectOnboarding}
-                                                disabled={loadingConnectOnboarding}
-                                                variant={subscriptionInfo?.stripe_connect_enabled ? 'outline' : 'default'}
-                                                className={`h-11 px-5 text-sm rounded-xl gap-2 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-[0_0_15px_-3px_rgba(139,92,246,0.4)]' : 'border-white/10 text-zinc-300'}`}
-                                            >
-                                                {loadingConnectOnboarding ? (
-                                                    <ArrowClockwise className="animate-spin" size={18} />
-                                                ) : (
-                                                    <ArrowSquareOut size={18} />
-                                                )}
-                                                {subscriptionInfo?.stripe_connect_enabled ? 'Gestisci' : subscriptionInfo?.stripe_connect_account_id ? 'Completa' : 'Collega Account Stripe'}
-                                            </Button>
+                                            {!showOnboardingEmbed && (
+                                                <Button
+                                                    onClick={handleConnectOnboarding}
+                                                    disabled={loadingConnectOnboarding}
+                                                    variant={subscriptionInfo?.stripe_connect_enabled ? 'outline' : 'default'}
+                                                    className={`h-11 px-5 text-sm rounded-xl gap-2 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-[0_0_15px_-3px_rgba(139,92,246,0.4)]' : 'border-white/10 text-zinc-300'}`}
+                                                >
+                                                    {loadingConnectOnboarding ? (
+                                                        <ArrowClockwise className="animate-spin" size={18} />
+                                                    ) : (
+                                                        <Gear size={18} />
+                                                    )}
+                                                    {subscriptionInfo?.stripe_connect_enabled ? 'Gestisci' : subscriptionInfo?.stripe_connect_account_id ? 'Completa Configurazione' : 'Collega Account Stripe'}
+                                                </Button>
+                                            )}
                                         </div>
+
+                                        {/* Embedded Stripe Connect Onboarding */}
+                                        {showOnboardingEmbed && stripeConnectInstance && (
+                                            <div className="mt-4 space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-sm font-medium text-zinc-300">Configurazione Account Stripe</p>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="text-zinc-500 hover:text-zinc-300"
+                                                        onClick={handleOnboardingExit}
+                                                    >
+                                                        Chiudi
+                                                    </Button>
+                                                </div>
+                                                <div className="rounded-xl overflow-hidden border border-white/10 bg-white min-h-[400px]">
+                                                    <ConnectComponentsProvider connectInstance={stripeConnectInstance}>
+                                                        <ConnectAccountOnboarding
+                                                            onExit={handleOnboardingExit}
+                                                        />
+                                                    </ConnectComponentsProvider>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Stripe Connect setup needed alert */}
                                         {connectSetupNeeded && (

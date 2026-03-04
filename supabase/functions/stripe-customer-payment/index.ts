@@ -70,27 +70,29 @@ serve(async (req) => {
             quantity: item.quantity,
         }));
 
-        // Crea la sessione di checkout — i fondi vanno direttamente al conto Stripe Connect del ristorante
-        const session = await stripe.checkout.sessions.create({
-            payment_method_types: ["card"],
-            mode: "payment",
-            line_items: lineItems,
-            success_url: successUrl || `${req.headers.get("origin")}/client/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: cancelUrl || `${req.headers.get("origin")}/client/payment-cancelled`,
-            payment_intent_data: {
-                transfer_data: {
-                    destination: restaurant.stripe_connect_account_id,
+        // Crea la sessione di checkout con Direct Charge — i fondi vanno direttamente sul conto del ristorante
+        // Il secondo argomento { stripeAccount } crea la sessione sull'account connesso (Direct Charge)
+        // I soldi NON passano mai dal conto MINTHI
+        const session = await stripe.checkout.sessions.create(
+            {
+                payment_method_types: ["card"],
+                mode: "payment",
+                line_items: lineItems,
+                success_url: successUrl || `${req.headers.get("origin")}/client/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: cancelUrl || `${req.headers.get("origin")}/client/payment-cancelled`,
+                metadata: {
+                    paymentType: "customer_order",
+                    restaurantId,
+                    tableSessionId: tableSessionId || "",
+                    orderIds: JSON.stringify(orderIds),
+                    splitLabel: splitLabel || "Pagamento",
                 },
+                ...(customerEmail ? { customer_email: customerEmail } : {}),
             },
-            metadata: {
-                paymentType: "customer_order",
-                restaurantId,
-                tableSessionId: tableSessionId || "",
-                orderIds: JSON.stringify(orderIds),
-                splitLabel: splitLabel || "Pagamento",
-            },
-            ...(customerEmail ? { customer_email: customerEmail } : {}),
-        });
+            {
+                stripeAccount: restaurant.stripe_connect_account_id,
+            }
+        );
 
         return new Response(
             JSON.stringify({ sessionId: session.id, url: session.url }),

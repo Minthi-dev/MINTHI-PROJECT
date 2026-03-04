@@ -28,7 +28,7 @@ serve(async (req) => {
             });
         }
 
-        const { restaurantId, returnUrl, refreshUrl } = await req.json();
+        const { restaurantId } = await req.json();
 
         if (!restaurantId) {
             return new Response(JSON.stringify({ error: "restaurantId richiesto" }), {
@@ -53,93 +53,54 @@ serve(async (req) => {
 
         let accountId = restaurant.stripe_connect_account_id;
 
-        // Crea account Connect se non esiste ancora
-        if (!accountId) {
+        // Se l'account esiste, verifica che sia valido
+        if (accountId) {
             try {
-                const account = await stripe.accounts.create({
-                    type: "express",
-                    country: "IT",
-                    email: restaurant.email || undefined,
-                    business_type: "company",
-                    capabilities: {
-                        card_payments: { requested: true },
-                        transfers: { requested: true },
-                    },
-                });
-                accountId = account.id;
-            } catch (stripeErr: any) {
-                console.error("Stripe accounts.create error:", stripeErr.message, stripeErr.type);
-                return new Response(JSON.stringify({ error: `Errore creazione account Stripe: ${stripeErr.message}` }), {
-                    status: 500,
+                await stripe.accounts.retrieve(accountId);
+                // Account valido, ritorna l'ID
+                return new Response(JSON.stringify({ accountId }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    status: 200,
                 });
-            }
-
-            const { error: updateErr } = await supabase
-                .from("restaurants")
-                .update({ stripe_connect_account_id: accountId })
-                .eq("id", restaurantId);
-
-            if (updateErr) {
-                console.error("DB update error:", updateErr.message);
+            } catch (retrieveErr: any) {
+                // Account non valido (eliminato o inesistente), lo ricrea
+                console.log("Account invalido, reset e ricreazione...", retrieveErr.message);
+                accountId = null;
             }
         }
 
-        const origin = req.headers.get("origin") || "http://localhost:5173";
-
-        let accountLink;
+        // Crea nuovo account Express
         try {
-            accountLink = await stripe.accountLinks.create({
-                account: accountId,
-                refresh_url: refreshUrl || `${origin}/?connect=refresh&restaurantId=${restaurantId}`,
-                return_url: returnUrl || `${origin}/?connect=success`,
-                type: "account_onboarding",
+            const account = await stripe.accounts.create({
+                type: "express",
+                country: "IT",
+                email: restaurant.email || undefined,
+                business_type: "company",
+                capabilities: {
+                    card_payments: { requested: true },
+                    transfers: { requested: true },
+                },
             });
-        } catch (linkErr: any) {
-            console.error("Stripe accountLinks.create error:", linkErr.message, linkErr.type);
-            // If the existing account is invalid, reset and retry
-            if (linkErr.message?.includes("No such account") || linkErr.code === "account_invalid") {
-                console.log("Account invalido, reset e riprovo...");
-                try {
-                    const newAccount = await stripe.accounts.create({
-                        type: "express",
-                        country: "IT",
-                        email: restaurant.email || undefined,
-                        business_type: "company",
-                        capabilities: {
-                            card_payments: { requested: true },
-                            transfers: { requested: true },
-                        },
-                    });
-                    accountId = newAccount.id;
-
-                    await supabase
-                        .from("restaurants")
-                        .update({ stripe_connect_account_id: accountId })
-                        .eq("id", restaurantId);
-
-                    accountLink = await stripe.accountLinks.create({
-                        account: accountId,
-                        refresh_url: refreshUrl || `${origin}/?connect=refresh&restaurantId=${restaurantId}`,
-                        return_url: returnUrl || `${origin}/?connect=success`,
-                        type: "account_onboarding",
-                    });
-                } catch (retryErr: any) {
-                    console.error("Retry failed:", retryErr.message);
-                    return new Response(JSON.stringify({ error: `Errore Stripe Connect: ${retryErr.message}` }), {
-                        status: 500,
-                        headers: { ...corsHeaders, "Content-Type": "application/json" },
-                    });
-                }
-            } else {
-                return new Response(JSON.stringify({ error: `Errore link onboarding: ${linkErr.message}` }), {
-                    status: 500,
-                    headers: { ...corsHeaders, "Content-Type": "application/json" },
-                });
-            }
+            accountId = account.id;
+        } catch (stripeErr: any) {
+            console.error("Stripe accounts.create error:", stripeErr.message, stripeErr.type);
+            return new Response(JSON.stringify({ error: `Errore creazione account Stripe: ${stripeErr.message}` }), {
+                status: 500,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
         }
 
-        return new Response(JSON.stringify({ url: accountLink.url, accountId }), {
+        // Salva l'account ID nel database
+        const { error: updateErr } = await supabase
+            .from("restaurants")
+            .update({ stripe_connect_account_id: accountId })
+            .eq("id", restaurantId);
+
+        if (updateErr) {
+            console.error("DB update error:", updateErr.message);
+        }
+
+        return new Response(JSON.stringify({ accountId }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 200,
         });

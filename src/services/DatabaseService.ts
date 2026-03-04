@@ -1033,17 +1033,12 @@ export const DatabaseService = {
         return data as { url: string };
     },
 
-    // Stripe Connect - Onboarding per ricevere pagamenti dai clienti
+    // Stripe Connect - Crea account Express (senza redirect, per embedded onboarding)
     async createStripeConnectOnboarding(restaurantId: string) {
         const { data, error } = await supabase.functions.invoke('stripe-connect-onboarding', {
-            body: {
-                restaurantId,
-                returnUrl: `${window.location.origin}/?connect=success`,
-                refreshUrl: `${window.location.origin}/?connect=refresh`,
-            }
+            body: { restaurantId }
         });
         if (error) {
-            // Extract actual error from response body when available
             let errorMsg = 'Errore connessione Stripe';
             try {
                 if (data?.error) {
@@ -1057,7 +1052,29 @@ export const DatabaseService = {
             } catch { /* ignore parse errors */ }
             throw new Error(errorMsg);
         }
-        return data as { url: string; accountId: string };
+        return data as { accountId: string };
+    },
+
+    // Stripe Connect - Crea Account Session per embedded components
+    async createStripeAccountSession(restaurantId: string) {
+        const { data, error } = await supabase.functions.invoke('stripe-account-session', {
+            body: { restaurantId }
+        });
+        if (error) {
+            let errorMsg = 'Errore sessione account Stripe';
+            try {
+                if (data?.error) {
+                    errorMsg = data.error;
+                } else if ((error as any).context) {
+                    const body = await (error as any).context.json();
+                    if (body?.error) errorMsg = body.error;
+                } else if (error.message && !error.message.includes('non-2xx')) {
+                    errorMsg = error.message;
+                }
+            } catch { /* ignore parse errors */ }
+            throw new Error(errorMsg);
+        }
+        return data as { clientSecret: string };
     },
 
     // Aggiorna dati fiscali del ristorante (P.IVA, ragione sociale)
