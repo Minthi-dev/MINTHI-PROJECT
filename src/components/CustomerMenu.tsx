@@ -2015,12 +2015,12 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         {/* CART & HISTORY MODAL */}
         {!isViewOnly && (
           <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
-            <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl h-[85vh] flex flex-col w-[95vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
+            <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl max-h-[90vh] min-h-0 flex flex-col w-[95vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
               <DialogHeader className="p-4 backdrop-blur-xl flex-none" style={{ borderBottom: `1px solid ${theme.divider}`, backgroundColor: theme.cardBg }}>
                 <DialogTitle className="text-center text-xl font-light uppercase tracking-widest" style={{ fontFamily: theme.headerFont, color: theme.textPrimary }}>Riepilogo</DialogTitle>
               </DialogHeader>
 
-              <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-6">
+              <div className="flex-1 overflow-y-auto scrollbar-hide p-4 pb-6 space-y-6 min-h-0">
 
                 {/* CURRENT CART */}
                 <div className="space-y-4">
@@ -2491,14 +2491,14 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           {/* Payment Header */}
           <header className="flex-none z-20 backdrop-blur-xl px-4 py-4" style={{ backgroundColor: theme.headerBg, borderBottom: `1px solid ${theme.primaryAlpha(0.1)}` }}>
             <div className="flex items-center justify-between">
-              <button onClick={() => { setCustomerTab('menu'); setPaymentStep('summary') }} className="flex items-center gap-1.5" style={{ color: theme.textSecondary }}>
+              <button onClick={() => { setCustomerTab('menu'); setPaymentStep('summary') }} className="flex items-center gap-1.5 min-w-[60px]" style={{ color: theme.textSecondary }}>
                 <ArrowLeft className="w-5 h-5" />
                 <span className="text-sm">Menù</span>
               </button>
-              <h1 className="text-base font-semibold tracking-wide" style={{ color: theme.textPrimary }}>
+              <h1 className="text-base font-semibold tracking-wide text-center flex-1" style={{ color: theme.textPrimary }}>
                 💳 Pagamento Sicuro
               </h1>
-              <div className="w-16" /> {/* spacer */}
+              <div className="min-w-[60px] pointer-events-none" /> {/* spacer - pointer-events-none to not block touches */}
             </div>
           </header>
 
