@@ -198,6 +198,7 @@ export interface TableSession {
     coperto?: number
     coperto_enabled?: boolean
     ayce_enabled?: boolean
+    receipt_issued?: boolean
 }
 
 export interface Room {

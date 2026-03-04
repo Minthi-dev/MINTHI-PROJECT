@@ -678,6 +678,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [expandedHistorySessionId, setExpandedHistorySessionId] = useState<string | null>(null)
   const notifiedStripeOrdersRef = useRef<Set<string>>(new Set())
   const [tableHistorySort, setTableHistorySort] = useState<'recent' | 'amount' | 'duration' | 'covers'>('recent')
+  const [tableHistoryPaymentFilter, setTableHistoryPaymentFilter] = useState<'all' | 'pending_receipt' | 'receipt_done' | 'online' | 'cash'>('all')
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false)
   const [currentSessionPin, setCurrentSessionPin] = useState<string>('')
   const [showOverbookingAlert, setShowOverbookingAlert] = useState(false)
@@ -2232,14 +2233,38 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button type="button" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
+                      <Button type="button" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow relative">
                         <ClockCounterClockwise size={16} className="mr-2" />
                         Storico
+                        {(() => {
+                          const pendingCount = sessions
+                            .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued)
+                            .filter(s => pastOrders.filter(o => o.table_session_id === s.id).some((o: any) => o.payment_method === 'stripe'))
+                            .length
+                          return pendingCount > 0 ? (
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 flex items-center justify-center px-1 rounded-full text-[10px] font-bold bg-amber-500 text-black animate-pulse">
+                              {pendingCount}
+                            </span>
+                          ) : null
+                        })()}
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col bg-zinc-950 border-zinc-800 text-zinc-100">
                       <DialogHeader>
-                        <DialogTitle>Storico Tavoli Chiusi</DialogTitle>
+                        <DialogTitle className="flex items-center gap-3">
+                          Storico Tavoli Chiusi
+                          {(() => {
+                            const pendingCount = sessions
+                              .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued)
+                              .filter(s => pastOrders.filter(o => o.table_session_id === s.id).some((o: any) => o.payment_method === 'stripe'))
+                              .length
+                            return pendingCount > 0 ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
+                                🔔 {pendingCount} scontrin{pendingCount === 1 ? 'o' : 'i'} da registrare
+                              </span>
+                            ) : null
+                          })()}
+                        </DialogTitle>
                         <DialogDescription className="text-zinc-400">Visualizza le sessioni dei tavoli concluse con dettagli e incassi.</DialogDescription>
                       </DialogHeader>
                       <div className="flex flex-wrap gap-3 py-3 border-b">
@@ -2288,6 +2313,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             <SelectItem value="covers">Coperti</SelectItem>
                           </SelectContent>
                         </Select>
+                        <Select value={tableHistoryPaymentFilter} onValueChange={(v: any) => setTableHistoryPaymentFilter(v)}>
+                          <SelectTrigger className={`w-[200px] h-9 ${tableHistoryPaymentFilter === 'pending_receipt' ? 'border-amber-500/50 text-amber-400' : ''}`}>
+                            <SelectValue placeholder="Pagamento" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Tutti i tavoli</SelectItem>
+                            <SelectItem value="pending_receipt">🔴 Scontrino da fare</SelectItem>
+                            <SelectItem value="receipt_done">✅ Scontrino fatto</SelectItem>
+                            <SelectItem value="online">💳 Pagamento online</SelectItem>
+                            <SelectItem value="cash">💵 Contanti</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="flex-1 overflow-y-auto py-4 space-y-3">
                         {(() => {
@@ -2334,6 +2371,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               const totalOk = minTotal ? summary.totalAmount >= minTotal : true
                               return coversOk && totalOk
                             })
+                            .filter(summary => {
+                              if (tableHistoryPaymentFilter === 'all') return true
+                              const hasStripe = summary.sessionOrders.some((o: any) => o.payment_method === 'stripe')
+                              if (tableHistoryPaymentFilter === 'pending_receipt') return hasStripe && !summary.session.receipt_issued
+                              if (tableHistoryPaymentFilter === 'receipt_done') return summary.session.receipt_issued === true
+                              if (tableHistoryPaymentFilter === 'online') return hasStripe
+                              if (tableHistoryPaymentFilter === 'cash') return !hasStripe
+                              return true
+                            })
                             .sort((a, b) => {
                               if (tableHistorySort === 'amount') return b.totalAmount - a.totalAmount
                               if (tableHistorySort === 'duration') return (b.duration || 0) - (a.duration || 0)
@@ -2355,8 +2401,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             const isExpanded = expandedHistorySessionId === session.id
                             // Flatten all items across all orders for this session
                             const allItems = sessionOrders.flatMap((o: any) => (o.items || []).map((item: any) => ({ ...item, orderId: o.id })))
+                            const hasStripePayment = sessionOrders.some((o: any) => o.payment_method === 'stripe')
+                            const needsReceipt = hasStripePayment && !session.receipt_issued
                             return (
-                              <div key={session.id} className="rounded-xl bg-muted/30 border border-border/50 overflow-hidden">
+                              <div key={session.id} className={`rounded-xl overflow-hidden ${needsReceipt ? 'bg-amber-500/5 border-l-4 border-l-amber-500 border border-amber-500/20 shadow-[0_0_12px_-4px_rgba(245,158,11,0.3)]' : 'bg-muted/30 border border-border/50'}`}>
                                 {/* Summary row — click to expand/collapse bill */}
                                 <button
                                   type="button"
@@ -3385,134 +3433,78 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </div>
 
                       {/* Dish Grid - Responsive */}
-                      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                         {categoryDishes.map(dish => (
+                          dish.image_url?.trim() ? (
+                          /* === CARD WITH IMAGE === */
                           <div
                             key={dish.id}
-                            className={`group relative bg-zinc-900/80 rounded-2xl overflow-hidden border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-amber-500/5 ${!dish.is_active ? 'opacity-50 grayscale' : ''}`}
+                            className={`group relative bg-zinc-900/80 rounded-xl overflow-hidden border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/5 ${!dish.is_active ? 'opacity-50 grayscale' : ''}`}
                           >
-                            {/* Image Section (only if dish has an image) */}
-                            {dish.image_url?.trim() ? (
-                              <div className="relative aspect-[4/3] overflow-hidden bg-zinc-800">
-                                <img
-                                  src={dish.image_url}
-                                  alt={dish.name}
-                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                  onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }}
-                                />
-
-                                {/* Price Badge */}
-                                <div className="absolute top-3 right-3">
-                                  <span className="px-3 py-1.5 bg-zinc-950/90 backdrop-blur-sm rounded-full text-amber-400 font-bold text-sm shadow-lg">
-                                    €{dish.price.toFixed(2)}
-                                  </span>
-                                </div>
-
-                                {/* AYCE Badge */}
-                                {dish.is_ayce && (
-                                  <div className="absolute top-3 left-3">
-                                    <span className="px-2.5 py-1 bg-amber-500 text-zinc-950 font-bold text-xs rounded-full shadow-md uppercase tracking-wide">
-                                      AYCE
-                                    </span>
-                                  </div>
-                                )}
-
-                                {/* Hover Actions Overlay */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end justify-center pb-4">
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="h-9 px-4 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded-full shadow-lg"
-                                      onClick={() => handleEditDish(dish)}
-                                    >
-                                      <PencilSimple size={16} className="mr-1.5" />
-                                      Modifica
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="secondary"
-                                      className={`h-9 w-9 rounded-full ${dish.is_active ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-700 hover:bg-zinc-600'}`}
-                                      onClick={() => handleToggleDish(dish.id)}
-                                    >
-                                      {dish.is_active ? <Eye size={16} className="text-amber-500" /> : <EyeSlash size={16} className="text-zinc-400" />}
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="destructive"
-                                      className="h-9 w-9 rounded-full"
-                                      onClick={() => handleDeleteDish(dish.id)}
-                                    >
-                                      <Trash size={16} />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              /* No image: show inline action buttons instead of image placeholder */
-                              <div className="flex items-center justify-end gap-1.5 px-4 pt-3">
-                                {dish.is_ayce && (
-                                  <span className="px-2 py-0.5 bg-amber-500 text-zinc-950 font-bold text-[10px] rounded-full uppercase tracking-wide mr-auto">
-                                    AYCE
-                                  </span>
-                                )}
-                                <span className="px-2.5 py-1 bg-zinc-800 rounded-full text-amber-400 font-bold text-xs">
+                            <div className="relative h-28 overflow-hidden bg-zinc-800">
+                              <img
+                                src={dish.image_url}
+                                alt={dish.name}
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0' }}
+                              />
+                              <div className="absolute top-2 right-2">
+                                <span className="px-2 py-1 bg-zinc-950/90 backdrop-blur-sm rounded-full text-amber-400 font-bold text-xs shadow-lg">
                                   €{dish.price.toFixed(2)}
                                 </span>
-                                <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full text-zinc-500 hover:text-amber-400" onClick={() => handleEditDish(dish)}>
-                                  <PencilSimple size={14} />
-                                </Button>
-                                <Button size="icon" variant="ghost" className={`h-7 w-7 rounded-full ${dish.is_active ? 'text-zinc-500 hover:text-amber-400' : 'text-zinc-600'}`} onClick={() => handleToggleDish(dish.id)}>
-                                  {dish.is_active ? <Eye size={14} /> : <EyeSlash size={14} />}
-                                </Button>
-                                <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full text-zinc-500 hover:text-red-400" onClick={() => handleDeleteDish(dish.id)}>
-                                  <Trash size={14} />
-                                </Button>
                               </div>
-                            )}
-
-                            {/* Content Section */}
-                            <div className="p-4">
-                              {/* Dish Name - Full visible */}
-                              <h4 className="font-semibold text-base text-zinc-100 leading-snug mb-1.5 group-hover:text-amber-400 transition-colors">
-                                {dish.name}
-                              </h4>
-
-                              {/* Description */}
-                              {dish.description && (
-                                <p className="text-sm text-zinc-500 leading-relaxed line-clamp-2">
-                                  {dish.description}
-                                </p>
+                              {dish.is_ayce && (
+                                <div className="absolute top-2 left-2">
+                                  <span className="px-2 py-0.5 bg-amber-500 text-zinc-950 font-bold text-[10px] rounded-full shadow-md uppercase tracking-wide">AYCE</span>
+                                </div>
                               )}
-
-                              {/* Mobile Actions - Always visible on touch devices */}
-                              <div className="flex items-center justify-end gap-1 mt-3 sm:hidden">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-zinc-400 hover:text-amber-500 hover:bg-amber-500/10 rounded-full"
-                                  onClick={() => handleEditDish(dish)}
-                                >
-                                  <PencilSimple size={16} />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className={`h-8 w-8 rounded-full ${dish.is_active ? 'text-amber-500' : 'text-zinc-600'}`}
-                                  onClick={() => handleToggleDish(dish.id)}
-                                >
-                                  {dish.is_active ? <Eye size={16} /> : <EyeSlash size={16} />}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-full"
-                                  onClick={() => handleDeleteDish(dish.id)}
-                                >
-                                  <Trash size={16} />
-                                </Button>
+                              {/* Hover Actions Overlay */}
+                              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/90 via-zinc-950/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-end justify-center pb-2">
+                                <div className="flex items-center gap-1.5">
+                                  <Button size="sm" className="h-7 px-3 text-xs bg-amber-500 hover:bg-amber-400 text-zinc-950 font-semibold rounded-full shadow-lg" onClick={() => handleEditDish(dish)}>
+                                    <PencilSimple size={13} className="mr-1" /> Modifica
+                                  </Button>
+                                  <Button size="icon" variant="secondary" className={`h-7 w-7 rounded-full ${dish.is_active ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-zinc-700 hover:bg-zinc-600'}`} onClick={() => handleToggleDish(dish.id)}>
+                                    {dish.is_active ? <Eye size={13} className="text-amber-500" /> : <EyeSlash size={13} className="text-zinc-400" />}
+                                  </Button>
+                                  <Button size="icon" variant="destructive" className="h-7 w-7 rounded-full" onClick={() => handleDeleteDish(dish.id)}>
+                                    <Trash size={13} />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="px-3 py-2">
+                              <h4 className="font-medium text-sm text-zinc-100 leading-snug line-clamp-1 group-hover:text-amber-400 transition-colors">{dish.name}</h4>
+                              {dish.description && <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{dish.description}</p>}
+                              {/* Mobile Actions */}
+                              <div className="flex items-center justify-end gap-1 mt-1.5 sm:hidden">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-amber-500 rounded-full" onClick={() => handleEditDish(dish)}><PencilSimple size={14} /></Button>
+                                <Button variant="ghost" size="icon" className={`h-7 w-7 rounded-full ${dish.is_active ? 'text-amber-500' : 'text-zinc-600'}`} onClick={() => handleToggleDish(dish.id)}>{dish.is_active ? <Eye size={14} /> : <EyeSlash size={14} />}</Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300 rounded-full" onClick={() => handleDeleteDish(dish.id)}><Trash size={14} /></Button>
                               </div>
                             </div>
                           </div>
+                          ) : (
+                          /* === COMPACT CARD WITHOUT IMAGE === */
+                          <div
+                            key={dish.id}
+                            className={`group flex items-center gap-3 bg-zinc-900/80 rounded-xl px-3 py-2.5 border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300 ${!dish.is_active ? 'opacity-50 grayscale' : ''}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-medium text-sm text-zinc-100 leading-tight truncate group-hover:text-amber-400 transition-colors">{dish.name}</h4>
+                                {dish.is_ayce && <span className="shrink-0 px-1.5 py-0.5 bg-amber-500 text-zinc-950 font-bold text-[9px] rounded-full uppercase">AYCE</span>}
+                              </div>
+                              {dish.description && <p className="text-xs text-zinc-500 truncate mt-0.5">{dish.description}</p>}
+                            </div>
+                            <span className="shrink-0 text-amber-400 font-bold text-xs">€{dish.price.toFixed(2)}</span>
+                            <div className="shrink-0 flex items-center gap-0.5">
+                              <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full text-zinc-500 hover:text-amber-400 hover:bg-amber-500/10" onClick={() => handleEditDish(dish)}><PencilSimple size={14} /></Button>
+                              <Button size="icon" variant="ghost" className={`h-7 w-7 rounded-full ${dish.is_active ? 'text-zinc-500 hover:text-amber-400' : 'text-zinc-600'} hover:bg-amber-500/10`} onClick={() => handleToggleDish(dish.id)}>{dish.is_active ? <Eye size={14} /> : <EyeSlash size={14} />}</Button>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full text-zinc-500 hover:text-red-400 hover:bg-red-500/10" onClick={() => handleDeleteDish(dish.id)}><Trash size={14} /></Button>
+                            </div>
+                          </div>
+                          )
                         ))}
                       </div>
                     </div>

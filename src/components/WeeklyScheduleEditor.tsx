@@ -74,6 +74,10 @@ export default function WeeklyScheduleEditor({
         onChange({ ...schedule, defaultPrice: price })
     }
 
+    const updateDefaultMaxOrders = (maxOrders: number) => {
+        onChange({ ...schedule, defaultMaxOrders: maxOrders } as any)
+    }
+
     const updateEnabled = (enabled: boolean) => {
         onChange({ ...schedule, enabled })
     }
@@ -169,6 +173,25 @@ export default function WeeklyScheduleEditor({
                             />
                         </div>
                     </div>
+
+                    {/* Max Orders Limit (AYCE only) */}
+                    {type === 'ayce' && (
+                        <div className="flex items-center gap-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800/50">
+                            <div className="flex-1 min-w-0">
+                                <Label className="text-zinc-400 whitespace-nowrap">Limite ordini per tavolo</Label>
+                                <p className="text-[11px] text-zinc-600 mt-0.5">Massimo ordini per sessione (0 = illimitato)</p>
+                            </div>
+                            <div className="relative w-[80px]">
+                                <PriceInput
+                                    value={(schedule as WeeklyAyceSchedule).defaultMaxOrders || 0}
+                                    onChange={updateDefaultMaxOrders}
+                                    step="1"
+                                    min="0"
+                                    className="bg-zinc-900 border-zinc-700 h-9 text-center"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     {/* Weekly Schedule Grid */}
                     {showAdvanced && (

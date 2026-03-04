@@ -866,10 +866,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
         const isTableMarkedInactive = table.is_active === false
 
+        const allTableOrders = activeOrders.filter(o => o.table_session_id === session?.id)
+        const hasStripePaymentToConfirm = session && allTableOrders.some(o => o.payment_method === 'stripe' && o.status === 'PAID') && !session.receipt_issued
+
         // Exact styles from RestaurantDashboard.tsx
         const tableCardClasses = isTableMarkedInactive
             ? 'opacity-60 grayscale'
             : (() => {
+                if (hasStripePaymentToConfirm) return 'bg-purple-900/40 border-purple-500/70 shadow-[0_0_20px_-5px_rgba(168,85,247,0.5)] animate-pulse-slow' // Purple Stripe
                 if (!isActive) return 'bg-black/40 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.1)] hover:border-emerald-500/40' // Green (Free)
                 if (statusInfo.step === 'waiting') return 'bg-red-900/20 border-red-500/50 shadow-[0_0_15px_-5px_rgba(239,68,68,0.3)]' // Red (Waiting for food)
                 return 'bg-amber-900/20 border-amber-500/50 shadow-[0_0_15px_-5px_rgba(245,158,11,0.3)]' // Yellow (Eating)
@@ -934,6 +938,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                         {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} serviti
                                     </Badge>
                                 )}
+                                {hasStripePaymentToConfirm && (
+                                    <Badge variant="outline" className="text-[9px] bg-purple-500/20 border-purple-500/50 text-purple-200 mt-1">
+                                        💳 Pagato Online
+                                    </Badge>
+                                )}
                             </>
                         ) : (
                             <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-all duration-300">
@@ -946,31 +955,54 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     {/* Footer Actions — icon-only on mobile to prevent overflow */}
                     <div className="p-2 sm:p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-1.5 relative z-10">
                         {isActive ? (
-                            <div className={`grid gap-1.5 ${restaurant?.allow_waiter_payments ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="shadow-sm hover:shadow transition-shadow h-10 text-xs bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:text-white overflow-hidden"
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleQuickOrderClick(table)
-                                    }}
-                                >
-                                    <Plus size={16} className="shrink-0" />
-                                    <span className="hidden sm:inline ml-1.5">Ordina</span>
-                                </Button>
-                                {restaurant?.allow_waiter_payments && (
+                            <div className={`grid gap-1.5 ${hasStripePaymentToConfirm ? 'grid-cols-1' : (restaurant?.allow_waiter_payments ? 'grid-cols-2' : 'grid-cols-1')}`}>
+                                {hasStripePaymentToConfirm ? (
                                     <Button
-                                        className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-sm hover:shadow transition-all h-10 text-xs overflow-hidden"
+                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-10 text-xs overflow-hidden"
                                         size="sm"
-                                        onClick={(e) => {
-                                            e.stopPropagation()
-                                            openPaymentDialog(e, table)
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                                await DatabaseService.updateSessionReceiptIssued(session.id, true);
+                                                toast.success('Scontrino confermato!');
+                                                refreshData();
+                                            } catch (err) {
+                                                toast.error('Errore nella conferma');
+                                            }
                                         }}
                                     >
-                                        <Receipt size={16} className="shrink-0" />
-                                        <span className="hidden sm:inline ml-1.5">Conto</span>
+                                        <CheckCircle size={16} weight="fill" className="mr-1.5 shrink-0" />
+                                        <span className="hidden sm:inline">Conferma Scontrino</span>
+                                        <span className="sm:hidden">Scontrino</span>
                                     </Button>
+                                ) : (
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="shadow-sm hover:shadow transition-shadow h-10 text-xs bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:text-white overflow-hidden"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                handleQuickOrderClick(table)
+                                            }}
+                                        >
+                                            <Plus size={16} className="shrink-0" />
+                                            <span className="hidden sm:inline ml-1.5">Ordina</span>
+                                        </Button>
+                                        {restaurant?.allow_waiter_payments && (
+                                            <Button
+                                                className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-sm hover:shadow transition-all h-10 text-xs overflow-hidden"
+                                                size="sm"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    openPaymentDialog(e, table)
+                                                }}
+                                            >
+                                                <Receipt size={16} className="shrink-0" />
+                                                <span className="hidden sm:inline ml-1.5">Conto</span>
+                                            </Button>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         ) : (

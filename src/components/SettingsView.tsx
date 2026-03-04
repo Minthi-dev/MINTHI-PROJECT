@@ -253,13 +253,20 @@ export function SettingsView({
         }
     }
 
+    const [connectSetupNeeded, setConnectSetupNeeded] = useState(false)
     const handleConnectOnboarding = async () => {
         setLoadingConnectOnboarding(true)
+        setConnectSetupNeeded(false)
         try {
             const { url } = await DatabaseService.createStripeConnectOnboarding(restaurantId)
             window.location.href = url
         } catch (e: any) {
-            toast.error('Errore: ' + e.message)
+            const msg = e.message || ''
+            if (msg.includes("signed up for Connect") || msg.includes("new accounts")) {
+                setConnectSetupNeeded(true)
+            } else {
+                toast.error('Errore: ' + msg)
+            }
         } finally {
             setLoadingConnectOnboarding(false)
         }
@@ -1002,6 +1009,27 @@ export function SettingsView({
                                                 {subscriptionInfo?.stripe_connect_enabled ? 'Gestisci' : subscriptionInfo?.stripe_connect_account_id ? 'Completa' : 'Collega Account Stripe'}
                                             </Button>
                                         </div>
+
+                                        {/* Stripe Connect setup needed alert */}
+                                        {connectSetupNeeded && (
+                                            <div className="mt-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                                                <p className="text-sm font-medium text-amber-400">
+                                                    ⚠️ Per ricevere pagamenti, devi prima attivare Stripe Connect sul tuo account Stripe.
+                                                </p>
+                                                <p className="text-xs text-zinc-400">
+                                                    Vai sulla dashboard di Stripe, abilita Connect, e poi riprova a collegare l'account.
+                                                </p>
+                                                <a
+                                                    href="https://dashboard.stripe.com/connect"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-2 mt-1 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm font-medium hover:bg-amber-500/30 transition-colors"
+                                                >
+                                                    <ArrowSquareOut size={16} />
+                                                    Apri Stripe Connect Dashboard
+                                                </a>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

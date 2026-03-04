@@ -1302,6 +1302,19 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const historyTotal = useMemo(() => previousOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0), [previousOrders])
   const grandTotal = cartTotal + historyTotal
 
+  // AYCE order limit
+  const ayceMaxOrders = useMemo(() => {
+    if (!activeSession?.ayce_enabled) return 0
+    const weeklyAyce = (fullRestaurant as any)?.weekly_ayce
+    const legacyAyce = (fullRestaurant as any)?.all_you_can_eat
+    return weeklyAyce?.defaultMaxOrders || legacyAyce?.maxOrders || (fullRestaurant as any)?.ayce_max_orders || 0
+  }, [fullRestaurant, activeSession])
+  const remainingOrders = useMemo(() => {
+    if (!ayceMaxOrders || ayceMaxOrders <= 0) return Infinity
+    return Math.max(0, ayceMaxOrders - previousOrders.length)
+  }, [ayceMaxOrders, previousOrders])
+  const orderLimitReached = remainingOrders <= 0 && remainingOrders !== Infinity
+
   const cartByCourse = useMemo(() => {
     const grouped: { [key: number]: CartItem[] } = {}
     cart.forEach(item => {
@@ -1543,6 +1556,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   const submitOrder = async () => {
     if (isOrderSubmitting) return // Prevent double-submit
+    if (orderLimitReached) {
+      toast.error('Hai raggiunto il limite massimo di ordini per questa sessione', { duration: 3000 })
+      return
+    }
     if ((!activeSession && !isWaiterMode) || cart.length === 0 || !restaurantId) return
 
     setIsOrderSubmitting(true)
@@ -1872,11 +1889,19 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
               <Button
                 onClick={() => setIsCartOpen(true)}
                 className="w-full h-14 rounded-full flex items-center justify-between px-6 transform transition-transform active:scale-95"
-                style={theme.floatingCartStyle}
+                style={{
+                  ...theme.floatingCartStyle,
+                  ...(orderLimitReached ? { opacity: 0.7 } : {})
+                }}
               >
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 rounded-full text-sm font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>{cart.reduce((a, b) => a + b.quantity, 0)}</span>
                   <span className="font-medium text-lg tracking-wide uppercase">Vedi Ordine</span>
+                  {activeSession?.ayce_enabled && ayceMaxOrders > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: orderLimitReached ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.15)' }}>
+                      {previousOrders.length}/{ayceMaxOrders}
+                    </span>
+                  )}
                 </div>
                 <span className="font-bold text-xl">
                   €{(() => {
@@ -2194,18 +2219,43 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     </div>
                   )}
 
+                  {/* AYCE order limit badge */}
+                  {activeSession?.ayce_enabled && ayceMaxOrders > 0 && (
+                    <div className={`flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-sm font-medium ${orderLimitReached ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'bg-amber-500/10 border border-amber-500/20'}`} style={!orderLimitReached ? { color: theme.primary } : undefined}>
+                      {orderLimitReached ? (
+                        <>
+                          <Warning size={16} weight="bold" />
+                          <span>Limite ordini raggiunto ({ayceMaxOrders}/{ayceMaxOrders})</span>
+                        </>
+                      ) : (
+                        <>
+                          <ListNumbers size={16} weight="bold" />
+                          <span>Ordini: {previousOrders.length}/{ayceMaxOrders} — {remainingOrders} rimanent{remainingOrders === 1 ? 'e' : 'i'}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   <Button
                     className="w-full font-bold h-12 rounded-xl"
-                    style={theme.floatingCartStyle}
+                    style={{
+                      ...theme.floatingCartStyle,
+                      ...(orderLimitReached ? { opacity: 0.5, cursor: 'not-allowed' } : {})
+                    }}
                     onClick={() => {
                       handleSubmitClick()
                     }}
-                    disabled={isOrderSubmitting}
+                    disabled={isOrderSubmitting || orderLimitReached}
                   >
                     {isOrderSubmitting ? (
                       <div className="flex items-center gap-2">
                         <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#ffffff' }} />
                         <span>Invio...</span>
+                      </div>
+                    ) : orderLimitReached ? (
+                      <div className="flex items-center gap-2 text-lg">
+                        <Warning weight="fill" size={20} />
+                        <span>Limite Raggiunto</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-lg">
