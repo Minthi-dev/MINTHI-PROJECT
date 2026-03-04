@@ -934,6 +934,7 @@ export const DatabaseService = {
         billingName: string, vatNumber: string, billingAddress: string,
         billingCity: string, billingCap: string, billingProvince: string, codiceUnivoco: string,
         priceId: string,
+        couponId?: string | null,
     }) {
         const passwordHash = await hashPassword(data.password)
 
@@ -968,6 +969,7 @@ export const DatabaseService = {
                 priceId: data.priceId,
                 successUrl: `${window.location.origin}/register-success`,
                 cancelUrl: `${window.location.origin}/register?cancelled=true`,
+                ...(data.couponId ? { couponId: data.couponId } : {}),
             }
         })
 
@@ -1157,11 +1159,52 @@ export const DatabaseService = {
     },
 
     // Registration Tokens (onboarding)
-    async createRegistrationToken(freeMonths: number = 0): Promise<{ token: string, id: string }> {
+    async createRegistrationToken(
+        freeMonths: number = 0,
+        discountPercent: number = 0,
+        discountDuration: string = 'once',
+        discountDurationMonths?: number
+    ): Promise<{ token: string, id: string }> {
+        // Controlla se esiste già un token con gli stessi parametri (non usato, non scaduto)
+        const { data: existing } = await supabase
+            .from('registration_tokens')
+            .select('id, token')
+            .eq('free_months', freeMonths)
+            .eq('discount_percent', discountPercent)
+            .eq('discount_duration', discountDuration)
+            .eq('used', false)
+            .gt('expires_at', new Date().toISOString())
+            .maybeSingle()
+
+        if (existing) return existing
+
+        // Crea coupon Stripe se sconto > 0
+        let stripeCouponId: string | null = null
+        if (discountPercent > 0) {
+            const { data: couponData, error: couponError } = await supabase.functions.invoke('stripe-create-coupon', {
+                body: {
+                    percent_off: discountPercent,
+                    duration: discountDuration === 'once' || discountDuration === 'forever'
+                        ? discountDuration
+                        : 'repeating',
+                    duration_in_months: discountDurationMonths
+                }
+            })
+            if (!couponError && couponData?.couponId) {
+                stripeCouponId = couponData.couponId
+            }
+        }
+
         const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6)
         const { data, error } = await supabase
             .from('registration_tokens')
-            .insert({ token, free_months: freeMonths })
+            .insert({
+                token,
+                free_months: freeMonths,
+                discount_percent: discountPercent,
+                discount_duration: discountDuration,
+                stripe_coupon_id: stripeCouponId
+            })
             .select('id, token')
             .single()
         if (error) throw error
@@ -1229,5 +1272,72 @@ export const DatabaseService = {
 
         if (error) throw error;
         return data as { id: string, name: string, is_active: boolean } | null;
-    }
+    },
+
+    // Stripe price management
+    async getStripePriceDetails(): Promise<{ amount: number, currency: string, product_id: string | null, price_id: string | null }> {
+        const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
+            body: { action: 'get' }
+        })
+        if (error) throw new Error(data?.error || error.message)
+        return data
+    },
+
+    async createStripePrice(amountCents: number): Promise<{ priceId: string, amount: number }> {
+        const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
+            body: { action: 'create', amount_cents: amountCents }
+        })
+        if (error) throw new Error(data?.error || error.message)
+        return data
+    },
+
+    // Restaurant discounts
+    async getRestaurantDiscounts(restaurantId?: string) {
+        let query = supabase
+            .from('restaurant_discounts')
+            .select('*')
+            .order('created_at', { ascending: false })
+        if (restaurantId) query = query.eq('restaurant_id', restaurantId)
+        const { data, error } = await query
+        if (error) throw error
+        return data || []
+    },
+
+    async applyRestaurantDiscount(params: {
+        restaurantId: string,
+        discountPercent: number,
+        discountDuration: string,
+        discountDurationMonths?: number,
+        reason?: string,
+        grantedBy?: string,
+    }) {
+        const { data, error } = await supabase.functions.invoke('stripe-apply-discount', {
+            body: {
+                restaurantId: params.restaurantId,
+                discountPercent: params.discountPercent,
+                discountDuration: params.discountDuration,
+                discountDurationMonths: params.discountDurationMonths,
+                reason: params.reason,
+                grantedBy: params.grantedBy,
+            }
+        })
+        if (error) throw new Error(data?.error || error.message)
+        return data
+    },
+
+    async dismissDiscountBanner(discountId: string) {
+        const { error } = await supabase
+            .from('restaurant_discounts')
+            .update({ banner_dismissed: true })
+            .eq('id', discountId)
+        if (error) throw error
+    },
+
+    async deactivateRestaurantDiscount(discountId: string) {
+        const { error } = await supabase
+            .from('restaurant_discounts')
+            .update({ is_active: false })
+            .eq('id', discountId)
+        if (error) throw error
+    },
 }

@@ -57,7 +57,8 @@ import {
   Receipt,
   Sparkle,
   DotsSixVertical,
-  Tag
+  Tag,
+  CreditCard
 } from '@phosphor-icons/react'
 import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -143,6 +144,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
   const currentRestaurant = restaurants?.[0]
+
+  // Discount banner
+  const [activeDiscount, setActiveDiscount] = useState<any>(null)
+  useEffect(() => {
+    if (!restaurantId) return
+    DatabaseService.getRestaurantDiscounts(restaurantId).then(discounts => {
+      const active = discounts.find((d: any) => d.is_active)
+      setActiveDiscount(active || null)
+    }).catch(() => {})
+  }, [restaurantId])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
   // Aliases for compatibility and lint fixes
@@ -1849,6 +1860,47 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               </motion.div>
             )}
           </AnimatePresence>
+          {/* Banner sconto attivo */}
+          <AnimatePresence>
+            {activeDiscount && !activeDiscount.banner_dismissed && (
+              <motion.div
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.3 }}
+                className="mb-4"
+              >
+                <div className="flex items-center gap-3 p-4 bg-amber-950/40 border border-amber-500/30 rounded-2xl backdrop-blur-sm shadow-lg shadow-amber-950/20">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                    <CreditCard className="text-amber-400" weight="duotone" size={20} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-amber-300 text-sm">
+                      Hai uno sconto attivo: {activeDiscount.discount_percent}%
+                      {activeDiscount.discount_duration === 'forever' ? ' per sempre'
+                        : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
+                          : ` per ${activeDiscount.discount_duration_months || activeDiscount.discount_duration} mesi`}
+                    </p>
+                    {activeDiscount.reason && (
+                      <p className="text-xs text-amber-400/60 mt-0.5">{activeDiscount.reason}</p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      await DatabaseService.dismissDiscountBanner(activeDiscount.id).catch(() => {})
+                      setActiveDiscount((d: any) => d ? { ...d, banner_dismissed: true } : null)
+                    }}
+                    className="shrink-0 text-zinc-500 hover:text-white h-8 w-8 p-0 rounded-lg"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Banner pagamento fallito — mostrato finché il pagamento non viene risolto */}
           <AnimatePresence>
             {currentRestaurant?.subscription_status === 'past_due' && (

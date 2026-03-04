@@ -47,11 +47,27 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [bonusReason, setBonusReason] = useState('')
   const [stripePriceId, setStripePriceId] = useState('')
   const [stripePriceIdSaved, setStripePriceIdSaved] = useState('')
+  const [stripePriceAmount, setStripePriceAmount] = useState<number>(0)
+  const [newPriceInput, setNewPriceInput] = useState('')
+  const [updatingPrice, setUpdatingPrice] = useState(false)
+  const [loadingPriceDetails, setLoadingPriceDetails] = useState(false)
+
+  // Discount dialog
+  const [showDiscountDialog, setShowDiscountDialog] = useState(false)
+  const [discountRestaurantId, setDiscountRestaurantId] = useState('')
+  const [discountPercent, setDiscountPercent] = useState<number | string>('')
+  const [discountDuration, setDiscountDuration] = useState('once')
+  const [discountDurationMonths, setDiscountDurationMonths] = useState(1)
+  const [discountReason, setDiscountReason] = useState('')
+  const [applyingDiscount, setApplyingDiscount] = useState(false)
 
   // Registration Link Generator
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [inviteFreeMonths, setInviteFreeMonths] = useState(false)
   const [inviteMonthsCount, setInviteMonthsCount] = useState(1)
+  const [inviteDiscountPercent, setInviteDiscountPercent] = useState<number | string>('')
+  const [inviteDiscountDuration, setInviteDiscountDuration] = useState('once')
+  const [inviteDiscountDurationMonths, setInviteDiscountDurationMonths] = useState(1)
   const [generatedLink, setGeneratedLink] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
 
@@ -61,6 +77,11 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       DatabaseService.getAppConfig('stripe_price_id').then(val => {
         if (val) { setStripePriceId(val); setStripePriceIdSaved(val) }
       }).catch(console.error)
+      // Fetch current Stripe price amount
+      setLoadingPriceDetails(true)
+      DatabaseService.getStripePriceDetails().then(details => {
+        if (details?.amount) setStripePriceAmount(details.amount)
+      }).catch(console.error).finally(() => setLoadingPriceDetails(false))
     }
   }, [activeView])
 
@@ -519,33 +540,58 @@ export default function AdminDashboard({ user, onLogout }: Props) {
               </div>
             </div>
 
-            {/* Global Stripe Price ID — compact */}
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900/50 border border-white/5">
-              <CreditCard size={16} className="text-zinc-500 shrink-0" />
-              <span className="text-xs text-zinc-400 shrink-0">Price ID:</span>
-              <Input
-                placeholder="price_..."
-                value={stripePriceId}
-                onChange={(e) => setStripePriceId(e.target.value)}
-                className="h-8 font-mono text-xs bg-black/40 border-white/5 flex-1 max-w-xs"
-              />
-              <Button
-                disabled={!stripePriceId || stripePriceId === stripePriceIdSaved}
-                size="sm"
-                className="bg-white/10 hover:bg-white/15 text-white text-xs h-8 px-3 shrink-0 disabled:opacity-20 rounded-lg"
-                onClick={async () => {
-                  try {
-                    await DatabaseService.setAppConfig('stripe_price_id', stripePriceId.trim())
-                    setStripePriceIdSaved(stripePriceId.trim())
-                    toast.success('Price ID salvato')
-                  } catch (e: any) { toast.error(e.message) }
-                }}
-              >
-                Salva
-              </Button>
-              {stripePriceIdSaved && (
-                <CheckCircle size={14} className="text-emerald-500 shrink-0" weight="fill" />
-              )}
+            {/* Gestione Prezzo Abbonamento */}
+            <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={18} className="text-amber-400" weight="duotone" />
+                    <span className="text-sm font-semibold text-white">Prezzo Abbonamento</span>
+                  </div>
+                  {stripePriceAmount > 0 && (
+                    <span className="text-2xl font-bold text-white">
+                      €{stripePriceAmount.toFixed(0)}<span className="text-sm font-normal text-zinc-500">/mese</span>
+                    </span>
+                  )}
+                  {loadingPriceDetails && <span className="text-xs text-zinc-500">Caricamento...</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder={stripePriceAmount > 0 ? String(stripePriceAmount) : 'Nuovo importo...'}
+                      value={newPriceInput}
+                      onChange={(e) => setNewPriceInput(e.target.value)}
+                      className="h-10 pl-7 bg-black/40 border-white/5 text-sm"
+                    />
+                  </div>
+                  <Button
+                    disabled={!newPriceInput || updatingPrice}
+                    className="h-10 px-4 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded-xl shrink-0"
+                    onClick={async () => {
+                      const cents = Math.round(parseFloat(newPriceInput) * 100)
+                      if (!cents || cents <= 0) return toast.error('Importo non valido')
+                      setUpdatingPrice(true)
+                      try {
+                        const result = await DatabaseService.createStripePrice(cents)
+                        setStripePriceAmount(result.amount)
+                        setStripePriceId(result.priceId)
+                        setStripePriceIdSaved(result.priceId)
+                        setNewPriceInput('')
+                        toast.success(`Prezzo aggiornato a €${result.amount}/mese`)
+                      } catch (e: any) { toast.error(e.message) }
+                      finally { setUpdatingPrice(false) }
+                    }}
+                  >
+                    {updatingPrice ? 'Aggiornamento...' : 'Aggiorna'}
+                  </Button>
+                </div>
+                {stripePriceIdSaved && (
+                  <p className="text-[10px] text-zinc-600 mt-2 font-mono truncate">{stripePriceIdSaved}</p>
+                )}
+              </div>
             </div>
 
             {/* Filters */}
@@ -676,6 +722,22 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                           >
                             <Gift size={15} />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-amber-400 hover:bg-amber-500/10 rounded-lg"
+                            onClick={() => {
+                              setDiscountRestaurantId(restaurant.id)
+                              setDiscountPercent('')
+                              setDiscountDuration('once')
+                              setDiscountDurationMonths(1)
+                              setDiscountReason('')
+                              setShowDiscountDialog(true)
+                            }}
+                            title="Assegna Sconto"
+                          >
+                            <CreditCard size={15} />
+                          </Button>
                           {activeBonus && (
                             <Button
                               variant="ghost"
@@ -714,6 +776,91 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 </div>
               )}
             </div>
+
+            {/* Discount Dialog */}
+            <Dialog open={showDiscountDialog} onOpenChange={setShowDiscountDialog}>
+              <DialogContent className="max-w-sm bg-zinc-950 border-white/10 text-white">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-base"><CreditCard size={18} className="text-amber-400" weight="duotone" /> Assegna Sconto</DialogTitle>
+                  <DialogDescription className="text-zinc-500 text-sm">Applica uno sconto Stripe all'abbonamento del ristorante.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Ristorante</Label>
+                    <Select value={discountRestaurantId} onValueChange={setDiscountRestaurantId}>
+                      <SelectTrigger className="h-10"><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                      <SelectContent>
+                        {(restaurants || []).filter(r => r.stripe_subscription_id).map(r => (
+                          <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Sconto (%)</Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        placeholder="Es. 50"
+                        value={discountPercent}
+                        onChange={(e) => setDiscountPercent(e.target.value === '' ? '' : Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="h-10 pr-8"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">%</span>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Durata sconto</Label>
+                    <Select value={discountDuration} onValueChange={setDiscountDuration}>
+                      <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="once">1 mese (una volta)</SelectItem>
+                        <SelectItem value="2">2 mesi</SelectItem>
+                        <SelectItem value="3">3 mesi</SelectItem>
+                        <SelectItem value="6">6 mesi</SelectItem>
+                        <SelectItem value="12">1 anno</SelectItem>
+                        <SelectItem value="forever">Per sempre</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-400">Motivo (opzionale)</Label>
+                    <Input placeholder="Es. Offerta lancio..." value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="h-10" />
+                  </div>
+                  {discountPercent && stripePriceAmount > 0 && (
+                    <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 text-xs text-amber-300">
+                      Il ristorante pagherà <span className="font-bold">€{(stripePriceAmount * (1 - Number(discountPercent) / 100)).toFixed(2)}/mese</span> invece di €{stripePriceAmount.toFixed(2)}/mese
+                      {discountDuration !== 'forever' && <span className="text-zinc-500"> per {discountDuration === 'once' ? '1 mese' : `${discountDuration} mesi`}</span>}
+                    </div>
+                  )}
+                  <Button
+                    className="w-full h-11 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl"
+                    disabled={!discountRestaurantId || !discountPercent || applyingDiscount}
+                    onClick={async () => {
+                      setApplyingDiscount(true)
+                      try {
+                        const months = discountDuration === 'once' ? 1 : discountDuration === 'forever' ? undefined : parseInt(discountDuration)
+                        await DatabaseService.applyRestaurantDiscount({
+                          restaurantId: discountRestaurantId,
+                          discountPercent: Number(discountPercent),
+                          discountDuration: discountDuration === 'once' ? 'once' : discountDuration === 'forever' ? 'forever' : 'repeating',
+                          discountDurationMonths: months,
+                          reason: discountReason || undefined,
+                          grantedBy: user.name || user.email,
+                        })
+                        toast.success(`Sconto ${discountPercent}% applicato!`)
+                        setShowDiscountDialog(false)
+                      } catch (e: any) { toast.error('Errore: ' + e.message) }
+                      finally { setApplyingDiscount(false) }
+                    }}
+                  >
+                    {applyingDiscount ? 'Applicazione...' : `Applica ${discountPercent || '—'}% di sconto`}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {/* Bonus Dialog */}
             <Dialog open={showBonusDialog} onOpenChange={setShowBonusDialog}>
@@ -796,6 +943,9 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     setGeneratedLink('')
                     setInviteFreeMonths(false)
                     setInviteMonthsCount(1)
+                    setInviteDiscountPercent('')
+                    setInviteDiscountDuration('once')
+                    setInviteDiscountDurationMonths(1)
                     setShowInviteDialog(true)
                   }}
                 >
@@ -947,34 +1097,92 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                       <DialogDescription className="text-zinc-400">Genera un link per far registrare un ristorante autonomamente.</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-2">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          id="invite-free-months"
-                          checked={inviteFreeMonths}
-                          onChange={(e) => setInviteFreeMonths(e.target.checked)}
-                          className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
-                        />
-                        <Label htmlFor="invite-free-months" className="text-sm cursor-pointer">Mesi gratis</Label>
-                        {inviteFreeMonths && (
-                          <Input
-                            type="number"
-                            min={1}
-                            max={24}
-                            value={inviteMonthsCount}
-                            onChange={(e) => setInviteMonthsCount(parseInt(e.target.value) || 1)}
-                            className="w-20 h-9 bg-zinc-900 border-white/10"
+                      {/* Mesi gratis */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            id="invite-free-months"
+                            checked={inviteFreeMonths}
+                            onChange={(e) => setInviteFreeMonths(e.target.checked)}
+                            className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
                           />
-                        )}
+                          <Label htmlFor="invite-free-months" className="text-sm cursor-pointer">Mesi gratis</Label>
+                          {inviteFreeMonths && (
+                            <Input
+                              type="number"
+                              min={1}
+                              max={24}
+                              value={inviteMonthsCount}
+                              onChange={(e) => setInviteMonthsCount(parseInt(e.target.value) || 1)}
+                              className="w-20 h-9 bg-zinc-900 border-white/10"
+                            />
+                          )}
+                        </div>
                       </div>
 
+                      {/* Sconto */}
+                      <div className="space-y-2">
+                        <Label className="text-xs text-zinc-400">Sconto (%)</Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            placeholder="0 = nessuno sconto"
+                            value={inviteDiscountPercent}
+                            onChange={(e) => setInviteDiscountPercent(e.target.value === '' ? '' : Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                            className="h-9 pr-8 bg-zinc-900 border-white/10"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">%</span>
+                        </div>
+                      </div>
+
+                      {/* Durata sconto (visibile solo se sconto > 0) */}
+                      {Number(inviteDiscountPercent) > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-zinc-400">Durata sconto</Label>
+                          <Select value={inviteDiscountDuration} onValueChange={setInviteDiscountDuration}>
+                            <SelectTrigger className="h-9 bg-zinc-900 border-white/10"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="once">1 mese (una volta)</SelectItem>
+                              <SelectItem value="2">2 mesi</SelectItem>
+                              <SelectItem value="3">3 mesi</SelectItem>
+                              <SelectItem value="6">6 mesi</SelectItem>
+                              <SelectItem value="12">1 anno</SelectItem>
+                              <SelectItem value="forever">Per sempre</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {/* Preview offerta */}
+                      {(inviteFreeMonths || Number(inviteDiscountPercent) > 0) && (
+                        <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-1">
+                          {inviteFreeMonths && (
+                            <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                              <CheckCircle size={13} weight="fill" />
+                              {inviteMonthsCount} {inviteMonthsCount === 1 ? 'mese' : 'mesi'} gratis
+                            </p>
+                          )}
+                          {Number(inviteDiscountPercent) > 0 && (
+                            <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                              <CheckCircle size={13} weight="fill" />
+                              {inviteDiscountPercent}% di sconto
+                              {inviteDiscountDuration === 'forever' ? ' per sempre' : inviteDiscountDuration === 'once' ? ' per 1 mese' : ` per ${inviteDiscountDuration} mesi`}
+                              {stripePriceAmount > 0 && ` → €${(stripePriceAmount * (1 - Number(inviteDiscountPercent) / 100)).toFixed(2)}/mese`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
                       {generatedLink ? (
-                        <div className="space-y-3">
+                        <div className="space-y-2">
                           <div className="p-3 bg-zinc-900 rounded-xl border border-white/10 flex items-center gap-2">
                             <input
                               readOnly
                               value={generatedLink}
-                              className="flex-1 bg-transparent text-sm text-white font-mono outline-none"
+                              className="flex-1 bg-transparent text-sm text-white font-mono outline-none min-w-0"
                             />
                             <Button
                               size="icon"
@@ -982,13 +1190,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                               className="h-8 w-8 shrink-0 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
                               onClick={() => {
                                 if (navigator.clipboard && window.isSecureContext) {
-                                  navigator.clipboard.writeText(generatedLink).then(() => {
-                                    toast.success('Link copiato!')
-                                  }).catch(() => {
-                                    toast.error('Impossibile copiare. Selezionalo e copialo manualmente.')
-                                  })
+                                  navigator.clipboard.writeText(generatedLink).then(() => toast.success('Link copiato!')).catch(() => toast.error('Impossibile copiare.'))
                                 } else {
-                                  // Fallback per ambienti non sicuri (http) o dispositivi vecchi
                                   toast.success('Seleziona il link qui sopra e copialo.', { duration: 4000 })
                                 }
                               }}
@@ -996,12 +1199,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                               <Copy size={16} />
                             </Button>
                           </div>
-                          {inviteFreeMonths && (
-                            <p className="text-xs text-emerald-400 flex items-center gap-1">
-                              <CheckCircle size={14} weight="fill" />
-                              Il ristorante avrà {inviteMonthsCount} {inviteMonthsCount === 1 ? 'mese' : 'mesi'} gratis
-                            </p>
-                          )}
+                          <p className="text-[11px] text-zinc-600">Se esiste già un link con gli stessi parametri, viene riutilizzato.</p>
                         </div>
                       ) : (
                         <Button
@@ -1011,7 +1209,10 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             setGeneratingLink(true)
                             try {
                               const freeMonths = inviteFreeMonths ? inviteMonthsCount : 0
-                              const { token } = await DatabaseService.createRegistrationToken(freeMonths)
+                              const discountPct = Number(inviteDiscountPercent) || 0
+                              const dur = inviteDiscountDuration
+                              const durMonths = dur === 'once' ? 1 : dur === 'forever' ? undefined : parseInt(dur)
+                              const { token } = await DatabaseService.createRegistrationToken(freeMonths, discountPct, dur === 'once' ? 'once' : dur === 'forever' ? 'forever' : 'repeating', durMonths)
                               const link = `${window.location.origin}/register/${token}`
                               setGeneratedLink(link)
                               if (navigator.clipboard && window.isSecureContext) {

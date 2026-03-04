@@ -13,7 +13,7 @@ serve(async (req) => {
     }
 
     try {
-        const { priceId, restaurantId, pendingRegistrationId, successUrl, cancelUrl } = await req.json();
+        const { priceId, restaurantId, pendingRegistrationId, successUrl, cancelUrl, couponId } = await req.json();
 
         if (!priceId || (!restaurantId && !pendingRegistrationId)) {
             return new Response(JSON.stringify({ error: "Mancano parametri: priceId e (restaurantId o pendingRegistrationId)" }), {
@@ -38,6 +38,7 @@ serve(async (req) => {
             cancel_url: cancelUrl || `${req.headers.get("origin")}/register-cancelled`,
             metadata,
             client_reference_id: pendingRegistrationId || restaurantId,
+            ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
         });
 
         return new Response(JSON.stringify({ sessionId: session.id, url: session.url }), {

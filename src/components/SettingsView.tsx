@@ -187,6 +187,8 @@ export function SettingsView({
     const [savingPaymentInfo, setSavingPaymentInfo] = useState(false)
     const [loadingBillingPortal, setLoadingBillingPortal] = useState(false)
     const [loadingConnectOnboarding, setLoadingConnectOnboarding] = useState(false)
+    const [activeDiscount, setActiveDiscount] = useState<any>(null)
+    const [priceAmount, setPriceAmount] = useState<number>(0)
 
     const loadStaff = async () => {
         if (!restaurantId) return;
@@ -220,6 +222,17 @@ export function SettingsView({
         try {
             const payments = await DatabaseService.getSubscriptionPayments(restaurantId)
             setSubscriptionPayments(payments || [])
+        } catch (e) { /* ignore */ }
+
+        try {
+            const discounts = await DatabaseService.getRestaurantDiscounts(restaurantId)
+            const active = discounts.find((d: any) => d.is_active)
+            setActiveDiscount(active || null)
+        } catch (e) { /* ignore */ }
+
+        try {
+            const amountStr = await DatabaseService.getAppConfig('stripe_price_amount')
+            if (amountStr && parseFloat(amountStr) > 0) setPriceAmount(parseFloat(amountStr))
         } catch (e) { /* ignore */ }
     }
 
@@ -1052,6 +1065,26 @@ export function SettingsView({
                                                 <p className="text-sm text-zinc-400">
                                                     Abbonamento disdetto — attivo fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                                                 </p>
+                                            </div>
+                                        )}
+
+                                        {/* Active discount */}
+                                        {activeDiscount && activeDiscount.is_active && (
+                                            <div className="flex items-center gap-3 p-4 bg-amber-500/5 rounded-xl border border-amber-500/10 mb-5">
+                                                <Receipt size={20} className="text-amber-400 shrink-0" />
+                                                <div className="flex-1">
+                                                    <p className="text-sm text-white font-medium">
+                                                        Sconto attivo: {activeDiscount.discount_percent}%
+                                                        {activeDiscount.discount_duration === 'forever' ? ' per sempre'
+                                                            : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
+                                                                : ` per ${activeDiscount.discount_duration_months || activeDiscount.discount_duration} mesi`}
+                                                    </p>
+                                                    {priceAmount > 0 && (
+                                                        <p className="text-xs text-zinc-500 mt-0.5">
+                                                            Prossimo addebito scontato: <span className="text-amber-400">€{(priceAmount * (1 - activeDiscount.discount_percent / 100)).toFixed(2)}/mese</span>
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
 

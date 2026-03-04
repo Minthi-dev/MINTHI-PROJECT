@@ -65,6 +65,7 @@ export default function RestaurantOnboarding() {
     const [showForm, setShowForm] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const [selectedFeature, setSelectedFeature] = useState<typeof MACRO_FEATURES[0] | null>(null)
+    const [priceAmount, setPriceAmount] = useState<number>(0)
 
     const [form, setForm] = useState({
         name: '',
@@ -94,6 +95,11 @@ export default function RestaurantOnboarding() {
             if (data) { setTokenData(data) } else { setTokenError(true) }
             setLoading(false)
         }).catch(() => { setTokenError(true); setLoading(false) })
+
+        // Fetch subscription price for display
+        DatabaseService.getAppConfig('stripe_price_amount').then(val => {
+            if (val && parseFloat(val) > 0) setPriceAmount(parseFloat(val))
+        }).catch(() => {})
     }, [token])
 
     const handleSubmit = async () => {
@@ -159,6 +165,7 @@ export default function RestaurantOnboarding() {
                 billingProvince: form.billingProvince.trim(),
                 codiceUnivoco: form.codiceUnivoco.trim(),
                 priceId,
+                couponId: tokenData.stripe_coupon_id || null,
             })
             toast.dismiss('stripe')
             window.location.href = url
@@ -228,12 +235,23 @@ export default function RestaurantOnboarding() {
             {/* Hero */}
             <section className="relative z-10 px-6 py-20 text-center max-w-3xl mx-auto">
                 <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-                    {tokenData?.free_months > 0 && (
-                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium mb-6">
-                            <Rocket size={16} weight="fill" />
-                            {tokenData.free_months} {tokenData.free_months === 1 ? 'mese' : 'mesi'} gratis inclusi!
-                        </div>
-                    )}
+                    <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
+                        {tokenData?.free_months > 0 && (
+                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium">
+                                <Rocket size={16} weight="fill" />
+                                {tokenData.free_months} {tokenData.free_months === 1 ? 'mese' : 'mesi'} gratis inclusi!
+                            </div>
+                        )}
+                        {tokenData?.discount_percent > 0 && (
+                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-400 text-sm font-medium">
+                                <CheckCircle size={16} weight="fill" />
+                                {tokenData.discount_percent}% di sconto
+                                {tokenData.discount_duration === 'forever' ? ' per sempre'
+                                    : tokenData.discount_duration === 'once' ? ' per 1 mese'
+                                        : ` per ${tokenData.discount_duration} mesi`}
+                            </div>
+                        )}
+                    </div>
                     <h1 className="text-4xl sm:text-5xl font-bold leading-tight mb-6">
                         Il tuo ristorante,<br />
                         <span className="bg-gradient-to-r from-amber-400 to-amber-600 bg-clip-text text-transparent">completamente digitale</span>
@@ -248,6 +266,45 @@ export default function RestaurantOnboarding() {
                         Registra il tuo Ristorante
                         <ArrowRight size={20} weight="bold" />
                     </button>
+
+                    {/* Pricing info */}
+                    {(priceAmount > 0 || tokenData?.free_months > 0 || tokenData?.discount_percent > 0) && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.3, duration: 0.5 }}
+                            className="mt-8 inline-block"
+                        >
+                            <div className="px-6 py-4 rounded-2xl bg-white/[0.03] border border-white/8 text-center">
+                                {tokenData?.free_months > 0 ? (
+                                    <p className="text-emerald-400 font-semibold text-base">
+                                        {tokenData.free_months} {tokenData.free_months === 1 ? 'mese' : 'mesi'} gratis
+                                        {priceAmount > 0 && <span className="text-zinc-500 font-normal text-sm">, poi €{priceAmount.toFixed(0)}/mese</span>}
+                                    </p>
+                                ) : tokenData?.discount_percent > 0 && priceAmount > 0 ? (
+                                    <div className="flex items-center justify-center gap-3">
+                                        <div>
+                                            <p className="text-zinc-500 text-sm line-through">€{priceAmount.toFixed(0)}/mese</p>
+                                            <p className="text-white font-bold text-2xl">€{(priceAmount * (1 - tokenData.discount_percent / 100)).toFixed(2)}<span className="text-sm font-normal text-zinc-400">/mese</span></p>
+                                        </div>
+                                        <div className="px-3 py-1 bg-amber-500/15 border border-amber-500/20 rounded-full">
+                                            <p className="text-amber-400 font-bold text-sm">-{tokenData.discount_percent}%</p>
+                                            <p className="text-amber-500/60 text-[10px]">
+                                                {tokenData.discount_duration === 'forever' ? 'per sempre'
+                                                    : tokenData.discount_duration === 'once' ? '1 mese'
+                                                        : `${tokenData.discount_duration} mesi`}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : priceAmount > 0 ? (
+                                    <p className="text-white font-semibold text-lg">
+                                        €{priceAmount.toFixed(0)}<span className="text-zinc-500 font-normal text-sm">/mese</span>
+                                    </p>
+                                ) : null}
+                                <p className="text-zinc-600 text-xs mt-1">Annullabile in qualsiasi momento</p>
+                            </div>
+                        </motion.div>
+                    )}
                 </motion.div>
             </section>
 

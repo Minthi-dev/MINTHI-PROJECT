@@ -11,6 +11,7 @@ import { it } from 'date-fns/locale'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { supabase } from '../lib/supabase'
 
 interface AdminStatisticsProps {
     onImpersonate?: (restaurantId: string) => void
@@ -90,6 +91,14 @@ function getAdminDateRange(filter: DateFilter, customStart?: string, customEnd?:
     }
 }
 
+interface SubscriptionStats {
+    totalEarned: number
+    activeSubscriptions: number
+    activeDiscounts: number
+    bonusMonthsGiven: number
+    revenueByMonth: { month: string; revenue: number }[]
+}
+
 export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps) {
     const [stats, setStats] = useState<GlobalStats | null>(null)
     const [loading, setLoading] = useState(true)
@@ -99,6 +108,61 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
     const [allRestaurants, setAllRestaurants] = useState<Restaurant[]>([])
     const [selectedRestaurantIds, setSelectedRestaurantIds] = useState<string[]>([])
     const [rankingMode, setRankingMode] = useState<'revenue' | 'access'>('revenue')
+    const [subStats, setSubStats] = useState<SubscriptionStats | null>(null)
+
+    // Fetch subscription analytics
+    useEffect(() => {
+        const fetchSubStats = async () => {
+            try {
+                const [paymentsResult, bonusesResult, discountsResult, restaurantsResult] = await Promise.all([
+                    supabase.from('subscription_payments').select('amount, status, created_at').eq('status', 'paid'),
+                    supabase.from('restaurant_bonuses').select('free_months, is_active'),
+                    supabase.from('restaurant_discounts').select('is_active'),
+                    supabase.from('restaurants').select('subscription_status'),
+                ])
+
+                const payments = paymentsResult.data || []
+                const bonuses = bonusesResult.data || []
+                const discounts = discountsResult.data || []
+                const restaurants = restaurantsResult.data || []
+
+                const totalEarned = payments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
+                const activeSubscriptions = restaurants.filter((r: any) => r.subscription_status === 'active').length
+                const activeDiscounts = discounts.filter((d: any) => d.is_active).length
+                const bonusMonthsGiven = bonuses.reduce((sum: number, b: any) => sum + (b.free_months || 0), 0)
+
+                // Revenue by month (last 12 months)
+                const revenueByMonth: Record<string, number> = {}
+                const now = new Date()
+                for (let i = 11; i >= 0; i--) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+                    const key = format(d, 'MMM yy', { locale: it })
+                    revenueByMonth[key] = 0
+                }
+                payments.forEach((p: any) => {
+                    if (!p.created_at) return
+                    try {
+                        const d = parseISO(p.created_at)
+                        const key = format(d, 'MMM yy', { locale: it })
+                        if (revenueByMonth[key] !== undefined) {
+                            revenueByMonth[key] += p.amount || 0
+                        }
+                    } catch { /* ignore */ }
+                })
+
+                setSubStats({
+                    totalEarned,
+                    activeSubscriptions,
+                    activeDiscounts,
+                    bonusMonthsGiven,
+                    revenueByMonth: Object.entries(revenueByMonth).map(([month, revenue]) => ({ month, revenue })),
+                })
+            } catch (e) {
+                console.error('Error fetching subscription stats:', e)
+            }
+        }
+        fetchSubStats()
+    }, [])
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -257,6 +321,74 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
 
     return (
         <div className="space-y-8 relative z-10 pb-20">
+
+            {/* Economia MINTHI */}
+            {subStats && (
+                <div className="space-y-4">
+                    <div>
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <CurrencyEur className="text-amber-500" size={22} /> Economia MINTHI
+                        </h2>
+                        <p className="text-xs text-zinc-500 uppercase tracking-widest mt-0.5">Abbonamenti, sconti e bonus</p>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <Card className="bg-zinc-900/50 border border-amber-500/10 rounded-2xl shadow-[0_10px_30px_-10px_rgba(245,158,11,0.15)] overflow-hidden">
+                            <CardContent className="p-5">
+                                <p className="text-[10px] text-amber-500/70 font-bold uppercase tracking-widest mb-1">Incassato</p>
+                                <p className="text-2xl font-black text-amber-400">€{subStats.totalEarned.toFixed(0)}</p>
+                                <p className="text-[10px] text-zinc-500 mt-1">Abbonamenti pagati</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-zinc-900/50 border border-emerald-500/10 rounded-2xl overflow-hidden">
+                            <CardContent className="p-5">
+                                <p className="text-[10px] text-emerald-500/70 font-bold uppercase tracking-widest mb-1">Abbonati attivi</p>
+                                <p className="text-2xl font-black text-emerald-400">{subStats.activeSubscriptions}</p>
+                                <p className="text-[10px] text-zinc-500 mt-1">Subscription active</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-zinc-900/50 border border-violet-500/10 rounded-2xl overflow-hidden">
+                            <CardContent className="p-5">
+                                <p className="text-[10px] text-violet-500/70 font-bold uppercase tracking-widest mb-1">Sconti attivi</p>
+                                <p className="text-2xl font-black text-violet-400">{subStats.activeDiscounts}</p>
+                                <p className="text-[10px] text-zinc-500 mt-1">Ristoranti con sconto</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-zinc-900/50 border border-blue-500/10 rounded-2xl overflow-hidden">
+                            <CardContent className="p-5">
+                                <p className="text-[10px] text-blue-500/70 font-bold uppercase tracking-widest mb-1">Mesi bonus</p>
+                                <p className="text-2xl font-black text-blue-400">{subStats.bonusMonthsGiven}</p>
+                                <p className="text-[10px] text-zinc-500 mt-1">Mesi gratuiti regalati</p>
+                            </CardContent>
+                        </Card>
+                    </div>
+                    {/* Revenue by month chart */}
+                    {subStats.revenueByMonth.length > 0 && (
+                        <Card className="bg-zinc-900/40 border border-white/5 rounded-2xl overflow-hidden">
+                            <CardHeader className="pb-0 pt-5 px-6">
+                                <CardTitle className="text-sm font-bold text-white flex items-center gap-2">
+                                    <Receipt className="text-amber-500" size={16} /> Ricavi Abbonamenti — Ultimi 12 mesi
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 pt-2">
+                                <ResponsiveContainer width="100%" height={160}>
+                                    <BarChart data={subStats.revenueByMonth} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                                        <XAxis dataKey="month" tick={{ fill: '#52525b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                                        <YAxis tick={{ fill: '#52525b', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `€${v}`} />
+                                        <Tooltip
+                                            contentStyle={{ background: '#18181b', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, color: '#fff', fontSize: 12 }}
+                                            formatter={(v: any) => [`€${Number(v).toFixed(2)}`, 'Ricavi']}
+                                            cursor={{ fill: 'rgba(245,158,11,0.05)' }}
+                                        />
+                                        <Bar dataKey="revenue" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
+            )}
+
             {/* Filter Bar */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-zinc-900/40 p-6 rounded-2xl border border-white/5 backdrop-blur-xl shadow-2xl">
                 <div>
