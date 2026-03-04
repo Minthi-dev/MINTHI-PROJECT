@@ -246,6 +246,39 @@ serve(async (req) => {
                 break;
             }
 
+            case "customer.subscription.updated": {
+                const subscription = event.data.object;
+                const customerId = subscription.customer;
+
+                const { data: restaurant } = await supabase
+                    .from("restaurants")
+                    .select("id")
+                    .eq("stripe_customer_id", customerId)
+                    .single();
+
+                if (restaurant) {
+                    const updates: Record<string, unknown> = {
+                        subscription_status: subscription.status,
+                    };
+
+                    if (subscription.cancel_at_period_end && subscription.cancel_at) {
+                        // Disdetta programmata: salva la data di fine
+                        updates.subscription_cancel_at = new Date(subscription.cancel_at * 1000).toISOString();
+                    } else if (!subscription.cancel_at_period_end) {
+                        // Disdetta annullata (ripristino): rimuovi la data
+                        updates.subscription_cancel_at = null;
+                    }
+
+                    await supabase
+                        .from("restaurants")
+                        .update(updates)
+                        .eq("id", restaurant.id);
+
+                    console.log(`Abbonamento aggiornato per ristorante ${restaurant.id}: status=${subscription.status}, cancel_at_period_end=${subscription.cancel_at_period_end}`);
+                }
+                break;
+            }
+
             case "account.updated": {
                 // Stripe Connect: aggiorna stato account del ristorante
                 const account = event.data.object;

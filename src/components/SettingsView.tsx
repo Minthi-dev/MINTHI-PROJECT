@@ -178,6 +178,7 @@ export function SettingsView({
         stripe_connect_account_id?: string | null
         stripe_connect_enabled?: boolean
         subscription_status?: string | null
+        subscription_cancel_at?: string | null
         vat_number?: string | null
         billing_name?: string | null
     } | null>(null)
@@ -205,7 +206,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, vat_number, billing_name')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -1044,8 +1045,18 @@ export function SettingsView({
                                             </div>
                                         )}
 
+                                        {/* Cancel at period end notice */}
+                                        {subscriptionInfo.subscription_cancel_at && subscriptionInfo.subscription_status !== 'canceled' && (
+                                            <div className="flex items-center gap-3 p-4 bg-amber-500/5 rounded-xl border border-amber-500/10 mb-5">
+                                                <WarningCircle size={20} className="text-amber-400 shrink-0" />
+                                                <p className="text-sm text-zinc-400">
+                                                    Abbonamento disdetto — attivo fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                </p>
+                                            </div>
+                                        )}
+
                                         {/* Next billing */}
-                                        {nextPaymentDate && subscriptionInfo.subscription_status !== 'canceled' && (
+                                        {nextPaymentDate && subscriptionInfo.subscription_status !== 'canceled' && !subscriptionInfo.subscription_cancel_at && (
                                             <div className="flex items-center gap-3 p-4 bg-black/20 rounded-xl mb-5">
                                                 <Clock size={20} className="text-zinc-500 shrink-0" />
                                                 <p className="text-sm text-zinc-400">
@@ -1081,49 +1092,6 @@ export function SettingsView({
                                     </div>
                                 </div>
 
-                                {/* Payment History */}
-                                {subscriptionPayments.length > 0 && (
-                                    <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                                        <div className="p-6 sm:p-8">
-                                            <h3 className="text-lg font-bold text-white mb-4">Storico Pagamenti</h3>
-                                            <div className="space-y-2">
-                                                {subscriptionPayments.slice(0, 8).map((payment) => (
-                                                    <div
-                                                        key={payment.id}
-                                                        className="flex items-center justify-between py-3 px-4 rounded-xl hover:bg-white/[0.02] transition-colors"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${payment.status === 'paid' ? 'bg-emerald-500'
-                                                                    : payment.status === 'failed' ? 'bg-red-500'
-                                                                        : 'bg-zinc-600'
-                                                                }`} />
-                                                            <span className="text-sm text-zinc-300">
-                                                                {payment.period_start
-                                                                    ? new Date(payment.period_start).toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
-                                                                    : payment.created_at
-                                                                        ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' })
-                                                                        : 'Abbonamento'}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-3">
-                                                            <span className={`text-sm font-semibold ${payment.status === 'paid' ? 'text-emerald-400'
-                                                                    : payment.status === 'failed' ? 'text-red-400'
-                                                                        : 'text-zinc-400'
-                                                                }`}>
-                                                                €{payment.amount.toFixed(2)}
-                                                            </span>
-                                                            <span className={`text-xs font-medium ${payment.status === 'paid' ? 'text-zinc-500'
-                                                                    : 'text-red-400/60'
-                                                                }`}>
-                                                                {payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : 'In attesa'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         ) : (
                             /* No subscription */
