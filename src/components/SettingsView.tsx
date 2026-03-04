@@ -255,56 +255,30 @@ export function SettingsView({
         }
     }
 
-    const [connectSetupNeeded, setConnectSetupNeeded] = useState(false)
+
     const [stripeConnectInstance, setStripeConnectInstance] = useState<any>(null)
     const [showOnboardingEmbed, setShowOnboardingEmbed] = useState(false)
+    const [showStripeGuide, setShowStripeGuide] = useState(false)
 
     const handleConnectOnboarding = async () => {
         setLoadingConnectOnboarding(true)
-        setConnectSetupNeeded(false)
         try {
-            // Step 1: Crea account Express se non esiste
-            await DatabaseService.createStripeConnectOnboarding(restaurantId)
-
-            // Step 2: Inizializza embedded onboarding
-            const publishableKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY
-            if (!publishableKey) {
-                throw new Error('Chiave pubblica Stripe non configurata')
-            }
-
-            const connectInstance = loadConnectAndInitialize({
-                publishableKey,
-                fetchClientSecret: async () => {
-                    const { clientSecret } = await DatabaseService.createStripeAccountSession(restaurantId)
-                    return clientSecret
-                },
-                appearance: {
-                    overlays: 'dialog',
-                    variables: {
-                        colorPrimary: '#8b5cf6',
-                    },
-                },
-            })
-
-            setStripeConnectInstance(connectInstance)
-            setShowOnboardingEmbed(true)
-        } catch (e: any) {
-            const msg = e.message || ''
-            if (msg.includes("signed up for Connect") || msg.includes("new accounts")) {
-                setConnectSetupNeeded(true)
+            const result = await DatabaseService.createStripeConnectOnboarding(restaurantId, window.location.href)
+            if (result.url) {
+                window.open(result.url, '_blank')
+                toast.success(subscriptionInfo?.stripe_connect_enabled
+                    ? 'Dashboard Stripe aperta in una nuova scheda!'
+                    : 'Pagina di configurazione Stripe aperta in una nuova scheda!')
             } else {
-                toast.error('Errore: ' + msg)
+                toast.error('Impossibile generare il link Stripe')
             }
+        } catch (e: any) {
+            const msg = e.message || 'Errore sconosciuto'
+            console.error('Stripe Connect error:', msg)
+            toast.error('Errore collegamento Stripe: ' + msg)
         } finally {
             setLoadingConnectOnboarding(false)
         }
-    }
-
-    const handleOnboardingExit = () => {
-        setShowOnboardingEmbed(false)
-        setStripeConnectInstance(null)
-        loadPaymentData()
-        toast.success('Onboarding completato! Verifica in corso...')
     }
 
     const handleSavePaymentInfo = async () => {
@@ -993,19 +967,22 @@ export function SettingsView({
 
                                 {stripePaymentsEnabled && (
                                     <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
-                                        <div className="flex items-start gap-3 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                                            <CheckCircle weight="fill" size={20} className="text-emerald-500 mt-0.5 shrink-0" />
-                                            <p className="text-sm text-zinc-400 leading-relaxed">
-                                                Il pulsante <span className="text-white font-medium">"Paga con Carta"</span> apparirà nel menu. I clienti possono pagare tutto, alla romana, o importo personalizzato. Il tavolo si chiude automaticamente dopo il pagamento.
-                                            </p>
+                                        <div className="flex items-center gap-3 p-4 bg-violet-500/5 rounded-xl border border-violet-500/10">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => setShowStripeGuide(true)}
+                                                className="w-full h-12 text-base rounded-xl gap-2 border-violet-500/30 text-violet-300 hover:bg-violet-500/10 hover:text-white"
+                                            >
+                                                📖 Come funziona il pagamento con Stripe?
+                                            </Button>
                                         </div>
 
                                         {/* Connect Status */}
                                         <div className={`flex items-center justify-between p-4 rounded-xl border ${subscriptionInfo?.stripe_connect_enabled
-                                                ? 'bg-emerald-500/5 border-emerald-500/10'
-                                                : subscriptionInfo?.stripe_connect_account_id
-                                                    ? 'bg-amber-500/5 border-amber-500/10'
-                                                    : 'bg-zinc-800/50 border-white/5'
+                                            ? 'bg-emerald-500/5 border-emerald-500/10'
+                                            : subscriptionInfo?.stripe_connect_account_id
+                                                ? 'bg-amber-500/5 border-amber-500/10'
+                                                : 'bg-zinc-800/50 border-white/5'
                                             }`}>
                                             <div className="flex items-center gap-3">
                                                 {subscriptionInfo?.stripe_connect_enabled ? (
@@ -1030,67 +1007,171 @@ export function SettingsView({
                                                     </p>
                                                 </div>
                                             </div>
-                                            {!showOnboardingEmbed && (
+                                            <div className="flex gap-2 flex-wrap">
                                                 <Button
                                                     onClick={handleConnectOnboarding}
                                                     disabled={loadingConnectOnboarding}
                                                     variant={subscriptionInfo?.stripe_connect_enabled ? 'outline' : 'default'}
-                                                    className={`h-11 px-5 text-sm rounded-xl gap-2 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-[0_0_15px_-3px_rgba(139,92,246,0.4)]' : 'border-white/10 text-zinc-300'}`}
+                                                    className={`h-11 px-5 text-sm rounded-xl gap-2 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-[0_0_15px_-3px_rgba(139,92,246,0.4)]' : 'border-violet-500/30 text-violet-300 hover:bg-violet-500/10'}`}
                                                 >
                                                     {loadingConnectOnboarding ? (
                                                         <ArrowClockwise className="animate-spin" size={18} />
                                                     ) : (
                                                         <Gear size={18} />
                                                     )}
-                                                    {subscriptionInfo?.stripe_connect_enabled ? 'Gestisci' : subscriptionInfo?.stripe_connect_account_id ? 'Completa Configurazione' : 'Collega Account Stripe'}
+                                                    {subscriptionInfo?.stripe_connect_enabled ? 'Apri Dashboard Stripe ↗' : subscriptionInfo?.stripe_connect_account_id ? 'Completa Configurazione ↗' : 'Collega Account Stripe ↗'}
                                                 </Button>
-                                            )}
+                                            </div>
                                         </div>
 
-                                        {/* Embedded Stripe Connect Onboarding */}
-                                        {showOnboardingEmbed && stripeConnectInstance && (
-                                            <div className="mt-4 space-y-3">
-                                                <div className="flex items-center justify-between">
-                                                    <p className="text-sm font-medium text-zinc-300">Configurazione Account Stripe</p>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="text-zinc-500 hover:text-zinc-300"
-                                                        onClick={handleOnboardingExit}
-                                                    >
-                                                        Chiudi
-                                                    </Button>
+                                        {/* Payout info when connected */}
+                                        {subscriptionInfo?.stripe_connect_enabled && (
+                                            <div className="mt-3 space-y-3">
+                                                <div className="p-4 rounded-xl bg-violet-500/5 border border-violet-500/10">
+                                                    <p className="text-sm text-zinc-400 leading-relaxed">
+                                                        💰 I clienti pagano con carta → i soldi arrivano sul <span className="text-white font-medium">tuo conto bancario</span> automaticamente. Apri la <span className="text-violet-400">Dashboard Stripe</span> per gestire pagamenti, fatture e commissioni.
+                                                    </p>
                                                 </div>
-                                                <div className="rounded-xl overflow-hidden border border-white/10 bg-white min-h-[400px]">
-                                                    <ConnectComponentsProvider connectInstance={stripeConnectInstance}>
-                                                        <ConnectAccountOnboarding
-                                                            onExit={handleOnboardingExit}
-                                                        />
-                                                    </ConnectComponentsProvider>
+
+                                                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
+                                                    <p className="text-sm text-zinc-500 leading-relaxed">
+                                                        ⚠️ Il pagamento digitale <span className="text-zinc-300">non sostituisce</span> lo scontrino fiscale. Consulta la <button onClick={() => setShowStripeGuide(true)} className="text-amber-400 underline underline-offset-2 hover:text-amber-300">Guida Pagamenti</button> per tutti i dettagli fiscali.
+                                                    </p>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Stripe Connect setup needed alert */}
-                                        {connectSetupNeeded && (
-                                            <div className="mt-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-                                                <p className="text-sm font-medium text-amber-400">
-                                                    ⚠️ Per ricevere pagamenti, devi prima attivare Stripe Connect sul tuo account Stripe.
-                                                </p>
-                                                <p className="text-xs text-zinc-400">
-                                                    Vai sulla dashboard di Stripe, abilita Connect, e poi riprova a collegare l'account.
-                                                </p>
-                                                <a
-                                                    href="https://dashboard.stripe.com/connect"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-2 mt-1 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm font-medium hover:bg-amber-500/30 transition-colors"
-                                                >
-                                                    <ArrowSquareOut size={16} />
-                                                    Apri Stripe Connect Dashboard
-                                                </a>
-                                            </div>
-                                        )}
+                                        {/* Stripe Payment Guide Dialog */}
+                                        <Dialog open={showStripeGuide} onOpenChange={setShowStripeGuide}>
+                                            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto bg-zinc-950 border-zinc-800">
+                                                <DialogHeader>
+                                                    <DialogTitle className="text-xl font-bold text-white flex items-center gap-2">
+                                                        📖 Guida Completa — Pagamenti Stripe
+                                                    </DialogTitle>
+                                                </DialogHeader>
+                                                <div className="space-y-5 pt-2">
+
+                                                    {/* Step 1 */}
+                                                    <div className="space-y-2">
+                                                        <h3 className="text-violet-400 font-bold flex items-center gap-2">
+                                                            <span className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-bold">1</span>
+                                                            Collegamento Account Stripe
+                                                        </h3>
+                                                        <div className="pl-8 space-y-1.5 text-zinc-400 text-[15px] leading-relaxed">
+                                                            <p>• Clicca <span className="text-white font-medium">"Collega Account Stripe ↗"</span> nelle impostazioni pagamenti</p>
+                                                            <p>• Si apre una pagina Stripe in una nuova scheda</p>
+                                                            <p>• Compila: dati aziendali, partita IVA, IBAN del conto corrente, documento d'identità</p>
+                                                            <p>• Stripe verifica i dati (può richiedere qualche ora)</p>
+                                                            <p>• Quando tutto è verificato, lo stato diventa <span className="text-emerald-400 font-medium">"Account collegato"</span></p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-zinc-800" />
+
+                                                    {/* Step 2 */}
+                                                    <div className="space-y-2">
+                                                        <h3 className="text-violet-400 font-bold flex items-center gap-2">
+                                                            <span className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-bold">2</span>
+                                                            Come paga il cliente
+                                                        </h3>
+                                                        <div className="pl-8 space-y-1.5 text-zinc-400 text-[15px] leading-relaxed">
+                                                            <p>• Il cliente apre il menù dal QR Code del tavolo</p>
+                                                            <p>• Ordina i piatti e quando è pronto, clicca <span className="text-white font-medium">"Paga Online"</span> nel tab "I miei ordini"</p>
+                                                            <p>• Sceglie la modalità: <span className="text-white">totale</span>, <span className="text-white">diviso alla romana</span> o <span className="text-white">per piatto</span></p>
+                                                            <p>• Inserisce i dati della carta nella pagina sicura di Stripe</p>
+                                                            <p>• Conferma il pagamento → vede la schermata <span className="text-emerald-400">"Pagamento completato!"</span></p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-zinc-800" />
+
+                                                    {/* Step 3 */}
+                                                    <div className="space-y-2">
+                                                        <h3 className="text-violet-400 font-bold flex items-center gap-2">
+                                                            <span className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-bold">3</span>
+                                                            Notifica al ristorante
+                                                        </h3>
+                                                        <div className="pl-8 space-y-1.5 text-zinc-400 text-[15px] leading-relaxed">
+                                                            <p>• In <span className="text-white font-medium">Gestione Tavoli</span> il tavolo diventa <span className="text-purple-400 font-medium">viola pulsante</span> con badge "💳 Pagato Online"</p>
+                                                            <p>• Appare un toast: <span className="text-white">"💳 Tavolo X ha pagato online! €XX.XX"</span></p>
+                                                            <p>• Il ristoratore <span className="text-white font-medium">emette lo scontrino fiscale</span> dal proprio registratore di cassa</p>
+                                                            <p>• Poi clicca <span className="text-emerald-400 font-medium">"Conferma Scontrino"</span> per registrare l'avvenuta emissione</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-zinc-800" />
+
+                                                    {/* Step 4 */}
+                                                    <div className="space-y-2">
+                                                        <h3 className="text-violet-400 font-bold flex items-center gap-2">
+                                                            <span className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-bold">4</span>
+                                                            Storico pagamenti
+                                                        </h3>
+                                                        <div className="pl-8 space-y-1.5 text-zinc-400 text-[15px] leading-relaxed">
+                                                            <p>• In <span className="text-white font-medium">Gestione Tavoli → Storico</span> trovi tutti i tavoli passati</p>
+                                                            <p>• Filtri disponibili: <span className="text-amber-400">🔴 Scontrino da fare</span> / <span className="text-emerald-400">✅ Scontrino fatto</span></p>
+                                                            <p>• I tavoli pagati con Stripe senza scontrino confermato sono evidenziati in <span className="text-amber-400">ambra</span></p>
+                                                            <p>• Puoi confermare lo scontrino anche dallo storico</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-zinc-800" />
+
+                                                    {/* Step 5 */}
+                                                    <div className="space-y-2">
+                                                        <h3 className="text-violet-400 font-bold flex items-center gap-2">
+                                                            <span className="w-6 h-6 rounded-full bg-violet-500/20 flex items-center justify-center text-xs font-bold">5</span>
+                                                            Dashboard Stripe
+                                                        </h3>
+                                                        <div className="pl-8 space-y-1.5 text-zinc-400 text-[16px] leading-relaxed">
+                                                            <p>• Clicca <span className="text-white font-medium">"Apri Dashboard Stripe ↗"</span> per accedere al tuo pannello</p>
+                                                            <p>• Lì trovi: <span className="text-white">saldo</span>, <span className="text-white">elenco transazioni</span>, <span className="text-white">fatture delle commissioni</span>, <span className="text-white">payout (bonifici ricevuti)</span></p>
+                                                            <p>• Puoi configurare la frequenza dei bonifici dalla Dashboard Stripe</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-zinc-800" />
+
+                                                    {/* Step 6 */}
+                                                    <div className="space-y-2">
+                                                        <h3 className="text-amber-400 font-bold flex items-center gap-2">
+                                                            <span className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-xs font-bold">6</span>
+                                                            Obbligo fiscale — Agenzia delle Entrate
+                                                        </h3>
+                                                        <div className="pl-8 space-y-1.5 text-zinc-400 text-[15px] leading-relaxed">
+                                                            <p className="text-amber-400/80 font-medium">⚠️ Il pagamento Stripe NON sostituisce lo scontrino fiscale!</p>
+                                                            <p>Il ristoratore è obbligato a emettere regolare <span className="text-white font-medium">scontrino fiscale</span> o <span className="text-white font-medium">fattura</span> per ogni transazione, anche se il cliente ha pagato con carta online.</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="border-t border-zinc-800" />
+
+                                                    {/* Step 7 */}
+                                                    <div className="space-y-2">
+                                                        <h3 className="text-amber-400 font-bold flex items-center gap-2">
+                                                            <span className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-xs font-bold">7</span>
+                                                            Collegamento Stripe → Registratore Telematico (AdE)
+                                                        </h3>
+                                                        <div className="pl-8 space-y-1.5 text-zinc-400 text-[15px] leading-relaxed">
+                                                            <p>Dal <span className="text-white font-medium">1° gennaio 2026</span> è obbligatorio collegare ogni strumento di pagamento elettronico al tuo Registratore Telematico (RT) sul portale dell'Agenzia delle Entrate.</p>
+                                                            <p className="text-zinc-300 font-semibold mt-2">Come fare:</p>
+                                                            <p>1. Accedi al portale <span className="text-white">Fatture e Corrispettivi</span> dell'AdE con <span className="text-white">SPID</span> o <span className="text-white">CIE</span></p>
+                                                            <p>2. Vai in <span className="text-white">Registratori Telematici → Gestione strumenti di pagamento elettronico</span></p>
+                                                            <p>3. Trova la <span className="text-white">matricola del tuo RT</span> (è scritta sull'adesivo del registratore di cassa o nel libretto)</p>
+                                                            <p>4. Abbina la matricola RT allo strumento di pagamento Stripe (Stripe ha già comunicato i suoi dati all'AdE come fornitore di servizi di pagamento)</p>
+                                                            <p>5. <span className="text-white">Conferma l'associazione</span> — fatto!</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-4 p-4 rounded-xl bg-violet-500/5 border border-violet-500/15">
+                                                        <p className="text-sm text-zinc-500 leading-relaxed">
+                                                            💡 <span className="text-violet-400 font-medium">Hai dubbi?</span> Contatta il tuo commercialista per gli aspetti fiscali specifici della tua attività. MINTHI gestisce la parte tecnologica, la responsabilità fiscale resta del ristoratore.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </DialogContent>
+                                        </Dialog>
+
                                     </div>
                                 )}
                             </div>
@@ -1101,21 +1182,21 @@ export function SettingsView({
                             <div className="space-y-6">
                                 {/* Active Subscription Card */}
                                 <div className={`rounded-2xl border overflow-hidden ${subscriptionInfo.subscription_status === 'past_due'
-                                        ? 'bg-zinc-900/50 border-red-500/20'
-                                        : subscriptionInfo.subscription_status === 'canceled'
-                                            ? 'bg-zinc-900/50 border-white/5'
-                                            : 'bg-zinc-900/50 border-emerald-500/10'
+                                    ? 'bg-zinc-900/50 border-red-500/20'
+                                    : subscriptionInfo.subscription_status === 'canceled'
+                                        ? 'bg-zinc-900/50 border-white/5'
+                                        : 'bg-zinc-900/50 border-emerald-500/10'
                                     }`}>
                                     <div className="p-6 sm:p-8">
                                         <div className="flex items-center justify-between mb-6">
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-3 rounded-xl flex items-center justify-center ${subscriptionInfo.subscription_status === 'past_due' ? 'bg-red-500/10'
-                                                        : subscriptionInfo.subscription_status === 'canceled' ? 'bg-zinc-800'
-                                                            : 'bg-emerald-500/10'
+                                                    : subscriptionInfo.subscription_status === 'canceled' ? 'bg-zinc-800'
+                                                        : 'bg-emerald-500/10'
                                                     }`}>
                                                     <CreditCard className={`${subscriptionInfo.subscription_status === 'past_due' ? 'text-red-400'
-                                                            : subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-400'
-                                                                : 'text-emerald-400'
+                                                        : subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-400'
+                                                            : 'text-emerald-400'
                                                         }`} weight="duotone" size={28} />
                                                 </div>
                                                 <div>
@@ -1125,10 +1206,10 @@ export function SettingsView({
                                             </div>
                                             {/* Status */}
                                             <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${subscriptionInfo.subscription_status === 'active'
-                                                    ? 'bg-emerald-500/10 text-emerald-400'
-                                                    : subscriptionInfo.subscription_status === 'past_due'
-                                                        ? 'bg-red-500/10 text-red-400'
-                                                        : 'bg-zinc-800 text-zinc-400'
+                                                ? 'bg-emerald-500/10 text-emerald-400'
+                                                : subscriptionInfo.subscription_status === 'past_due'
+                                                    ? 'bg-red-500/10 text-red-400'
+                                                    : 'bg-zinc-800 text-zinc-400'
                                                 }`}>
                                                 {subscriptionInfo.subscription_status === 'active' && <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
                                                 {subscriptionInfo.subscription_status === 'past_due' && <><WarningCircle weight="fill" size={16} />Pagamento fallito</>}
@@ -1151,9 +1232,28 @@ export function SettingsView({
                                         {subscriptionInfo.subscription_cancel_at && subscriptionInfo.subscription_status !== 'canceled' && (
                                             <div className="flex items-center gap-3 p-4 bg-amber-500/5 rounded-xl border border-amber-500/10 mb-5">
                                                 <WarningCircle size={20} className="text-amber-400 shrink-0" />
-                                                <p className="text-sm text-zinc-400">
-                                                    Abbonamento disdetto — attivo fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                                </p>
+                                                <div>
+                                                    <p className="text-sm text-white font-medium">Abbonamento disdetto</p>
+                                                    <p className="text-sm text-zinc-400 mt-0.5">
+                                                        Potrai continuare ad usufruire di tutti i servizi fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Fully canceled notice */}
+                                        {subscriptionInfo.subscription_status === 'canceled' && (
+                                            <div className="flex items-center gap-3 p-4 bg-red-500/5 rounded-xl border border-red-500/10 mb-5">
+                                                <WarningCircle size={20} className="text-red-400 shrink-0" />
+                                                <div>
+                                                    <p className="text-sm text-white font-medium">Abbonamento annullato</p>
+                                                    <p className="text-sm text-zinc-400 mt-0.5">
+                                                        {subscriptionInfo.subscription_cancel_at
+                                                            ? <>I servizi sono rimasti attivi fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>. Riattiva l'abbonamento per continuare.</>
+                                                            : <>L'abbonamento è stato annullato. Riattiva per continuare ad usufruire dei servizi.</>
+                                                        }
+                                                    </p>
+                                                </div>
                                             </div>
                                         )}
 
@@ -1177,8 +1277,8 @@ export function SettingsView({
                                             </div>
                                         )}
 
-                                        {/* Next billing */}
-                                        {nextPaymentDate && subscriptionInfo.subscription_status !== 'canceled' && !subscriptionInfo.subscription_cancel_at && (
+                                        {/* Next billing — only when truly active and not cancelling */}
+                                        {nextPaymentDate && subscriptionInfo.subscription_status === 'active' && !subscriptionInfo.subscription_cancel_at && (
                                             <div className="flex items-center gap-3 p-4 bg-black/20 rounded-xl mb-5">
                                                 <Clock size={20} className="text-zinc-500 shrink-0" />
                                                 <p className="text-sm text-zinc-400">

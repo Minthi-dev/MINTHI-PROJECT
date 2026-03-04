@@ -1034,9 +1034,9 @@ export const DatabaseService = {
     },
 
     // Stripe Connect - Crea account Express (senza redirect, per embedded onboarding)
-    async createStripeConnectOnboarding(restaurantId: string) {
+    async createStripeConnectOnboarding(restaurantId: string, returnUrl?: string) {
         const { data, error } = await supabase.functions.invoke('stripe-connect-onboarding', {
-            body: { restaurantId }
+            body: { restaurantId, returnUrl }
         });
         if (error) {
             let errorMsg = 'Errore connessione Stripe';
@@ -1052,7 +1052,7 @@ export const DatabaseService = {
             } catch { /* ignore parse errors */ }
             throw new Error(errorMsg);
         }
-        return data as { accountId: string };
+        return data as { accountId: string; url: string };
     },
 
     // Stripe Connect - Crea Account Session per embedded components
@@ -1084,6 +1084,15 @@ export const DatabaseService = {
             .update(info)
             .eq('id', restaurantId)
         if (error) throw error
+    },
+
+    // Stripe Connect - Open Express Dashboard for payout management
+    async openExpressDashboard(restaurantId: string) {
+        const { data, error } = await supabase.functions.invoke('stripe-express-dashboard', {
+            body: { restaurantId }
+        });
+        if (error) throw new Error(data?.error || error.message || 'Errore apertura dashboard');
+        return data as { url: string };
     },
 
     // Admin - Subscription payments

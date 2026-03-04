@@ -8,10 +8,9 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     httpClient: Stripe.createFetchHttpClient(),
 });
 
-const supabase = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-);
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 serve(async (req) => {
     if (req.method === "OPTIONS") {
@@ -23,50 +22,38 @@ serve(async (req) => {
 
         if (!restaurantId) {
             return new Response(
-                JSON.stringify({ error: "restaurantId richiesto" }),
+                JSON.stringify({ error: "restaurantId mancante" }),
                 { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
 
-        // Cerca l'account Connect del ristorante
+        // Get restaurant's Stripe Connect account ID
         const { data: restaurant, error: dbError } = await supabase
             .from("restaurants")
             .select("stripe_connect_account_id")
             .eq("id", restaurantId)
             .single();
 
-        if (dbError || !restaurant) {
+        if (dbError || !restaurant?.stripe_connect_account_id) {
             return new Response(
-                JSON.stringify({ error: "Ristorante non trovato" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                JSON.stringify({ error: "Account Stripe Connect non trovato" }),
+                { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
         }
 
-        if (!restaurant.stripe_connect_account_id) {
-            return new Response(
-                JSON.stringify({ error: "Nessun account Stripe Connect collegato. Avvia prima l'onboarding." }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-        }
-
-        // Crea Account Session per gli embedded components
-        const accountSession = await stripe.accountSessions.create({
-            account: restaurant.stripe_connect_account_id,
-            components: {
-                account_onboarding: {
-                    enabled: true,
-                },
-            },
-        });
+        // Create a login link for the Express Dashboard
+        const loginLink = await stripe.accounts.createLoginLink(
+            restaurant.stripe_connect_account_id
+        );
 
         return new Response(
-            JSON.stringify({ clientSecret: accountSession.client_secret }),
+            JSON.stringify({ url: loginLink.url }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
         );
     } catch (error: any) {
-        console.error("Errore Account Session:", error.message, error.stack);
+        console.error("Error creating Express login link:", error);
         return new Response(
-            JSON.stringify({ error: error.message || "Errore interno" }),
+            JSON.stringify({ error: error.message || "Errore creazione link dashboard" }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
         );
     }

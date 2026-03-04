@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@12.9.0?target=deno";
+import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const stripe = new Stripe(stripeKey, {
-    apiVersion: "2022-11-15",
+    apiVersion: "2024-04-10" as any,
     httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -28,7 +28,7 @@ serve(async (req) => {
             });
         }
 
-        const { restaurantId } = await req.json();
+        const { restaurantId, returnUrl } = await req.json();
 
         if (!restaurantId) {
             return new Response(JSON.stringify({ error: "restaurantId richiesto" }), {
@@ -56,9 +56,26 @@ serve(async (req) => {
         // Se l'account esiste, verifica che sia valido
         if (accountId) {
             try {
-                await stripe.accounts.retrieve(accountId);
-                // Account valido, ritorna l'ID
-                return new Response(JSON.stringify({ accountId }), {
+                const account = await stripe.accounts.retrieve(accountId);
+
+                // If account is fully set up, return login link to Express Dashboard
+                if (account.charges_enabled && account.details_submitted) {
+                    const loginLink = await stripe.accounts.createLoginLink(accountId);
+                    return new Response(JSON.stringify({ accountId, url: loginLink.url }), {
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
+                        status: 200,
+                    });
+                }
+
+                // Account exists but not fully set up — create Account Link to complete
+                const accountLink = await stripe.accountLinks.create({
+                    account: accountId,
+                    refresh_url: returnUrl || req.headers.get("origin") || "https://localhost",
+                    return_url: returnUrl || req.headers.get("origin") || "https://localhost",
+                    type: "account_onboarding",
+                });
+
+                return new Response(JSON.stringify({ accountId, url: accountLink.url }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
                     status: 200,
                 });
@@ -84,7 +101,11 @@ serve(async (req) => {
             accountId = account.id;
         } catch (stripeErr: any) {
             console.error("Stripe accounts.create error:", stripeErr.message, stripeErr.type);
-            return new Response(JSON.stringify({ error: `Errore creazione account Stripe: ${stripeErr.message}` }), {
+            let userMsg = stripeErr.message || "Errore sconosciuto";
+            if (userMsg.includes("signed up for Connect") || userMsg.includes("new accounts")) {
+                userMsg = "Stripe Connect non è ancora abilitato sul tuo account piattaforma. Contatta l'amministratore MINTHI.";
+            }
+            return new Response(JSON.stringify({ error: userMsg }), {
                 status: 500,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
@@ -100,7 +121,15 @@ serve(async (req) => {
             console.error("DB update error:", updateErr.message);
         }
 
-        return new Response(JSON.stringify({ accountId }), {
+        // Crea Account Link per l'onboarding
+        const accountLink = await stripe.accountLinks.create({
+            account: accountId!,
+            refresh_url: returnUrl || req.headers.get("origin") || "https://localhost",
+            return_url: returnUrl || req.headers.get("origin") || "https://localhost",
+            type: "account_onboarding",
+        });
+
+        return new Response(JSON.stringify({ accountId, url: accountLink.url }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 200,
         });

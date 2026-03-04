@@ -594,42 +594,59 @@ const CustomerMenuBase = () => {
 
     if (sessionId && restaurantId) {
       const checkSession = async () => {
-        // Fetch session details to get the correct PIN
-        const session = await DatabaseService.getSessionById(sessionId)
+        try {
+          // Fetch session details to get the correct PIN
+          const session = await DatabaseService.getSessionById(sessionId)
 
-        if (session) {
-          setActiveSession(session)
+          if (session) {
+            setActiveSession(session)
 
-          // Verify session status - if CLOSED, force logout/re-auth
-          if (session.status === 'CLOSED') {
-            setIsAuthenticated(false)
-            setAuthChecking(false)
-            return
-          }
-
-          if (sessionPin && sessionPin === session.session_pin) {
-            // Context has a valid PIN that matches DB - auto authenticate
-            setIsAuthenticated(true)
-          } else {
-            // Only set false if we haven't already passed auth manually
-            if (!isAuthenticated && !isViewOnly) {
+            // Verify session status - if CLOSED, force logout/re-auth
+            if (session.status === 'CLOSED') {
               setIsAuthenticated(false)
+              setAuthChecking(false)
+              return
             }
+
+            if (sessionPin && sessionPin === session.session_pin) {
+              // Context has a valid PIN that matches DB - auto authenticate
+              setIsAuthenticated(true)
+            } else {
+              // Only set false if we haven't already passed auth manually
+              if (!isAuthenticated && !isViewOnly) {
+                setIsAuthenticated(false)
+              }
+            }
+          } else {
+            // Session invalid or closed/deleted
+            if (!isViewOnly) setIsAuthenticated(false)
           }
-        } else {
-          // Session invalid or closed/deleted
+        } catch (err) {
+          console.error('Auth check error:', err)
           if (!isViewOnly) setIsAuthenticated(false)
+        } finally {
+          setAuthChecking(false)
         }
-        setAuthChecking(false)
       }
       checkSession()
-    } else if (!sessionLoading && !sessionId && tableId) {
-      // If loading finished but no session (and we have tableId), stop checking
-      // This handles invalid table/no session cases where we show specific errors
+    } else if (!sessionLoading) {
+      // Session loading finished — no valid session found, stop checking
       setAuthChecking(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, restaurantId, sessionLoading, tableId, isViewOnly])
+
+  // Safety timeout: ensure authChecking never stays stuck
+  useEffect(() => {
+    if (!authChecking) return
+    const timer = setTimeout(() => {
+      if (authChecking) {
+        console.warn('Forcing authChecking to false after timeout')
+        setAuthChecking(false)
+      }
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [authChecking])
 
   // Real-time subscription to detect when session is closed (table paid/emptied)
   // This ensures authenticated customers are immediately redirected to PIN screen
@@ -1036,6 +1053,17 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [showPaymentOptions, setShowPaymentOptions] = useState(false)
   const [stripePaymentSplitCount, setStripePaymentSplitCount] = useState(1)
   const [stripePaymentSuccess, setStripePaymentSuccess] = useState(false)
+
+  // Bottom nav tab
+  const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>('menu')
+  // Payment sub-step: summary -> options -> selectItems
+  const [paymentStep, setPaymentStep] = useState<'summary' | 'options' | 'selectItems'>('summary')
+  // Selected items for 'diviso per piatti' payment
+  const [selectedPaymentItems, setSelectedPaymentItems] = useState<Set<string>>(new Set())
+  // Romana count (number of people to split)
+  const [romanaCount, setRomanaCount] = useState(2)
+  // Show coperto/AYCE prompt
+  const [showCopertoPrompt, setShowCopertoPrompt] = useState(false)
 
   // Cleanup all pending timers on unmount
   React.useEffect(() => {
@@ -1633,6 +1661,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     const params = new URLSearchParams(window.location.search)
     if (params.get('payment') === 'success') {
       setStripePaymentSuccess(true)
+      setCustomerTab('payment') // Auto-switch to payment tab to show success
       toast.success('Pagamento completato con successo!', { duration: 5000 })
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname)
@@ -1642,14 +1671,57 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     }
   }, [])
 
-  // Handle Stripe payment
-  const handleStripePayment = async (mode: 'full' | 'split', splitCount?: number) => {
+  // Helper: get all payable items (not PAID, not CANCELLED)
+  const payableItems = useMemo(() => {
+    const items: { id: string, name: string, price: number, quantity: number, orderId: string }[] = []
+    previousOrders.forEach(order => {
+      order.items?.forEach((item: any) => {
+        if (item.status === 'PAID' || item.status === 'CANCELLED') return
+        const dishName = item.dish?.name || dishes.find(d => d.id === item.dish_id)?.name || 'Piatto'
+        items.push({
+          id: `${order.id}_${item.dish_id}_${item.id || items.length}`,
+          name: dishName,
+          price: item.dish?.price || 0,
+          quantity: item.quantity || 1,
+          orderId: order.id,
+        })
+      })
+    })
+    return items
+  }, [previousOrders, dishes])
+
+  // Helper: get coperto info
+  const copertoInfo = useMemo(() => {
+    const isCopertoEnabled = activeSession?.coperto_enabled ?? true
+    if (!isCopertoEnabled || !fullRestaurant) return { enabled: false, price: 0, count: 0 }
+    const currentCoperto = getCurrentCopertoPrice(
+      fullRestaurant,
+      fullRestaurant.lunch_time_start || '12:00',
+      fullRestaurant.dinner_time_start || '19:00'
+    ).price
+    return { enabled: currentCoperto > 0, price: currentCoperto, count: activeSession?.customer_count || 1 }
+  }, [activeSession, fullRestaurant])
+
+  // Helper: check if AYCE is enabled for the session
+  const ayceInfo = useMemo(() => {
+    if (!activeSession?.ayce_enabled || !fullRestaurant) return { enabled: false, price: 0 }
+    return { enabled: true, price: (fullRestaurant as any).ayce_price_per_person || 0 }
+  }, [activeSession, fullRestaurant])
+
+  // Total for all unpaid items
+  const unpaidTotal = useMemo(() => {
+    let total = payableItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    if (copertoInfo.enabled) total += copertoInfo.price * copertoInfo.count
+    if (ayceInfo.enabled && ayceInfo.price > 0) total += ayceInfo.price * (activeSession?.customer_count || 1)
+    return total
+  }, [payableItems, copertoInfo, ayceInfo, activeSession])
+
+  // Handle Stripe payment — supports full, split (alla romana), and items (diviso per piatti)
+  const handleStripePayment = async (mode: 'full' | 'split' | 'items', splitCount?: number) => {
     if (!fullRestaurant || !activeSession || previousOrders.length === 0) return
     setIsProcessingStripePayment(true)
 
     try {
-      // Calculate total with coperto
-      let total = previousOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
       const orderIds = previousOrders.filter(o => o.status !== 'PAID' && o.status !== 'CANCELLED').map(o => o.id)
 
       if (orderIds.length === 0) {
@@ -1657,46 +1729,40 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         return
       }
 
-      // Build line items from orders
       const items: { name: string, price: number, quantity: number }[] = []
+      let splitLabel = 'Pagamento completo'
 
       if (mode === 'split' && splitCount && splitCount > 1) {
-        // Alla romana - divide total by split count
-        const perPerson = Math.ceil((total / splitCount) * 100) / 100
-        items.push({
-          name: `Quota alla romana (1/${splitCount})`,
-          price: perPerson,
-          quantity: 1
+        // Alla romana: divide total by split count
+        const perPerson = Math.ceil((unpaidTotal / splitCount) * 100) / 100
+        items.push({ name: `Quota alla romana (1/${splitCount})`, price: perPerson, quantity: 1 })
+        splitLabel = `Alla romana (1/${splitCount})`
+      } else if (mode === 'items') {
+        // Diviso per piatti: only selected items
+        payableItems.filter(pi => selectedPaymentItems.has(pi.id)).forEach(pi => {
+          items.push({ name: pi.name, price: pi.price, quantity: pi.quantity })
         })
+        // Check if coperto items were selected
+        if (selectedPaymentItems.has('coperto') && copertoInfo.enabled) {
+          // Count how many coperti are selected (stored as coperto_1, coperto_2, etc.)
+          const selectedCopertiCount = Array.from(selectedPaymentItems).filter(id => id.startsWith('coperto')).length
+          items.push({ name: 'Coperto', price: copertoInfo.price, quantity: selectedCopertiCount })
+        }
+        if (selectedPaymentItems.has('ayce') && ayceInfo.enabled && ayceInfo.price > 0) {
+          const selectedAyceCount = Array.from(selectedPaymentItems).filter(id => id.startsWith('ayce')).length
+          items.push({ name: 'All You Can Eat', price: ayceInfo.price, quantity: selectedAyceCount })
+        }
+        splitLabel = 'Pagamento parziale (per piatti)'
       } else {
-        // Full payment - list all items
-        previousOrders.forEach(order => {
-          order.items?.forEach((item: any) => {
-            if (item.status === 'PAID' || item.status === 'CANCELLED') return
-            const dishName = item.dish?.name || dishes.find(d => d.id === item.dish_id)?.name || 'Piatto'
-            items.push({
-              name: dishName,
-              price: item.dish?.price || 0,
-              quantity: item.quantity || 1
-            })
-          })
+        // Full payment: all items + coperto + AYCE
+        payableItems.forEach(pi => {
+          items.push({ name: pi.name, price: pi.price, quantity: pi.quantity })
         })
-
-        // Add coperto if applicable
-        const isCopertoEnabled = activeSession?.coperto_enabled ?? true
-        if (isCopertoEnabled && fullRestaurant) {
-          const currentCoperto = getCurrentCopertoPrice(
-            fullRestaurant,
-            fullRestaurant.lunch_time_start || '12:00',
-            fullRestaurant.dinner_time_start || '19:00'
-          ).price
-          if (currentCoperto > 0) {
-            items.push({
-              name: 'Coperto',
-              price: currentCoperto,
-              quantity: activeSession.customer_count || 1
-            })
-          }
+        if (copertoInfo.enabled) {
+          items.push({ name: 'Coperto', price: copertoInfo.price, quantity: copertoInfo.count })
+        }
+        if (ayceInfo.enabled && ayceInfo.price > 0) {
+          items.push({ name: 'All You Can Eat', price: ayceInfo.price, quantity: activeSession.customer_count || 1 })
         }
       }
 
@@ -1715,7 +1781,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         orderIds,
         items,
         totalAmount: totalToPay,
-        splitLabel: mode === 'split' ? `Alla romana (1/${splitCount})` : 'Pagamento completo',
+        splitLabel,
         tableId: tableId || '',
       })
 
@@ -1730,6 +1796,24 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     } finally {
       setIsProcessingStripePayment(false)
     }
+  }
+
+  // Handle 'Diviso per piatti' payment with coperto/AYCE prompt
+  const handleItemsPayment = () => {
+    if (selectedPaymentItems.size === 0) {
+      toast.error('Seleziona almeno un piatto')
+      return
+    }
+    // Check if any coperto or AYCE items were selected
+    const hasCopertoSelected = Array.from(selectedPaymentItems).some(id => id.startsWith('coperto'))
+    const hasAyceSelected = Array.from(selectedPaymentItems).some(id => id.startsWith('ayce'))
+    const hasCopertoOrAyce = (copertoInfo.enabled || (ayceInfo.enabled && ayceInfo.price > 0))
+
+    if (!hasCopertoSelected && !hasAyceSelected && hasCopertoOrAyce) {
+      setShowCopertoPrompt(true)
+      return
+    }
+    handleStripePayment('items')
   }
 
   // RENDER HELPERS - LUXURY THEME
@@ -1879,12 +1963,12 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
         {/* Floating Cart Button */}
         <AnimatePresence>
-          {!isViewOnly && cart.length > 0 ? (
+          {!isViewOnly && cart.length > 0 && (
             <motion.div
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
-              className="fixed bottom-6 left-4 right-4 z-40"
+              className={`fixed left-4 right-4 z-40 ${fullRestaurant?.enable_stripe_payments ? 'bottom-16' : 'bottom-6'}`}
             >
               <Button
                 onClick={() => setIsCartOpen(true)}
@@ -1922,26 +2006,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     return (cartTotal + copertoTotal).toFixed(2)
                   })()}
                 </span>
-              </Button>
-            </motion.div>
-          ) : !isViewOnly && previousOrders.length > 0 && (
-            <motion.div
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
-              className="fixed bottom-6 left-0 right-0 z-40 flex justify-center pointer-events-none"
-            >
-              <Button
-                onClick={() => setIsCartOpen(true)}
-                className="h-10 rounded-full px-6 shadow-lg backdrop-blur-md border pointer-events-auto transition-transform active:scale-95 flex items-center gap-2"
-                style={{
-                  backgroundColor: `${theme.primary}15`, // Very transparent background
-                  borderColor: `${theme.primary}40`,
-                  color: theme.primary,
-                }}
-              >
-                <Clock size={16} weight="bold" />
-                <span className="font-medium text-sm tracking-wide uppercase">I Miei Ordini</span>
               </Button>
             </motion.div>
           )}
@@ -2025,145 +2089,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
                   {/* DIVIDE IN PORTATE BUTTON moved to footer */}
                 </div>
-                {previousOrders.length > 0 && (
-                  <div className="pt-6 space-y-4" style={{ borderTop: `1px solid ${theme.divider}` }}>
-                    <h3 className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: theme.textMuted }}>Storico Ordini</h3>
-                    {previousOrders.map(order => (
-                      <div key={order.id} className="rounded-xl p-3 opacity-80 hover:opacity-100 transition-opacity" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
-                        <div className="flex justify-between text-sm mb-3 pb-2" style={{ borderBottom: `1px solid ${theme.divider}` }}>
-                          <span className="text-xs" style={{ color: theme.textSecondary }}>Ordine delle {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          <span className="font-bold" style={{ color: theme.textPrimary }}>€{order.total_amount?.toFixed(2)}</span>
-                        </div>
-                        <div className="space-y-2">
-                          {order.items?.map((item: any, i: number) => (
-                            <div key={i} className="flex justify-between text-xs items-start" style={{ color: theme.textMuted }}>
-                              <span className="line-clamp-1 flex-1 pr-2">
-                                <span className="font-bold" style={{ color: theme.textSecondary }}>{item.quantity}x</span> {(item.dish || dishes.find(d => d.id === item.dish_id))?.name || 'Piatto'}
-                              </span>
-                              <span className={`whitespace-nowrap ${['SERVED', 'READY'].includes(item.status) ? 'font-medium' : ''}`} style={{ color: item.status === 'SERVED' ? '#10B981' : item.status === 'READY' ? '#10B981' : theme.primary }}>
-                                {item.status === 'SERVED' ? 'Servito' : item.status === 'READY' ? 'Pronto' : 'In prep.'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
 
-                    {/* STRIPE PAYMENT SECTION */}
-                    {fullRestaurant?.enable_stripe_payments && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && !stripePaymentSuccess && (
-                      <div className="pt-4 space-y-3" style={{ borderTop: `1px solid ${theme.divider}` }}>
-                        <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.primary }}>Paga Online</h3>
-
-                        {!showPaymentOptions ? (
-                          <Button
-                            className="w-full font-bold h-14 rounded-xl text-lg shadow-lg"
-                            style={{
-                              background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)',
-                              color: '#ffffff',
-                              boxShadow: '0 10px 25px -5px rgba(99, 91, 255, 0.4)',
-                            }}
-                            onClick={() => setShowPaymentOptions(true)}
-                            disabled={isProcessingStripePayment}
-                          >
-                            <CreditCard size={22} className="mr-2" />
-                            Paga con Carta
-                          </Button>
-                        ) : (
-                          <div className="space-y-3 animate-in slide-in-from-bottom-2">
-                            {/* Pay full */}
-                            <Button
-                              className="w-full font-bold h-12 rounded-xl text-base"
-                              style={{
-                                background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)',
-                                color: '#ffffff',
-                              }}
-                              onClick={() => handleStripePayment('full')}
-                              disabled={isProcessingStripePayment}
-                            >
-                              {isProcessingStripePayment ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
-                                  <span>Attendi...</span>
-                                </div>
-                              ) : (
-                                <>
-                                  <Wallet size={18} className="mr-2" />
-                                  Paga Tutto — €{historyTotal.toFixed(2)}
-                                </>
-                              )}
-                            </Button>
-
-                            {/* Alla Romana */}
-                            {(activeSession?.customer_count || 0) > 1 && (
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    className="flex-1 font-bold h-12 rounded-xl text-sm"
-                                    style={{
-                                      borderColor: '#635BFF40',
-                                      color: '#635BFF',
-                                      backgroundColor: '#635BFF10',
-                                    }}
-                                    onClick={() => handleStripePayment('split', activeSession?.customer_count || 2)}
-                                    disabled={isProcessingStripePayment}
-                                  >
-                                    <Users size={16} className="mr-1.5" />
-                                    Alla Romana — €{(historyTotal / (activeSession?.customer_count || 2)).toFixed(2)}/pers.
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Custom split */}
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1 p-1 rounded-lg flex-1" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
-                                <span className="text-xs px-2" style={{ color: theme.textMuted }}>Dividi in</span>
-                                <button onClick={() => setStripePaymentSplitCount(c => Math.max(2, c - 1))} className="w-8 h-8 rounded flex items-center justify-center" style={{ color: theme.textSecondary }}>
-                                  <Minus size={14} weight="bold" />
-                                </button>
-                                <span className="w-6 text-center font-bold text-sm" style={{ color: theme.textPrimary }}>{stripePaymentSplitCount}</span>
-                                <button onClick={() => setStripePaymentSplitCount(c => Math.min(20, c + 1))} className="w-8 h-8 rounded flex items-center justify-center" style={{ color: theme.textSecondary }}>
-                                  <Plus size={14} weight="bold" />
-                                </button>
-                              </div>
-                              <Button
-                                variant="outline"
-                                className="h-10 rounded-lg font-bold text-xs px-4"
-                                style={{ borderColor: '#635BFF40', color: '#635BFF' }}
-                                onClick={() => handleStripePayment('split', stripePaymentSplitCount)}
-                                disabled={isProcessingStripePayment || stripePaymentSplitCount < 2}
-                              >
-                                €{(historyTotal / stripePaymentSplitCount).toFixed(2)}
-                              </Button>
-                            </div>
-
-                            <Button
-                              variant="ghost"
-                              className="w-full text-xs h-8"
-                              style={{ color: theme.textMuted }}
-                              onClick={() => setShowPaymentOptions(false)}
-                            >
-                              Annulla
-                            </Button>
-
-                            <p className="text-[10px] text-center" style={{ color: theme.textMuted }}>
-                              Pagamento sicuro tramite Stripe
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {stripePaymentSuccess && (
-                      <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#10B98115', border: '1px solid #10B98130' }}>
-                        <CheckCircle size={32} weight="fill" className="mx-auto mb-2" style={{ color: '#10B981' }} />
-                        <p className="font-bold text-sm" style={{ color: '#10B981' }}>Pagamento completato!</p>
-                        <p className="text-xs mt-1" style={{ color: theme.textMuted }}>Il tavolo verrà liberato automaticamente.</p>
-                      </div>
-                    )}
-                  </div>
-                )}
 
               </div>
 
@@ -2516,6 +2442,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         </Dialog>
 
         {/* Call Waiter FAB */}
+        {/* Call Waiter FAB */}
         <Button
           onClick={handleCallWaiter}
           disabled={callWaiterDisabled}
@@ -2529,7 +2456,463 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           <Bell className="w-4 h-4" fill="currentColor" />
           <span className="text-xs font-semibold tracking-wide">Cameriere</span>
         </Button>
+
+        {/* ===== BOTTOM NAVIGATION BAR ===== */}
+        {!isViewOnly && fullRestaurant?.enable_stripe_payments && (
+          <nav className="flex-none z-30 border-t backdrop-blur-xl" style={{ backgroundColor: theme.headerBg, borderColor: theme.primaryAlpha(0.15) }}>
+            <div className="flex">
+              <button
+                onClick={() => setCustomerTab('menu')}
+                className="flex-1 flex flex-col items-center py-2.5 gap-1 transition-colors"
+                style={{ color: customerTab === 'menu' ? theme.primary : theme.textMuted }}
+              >
+                <Utensils className="w-5 h-5" strokeWidth={customerTab === 'menu' ? 2.5 : 1.5} />
+                <span className="text-[10px] font-semibold tracking-wide uppercase">Menù</span>
+              </button>
+              <button
+                onClick={() => { setCustomerTab('payment'); setPaymentStep('summary') }}
+                className="flex-1 flex flex-col items-center py-2.5 gap-1 transition-colors relative"
+                style={{ color: customerTab === 'payment' ? '#635BFF' : theme.textMuted }}
+              >
+                <CreditCard size={20} weight={customerTab === 'payment' ? 'fill' : 'regular'} />
+                <span className="text-[10px] font-semibold tracking-wide uppercase">Pagamento</span>
+                {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+                  <div className="absolute top-1.5 right-1/4 w-2 h-2 rounded-full" style={{ backgroundColor: '#635BFF' }} />
+                )}
+              </button>
+            </div>
+          </nav>
+        )}
       </div>
+
+      {/* ===== PAYMENT TAB VIEW (full screen overlay) ===== */}
+      {customerTab === 'payment' && !isViewOnly && (
+        <div className="fixed inset-0 z-40 flex flex-col" style={{ background: theme.pageBgGradient, color: theme.textPrimary, ...theme.cssVars }}>
+          {/* Payment Header */}
+          <header className="flex-none z-20 backdrop-blur-xl px-4 py-4" style={{ backgroundColor: theme.headerBg, borderBottom: `1px solid ${theme.primaryAlpha(0.1)}` }}>
+            <div className="flex items-center justify-between">
+              <button onClick={() => { setCustomerTab('menu'); setPaymentStep('summary') }} className="flex items-center gap-1.5" style={{ color: theme.textSecondary }}>
+                <ArrowLeft className="w-5 h-5" />
+                <span className="text-sm">Menù</span>
+              </button>
+              <h1 className="text-base font-semibold tracking-wide" style={{ color: theme.textPrimary }}>
+                💳 Pagamento Sicuro
+              </h1>
+              <div className="w-16" /> {/* spacer */}
+            </div>
+          </header>
+
+          {/* Payment Content */}
+          <main className="flex-1 overflow-y-auto px-4 pt-4 pb-4 scrollbar-hide">
+            {stripePaymentSuccess ? (
+              /* === Payment Success === */
+              <div className="flex flex-col items-center justify-center text-center py-12 space-y-4">
+                <div className="w-20 h-20 rounded-full flex items-center justify-center mb-2"
+                  style={{ backgroundColor: '#10B98120', border: '2px solid #10B98140' }}>
+                  <CheckCircle size={48} weight="fill" style={{ color: '#10B981' }} />
+                </div>
+                <h2 className="text-xl font-bold" style={{ color: '#10B981' }}>
+                  Pagamento completato!
+                </h2>
+                <p className="text-base font-medium" style={{ color: theme.textPrimary }}>
+                  Grazie per aver scelto {fullRestaurant?.name || 'il nostro ristorante'} 🎉
+                </p>
+                <p className="text-sm" style={{ color: theme.textMuted }}>
+                  Il pagamento è stato elaborato con successo.<br />
+                  Ti auguriamo una buona serata!
+                </p>
+                <div className="pt-4 w-full max-w-xs">
+                  <div className="p-3 rounded-xl text-center" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
+                    <p className="text-[11px]" style={{ color: theme.textMuted }}>
+                      Riceverai lo scontrino direttamente dal ristorante
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : previousOrders.length === 0 ? (
+              /* === No Orders Yet === */
+              <div className="flex flex-col items-center justify-center text-center py-16 space-y-4">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.primaryAlpha(0.1) }}>
+                  <ForkKnife size={32} weight="duotone" style={{ color: theme.primary }} />
+                </div>
+                <h2 className="text-lg font-medium" style={{ color: theme.textPrimary }}>Nessun ordine ancora</h2>
+                <p className="text-sm" style={{ color: theme.textMuted }}>Ordina dal menù prima di procedere al pagamento</p>
+                <Button onClick={() => setCustomerTab('menu')} className="mt-2 rounded-xl" style={{ backgroundColor: theme.primary, color: '#000' }}>
+                  Vai al Menù
+                </Button>
+              </div>
+            ) : paymentStep === 'selectItems' ? (
+              /* === Select Items View (Diviso per Piatti) === */
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={() => setPaymentStep('options')} className="flex items-center gap-1.5 text-sm" style={{ color: theme.textSecondary }}>
+                    <ArrowLeft className="w-4 h-4" /> Indietro
+                  </button>
+                  <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: theme.primary }}>Seleziona Piatti</h3>
+                  <div className="w-16" />
+                </div>
+
+                <p className="text-xs text-center" style={{ color: theme.textMuted }}>
+                  Seleziona i piatti che vuoi pagare
+                </p>
+
+                {/* Dish items */}
+                <div className="space-y-2">
+                  {payableItems.map(item => {
+                    const isSelected = selectedPaymentItems.has(item.id)
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          const updated = new Set(selectedPaymentItems)
+                          if (isSelected) updated.delete(item.id)
+                          else updated.add(item.id)
+                          setSelectedPaymentItems(updated)
+                        }}
+                        className="w-full flex items-center justify-between p-3 rounded-xl transition-all"
+                        style={{
+                          backgroundColor: isSelected ? '#635BFF15' : theme.cardBg,
+                          border: `1px solid ${isSelected ? '#635BFF50' : theme.cardBorder}`,
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all"
+                            style={{
+                              borderColor: isSelected ? '#635BFF' : theme.textMuted,
+                              backgroundColor: isSelected ? '#635BFF' : 'transparent',
+                            }}>
+                            {isSelected && <Check size={14} weight="bold" style={{ color: '#fff' }} />}
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>{item.quantity}x {item.name}</p>
+                          </div>
+                        </div>
+                        <span className="text-sm font-bold" style={{ color: isSelected ? '#635BFF' : theme.textSecondary }}>
+                          €{(item.price * item.quantity).toFixed(2)}
+                        </span>
+                      </button>
+                    )
+                  })}
+
+                  {/* Coperto items (one per person) */}
+                  {copertoInfo.enabled && Array.from({ length: copertoInfo.count }, (_, i) => {
+                    const cId = `coperto_${i}`
+                    const isSelected = selectedPaymentItems.has(cId)
+                    return (
+                      <button
+                        key={cId}
+                        onClick={() => {
+                          const updated = new Set(selectedPaymentItems)
+                          if (isSelected) updated.delete(cId)
+                          else updated.add(cId)
+                          setSelectedPaymentItems(updated)
+                        }}
+                        className="w-full flex items-center justify-between p-3 rounded-xl transition-all"
+                        style={{
+                          backgroundColor: isSelected ? '#f59e0b15' : theme.cardBg,
+                          border: `1px solid ${isSelected ? '#f59e0b50' : theme.cardBorder}`,
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all"
+                            style={{
+                              borderColor: isSelected ? '#f59e0b' : theme.textMuted,
+                              backgroundColor: isSelected ? '#f59e0b' : 'transparent',
+                            }}>
+                            {isSelected && <Check size={14} weight="bold" style={{ color: '#fff' }} />}
+                          </div>
+                          <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>🍽 Coperto {copertoInfo.count > 1 ? `(${i + 1}/${copertoInfo.count})` : ''}</p>
+                        </div>
+                        <span className="text-sm font-bold" style={{ color: isSelected ? '#f59e0b' : theme.textSecondary }}>€{copertoInfo.price.toFixed(2)}</span>
+                      </button>
+                    )
+                  })}
+
+                  {/* AYCE items (one per person) */}
+                  {ayceInfo.enabled && ayceInfo.price > 0 && Array.from({ length: activeSession?.customer_count || 1 }, (_, i) => {
+                    const aId = `ayce_${i}`
+                    const isSelected = selectedPaymentItems.has(aId)
+                    return (
+                      <button
+                        key={aId}
+                        onClick={() => {
+                          const updated = new Set(selectedPaymentItems)
+                          if (isSelected) updated.delete(aId)
+                          else updated.add(aId)
+                          setSelectedPaymentItems(updated)
+                        }}
+                        className="w-full flex items-center justify-between p-3 rounded-xl transition-all"
+                        style={{
+                          backgroundColor: isSelected ? '#10B98115' : theme.cardBg,
+                          border: `1px solid ${isSelected ? '#10B98150' : theme.cardBorder}`,
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all"
+                            style={{
+                              borderColor: isSelected ? '#10B981' : theme.textMuted,
+                              backgroundColor: isSelected ? '#10B981' : 'transparent',
+                            }}>
+                            {isSelected && <Check size={14} weight="bold" style={{ color: '#fff' }} />}
+                          </div>
+                          <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>🔄 All You Can Eat {(activeSession?.customer_count || 1) > 1 ? `(${i + 1}/${activeSession?.customer_count || 1})` : ''}</p>
+                        </div>
+                        <span className="text-sm font-bold" style={{ color: isSelected ? '#10B981' : theme.textSecondary }}>€{ayceInfo.price.toFixed(2)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Selected total */}
+                {selectedPaymentItems.size > 0 && (
+                  <div className="p-3 rounded-xl text-center" style={{ backgroundColor: '#635BFF10', border: '1px solid #635BFF30' }}>
+                    <p className="text-sm" style={{ color: theme.textSecondary }}>Totale selezionato</p>
+                    <p className="text-2xl font-bold" style={{ color: '#635BFF' }}>
+                      €{(() => {
+                        let total = 0
+                        payableItems.filter(pi => selectedPaymentItems.has(pi.id)).forEach(pi => { total += pi.price * pi.quantity })
+                        Array.from(selectedPaymentItems).filter(id => id.startsWith('coperto')).forEach(() => { total += copertoInfo.price })
+                        Array.from(selectedPaymentItems).filter(id => id.startsWith('ayce')).forEach(() => { total += ayceInfo.price })
+                        return total.toFixed(2)
+                      })()}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : paymentStep === 'options' ? (
+              /* === Payment Options === */
+              <div className="space-y-4">
+                <button onClick={() => setPaymentStep('summary')} className="flex items-center gap-1.5 text-sm mb-2" style={{ color: theme.textSecondary }}>
+                  <ArrowLeft className="w-4 h-4" /> Indietro
+                </button>
+
+                <div className="text-center mb-4">
+                  <p className="text-sm" style={{ color: theme.textSecondary }}>Totale da pagare</p>
+                  <p className="text-3xl font-bold" style={{ color: theme.textPrimary }}>€{unpaidTotal.toFixed(2)}</p>
+                </div>
+
+                {/* Option 1: Pay All */}
+                <button
+                  onClick={() => handleStripePayment('full')}
+                  disabled={isProcessingStripePayment}
+                  className="w-full p-4 rounded-2xl text-left transition-all active:scale-[0.98]"
+                  style={{ background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)', color: '#fff' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Wallet size={24} weight="fill" />
+                      <div>
+                        <p className="font-bold text-base">Pagamento Totale</p>
+                        <p className="text-xs opacity-80">Paga l'intero conto</p>
+                      </div>
+                    </div>
+                    <span className="text-lg font-bold">€{unpaidTotal.toFixed(2)}</span>
+                  </div>
+                </button>
+
+                {/* Option 2: Alla Romana */}
+                <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
+                  <div className="p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Users size={24} weight="duotone" style={{ color: '#635BFF' }} />
+                      <div>
+                        <p className="font-bold text-base" style={{ color: theme.textPrimary }}>Alla Romana</p>
+                        <p className="text-xs" style={{ color: theme.textMuted }}>Dividi in parti uguali</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1 p-1 rounded-xl flex-1" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
+                        <span className="text-xs px-2" style={{ color: theme.textMuted }}>Persone</span>
+                        <button onClick={() => setRomanaCount(c => Math.max(2, c - 1))} className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: theme.textSecondary }}>
+                          <Minus size={16} weight="bold" />
+                        </button>
+                        <span className="w-8 text-center font-bold text-lg" style={{ color: theme.textPrimary }}>{romanaCount}</span>
+                        <button onClick={() => setRomanaCount(c => Math.min(20, c + 1))} className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: theme.textSecondary }}>
+                          <Plus size={16} weight="bold" />
+                        </button>
+                      </div>
+                      <Button
+                        onClick={() => handleStripePayment('split', romanaCount)}
+                        disabled={isProcessingStripePayment}
+                        className="h-11 rounded-xl font-bold px-5"
+                        style={{ backgroundColor: '#635BFF', color: '#fff' }}
+                      >
+                        €{(unpaidTotal / romanaCount).toFixed(2)}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Option 3: Diviso per Piatti */}
+                <button
+                  onClick={() => { setPaymentStep('selectItems'); setSelectedPaymentItems(new Set()) }}
+                  className="w-full p-4 rounded-2xl text-left transition-all active:scale-[0.98]"
+                  style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}
+                >
+                  <div className="flex items-center gap-3">
+                    <ListNumbers size={24} weight="duotone" style={{ color: '#635BFF' }} />
+                    <div>
+                      <p className="font-bold text-base" style={{ color: theme.textPrimary }}>Diviso per Piatti</p>
+                      <p className="text-xs" style={{ color: theme.textMuted }}>Seleziona i piatti che vuoi pagare</p>
+                    </div>
+                    <ChevronRight className="ml-auto w-5 h-5" style={{ color: theme.textMuted }} />
+                  </div>
+                </button>
+
+                <p className="text-[10px] text-center pt-2" style={{ color: theme.textMuted }}>
+                  🔒 Pagamento sicuro tramite Stripe
+                </p>
+              </div>
+            ) : (
+              /* === Order Summary (default) === */
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textMuted }}>I tuoi ordini</h3>
+
+                {/* Order list */}
+                {previousOrders.map(order => (
+                  <div key={order.id} className="rounded-xl p-3" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
+                    <div className="flex justify-between text-sm mb-2 pb-2" style={{ borderBottom: `1px solid ${theme.divider}` }}>
+                      <span className="text-xs" style={{ color: theme.textSecondary }}>Ordine • {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="font-bold" style={{ color: order.status === 'PAID' ? '#10B981' : theme.textPrimary }}>
+                        {order.status === 'PAID' ? '✓ Pagato' : `€${order.total_amount?.toFixed(2)}`}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {order.items?.map((item: any, i: number) => (
+                        <div key={i} className="flex justify-between text-xs items-center" style={{ color: theme.textMuted }}>
+                          <span className="flex-1">
+                            <span className="font-bold" style={{ color: theme.textSecondary }}>{item.quantity}x</span> {(item.dish || dishes.find(d => d.id === item.dish_id))?.name || 'Piatto'}
+                          </span>
+                          <span className={item.status === 'PAID' ? 'line-through opacity-50' : ''} style={{ color: item.status === 'PAID' ? '#10B981' : theme.textSecondary }}>
+                            €{((item.dish?.price || 0) * item.quantity).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Coperto / AYCE summary */}
+                {(copertoInfo.enabled || (ayceInfo.enabled && ayceInfo.price > 0)) && (
+                  <div className="rounded-xl p-3 space-y-1.5" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
+                    {copertoInfo.enabled && (
+                      <div className="flex justify-between text-xs" style={{ color: theme.textSecondary }}>
+                        <span>🍽 Coperto × {copertoInfo.count}</span>
+                        <span className="font-bold">€{(copertoInfo.price * copertoInfo.count).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {ayceInfo.enabled && ayceInfo.price > 0 && (
+                      <div className="flex justify-between text-xs" style={{ color: theme.textSecondary }}>
+                        <span>🔄 All You Can Eat × {activeSession?.customer_count || 1}</span>
+                        <span className="font-bold">€{(ayceInfo.price * (activeSession?.customer_count || 1)).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Total */}
+                {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+                  <div className="p-4 rounded-2xl text-center" style={{ background: 'linear-gradient(135deg, #635BFF10, #7C3AED10)', border: '1px solid #635BFF30' }}>
+                    <p className="text-xs uppercase tracking-wider mb-1" style={{ color: theme.textMuted }}>Totale da pagare</p>
+                    <p className="text-3xl font-bold" style={{ color: '#635BFF' }}>€{unpaidTotal.toFixed(2)}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* Fixed Pay Button at bottom */}
+          {!stripePaymentSuccess && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+            <div className="flex-none p-4 backdrop-blur-xl" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.cardBg }}>
+              {paymentStep === 'summary' ? (
+                <Button
+                  className="w-full font-bold h-14 rounded-2xl text-lg shadow-lg"
+                  style={{
+                    background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)',
+                    color: '#ffffff',
+                    boxShadow: '0 10px 25px -5px rgba(99, 91, 255, 0.4)',
+                  }}
+                  onClick={() => setPaymentStep('options')}
+                  disabled={isProcessingStripePayment}
+                >
+                  <CreditCard size={22} className="mr-2" />
+                  Paga — €{unpaidTotal.toFixed(2)}
+                </Button>
+              ) : paymentStep === 'selectItems' ? (
+                <Button
+                  className="w-full font-bold h-14 rounded-2xl text-lg shadow-lg"
+                  style={{
+                    background: selectedPaymentItems.size > 0 ? 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)' : theme.inputBg,
+                    color: selectedPaymentItems.size > 0 ? '#ffffff' : theme.textMuted,
+                    boxShadow: selectedPaymentItems.size > 0 ? '0 10px 25px -5px rgba(99, 91, 255, 0.4)' : 'none',
+                  }}
+                  onClick={handleItemsPayment}
+                  disabled={isProcessingStripePayment || selectedPaymentItems.size === 0}
+                >
+                  {isProcessingStripePayment ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
+                      Attendi...
+                    </div>
+                  ) : (
+                    <>
+                      <CreditCard size={22} className="mr-2" />
+                      Paga Selezionati {selectedPaymentItems.size > 0 && `— €${(() => {
+                        let total = 0
+                        payableItems.filter(pi => selectedPaymentItems.has(pi.id)).forEach(pi => { total += pi.price * pi.quantity })
+                        Array.from(selectedPaymentItems).filter(id => id.startsWith('coperto')).forEach(() => { total += copertoInfo.price })
+                        Array.from(selectedPaymentItems).filter(id => id.startsWith('ayce')).forEach(() => { total += ayceInfo.price })
+                        return total.toFixed(2)
+                      })()}`}
+                    </>
+                  )}
+                </Button>
+              ) : null}
+            </div>
+          )}
+
+          {/* Bottom nav in payment view */}
+          <nav className="flex-none z-30 border-t backdrop-blur-xl" style={{ backgroundColor: theme.headerBg, borderColor: theme.primaryAlpha(0.15) }}>
+            <div className="flex">
+              <button
+                onClick={() => { setCustomerTab('menu'); setPaymentStep('summary') }}
+                className="flex-1 flex flex-col items-center py-2.5 gap-1 transition-colors"
+                style={{ color: theme.textMuted }}
+              >
+                <Utensils className="w-5 h-5" strokeWidth={1.5} />
+                <span className="text-[10px] font-semibold tracking-wide uppercase">Menù</span>
+              </button>
+              <button
+                className="flex-1 flex flex-col items-center py-2.5 gap-1 transition-colors"
+                style={{ color: '#635BFF' }}
+              >
+                <CreditCard size={20} weight="fill" />
+                <span className="text-[10px] font-semibold tracking-wide uppercase">Pagamento</span>
+              </button>
+            </div>
+          </nav>
+        </div>
+      )}
+
+      {/* Coperto/AYCE Prompt Dialog */}
+      <AlertDialog open={showCopertoPrompt} onOpenChange={setShowCopertoPrompt}>
+        <AlertDialogContent style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle style={{ color: theme.textPrimary }}>Coperti e All You Can Eat</AlertDialogTitle>
+            <AlertDialogDescription style={{ color: theme.textSecondary }}>
+              Non hai selezionato nessun coperto{ayceInfo.enabled ? ' / All You Can Eat' : ''}. Vuoi tornare indietro per aggiungerli al pagamento?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setShowCopertoPrompt(false); handleStripePayment('items') }} style={{ color: theme.textSecondary }}>
+              No, paga così
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => setShowCopertoPrompt(false)} style={{ backgroundColor: '#635BFF', color: '#fff' }}>
+              Sì, seleziona
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div >
   )
 }
