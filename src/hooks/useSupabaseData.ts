@@ -5,7 +5,8 @@ export function useSupabaseData<T>(
     tableName: string,
     initialData: T[] = [],
     filter?: { column: string; value: string },
-    mapper?: (item: any) => T
+    mapper?: (item: any) => T,
+    orderBy?: { column: string; ascending: boolean }
 ) {
     const [data, setData] = useState<T[]>(initialData)
     const [loading, setLoading] = useState(true)
@@ -30,6 +31,9 @@ export function useSupabaseData<T>(
         if (filter) {
             query = query.eq(filter.column, filter.value)
         }
+        if (orderBy) {
+            query = query.order(orderBy.column, { ascending: orderBy.ascending })
+        }
 
         const { data: result, error } = await query
         if (error) {
@@ -41,7 +45,7 @@ export function useSupabaseData<T>(
         const mappedData = currentMapper ? result.map(currentMapper) : result as T[]
         setData(mappedData)
         setLoading(false)
-    }, [tableName, filter?.column, filter?.value])
+    }, [tableName, filter?.column, filter?.value, orderBy?.column, orderBy?.ascending])
 
     useEffect(() => {
         // Skip subscription if filter value is missing

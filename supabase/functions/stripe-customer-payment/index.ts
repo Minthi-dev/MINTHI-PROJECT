@@ -28,6 +28,7 @@ serve(async (req) => {
             splitLabel, // e.g. "Pagamento completo", "Alla romana (1/4)", "Pagamento parziale"
             successUrl,
             cancelUrl,
+            tableId,
         } = await req.json();
 
         if (!restaurantId || !orderIds || !items || items.length === 0) {
@@ -78,8 +79,8 @@ serve(async (req) => {
                 payment_method_types: ["card"],
                 mode: "payment",
                 line_items: lineItems,
-                success_url: successUrl || `${req.headers.get("origin")}/client/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-                cancel_url: cancelUrl || `${req.headers.get("origin")}/client/payment-cancelled`,
+                success_url: successUrl || `${req.headers.get("origin")}/client/table/${tableId}?payment=success`,
+                cancel_url: cancelUrl || `${req.headers.get("origin")}/client/table/${tableId}?payment=cancelled`,
                 metadata: {
                     paymentType: "customer_order",
                     restaurantId,

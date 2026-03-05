@@ -118,7 +118,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
   const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
   const [bookings, , refreshBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
-  const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId })
+  const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'created_at', ascending: false })
   const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
 
   // Initialize selected categories when available
@@ -2227,8 +2227,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         Storico
                         {(() => {
                           const pendingCount = sessions
-                            .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued)
-                            .filter(s => pastOrders.filter(o => o.table_session_id === s.id).some((o: any) => o.payment_method === 'stripe'))
+                            .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued && (s.paid_amount || 0) > 0)
                             .length
                           return pendingCount > 0 ? (
                             <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 flex items-center justify-center px-1 rounded-full text-[10px] font-bold bg-amber-500 text-black animate-pulse">
@@ -2244,8 +2243,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           Storico Tavoli Chiusi
                           {(() => {
                             const pendingCount = sessions
-                              .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued)
-                              .filter(s => pastOrders.filter(o => o.table_session_id === s.id).some((o: any) => o.payment_method === 'stripe'))
+                              .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued && (s.paid_amount || 0) > 0)
                               .length
                             return pendingCount > 0 ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
@@ -2362,7 +2360,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             })
                             .filter(summary => {
                               if (tableHistoryPaymentFilter === 'all') return true
-                              const hasStripe = summary.sessionOrders.some((o: any) => o.payment_method === 'stripe')
+                              const hasStripe = summary.sessionOrders.some((o: any) => o.payment_method === 'stripe') || (summary.session.paid_amount || 0) > 0
                               if (tableHistoryPaymentFilter === 'pending_receipt') return hasStripe && !summary.session.receipt_issued
                               if (tableHistoryPaymentFilter === 'receipt_done') return summary.session.receipt_issued === true
                               if (tableHistoryPaymentFilter === 'online') return hasStripe
@@ -2414,9 +2412,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                             </Badge>
                                           )}
                                           <Badge variant="outline" className="text-[10px] font-mono border-zinc-700 text-zinc-400">{session.session_pin}</Badge>
-                                          {sessionOrders.some((o: any) => o.payment_method === 'stripe') && (
+                                          {((session.paid_amount || 0) > 0 || sessionOrders.some((o: any) => o.payment_method === 'stripe')) && (
                                             <div className="flex items-center gap-2">
-                                              <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">💳 Pagato Online</Badge>
+                                              <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">
+                                                💳 Pagato Online {(session.paid_amount || 0) > 0 ? `(€${session.paid_amount?.toFixed(2)})` : ''}
+                                              </Badge>
                                               {!session.receipt_issued ? (
                                                 <Button
                                                   size="sm"
@@ -2836,7 +2836,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       const isActive = session?.status === 'OPEN'
                       const activeOrder = restaurantOrders.find(o => getTableIdFromOrder(o) === table.id)
                       const allTableOrders = restaurantOrders.filter(o => getTableIdFromOrder(o) === table.id)
-                      const hasStripePaymentToConfirm = session && allTableOrders.some(o => o.payment_method === 'stripe' && o.status === 'PAID') && !session.receipt_issued
+                      const hasStripePaymentToConfirm = session && (session.paid_amount || 0) > 0 && !session.receipt_issued
 
                       return (
                         <Card
@@ -2915,7 +2915,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   )}
                                   {hasStripePaymentToConfirm && (
                                     <Badge variant="outline" className="text-[10px] bg-purple-500/20 border-purple-500/50 text-purple-200 mt-1">
-                                      💳 Pagato Online
+                                      💳 Pagato Online {(session?.paid_amount || 0) > 0 ? `(€${session!.paid_amount!.toFixed(2)})` : ''}
                                     </Badge>
                                   )}
                                 </>
