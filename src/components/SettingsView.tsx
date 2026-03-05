@@ -1205,13 +1205,16 @@ export function SettingsView({
                                                 </div>
                                             </div>
                                             {/* Status */}
-                                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${subscriptionInfo.subscription_status === 'active'
+                                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${subscriptionInfo.subscription_status === 'active' && !subscriptionInfo.subscription_cancel_at
                                                 ? 'bg-emerald-500/10 text-emerald-400'
-                                                : subscriptionInfo.subscription_status === 'past_due'
-                                                    ? 'bg-red-500/10 text-red-400'
-                                                    : 'bg-zinc-800 text-zinc-400'
+                                                : subscriptionInfo.subscription_status === 'active' && subscriptionInfo.subscription_cancel_at
+                                                    ? 'bg-amber-500/10 text-amber-500'
+                                                    : subscriptionInfo.subscription_status === 'past_due'
+                                                        ? 'bg-red-500/10 text-red-400'
+                                                        : 'bg-zinc-800 text-zinc-400'
                                                 }`}>
-                                                {subscriptionInfo.subscription_status === 'active' && <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
+                                                {subscriptionInfo.subscription_status === 'active' && !subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
+                                                {subscriptionInfo.subscription_status === 'active' && subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-amber-400" />Annullato</>}
                                                 {subscriptionInfo.subscription_status === 'past_due' && <><WarningCircle weight="fill" size={16} />Pagamento fallito</>}
                                                 {subscriptionInfo.subscription_status === 'canceled' && 'Annullato'}
                                                 {!subscriptionInfo.subscription_status && 'Attivo'}
@@ -1233,7 +1236,7 @@ export function SettingsView({
                                             <div className="flex items-center gap-3 p-4 bg-amber-500/5 rounded-xl border border-amber-500/10 mb-5">
                                                 <WarningCircle size={20} className="text-amber-400 shrink-0" />
                                                 <div>
-                                                    <p className="text-sm text-white font-medium">Abbonamento disdetto</p>
+                                                    <p className="text-sm text-white font-medium">Abbonamento annullato</p>
                                                     <p className="text-sm text-zinc-400 mt-0.5">
                                                         Potrai continuare ad usufruire di tutti i servizi fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                                                     </p>
@@ -1268,7 +1271,7 @@ export function SettingsView({
                                                             : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
                                                                 : ` per ${activeDiscount.discount_duration_months || activeDiscount.discount_duration} mesi`}
                                                     </p>
-                                                    {priceAmount > 0 && (
+                                                    {priceAmount > 0 && !subscriptionInfo.subscription_cancel_at && (
                                                         <p className="text-xs text-zinc-500 mt-0.5">
                                                             Prossimo addebito scontato: <span className="text-amber-400">€{(priceAmount * (1 - activeDiscount.discount_percent / 100)).toFixed(2)}/mese</span>
                                                         </p>
