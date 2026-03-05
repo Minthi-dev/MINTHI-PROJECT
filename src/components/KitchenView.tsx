@@ -116,10 +116,11 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
     return (
         <div className="h-[calc(100vh-180px)] w-full overflow-hidden bg-black relative">
             <div
-                className="w-full h-full overflow-y-auto px-2 origin-top-left transition-all duration-200"
+                className="px-2 origin-top-left transition-all duration-200 overflow-y-auto"
                 style={{
                     transform: `scale(${zoom})`,
                     width: `${100 / zoom}%`,
+                    height: `${100 / zoom}%`,
                     paddingBottom: `${100 / zoom}px` // Extra padding to prevent clipping
                 }}
             >
@@ -272,9 +273,9 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                             </div>
                                         ))}
 
-                                        {/* Sticky Complete Button */}
+                                        {/* Complete Button */}
                                         {!allItemsDone && (
-                                            <div className="sticky bottom-0 mt-auto pt-4 pb-1 bg-transparent z-10">
+                                            <div className="mt-auto pt-5 pb-1 shrink-0">
                                                 <Button
                                                     className="w-full h-12 text-lg font-bold rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-white/5 hover:text-white hover:border-white/10 transition-all duration-300 active:scale-[0.98]"
                                                     onClick={(e) => {

@@ -49,18 +49,30 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         // Verify session validity on mount (prevent auto-login to closed sessions)
         const checkSessionStatus = async () => {
-            const { data, error } = await supabase
-                .from('table_sessions')
-                .select('status')
-                .eq('id', sessionId)
-                .single();
+            try {
+                const { data, error } = await supabase
+                    .from('table_sessions')
+                    .select('status')
+                    .eq('id', sessionId)
+                    .single();
 
-            if (error || !data || data.status === 'CLOSED' || data.status === 'PAID') {
-                console.log('Session Invalid or Closed on Load - Logging out');
-                exitSession();
-            } else {
-                setSessionStatus(data.status);
-                // On valid session, keep the pin loaded from local storage
+                if (error) {
+                    // RLS or network error - DO NOT clear session data
+                    // The PIN and session might still be valid, just can't verify right now
+                    console.warn('Session status check failed (RLS/network):', error.message);
+                    // Keep session data in localStorage, user stays authenticated
+                    return;
+                }
+
+                if (!data || data.status === 'CLOSED' || data.status === 'PAID') {
+                    console.log('Session confirmed CLOSED/PAID - Logging out');
+                    exitSession();
+                } else {
+                    setSessionStatus(data.status);
+                }
+            } catch (err) {
+                // Network error - preserve session data
+                console.warn('Session check network error, preserving session:', err);
             }
         };
         checkSessionStatus();

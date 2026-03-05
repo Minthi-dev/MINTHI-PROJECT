@@ -76,19 +76,34 @@ serve(async (req) => {
                                 .eq("id", orderId);
                         }
 
+                        // Update session with payment info but DON'T close it
+                        // The restaurant will close the table manually from gestione tavoli
                         if (sessionId) {
-                            const { data: remainingOrders } = await supabase
-                                .from("orders")
-                                .select("id")
-                                .eq("table_session_id", sessionId)
-                                .not("status", "in", '("PAID","CANCELLED")');
+                            const amountPaid = (session.amount_total || 0) / 100; // Stripe uses cents
+                            const splitLabel = session.metadata?.splitLabel || 'Pagamento online';
 
-                            if (!remainingOrders || remainingOrders.length === 0) {
-                                await supabase
-                                    .from("table_sessions")
-                                    .update({ status: "CLOSED", closed_at: new Date().toISOString() })
-                                    .eq("id", sessionId);
-                            }
+                            // Get current paid_amount to add to it
+                            const { data: currentSession } = await supabase
+                                .from("table_sessions")
+                                .select("paid_amount, notes")
+                                .eq("id", sessionId)
+                                .single();
+
+                            const currentPaid = currentSession?.paid_amount || 0;
+                            const existingNotes = currentSession?.notes || '';
+                            const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
+                            const newNotes = existingNotes ? `${existingNotes}\n${paymentNote}` : paymentNote;
+
+                            await supabase
+                                .from("table_sessions")
+                                .update({
+                                    paid_amount: currentPaid + amountPaid,
+                                    notes: newNotes,
+                                    updated_at: new Date().toISOString(),
+                                })
+                                .eq("id", sessionId);
+
+                            console.log(`Pagamento cliente: €${amountPaid.toFixed(2)} per sessione ${sessionId} (${splitLabel})`);
                         }
                     }
                 } else {
