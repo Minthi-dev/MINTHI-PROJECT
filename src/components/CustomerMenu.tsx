@@ -2037,10 +2037,12 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   boxShadow: `0 10px 25px -5px ${theme.primaryAlpha(0.4)}`,
                 }}
               >
-                <Receipt size={22} weight="fill" />
-                <span className="font-bold text-lg tracking-wide uppercase">
-                  Conto e Pagamento
-                </span>
+                <div className="flex items-center gap-2">
+                  <Receipt size={22} weight="fill" />
+                  <span className="font-bold text-lg tracking-wide uppercase">
+                    {(fullRestaurant as any)?.enable_stripe_payments ? "Conto e Pagamento" : "Il Tuo Ordine"}
+                  </span>
+                </div>
                 <span className="px-2.5 py-0.5 rounded-full text-sm font-bold" style={{ backgroundColor: 'rgba(0,0,0,0.1)' }}>
                   €{unpaidTotal.toFixed(2)}
                 </span>
@@ -2508,7 +2510,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 <span className="text-sm">Menù</span>
               </button>
               <h1 className="text-base font-semibold tracking-wide text-center flex-1" style={{ color: theme.textPrimary }}>
-                💳 Conto e Pagamento
+                {(fullRestaurant as any)?.enable_stripe_payments ? "💳 Conto e Pagamento" : "🧾 Il Tuo Ordine"}
               </h1>
               <div className="min-w-[60px] pointer-events-none" /> {/* spacer - pointer-events-none to not block touches */}
             </div>
@@ -2796,7 +2798,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           </main>
 
           {/* Fixed Bottom Container for Payment Options */}
-          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (fullRestaurant as any)?.enable_stripe_payments && (
             <motion.div
               initial={{ y: 200, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}

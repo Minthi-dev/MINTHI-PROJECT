@@ -218,6 +218,17 @@ export function SettingsView({
                 setSubscriptionInfo(data)
                 setVatNumber(data.vat_number || '')
                 setBillingName(data.billing_name || '')
+
+                // If account exists but is not marked as enabled, check with Stripe API directly once
+                if (data.stripe_connect_account_id && !data.stripe_connect_enabled) {
+                    DatabaseService.refreshStripeConnectStatus(restaurantId)
+                        .then(res => {
+                            if (res && res.enabled) {
+                                setSubscriptionInfo(prev => prev ? { ...prev, stripe_connect_enabled: true } : prev)
+                            }
+                        })
+                        .catch(() => { })
+                }
             }
         } catch (e) { /* ignore */ }
 
@@ -261,6 +272,22 @@ export function SettingsView({
     const [showStripeGuide, setShowStripeGuide] = useState(false)
 
     const handleConnectOnboarding = async () => {
+        // If it's already an account but NOT enabled, first try to manual refresh.
+        // It's possible the user completed the flow and the webhook hasn't arrived.
+        if (subscriptionInfo?.stripe_connect_account_id && !subscriptionInfo?.stripe_connect_enabled) {
+            setLoadingConnectOnboarding(true)
+            try {
+                const res = await DatabaseService.refreshStripeConnectStatus(restaurantId)
+                if (res && res.enabled) {
+                    setSubscriptionInfo(prev => prev ? { ...prev, stripe_connect_enabled: true } : prev)
+                    toast.success('Verifica account completata con successo!')
+                    return
+                }
+            } catch (e) { /* fallback to opening the link */ } finally {
+                setLoadingConnectOnboarding(false)
+            }
+        }
+
         setLoadingConnectOnboarding(true)
         try {
             const result = await DatabaseService.createStripeConnectOnboarding(restaurantId, window.location.href)
@@ -997,13 +1024,15 @@ export function SettingsView({
                                                         {subscriptionInfo?.stripe_connect_enabled
                                                             ? 'Account collegato'
                                                             : subscriptionInfo?.stripe_connect_account_id
-                                                                ? 'Configurazione incompleta'
+                                                                ? 'Verifica in corso'
                                                                 : 'Account non collegato'}
                                                     </p>
                                                     <p className="text-sm text-zinc-500 mt-0.5">
                                                         {subscriptionInfo?.stripe_connect_enabled
                                                             ? 'I pagamenti arrivano direttamente sul tuo conto'
-                                                            : 'Collega il tuo account Stripe per ricevere pagamenti'}
+                                                            : subscriptionInfo?.stripe_connect_account_id
+                                                                ? 'Stripe sta verificando i tuoi dati aziendali'
+                                                                : 'Collega il tuo account Stripe per ricevere pagamenti'}
                                                     </p>
                                                 </div>
                                             </div>
@@ -1019,7 +1048,7 @@ export function SettingsView({
                                                     ) : (
                                                         <Gear size={18} />
                                                     )}
-                                                    {subscriptionInfo?.stripe_connect_enabled ? 'Apri Dashboard Stripe ↗' : subscriptionInfo?.stripe_connect_account_id ? 'Completa Configurazione ↗' : 'Collega Account Stripe ↗'}
+                                                    {subscriptionInfo?.stripe_connect_enabled ? 'Apri Dashboard Stripe ↗' : subscriptionInfo?.stripe_connect_account_id ? 'Controlla Stato Verifica ↗' : 'Collega Account Stripe ↗'}
                                                 </Button>
                                             </div>
                                         </div>

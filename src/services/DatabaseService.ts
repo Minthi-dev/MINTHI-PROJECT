@@ -1074,6 +1074,18 @@ export const DatabaseService = {
         return data as { accountId: string; url: string };
     },
 
+    // Stripe Connect - Aggiorna lo stato charges_enabled su richiesta
+    async refreshStripeConnectStatus(restaurantId: string) {
+        const { data, error } = await supabase.functions.invoke('stripe-connect-refresh-status', {
+            body: { restaurantId }
+        });
+        if (error) {
+            console.error('Errore refresh stripe connect:', error)
+            return false;
+        }
+        return data as { enabled: boolean };
+    },
+
     // Stripe Connect - Crea Account Session per embedded components
     async createStripeAccountSession(restaurantId: string) {
         const { data, error } = await supabase.functions.invoke('stripe-account-session', {
