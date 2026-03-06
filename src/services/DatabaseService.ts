@@ -78,7 +78,8 @@ export const DatabaseService = {
             'lunch_time_start', 'dinner_time_start', 'enable_course_splitting', 'reservation_duration',
             'weekly_coperto', 'weekly_ayce', 'weekly_service_hours', 'waiter_password',
             'menu_style', 'menu_primary_color', 'view_only_menu_enabled',
-            'enable_reservation_room_selection', 'enable_public_reservations'
+            'enable_reservation_room_selection', 'enable_public_reservations',
+            'show_cooking_times'
         ]
 
         // Copia solo i campi presenti nell'oggetto input
@@ -692,7 +693,7 @@ export const DatabaseService = {
     async getAllTableSessions(restaurantId?: string) {
         let query = supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled, receipt_issued')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled, receipt_issued, paid_amount, notes')
             .order('opened_at', { ascending: false })
             .limit(1000)
         if (restaurantId) {
@@ -888,7 +889,7 @@ export const DatabaseService = {
     async getSessionById(sessionId: string) {
         const { data, error } = await supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled, paid_amount, notes')
             .eq('id', sessionId)
             .single()
         if (error) return null

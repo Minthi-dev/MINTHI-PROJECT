@@ -804,6 +804,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             ? tables.filter(t => !t.room_id)
             : tables.filter(t => t.room_id === selectedRoomFilter), [tables, selectedRoomFilter])
 
+    // Must be before early return to maintain consistent hook call order
+    const sortedTables = useMemo(() => sortTables(filteredTables), [filteredTables, sortBy, sessions, activeOrders])
+    const readyCount = readyItems.length
+
     if (loading) return (
         <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
             {/* Ambient Background */}
@@ -853,9 +857,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             </motion.div>
         </div>
     )
-
-    const sortedTables = useMemo(() => sortTables(filteredTables), [filteredTables, sortBy, sessions, activeOrders])
-    const readyCount = readyItems.length
 
     // Helper function to render a table card - MATCHING ADMIN DASHBOARD GRAPHICS
     const renderTableCard = (table: Table) => {
