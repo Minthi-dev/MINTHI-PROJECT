@@ -74,7 +74,12 @@ export function useSupabaseData<T>(
                         const currentMapper = mapperRef.current
                         if (payload.eventType === 'INSERT') {
                             const newItem = currentMapper ? currentMapper(payload.new) : payload.new as T
-                            setData((prev) => [...prev, newItem])
+                            setData((prev) => {
+                                // Avoid duplicates if item already exists (e.g. from a manual refresh)
+                                const exists = prev.some((item: any) => item.id === (payload.new as any).id)
+                                if (exists) return prev
+                                return [...prev, newItem]
+                            })
                         } else if (payload.eventType === 'UPDATE') {
                             const updatedItem = currentMapper ? currentMapper(payload.new) : payload.new as T
                             setData((prev) => {

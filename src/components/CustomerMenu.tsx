@@ -623,9 +623,8 @@ const CustomerMenuBase = () => {
           } else {
             // Session query failed (RLS/network) but we have saved PIN - trust localStorage
             if (sessionPin && !isViewOnly) {
-              console.log('Session query failed but PIN exists in localStorage, keeping authenticated')
-              // Don't force logout - the PIN might still be valid
-              // The user will be re-authenticated when the session becomes accessible
+              console.log('Session query failed but PIN exists in localStorage, trusting saved PIN')
+              setIsAuthenticated(true)
             } else if (!isViewOnly) {
               setIsAuthenticated(false)
             }
@@ -777,8 +776,7 @@ const CustomerMenuBase = () => {
           setPin(['', '', '', ''])
           return
         }
-        // If joinSession worked, it means a NEW session was created implicitly.
-        // We fetch it again now.
+        // joinSession found an existing open session - fetch full details
         latestSession = await DatabaseService.getActiveSession(tableId)
       } else {
         toast.error("Dati tavolo mancanti. Riprova a scansionare il QR.")
@@ -1607,6 +1605,9 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       // AUTO-ACTIVATE SESSION IF MISSING (Waiter Mode Only)
       if (!activeSession && isWaiterMode) {
         try {
+          // Close ALL open sessions for this table directly to avoid duplicate key constraint
+          await DatabaseService.closeAllOpenSessionsForTable(tableId)
+
           const newSession = await DatabaseService.createSession({
             restaurant_id: restaurantId,
             table_id: tableId,

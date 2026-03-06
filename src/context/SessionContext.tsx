@@ -114,46 +114,44 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const joinSession = useCallback(async (tableId: string, restaurantId: string): Promise<boolean> => {
         setLoading(true);
         try {
-            // Use RPC to get or create session atomically
-            const { data: rpcSessionId, error } = await supabase.rpc('get_or_create_table_session', {
-                p_table_id: tableId,
-                p_restaurant_id: restaurantId
-            });
+            // Only join existing open sessions - never create new ones
+            // Sessions are created by the restaurant owner from the dashboard
+            const { data: openSession, error } = await supabase
+                .from('table_sessions')
+                .select('id')
+                .eq('table_id', tableId)
+                .eq('status', 'OPEN')
+                .maybeSingle();
 
             if (error) {
-                console.error('Supabase RPC Error:', error);
-                // Check for specific error types
+                console.error('Session lookup error:', error);
                 if (error.message?.includes('Failed to fetch') || error.code === 'PGRST000') {
                     toast.error('Errore di connessione al server. Verifica la tua connessione internet.');
                 } else if (error.message?.includes('ERR_NAME_NOT_RESOLVED')) {
                     toast.error('Server non raggiungibile. Contatta il supporto.');
-                } else if (error.code === '42883') {
-                    toast.error('Configurazione server incompleta. Contatta il ristorante.');
                 } else {
                     toast.error(`Errore: ${error.message || 'Impossibile accedere al tavolo.'}`);
                 }
                 return false;
             }
 
-            if (rpcSessionId) {
-                // Fetch full session details to get PIN and Status if needed, but RPC returns ID is enough to start
-                setSessionId(rpcSessionId);
+            if (openSession) {
+                setSessionId(openSession.id);
                 setCurrentTableId(tableId);
                 setSessionStatus('OPEN');
 
                 // Persist
                 localStorage.setItem('tableId', tableId);
-                localStorage.setItem('sessionId', rpcSessionId);
+                localStorage.setItem('sessionId', openSession.id);
                 localStorage.setItem('restaurantId', restaurantId);
 
                 return true;
             }
 
-            toast.error('Tavolo non disponibile. Riprova.');
+            // No open session - table not activated yet
             return false;
         } catch (err: any) {
             console.error('Join Session Failed:', err);
-            // Handle network-level errors (DNS, connection issues)
             if (err.message?.includes('Failed to fetch') || err.name === 'TypeError') {
                 toast.error('Impossibile connettersi al server. Verifica la connessione o contatta il supporto.');
             } else {

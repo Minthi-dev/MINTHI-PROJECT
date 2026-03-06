@@ -604,6 +604,15 @@ export const DatabaseService = {
         if (error) throw error
     },
 
+    async closeAllOpenSessionsForTable(tableId: string) {
+        const { error } = await supabase
+            .from('table_sessions')
+            .update({ status: 'CLOSED', closed_at: new Date().toISOString() })
+            .eq('table_id', tableId)
+            .eq('status', 'OPEN')
+        if (error) throw error
+    },
+
     async markOrdersPaidForSession(sessionId: string) {
         const { error } = await supabase
             .from('orders')

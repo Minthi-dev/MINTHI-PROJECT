@@ -118,7 +118,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
   const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
   const [bookings, , refreshBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
-  const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'created_at', ascending: false })
+  const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
   const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
 
   // Initialize selected categories when available
@@ -567,7 +567,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             `💳 Tavolo ${tableNumber} ha pagato online! €${Number(newAmount - oldAmount).toFixed(2)}`,
             { duration: 8000 }
           )
+          // Also play notification sound
+          if (soundEnabledRef.current) {
+            soundManager.play(selectedSoundRef.current)
+          }
         }
+        // Refresh sessions data to update table cards (e.g. purple "Pagato Online" indicator)
+        refreshSessions()
+        // Also refresh orders since webhook marks orders as PAID
+        debouncedFetch()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
         // Also refresh when order items change (new items added, status updated, etc.)
@@ -1176,6 +1184,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     if (!tableToUpdate) return
 
     try {
+      // Close ALL open sessions for this table directly to avoid duplicate key constraint
+      // Uses direct UPDATE query - doesn't depend on reading first (avoids RLS issues)
+      await DatabaseService.closeAllOpenSessionsForTable(tableId)
+
       const session = await DatabaseService.createSession({
         restaurant_id: restaurantId,
         table_id: tableId,
