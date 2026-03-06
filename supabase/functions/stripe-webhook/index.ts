@@ -62,18 +62,27 @@ serve(async (req) => {
                     // === PAGAMENTO CLIENTE (ordine dal menu) ===
                     const restaurantId = session.metadata?.restaurantId;
                     const sessionId = session.metadata?.tableSessionId;
-                    const orderIds = session.metadata?.orderIds ? JSON.parse(session.metadata.orderIds) : [];
+                    let orderIds = [];
+                    try {
+                        if (session.metadata?.orderIds && session.metadata?.orderIds !== "multiple_orders_overflow") {
+                            orderIds = JSON.parse(session.metadata.orderIds);
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse orderIds from metadata:", e);
+                    }
 
-                    if (restaurantId && orderIds.length > 0) {
-                        for (const orderId of orderIds) {
-                            await supabase
-                                .from("orders")
-                                .update({
-                                    status: "PAID",
-                                    payment_method: "stripe",
-                                    closed_at: new Date().toISOString(),
-                                })
-                                .eq("id", orderId);
+                    if (restaurantId) {
+                        if (orderIds.length > 0) {
+                            for (const orderId of orderIds) {
+                                await supabase
+                                    .from("orders")
+                                    .update({
+                                        status: "PAID",
+                                        payment_method: "stripe",
+                                        closed_at: new Date().toISOString(),
+                                    })
+                                    .eq("id", orderId);
+                            }
                         }
 
                         // Update session with payment info but DON'T close it
