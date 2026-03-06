@@ -1014,7 +1014,20 @@ export const DatabaseService = {
             }
         });
 
-        if (error) throw new Error(data?.error || error.message || 'Errore durante il pagamento');
+        if (error) {
+            let errorMsg = 'Errore durante il pagamento';
+            try {
+                if (data?.error) {
+                    errorMsg = data.error;
+                } else if ((error as any).context) {
+                    const body = await (error as any).context.json();
+                    if (body?.error) errorMsg = body.error;
+                } else if (error.message && !error.message.includes('non-2xx')) {
+                    errorMsg = error.message;
+                }
+            } catch { /* ignore parse errors */ }
+            throw new Error(errorMsg);
+        }
         return data; // { sessionId: string, url: string }
     },
 

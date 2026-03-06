@@ -80,6 +80,10 @@ serve(async (req) => {
             );
         }
 
+        // Array of orderIds might exceed 500 chars if the customer has many separated orders in the session.
+        const orderIdsStr = JSON.stringify(orderIds);
+        const safeOrderIdsMetadata = orderIdsStr.length > 500 ? "multiple_orders_overflow" : orderIdsStr;
+
         // Crea la sessione di checkout con Direct Charge — i fondi vanno direttamente sul conto del ristorante
         // Il secondo argomento { stripeAccount } crea la sessione sull'account connesso (Direct Charge)
         // I soldi NON passano mai dal conto MINTHI
@@ -94,7 +98,7 @@ serve(async (req) => {
                     paymentType: "customer_order",
                     restaurantId,
                     tableSessionId: tableSessionId || "",
-                    orderIds: JSON.stringify(orderIds),
+                    orderIds: safeOrderIdsMetadata,
                     splitLabel: splitLabel || "Pagamento",
                 },
                 ...(customerEmail ? { customer_email: customerEmail } : {}),
