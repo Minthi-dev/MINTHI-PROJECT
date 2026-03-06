@@ -630,6 +630,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!restaurantId || !tableToActivate) return
         setActivatingTable(true)
         try {
+            await DatabaseService.closeAllOpenSessionsForTable(tableToActivate.id)
+
             const pin = Math.floor(1000 + Math.random() * 9000).toString()
             const newSession = await DatabaseService.createSession({
                 table_id: tableToActivate.id,
@@ -867,8 +869,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
         const isTableMarkedInactive = table.is_active === false
 
-        const allTableOrders = activeOrders.filter(o => o.table_session_id === session?.id)
-        const hasStripePaymentToConfirm = session && allTableOrders.some(o => o.payment_method === 'stripe' && o.status === 'PAID') && !session.receipt_issued
+        const hasStripePaymentToConfirm = session && (session.paid_amount || 0) > 0 && !session.receipt_issued
 
         // Exact styles from RestaurantDashboard.tsx
         const tableCardClasses = isTableMarkedInactive
@@ -886,7 +887,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 className={`relative overflow-hidden transition-all duration-300 group cursor-pointer ${tableCardClasses}`}
                 onClick={() => {
                     if (isTableMarkedInactive) return
-                    handleTableClick(table)
+                    if (isActive) {
+                        handleTableClick(table)
+                    } else {
+                        activateTable(table)
+                    }
                 }}
             >
                 {isTableMarkedInactive && (
@@ -902,67 +907,68 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 )}
 
                 <CardContent className="p-0 flex flex-col h-full">
-                    {/* Header — compact on mobile */}
-                    <div className="p-2.5 sm:p-3 flex items-center justify-between gap-1.5 border-b border-white/5 relative z-10">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className={`text-lg sm:text-xl font-bold tracking-tight truncate ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
+                    <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-b border-white/5 relative z-10">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <span className={`text-2xl font-bold tracking-tight whitespace-nowrap ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
                                 {table.number}
                             </span>
-                            <div className="flex items-center gap-1 text-zinc-400 bg-white/5 px-2 py-0.5 rounded-full shrink-0">
-                                <User size={12} weight="bold" />
-                                <span className="text-xs font-bold">{table.seats || 4}</span>
+                            <div className="flex items-center gap-1.5 text-zinc-400 bg-white/5 px-3 py-1 rounded-full shrink-0">
+                                <User size={16} weight="bold" />
+                                <span className="text-sm font-bold">{table.seats || 4}</span>
                             </div>
                         </div>
                         <Badge
                             variant={isActive ? 'default' : 'outline'}
-                            className={`text-[9px] uppercase tracking-wider font-bold h-5 px-1.5 shrink-0 ${isActive ? 'bg-amber-500 text-black border-none' : 'bg-transparent text-zinc-500 border-zinc-700'}`}
+                            className={isActive ? 'bg-amber-500 text-black border-none font-bold' : 'bg-transparent text-zinc-500 border-zinc-700'}
                         >
-                            {isActive ? (statusInfo.step === 'eating' ? 'Mangiando' : statusInfo.step === 'waiting' ? 'Attesa' : 'Occupato') : 'Libero'}
+                            {isActive ? 'Occupato' : 'Libero'}
                         </Badge>
                     </div>
 
-                    {/* Center Content — compact */}
-                    <div className="flex-1 p-3 sm:p-4 flex flex-col items-center justify-center gap-2 relative z-10">
+                    <div className="flex-1 p-5 flex flex-col items-center justify-center gap-3 relative z-10">
                         {isActive ? (
                             <>
                                 <div className="text-center">
-                                    <p className="text-[8px] text-amber-500/70 mb-0.5 uppercase tracking-[0.2em] font-semibold">PIN</p>
-                                    <div className="bg-black/40 px-3 sm:px-5 py-2 rounded-xl border border-amber-500/20 shadow-inner">
-                                        <span className="text-2xl sm:text-3xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
+                                    <p className="text-[9px] text-amber-500/70 mb-1 uppercase tracking-[0.2em] font-semibold">PIN</p>
+                                    <div className="bg-black/40 px-6 py-3 rounded-xl border border-amber-500/20 shadow-inner min-w-[120px]">
+                                        <span className="text-4xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
                                             {session?.session_pin || '...'}
                                         </span>
                                     </div>
                                 </div>
                                 {activeOrder && (
-                                    <Badge variant="outline" className="text-[9px] bg-black/40 border-amber-500/30 text-amber-200">
+                                    <Badge variant="outline" className="text-[10px] bg-black/40 border-amber-500/30 text-amber-200">
                                         <CheckCircle size={10} className="mr-1" weight="fill" />
-                                        {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} serviti
+                                        {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati
                                     </Badge>
                                 )}
                                 {hasStripePaymentToConfirm && (
-                                    <Badge variant="outline" className="text-[9px] bg-purple-500/20 border-purple-500/50 text-purple-200 mt-1">
-                                        💳 Pagato Online
+                                    <Badge variant="outline" className="text-[10px] bg-purple-500/20 border-purple-500/50 text-purple-200 mt-1">
+                                        💳 Pagato Online {(session?.paid_amount || 0) > 0 ? `(€${session!.paid_amount!.toFixed(2)})` : ''}
                                     </Badge>
                                 )}
                             </>
                         ) : (
                             <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-all duration-300">
-                                <ForkKnife size={28} className="mx-auto mb-1" weight="duotone" />
-                                <p className="text-[11px] font-medium">Tocca per Attivare</p>
+                                <ForkKnife size={32} className="mx-auto mb-1" weight="duotone" />
+                                <p className="text-xs font-medium">Clicca per Ordinare</p>
                             </div>
                         )}
                     </div>
 
-                    {/* Footer Actions — icon-only on mobile to prevent overflow */}
-                    <div className="p-2 sm:p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-1.5 relative z-10">
+                    <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2 relative z-10">
                         {isActive ? (
-                            <div className={`grid gap-1.5 ${hasStripePaymentToConfirm ? 'grid-cols-1' : (restaurant?.allow_waiter_payments ? 'grid-cols-2' : 'grid-cols-1')}`}>
+                            <div className={`grid gap-2 ${hasStripePaymentToConfirm ? 'grid-cols-1' : (restaurant?.allow_waiter_payments ? 'grid-cols-2' : 'grid-cols-1')}`}>
                                 {hasStripePaymentToConfirm ? (
                                     <Button
-                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-10 text-xs overflow-hidden"
+                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-8 text-xs font-bold"
                                         size="sm"
                                         onClick={async (e) => {
                                             e.stopPropagation();
+                                            if (!restaurant?.allow_waiter_payments) {
+                                                toast.error('Non hai i permessi di cassa per confermare lo scontrino');
+                                                return;
+                                            }
                                             try {
                                                 await DatabaseService.updateSessionReceiptIssued(session.id, true);
                                                 toast.success('Scontrino confermato!');
@@ -972,35 +978,34 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                             }
                                         }}
                                     >
-                                        <CheckCircle size={16} weight="fill" className="mr-1.5 shrink-0" />
-                                        <span className="hidden sm:inline">Conferma Scontrino</span>
-                                        <span className="sm:hidden">Scontrino</span>
+                                        <CheckCircle size={14} weight="fill" className="mr-1.5 shrink-0" />
+                                        <span>Conferma Scontrino</span>
                                     </Button>
                                 ) : (
                                     <>
                                         <Button
                                             variant="outline"
                                             size="sm"
-                                            className="shadow-sm hover:shadow transition-shadow h-10 text-xs bg-zinc-900 border-zinc-700 hover:bg-zinc-800 hover:text-white overflow-hidden"
+                                            className="shadow-sm hover:shadow transition-shadow h-8 text-xs"
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 handleQuickOrderClick(table)
                                             }}
                                         >
-                                            <Plus size={16} className="shrink-0" />
-                                            <span className="hidden sm:inline ml-1.5">Ordina</span>
+                                            <Plus size={14} className="shrink-0 mr-1.5" />
+                                            <span>Ordina</span>
                                         </Button>
                                         {restaurant?.allow_waiter_payments && (
                                             <Button
-                                                className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-sm hover:shadow transition-all h-10 text-xs overflow-hidden"
+                                                className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-sm hover:shadow transition-all h-8 text-xs"
                                                 size="sm"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
                                                     openPaymentDialog(e, table)
                                                 }}
                                             >
-                                                <Receipt size={16} className="shrink-0" />
-                                                <span className="hidden sm:inline ml-1.5">Conto</span>
+                                                <Receipt size={14} className="shrink-0 mr-1.5" />
+                                                <span>Conto</span>
                                             </Button>
                                         )}
                                     </>
@@ -1008,14 +1013,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             </div>
                         ) : (
                             <Button
-                                className="w-full shadow-sm hover:shadow transition-shadow h-10 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                                className="w-full shadow-sm hover:shadow transition-shadow h-8 text-xs"
                                 size="sm"
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     activateTable(table)
                                 }}
                             >
-                                <Plus size={16} className="mr-1" />
+                                <Plus size={14} className="mr-1.5" />
                                 Attiva
                             </Button>
                         )}
