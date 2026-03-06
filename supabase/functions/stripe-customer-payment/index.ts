@@ -59,17 +59,26 @@ serve(async (req) => {
             );
         }
 
-        // Crea le line items per Stripe
-        const lineItems = items.map((item: { name: string; price: number; quantity: number }) => ({
-            price_data: {
-                currency: "eur",
-                product_data: {
-                    name: item.name,
+        // Crea le line items per Stripe, escludendo elementi con prezzo 0 (come piatti AYCE se costo è coperto in origine)
+        const lineItems = items
+            .filter((item: { name: string; price: number; quantity: number }) => item.price > 0)
+            .map((item: { name: string; price: number; quantity: number }) => ({
+                price_data: {
+                    currency: "eur",
+                    product_data: {
+                        name: item.name,
+                    },
+                    unit_amount: Math.round(item.price * 100), // Stripe usa centesimi
                 },
-                unit_amount: Math.round(item.price * 100), // Stripe usa centesimi
-            },
-            quantity: item.quantity,
-        }));
+                quantity: item.quantity,
+            }));
+
+        if (lineItems.length === 0) {
+            return new Response(
+                JSON.stringify({ error: "Il totale da pagare tramite Stripe deve essere maggiore di 0€" }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
 
         // Crea la sessione di checkout con Direct Charge — i fondi vanno direttamente sul conto del ristorante
         // Il secondo argomento { stripeAccount } crea la sessione sull'account connesso (Direct Charge)
