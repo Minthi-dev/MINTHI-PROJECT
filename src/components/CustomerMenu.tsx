@@ -57,7 +57,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 // Icons
-import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users } from '@phosphor-icons/react'
+import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users, Receipt } from '@phosphor-icons/react'
 import {
   ShoppingBasket, Utensils, ChefHat, Search,
   RefreshCw, AlertCircle, ChevronUp, ChevronDown, Layers, ArrowLeft, Send,
@@ -2020,8 +2020,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
               </Button>
             </motion.div>
           )}
-          {/* Pagamento button - shows when cart is empty but there are unpaid orders */}
-          {!isViewOnly && cart.length === 0 && fullRestaurant?.enable_stripe_payments && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+          {/* Pagamento button - shows when cart is empty and there are unpaid orders */}
+          {!isViewOnly && cart.length === 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
             <motion.div
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -2029,16 +2029,22 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
               className="fixed bottom-6 left-4 right-4 z-40"
             >
               <Button
-                onClick={() => { setCustomerTab('payment'); setPaymentStep('options') }}
+                onClick={() => { setCustomerTab('payment'); setPaymentStep((fullRestaurant as any)?.enable_stripe_payments ? 'options' : 'summary') }}
                 className="w-full h-14 rounded-full flex items-center justify-center gap-3 px-6 transform transition-transform active:scale-95 shadow-xl"
                 style={{
-                  background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)',
-                  color: '#ffffff',
-                  boxShadow: '0 10px 25px -5px rgba(99, 91, 255, 0.4)',
+                  background: (fullRestaurant as any)?.enable_stripe_payments
+                    ? 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)'
+                    : `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primary}dd 100%)`,
+                  color: (fullRestaurant as any)?.enable_stripe_payments ? '#ffffff' : '#000',
+                  boxShadow: (fullRestaurant as any)?.enable_stripe_payments
+                    ? '0 10px 25px -5px rgba(99, 91, 255, 0.4)'
+                    : `0 10px 25px -5px ${theme.primaryAlpha(0.4)}`,
                 }}
               >
-                <CreditCard size={22} weight="fill" />
-                <span className="font-bold text-lg tracking-wide uppercase">Pagamento</span>
+                {(fullRestaurant as any)?.enable_stripe_payments ? <CreditCard size={22} weight="fill" /> : <Receipt size={22} weight="fill" />}
+                <span className="font-bold text-lg tracking-wide uppercase">
+                  {(fullRestaurant as any)?.enable_stripe_payments ? 'Pagamento' : 'Il Conto'}
+                </span>
                 <span className="px-2.5 py-0.5 rounded-full text-sm font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
                   €{unpaidTotal.toFixed(2)}
                 </span>
@@ -2773,7 +2779,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           </main>
 
           {/* Fixed Bottom Container for Payment Options */}
-          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (fullRestaurant as any)?.enable_stripe_payments && (
             <div className="flex-none p-4 backdrop-blur-xl shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.3)] space-y-3 z-30" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.pageBg }}>
               <div className="w-12 h-1 bg-zinc-300/20 rounded-full mx-auto mb-1"></div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-center" style={{ color: theme.primary }}>Scegli come pagare</h3>
@@ -2852,7 +2858,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           )}
 
           {/* Fixed Pay Button at bottom - only for selectItems step */}
-          {!stripePaymentSuccess && paymentStep === 'selectItems' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+          {!stripePaymentSuccess && paymentStep === 'selectItems' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (fullRestaurant as any)?.enable_stripe_payments && (
             <div className="flex-none p-4 backdrop-blur-xl" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.cardBg }}>
               <Button
                 className="w-full font-bold h-14 rounded-2xl text-lg shadow-lg"

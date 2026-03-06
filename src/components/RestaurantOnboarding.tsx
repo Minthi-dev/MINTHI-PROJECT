@@ -127,6 +127,7 @@ export default function RestaurantOnboarding() {
                     username: form.username.trim(),
                     password: form.password,
                     freeMonths: tokenData.free_months,
+                    registrationToken: tokenData.token,
                     billingName: form.billingName.trim(),
                     vatNumber: form.vatNumber.trim(),
                     billingAddress: form.billingAddress.trim(),

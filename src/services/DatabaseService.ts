@@ -956,34 +956,30 @@ export const DatabaseService = {
     }) {
         const passwordHash = await hashPassword(data.password)
 
-        // Salva i dati in pending_registrations
-        const { data: pending, error: insertError } = await supabase
-            .from('pending_registrations')
-            .insert({
-                registration_token: data.registrationToken,
-                name: data.name,
-                phone: data.phone || null,
-                email: data.email || null,
-                billing_name: data.billingName,
-                vat_number: data.vatNumber,
-                billing_address: data.billingAddress,
-                billing_city: data.billingCity,
-                billing_cap: data.billingCap,
-                billing_province: data.billingProvince,
-                codice_univoco: data.codiceUnivoco,
-                username: data.username,
-                password_hash: passwordHash,
-                raw_password: data.password,
-            })
-            .select('id')
-            .single()
+        // Salva i dati in pending_registrations via RPC (bypassa RLS)
+        const { data: pendingId, error: insertError } = await supabase.rpc('insert_pending_registration', {
+            p_registration_token: data.registrationToken,
+            p_name: data.name,
+            p_phone: data.phone || null,
+            p_email: data.email || null,
+            p_billing_name: data.billingName,
+            p_vat_number: data.vatNumber,
+            p_billing_address: data.billingAddress,
+            p_billing_city: data.billingCity,
+            p_billing_cap: data.billingCap,
+            p_billing_province: data.billingProvince,
+            p_codice_univoco: data.codiceUnivoco,
+            p_username: data.username,
+            p_password_hash: passwordHash,
+            p_raw_password: data.password,
+        })
 
         if (insertError) throw insertError
 
         // Crea sessione Stripe con pendingRegistrationId
         const { data: checkout, error: checkoutError } = await supabase.functions.invoke('stripe-checkout', {
             body: {
-                pendingRegistrationId: pending.id,
+                pendingRegistrationId: pendingId,
                 priceId: data.priceId,
                 successUrl: `${window.location.origin}/register-success`,
                 cancelUrl: `${window.location.origin}/register?cancelled=true`,
@@ -1277,6 +1273,7 @@ export const DatabaseService = {
             .maybeSingle()
         if (error) throw error
         if (!data) return null
+        if (data.used) return null // Token già usato
         if (data.expires_at && new Date(data.expires_at) < new Date()) return null
         return data
     },
@@ -1292,6 +1289,7 @@ export const DatabaseService = {
     async registerRestaurant(data: {
         name: string, phone: string, email: string, username: string, password: string,
         freeMonths?: number,
+        registrationToken?: string,
         billingName?: string, vatNumber?: string, billingAddress?: string,
         billingCity?: string, billingCap?: string, billingProvince?: string, codiceUnivoco?: string
     }) {
@@ -1312,6 +1310,7 @@ export const DatabaseService = {
             p_billing_cap: data.billingCap || null,
             p_billing_province: data.billingProvince || null,
             p_codice_univoco: data.codiceUnivoco || null,
+            p_registration_token: data.registrationToken || null,
         });
 
         if (error) {
