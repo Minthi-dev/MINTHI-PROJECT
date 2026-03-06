@@ -2554,7 +2554,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   <Button
                     onClick={() => {
                       setStripePaymentSuccess(false);
-                      setPaymentStep('summary');
+                      setPaymentStep('options');
                       setCustomerTab('payment');
                     }}
                     variant="outline"

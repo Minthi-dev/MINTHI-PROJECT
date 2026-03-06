@@ -186,6 +186,8 @@ export default function TableBillDialog({
         return splitPayableItems.reduce((acc, item) => acc + item.price, 0)
     }, [splitPayableItems])
 
+    const remainingAmount = Math.max(0, totalAmount - (session?.paid_amount || 0))
+
 
     const perPersonAmount = useMemo(() => {
         const count = Math.max(1, session?.customer_count || 1)
@@ -482,16 +484,16 @@ export default function TableBillDialog({
                                                             setSelectedSplitItems(newSet)
                                                         }}
                                                         className={`flex items-center justify-between p-4 rounded-xl border transition-all select-none group ${isPaid
-                                                                ? 'bg-white/[0.02] border-white/5 opacity-40 cursor-default'
-                                                                : isSelected
-                                                                    ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)] cursor-pointer'
-                                                                    : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10 cursor-pointer'
+                                                            ? 'bg-white/[0.02] border-white/5 opacity-40 cursor-default'
+                                                            : isSelected
+                                                                ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)] cursor-pointer'
+                                                                : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10 cursor-pointer'
                                                             }`}
                                                     >
                                                         <div className="flex items-center gap-4">
                                                             <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all ${isPaid
-                                                                    ? 'bg-emerald-500/20 border-emerald-500/50'
-                                                                    : isSelected ? 'bg-amber-500 border-amber-500 scale-110' : 'border-zinc-600 bg-transparent group-hover:border-zinc-500'
+                                                                ? 'bg-emerald-500/20 border-emerald-500/50'
+                                                                : isSelected ? 'bg-amber-500 border-amber-500 scale-110' : 'border-zinc-600 bg-transparent group-hover:border-zinc-500'
                                                                 }`}>
                                                                 {isPaid && <Check size={14} weight="bold" className="text-emerald-500" />}
                                                                 {isSelected && <Check size={14} weight="bold" className="text-black" />}
@@ -678,17 +680,27 @@ export default function TableBillDialog({
                                         </Button>
                                     </div>
 
-                                    <Button
-                                        className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xl rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between px-6"
-                                        onClick={() => onPaymentComplete()}
-                                        disabled={totalAmount <= 0}
-                                    >
-                                        <div className="flex items-center gap-2">
+                                    {remainingAmount <= 0 && totalAmount > 0 && session?.paid_amount ? (
+                                        <Button
+                                            className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xl rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 px-6"
+                                            onClick={() => onPaymentComplete()}
+                                        >
                                             <CheckCircle weight="fill" size={24} />
-                                            <span>Salda Tutto</span>
-                                        </div>
-                                        <span>€{totalAmount.toFixed(2)}</span>
-                                    </Button>
+                                            <span>Conferma Scontrino e Chiudi</span>
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xl rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between px-6"
+                                            onClick={() => onPaymentComplete()}
+                                            disabled={remainingAmount <= 0 && totalAmount <= 0}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle weight="fill" size={24} />
+                                                <span>{session?.paid_amount ? 'Incassa Rimanente' : 'Salda Tutto'}</span>
+                                            </div>
+                                            <span>€{remainingAmount.toFixed(2)}</span>
+                                        </Button>
+                                    )}
 
                                     {onEmptyTable && (
                                         <Button
