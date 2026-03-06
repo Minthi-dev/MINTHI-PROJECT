@@ -2029,23 +2029,19 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
               className="fixed bottom-6 left-4 right-4 z-40"
             >
               <Button
-                onClick={() => { setCustomerTab('payment'); setPaymentStep((fullRestaurant as any)?.enable_stripe_payments ? 'options' : 'summary') }}
-                className="w-full h-14 rounded-full flex items-center justify-center gap-3 px-6 transform transition-transform active:scale-95 shadow-xl"
+                onClick={() => { setCustomerTab('payment'); setPaymentStep('options') }}
+                className="w-full h-14 rounded-full flex items-center justify-center gap-3 px-6 transform transition-transform active:scale-95 shadow-2xl"
                 style={{
-                  background: (fullRestaurant as any)?.enable_stripe_payments
-                    ? 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)'
-                    : `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primary}dd 100%)`,
-                  color: (fullRestaurant as any)?.enable_stripe_payments ? '#ffffff' : '#000',
-                  boxShadow: (fullRestaurant as any)?.enable_stripe_payments
-                    ? '0 10px 25px -5px rgba(99, 91, 255, 0.4)'
-                    : `0 10px 25px -5px ${theme.primaryAlpha(0.4)}`,
+                  background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primaryDark} 100%)`,
+                  color: '#000',
+                  boxShadow: `0 10px 25px -5px ${theme.primaryAlpha(0.4)}`,
                 }}
               >
-                {(fullRestaurant as any)?.enable_stripe_payments ? <CreditCard size={22} weight="fill" /> : <Receipt size={22} weight="fill" />}
+                <Receipt size={22} weight="fill" />
                 <span className="font-bold text-lg tracking-wide uppercase">
-                  {(fullRestaurant as any)?.enable_stripe_payments ? 'Pagamento' : 'Il Conto'}
+                  Conto e Pagamento
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-sm font-bold" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                <span className="px-2.5 py-0.5 rounded-full text-sm font-bold" style={{ backgroundColor: 'rgba(0,0,0,0.1)' }}>
                   €{unpaidTotal.toFixed(2)}
                 </span>
               </Button>
@@ -2512,7 +2508,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 <span className="text-sm">Menù</span>
               </button>
               <h1 className="text-base font-semibold tracking-wide text-center flex-1" style={{ color: theme.textPrimary }}>
-                💳 Pagamento Sicuro
+                💳 Conto e Pagamento
               </h1>
               <div className="min-w-[60px] pointer-events-none" /> {/* spacer - pointer-events-none to not block touches */}
             </div>
@@ -2721,57 +2717,78 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
               </div>
             ) : (
               /* === Payment Options with Order Summary (default view) === */
-              <div className="space-y-4">
+              <div className="space-y-6 max-w-lg mx-auto pb-56">
                 {/* Order Summary section */}
-                <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: theme.textMuted }}>I tuoi ordini</h3>
+                <h3 className="text-xs font-bold uppercase tracking-[0.2em] mb-4 text-center mt-2" style={{ color: theme.textMuted }}>I tuoi ordini</h3>
 
-                {previousOrders.map(order => (
-                  <div key={order.id} className="rounded-xl p-3" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
-                    <div className="flex justify-between text-sm mb-2 pb-2" style={{ borderBottom: `1px solid ${theme.divider}` }}>
-                      <span className="text-xs" style={{ color: theme.textSecondary }}>Ordine • {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span className="font-bold" style={{ color: order.status === 'PAID' ? '#10B981' : theme.textPrimary }}>
-                        {order.status === 'PAID' ? '✓ Pagato' : `€${order.total_amount?.toFixed(2)}`}
-                      </span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {order.items?.map((item: any, i: number) => (
-                        <div key={i} className="flex justify-between text-xs items-center" style={{ color: theme.textMuted }}>
-                          <span className="flex-1">
-                            <span className="font-bold" style={{ color: theme.textSecondary }}>{item.quantity}x</span> {(item.dish || dishes.find(d => d.id === item.dish_id))?.name || 'Piatto'}
-                          </span>
-                          <span className={item.status === 'PAID' ? 'line-through opacity-50' : ''} style={{ color: item.status === 'PAID' ? '#10B981' : theme.textSecondary }}>
-                            €{((item.dish?.price || 0) * item.quantity).toFixed(2)}
-                          </span>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+                  style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.primaryAlpha(0.2)}` }}
+                >
+                  <div className="absolute top-0 left-0 right-0 h-1" style={{ background: `linear-gradient(to right, ${theme.primary}, ${theme.primaryDark})` }} />
+
+                  <div className="space-y-6">
+                    {previousOrders.map((order, orderIdx) => (
+                      <div key={order.id} className="space-y-3">
+                        <div className="flex justify-between text-xs items-center opacity-70 mb-2">
+                          <span className="uppercase tracking-wider font-semibold">Ordine {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {order.status === 'PAID' && <span className="text-emerald-500 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10">PAGATO</span>}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                        {order.items?.map((item: any, i: number) => (
+                          <div key={i} className="flex justify-between text-sm items-center gap-4">
+                            <span className="flex-1 flex items-baseline gap-2">
+                              <span className="font-bold text-xs" style={{ color: theme.primary }}>{item.quantity}x</span>
+                              <span className="font-medium truncate" style={{ color: theme.textPrimary }}>{(item.dish || dishes.find(d => d.id === item.dish_id))?.name || 'Piatto'}</span>
+                            </span>
+                            <span className={`font-medium ${item.status === 'PAID' ? 'line-through opacity-40' : ''}`} style={{ color: item.status === 'PAID' ? '#10B981' : theme.textPrimary }}>
+                              €{((item.dish?.price || 0) * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                        {orderIdx < previousOrders.length - 1 && <div className="h-px w-full my-4" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)' }} />}
+                      </div>
+                    ))}
 
-                {/* Coperto / AYCE summary */}
-                {(copertoInfo.enabled || (ayceInfo.enabled && ayceInfo.price > 0)) && (
-                  <div className="rounded-xl p-3 space-y-1.5" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
-                    {copertoInfo.enabled && (
-                      <div className="flex justify-between text-xs" style={{ color: theme.textSecondary }}>
-                        <span>🍽 Coperto × {copertoInfo.count}</span>
-                        <span className="font-bold">€{(copertoInfo.price * copertoInfo.count).toFixed(2)}</span>
-                      </div>
-                    )}
-                    {ayceInfo.enabled && ayceInfo.price > 0 && (
-                      <div className="flex justify-between text-xs" style={{ color: theme.textSecondary }}>
-                        <span>🔄 All You Can Eat × {activeSession?.customer_count || 1}</span>
-                        <span className="font-bold">€{(ayceInfo.price * (activeSession?.customer_count || 1)).toFixed(2)}</span>
+                    {/* Coperto / AYCE summary */}
+                    {(copertoInfo.enabled || (ayceInfo.enabled && ayceInfo.price > 0)) && (
+                      <div className="pt-4 border-t border-dashed" style={{ borderColor: theme.divider }}>
+                        <div className="space-y-3">
+                          {copertoInfo.enabled && (
+                            <div className="flex justify-between text-sm items-center">
+                              <span className="font-medium flex items-center gap-2" style={{ color: theme.textSecondary }}><span>🍽</span> Coperto × {copertoInfo.count}</span>
+                              <span className="font-medium" style={{ color: theme.textPrimary }}>€{(copertoInfo.price * copertoInfo.count).toFixed(2)}</span>
+                            </div>
+                          )}
+                          {ayceInfo.enabled && ayceInfo.price > 0 && (
+                            <div className="flex justify-between text-sm items-center">
+                              <span className="font-medium flex items-center gap-2" style={{ color: theme.textSecondary }}><span>🔄</span> All You Can Eat × {activeSession?.customer_count || 1}</span>
+                              <span className="font-medium" style={{ color: theme.textPrimary }}>€{(ayceInfo.price * (activeSession?.customer_count || 1)).toFixed(2)}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
+                </motion.div>
 
                 {/* Total */}
                 {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
-                  <div className="p-4 rounded-2xl text-center" style={{ background: 'linear-gradient(135deg, #635BFF10, #7C3AED10)', border: '1px solid #635BFF30' }}>
-                    <p className="text-xs uppercase tracking-wider mb-1" style={{ color: theme.textMuted }}>Totale da pagare</p>
-                    <p className="text-3xl font-bold" style={{ color: '#635BFF' }}>€{unpaidTotal.toFixed(2)}</p>
-                  </div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="mt-6 flex flex-col items-center justify-center pb-8"
+                  >
+                    <p className="text-xs uppercase tracking-[0.3em] mb-2 font-semibold" style={{ color: theme.textMuted }}>Totale da pagare</p>
+                    <div className="relative">
+                      <div className="absolute inset-0 blur-2xl opacity-20" style={{ background: theme.primary, borderRadius: '50%' }}></div>
+                      <p className="text-5xl font-black tracking-tight drop-shadow-lg relative" style={{ color: theme.primary }}>
+                        €{unpaidTotal.toFixed(2)}
+                      </p>
+                    </div>
+                  </motion.div>
                 )}
 
               </div>
@@ -2779,82 +2796,91 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           </main>
 
           {/* Fixed Bottom Container for Payment Options */}
-          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (fullRestaurant as any)?.enable_stripe_payments && (
-            <div className="flex-none p-4 backdrop-blur-xl shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.3)] space-y-3 z-30" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.pageBg }}>
-              <div className="w-12 h-1 bg-zinc-300/20 rounded-full mx-auto mb-1"></div>
-              <h3 className="text-xs font-bold uppercase tracking-wider text-center" style={{ color: theme.primary }}>Scegli come pagare</h3>
+          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+            <motion.div
+              initial={{ y: 200, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 200, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed bottom-0 left-0 right-0 p-4 backdrop-blur-3xl shadow-[0_-20px_50px_-15px_rgba(0,0,0,0.8)] space-y-3 z-30 rounded-t-[2rem]"
+              style={{ borderTop: `1px solid ${theme.cardBorder}`, backgroundColor: 'rgba(9, 9, 11, 0.90)' }}
+            >
+              <div className="w-12 h-1.5 bg-zinc-600/40 rounded-full mx-auto mb-3"></div>
 
               {/* Option 1: Pay All */}
               <button
                 onClick={() => handleStripePayment('full')}
                 disabled={isProcessingStripePayment}
-                className="w-full p-4 rounded-2xl text-left transition-all active:scale-[0.98]"
-                style={{ background: 'linear-gradient(135deg, #635BFF 0%, #7C3AED 100%)', color: '#fff', boxShadow: '0 4px 14px 0 rgba(99, 91, 255, 0.39)' }}
+                className="w-full p-4 rounded-2xl text-left transition-all active:scale-[0.98] group relative overflow-hidden"
+                style={{ background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primaryDark} 100%)`, color: '#000', boxShadow: `0 8px 20px -5px ${theme.primaryAlpha(0.4)}` }}
               >
-                <div className="flex items-center justify-between">
+                <div className="absolute inset-0 bg-white/20 translate-y-full group-active:translate-y-0 transition-transform"></div>
+                <div className="flex items-center justify-between relative z-10">
                   <div className="flex items-center gap-3">
-                    <Wallet size={24} weight="fill" />
+                    <div className="p-2 rounded-xl bg-black/10 backdrop-blur-sm">
+                      <Wallet size={24} weight="fill" color="#000" />
+                    </div>
                     <div>
-                      <p className="font-bold text-base">Pagamento Totale</p>
-                      <p className="text-xs opacity-80">Paga l'intero conto</p>
+                      <p className="font-extrabold text-base tracking-wide uppercase text-black">Pagamento Totale</p>
+                      <p className="text-xs font-medium text-black/70">Paga l'intero conto in un colpo solo</p>
                     </div>
                   </div>
-                  <span className="text-lg font-bold">€{unpaidTotal.toFixed(2)}</span>
                 </div>
               </button>
 
-              {/* Option 2: Alla Romana */}
-              <div className="rounded-2xl overflow-hidden shadow-sm" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
-                <div className="p-3">
-                  <div className="flex flex-col gap-2 relative">
-                    <div className="flex items-center gap-3">
-                      <Users size={24} weight="duotone" style={{ color: '#635BFF' }} />
-                      <div className="flex-1">
-                        <p className="font-bold text-sm" style={{ color: theme.textPrimary }}>Alla Romana</p>
-                        <p className="text-[10px]" style={{ color: theme.textMuted }}>Dividi in parti uguali</p>
-                      </div>
-                      <div className="flex items-center gap-1 p-1 rounded-xl" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
-                        <button onClick={() => setRomanaCount(c => Math.max(2, c - 1))} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: theme.textSecondary }}>
-                          <Minus size={14} weight="bold" />
-                        </button>
-                        <span className="w-6 text-center font-bold text-sm" style={{ color: theme.textPrimary }}>{romanaCount}</span>
-                        <button onClick={() => setRomanaCount(c => Math.min(20, c + 1))} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: theme.textSecondary }}>
-                          <Plus size={14} weight="bold" />
-                        </button>
-                      </div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Option 2: Diviso per Piatti */}
+                <button
+                  onClick={() => { setPaymentStep('selectItems'); setSelectedPaymentItems(new Set()) }}
+                  className="w-full p-3.5 rounded-2xl text-left transition-all active:scale-[0.98] flex flex-col justify-between items-start gap-4"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px solid ${theme.cardBorder}`, boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}
+                >
+                  <div className="w-full flex items-center justify-between">
+                    <div className="p-2 rounded-xl" style={{ backgroundColor: theme.primaryAlpha(0.15) }}>
+                      <ListNumbers size={20} weight="fill" style={{ color: theme.primary }} />
                     </div>
-                    <Button
-                      onClick={() => handleStripePayment('split', romanaCount)}
-                      disabled={isProcessingStripePayment}
-                      className="w-full h-10 rounded-xl font-bold"
-                      style={{ backgroundColor: '#635BFF', color: '#fff' }}
-                    >
+                    <ChevronRight className="w-4 h-4" style={{ color: theme.textMuted }} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm leading-tight mb-0.5" style={{ color: theme.textPrimary }}>Diviso per Piatti</p>
+                    <p className="text-[10px] font-medium" style={{ color: theme.textMuted }}>Scegli cosa pagare</p>
+                  </div>
+                </button>
+
+                {/* Option 3: Alla Romana */}
+                <div className="w-full p-3.5 rounded-2xl flex flex-col justify-between items-start gap-2" style={{ backgroundColor: 'rgba(255,255,255,0.03)', border: `1px solid ${theme.cardBorder}`, boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="p-2 rounded-xl" style={{ backgroundColor: theme.primaryAlpha(0.15) }}>
+                      <Users size={20} weight="fill" style={{ color: theme.primary }} />
+                    </div>
+                    <div className="flex rounded-lg p-0.5" style={{ backgroundColor: 'rgba(0,0,0,0.4)', border: `1px solid ${theme.cardBorder}` }}>
+                      <button onClick={() => setRomanaCount(c => Math.max(2, c - 1))} className="w-6 h-6 rounded flex items-center justify-center active:bg-white/10" style={{ color: theme.textSecondary }}>
+                        <Minus size={12} weight="bold" />
+                      </button>
+                      <span className="w-6 text-center font-bold text-sm flex items-center justify-center" style={{ color: theme.textPrimary }}>{romanaCount}</span>
+                      <button onClick={() => setRomanaCount(c => Math.min(20, c + 1))} className="w-6 h-6 rounded flex items-center justify-center active:bg-white/10" style={{ color: theme.textSecondary }}>
+                        <Plus size={12} weight="bold" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="w-full mt-1.5 flex flex-col gap-2">
+                    <div>
+                      <p className="font-bold text-sm leading-tight mb-0.5" style={{ color: theme.textPrimary }}>Alla Romana</p>
+                      <p className="text-[10px] font-medium" style={{ color: theme.textMuted }}>Dividi equamente</p>
+                    </div>
+                    <button onClick={() => handleStripePayment('split', romanaCount)} disabled={isProcessingStripePayment} className="w-full py-2 rounded-xl font-bold text-xs transition-colors border active:bg-opacity-30" style={{ backgroundColor: theme.primaryAlpha(0.15), color: theme.primary, borderColor: theme.primaryAlpha(0.3) }}>
                       Paga €{(unpaidTotal / romanaCount).toFixed(2)}
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Option 3: Diviso per Piatti */}
-              <button
-                onClick={() => { setPaymentStep('selectItems'); setSelectedPaymentItems(new Set()) }}
-                className="w-full p-3 rounded-2xl text-left transition-all active:scale-[0.98] shadow-sm"
-                style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}
-              >
-                <div className="flex items-center gap-3">
-                  <ListNumbers size={24} weight="duotone" style={{ color: '#635BFF' }} />
-                  <div>
-                    <p className="font-bold text-sm" style={{ color: theme.textPrimary }}>Diviso per Piatti</p>
-                    <p className="text-[10px]" style={{ color: theme.textMuted }}>Seleziona cosa pagare</p>
-                  </div>
-                  <ChevronRight className="ml-auto w-4 h-4" style={{ color: theme.textMuted }} />
-                </div>
-              </button>
-
-              <p className="text-[10px] text-center pt-1 m-0" style={{ color: theme.textMuted }}>
-                🔒 Pagamento sicuro tramite Stripe
-              </p>
-            </div>
+              {(fullRestaurant as any)?.enable_stripe_payments && (
+                <p className="text-[9px] text-center pt-1 m-0 font-medium uppercase tracking-[0.2em]" style={{ color: theme.textMuted }}>
+                  🔒 Pagamento sicuro tramite Stripe
+                </p>
+              )}
+            </motion.div>
           )}
 
           {/* Fixed Pay Button at bottom - only for selectItems step */}
