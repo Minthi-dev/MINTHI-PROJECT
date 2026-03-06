@@ -674,19 +674,24 @@ const CustomerMenuBase = () => {
         // Filter by session ID, not table_id, for precise targeting
         filter: `id=eq.${currentSessionId}`
       }, async (payload) => {
-        // Handle session updates (status changed to CLOSED)
+        // Handle session updates (status changed or paid_amount updated)
         if (payload.eventType === 'UPDATE') {
           const updatedSession = payload.new as any
-          // Double-check session ID matches before logging out
-          if (updatedSession.id === currentSessionId && updatedSession.status === 'CLOSED') {
-            // Session closed - force logout handled by session context effect usually, but we sync state here
-            setIsAuthenticated(false)
-            setActiveSession(null)
-            setPin(['', '', '', ''])
-            toast.info('Il tavolo è stato chiuso. Inserisci il nuovo codice per ordinare.', {
-              duration: 4000,
-              style: { background: '#3b82f6', color: 'white' }
-            })
+          // Double-check session ID matches
+          if (updatedSession.id === currentSessionId) {
+            if (updatedSession.status === 'CLOSED') {
+              // Session closed - force logout handled by session context effect usually, but we sync state here
+              setIsAuthenticated(false)
+              setActiveSession(null)
+              setPin(['', '', '', ''])
+              toast.info('Il tavolo è stato chiuso. Inserisci il nuovo codice per ordinare.', {
+                duration: 4000,
+                style: { background: '#3b82f6', color: 'white' }
+              })
+            } else {
+              // Valid update (e.g. paid_amount or notes changed)
+              setActiveSession(updatedSession)
+            }
           }
         }
 
@@ -1719,12 +1724,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     return { enabled: true, price: (fullRestaurant as any).ayce_price_per_person || 0 }
   }, [activeSession, fullRestaurant])
 
-  // Total for all unpaid items
+  // Total for all unpaid items, minus any partial payments already registered in the session
   const unpaidTotal = useMemo(() => {
     let total = payableItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     if (copertoInfo.enabled) total += copertoInfo.price * copertoInfo.count
     if (ayceInfo.enabled && ayceInfo.price > 0) total += ayceInfo.price * (activeSession?.customer_count || 1)
-    return total
+
+    // Subtract any amount already paid for this session (e.g. from partial or split payments)
+    const paidAmount = activeSession?.paid_amount || 0;
+    return Math.max(0, total - paidAmount);
   }, [payableItems, copertoInfo, ayceInfo, activeSession])
 
   // Handle Stripe payment — supports full, split (alla romana), and items (diviso per piatti)
@@ -2776,7 +2784,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 </motion.div>
 
                 {/* Total */}
-                {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+                {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && unpaidTotal > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -2793,12 +2801,28 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   </motion.div>
                 )}
 
+                {/* Everything Paid UI */}
+                {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && unpaidTotal === 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="mt-6 flex flex-col items-center justify-center pb-8 text-center"
+                  >
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#10B98120' }}>
+                      <CheckCircle size={32} weight="fill" style={{ color: '#10B981' }} />
+                    </div>
+                    <p className="text-xl font-bold" style={{ color: '#10B981' }}>Conto Saldato</p>
+                    <p className="text-sm mt-1" style={{ color: theme.textMuted }}>Tutti gli ordini sono stati pagati.</p>
+                  </motion.div>
+                )}
+
               </div>
             )}
           </main>
 
           {/* Fixed Bottom Container for Payment Options */}
-          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (fullRestaurant as any)?.enable_stripe_payments && (
+          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && unpaidTotal > 0 && (fullRestaurant as any)?.enable_stripe_payments && (
             <motion.div
               initial={{ y: 200, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -2824,7 +2848,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     </div>
                     <div>
                       <p className="font-extrabold text-base tracking-wide uppercase text-black">Pagamento Totale</p>
-                      <p className="text-xs font-medium text-black/70">Paga l'intero conto in un colpo solo</p>
+                      <p className="text-xs font-medium text-black/70">Paga il rimanente: €{unpaidTotal.toFixed(2)}</p>
                     </div>
                   </div>
                 </div>

@@ -160,7 +160,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const restaurantDishes = dishes || []
   const restaurantTables = tables || []
   const restaurantTablesRef = useRef<Table[]>(restaurantTables)
+  const sessionsRef = useRef<TableSession[]>(sessions || [])
   useEffect(() => { restaurantTablesRef.current = restaurantTables }, [restaurantTables])
+  useEffect(() => { sessionsRef.current = sessions || [] }, [sessions])
   const restaurantOrders = orders || []
   const restaurantCompletedOrders = useMemo(() => orders?.filter(o => o.status === 'completed') || [], [orders])
 
@@ -558,8 +560,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'table_sessions', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         // Notify when a customer pays online via Stripe (paid_amount increased)
-        const oldAmount = payload.old?.paid_amount || 0;
+        // using sessionsRef instead of payload.old since payload.old might be empty without replica identity full
+        const oldSession = sessionsRef.current.find(s => s.id === payload.new.id)
+        const oldAmount = oldSession?.paid_amount || 0;
         const newAmount = payload.new?.paid_amount || 0;
+
+        const oldNotes = oldSession?.notes || '';
+        const newNotes = payload.new?.notes || '';
 
         if (newAmount > oldAmount) {
           const tableNumber = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)?.number || '?'
@@ -571,7 +578,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           if (soundEnabledRef.current) {
             soundManager.play(selectedSoundRef.current)
           }
+        } else if (newNotes !== oldNotes && newNotes.includes('Pagamento')) {
+          // Fallback if paid_amount wasn't updated but notes were (e.g. some split logic scenario)
+          const tableNumber = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)?.number || '?'
+          toast.success(
+            `💳 Nuova notifica di pagamento: Tavolo ${tableNumber}`,
+            { duration: 8000 }
+          )
+          if (soundEnabledRef.current) {
+            soundManager.play(selectedSoundRef.current)
+          }
         }
+
         // Refresh sessions data to update table cards (e.g. purple "Pagato Online" indicator)
         refreshSessions()
         // Also refresh orders since webhook marks orders as PAID
