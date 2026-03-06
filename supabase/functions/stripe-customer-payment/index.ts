@@ -52,7 +52,7 @@ serve(async (req) => {
             );
         }
 
-        if (!restaurant.stripe_connect_account_id || !restaurant.stripe_connect_enabled) {
+        if (!restaurant.stripe_connect_account_id) {
             return new Response(
                 JSON.stringify({ error: "Il ristorante non ha ancora configurato l'account di pagamento per ricevere fondi" }),
                 { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
