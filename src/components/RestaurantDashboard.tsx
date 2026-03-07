@@ -717,6 +717,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     refreshBookings?.()
     refreshRooms?.()
     refreshSessions?.()
+    fetchOrders()
   }, [refreshTables, refreshBookings, refreshRooms, refreshSessions])
 
   // Restaurant Settings State (initialized from DB)
@@ -1152,6 +1153,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
         toast.success(markPaid ? 'Tavolo pagato e liberato' : 'Tavolo svuotato e liberato')
         refreshSessions()
+        fetchOrders()
         setSelectedTable(null)
         setSelectedTableForActions(null)
         setShowTableDialog(false)
@@ -2350,7 +2352,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           const closedSessions = sessions
                             .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId)
                             .filter(s => {
-                              const sessionDate = new Date(s.created_at)
+                              // Use closed_at for date filtering (when the table was closed), fallback to created_at
+                              const sessionDate = new Date(s.closed_at || s.created_at)
                               if (tableHistoryDateFilter === 'today') {
                                 return sessionDate.toDateString() === now.toDateString()
                               } else if (tableHistoryDateFilter === 'week') {
