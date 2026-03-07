@@ -2791,14 +2791,34 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
-                    className="mt-6 flex flex-col items-center justify-center pb-8"
+                    className="mt-6 flex flex-col items-center justify-center pb-8 space-y-3"
                   >
-                    <p className="text-xs uppercase tracking-[0.3em] mb-2 font-semibold" style={{ color: theme.textMuted }}>Totale da pagare</p>
-                    <div className="relative">
-                      <div className="absolute inset-0 blur-2xl opacity-20" style={{ background: theme.primary, borderRadius: '50%' }}></div>
-                      <p className="text-5xl font-black tracking-tight drop-shadow-lg relative" style={{ color: theme.primary }}>
-                        €{unpaidTotal.toFixed(2)}
-                      </p>
+                    <div className="w-full max-w-sm rounded-2xl p-4 shadow-sm border border-zinc-800" style={{ backgroundColor: theme.cardBg }}>
+                      <div className="flex justify-between items-center text-sm mb-2" style={{ color: theme.textSecondary }}>
+                        <span>Costo Totale</span>
+                        <span className="font-semibold text-white">€{(() => {
+                          let t = payableItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+                          if (copertoInfo.enabled) t += copertoInfo.price * copertoInfo.count
+                          if (ayceInfo.enabled && ayceInfo.price > 0) t += ayceInfo.price * (activeSession?.customer_count || 1)
+                          return t.toFixed(2)
+                        })()}</span>
+                      </div>
+
+                      {(activeSession?.paid_amount || 0) > 0 && (
+                        <div className="flex justify-between items-center text-sm mb-3">
+                          <span style={{ color: '#10B981' }}>Già Pagato Online</span>
+                          <span className="font-bold shrink-0 px-2 py-0.5 rounded-md bg-emerald-500/10" style={{ color: '#10B981', border: '1px solid #10B98140' }}>
+                            - €{(activeSession?.paid_amount || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="h-px w-full my-3" style={{ background: `linear-gradient(90deg, transparent, ${theme.divider}, transparent)` }} />
+
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-xs uppercase tracking-[0.2em] font-semibold" style={{ color: theme.primary }}>Rimanenza</span>
+                        <span className="text-2xl font-black tracking-tight" style={{ color: theme.primary }}>€{unpaidTotal.toFixed(2)}</span>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -2811,10 +2831,33 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     transition={{ delay: 0.1 }}
                     className="mt-6 flex flex-col items-center justify-center pb-8 text-center"
                   >
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#10B98120' }}>
+                    <div className="w-full max-w-sm rounded-2xl p-4 shadow-sm border border-emerald-900/40 mb-4" style={{ backgroundColor: theme.cardBg }}>
+                      <div className="flex justify-between items-center text-sm mb-2" style={{ color: theme.textSecondary }}>
+                        <span>Costo Totale</span>
+                        <span className="font-semibold text-white">€{(() => {
+                          let t = payableItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+                          if (copertoInfo.enabled) t += copertoInfo.price * copertoInfo.count
+                          if (ayceInfo.enabled && ayceInfo.price > 0) t += ayceInfo.price * (activeSession?.customer_count || 1)
+                          return t.toFixed(2)
+                        })()}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span style={{ color: '#10B981' }}>Già Pagato Online</span>
+                        <span className="font-bold shrink-0 px-2 py-0.5 rounded-md bg-emerald-500/10" style={{ color: '#10B981', border: '1px solid #10B98140' }}>
+                          - €{(activeSession?.paid_amount || 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="h-px w-full my-3" style={{ background: `linear-gradient(90deg, transparent, rgba(16,185,129,0.2), transparent)` }} />
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs uppercase tracking-[0.2em] font-semibold" style={{ color: '#10B981' }}>Rimanenza</span>
+                        <span className="text-xl font-black tracking-tight" style={{ color: '#10B981' }}>€0.00</span>
+                      </div>
+                    </div>
+
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 mt-2" style={{ backgroundColor: '#10B98120' }}>
                       <CheckCircle size={32} weight="fill" style={{ color: '#10B981' }} />
                     </div>
-                    <p className="text-xl font-bold" style={{ color: '#10B981' }}>Conto Saldato</p>
+                    <p className="text-xl font-bold border-b border-transparent" style={{ color: '#10B981' }}>Conto Saldato</p>
                     <p className="text-sm mt-1" style={{ color: theme.textMuted }}>Tutti gli ordini sono stati pagati.</p>
                   </motion.div>
                 )}

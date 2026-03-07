@@ -92,6 +92,7 @@ serve(async (req) => {
                                     paid_amount: currentPaid + amountPaid,
                                     notes: newNotes,
                                     updated_at: new Date().toISOString(),
+                                    restaurant_id: restaurantId, // CRITICAL: Include to trigger Postgres realtime filter!
                                 })
                                 .eq("id", sessionId);
 
