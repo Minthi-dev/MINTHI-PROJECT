@@ -1142,7 +1142,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       try {
         await DatabaseService.closeSession(openSession.id)
         if (markPaid) {
-          await DatabaseService.markOrdersPaidForSession(openSession.id)
+          const payMethod = (openSession.paid_amount || 0) > 0 ? 'stripe' : 'cash'
+          await DatabaseService.markOrdersPaidForSession(openSession.id, payMethod)
         } else {
           // FIX: If just emptying the table (not paid), cancel all active orders
           // so they don't count as "Active" in analytics.
@@ -2967,8 +2968,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       onClick={async (e) => {
                                         e.stopPropagation();
                                         try {
+                                          // Conferma scontrino + chiudi tavolo + segna ordini come PAID
                                           await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                          toast.success('Scontrino confermato!');
+                                          await DatabaseService.closeSession(session.id);
+                                          await DatabaseService.markOrdersPaidForSession(session.id, 'stripe');
+                                          toast.success('Scontrino confermato e tavolo chiuso!');
+                                          refreshSessions();
                                           refreshData();
                                         } catch (err) {
                                           toast.error('Errore nella conferma');
@@ -2976,7 +2981,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       }}
                                     >
                                       <CheckCircle size={14} weight="fill" className="mr-1.5" />
-                                      Conferma Scontrino
+                                      Conferma Scontrino e Chiudi
                                     </Button>
                                   ) : (
                                     <>

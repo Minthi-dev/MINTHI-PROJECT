@@ -614,10 +614,10 @@ export const DatabaseService = {
         if (error) throw error
     },
 
-    async markOrdersPaidForSession(sessionId: string) {
+    async markOrdersPaidForSession(sessionId: string, paymentMethod: string = 'cash') {
         const { error } = await supabase
             .from('orders')
-            .update({ status: 'PAID', payment_method: 'cash', closed_at: new Date().toISOString() })
+            .update({ status: 'PAID', payment_method: paymentMethod, closed_at: new Date().toISOString() })
             .eq('table_session_id', sessionId)
             .neq('status', 'PAID')
         if (error) throw error

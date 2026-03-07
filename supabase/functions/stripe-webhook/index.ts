@@ -62,28 +62,11 @@ serve(async (req) => {
                     // === PAGAMENTO CLIENTE (ordine dal menu) ===
                     const restaurantId = session.metadata?.restaurantId;
                     const sessionId = session.metadata?.tableSessionId;
-                    let orderIds = [];
-                    try {
-                        if (session.metadata?.orderIds && session.metadata?.orderIds !== "multiple_orders_overflow") {
-                            orderIds = JSON.parse(session.metadata.orderIds);
-                        }
-                    } catch (e) {
-                        console.error("Failed to parse orderIds from metadata:", e);
-                    }
 
                     if (restaurantId) {
-                        if (orderIds.length > 0) {
-                            for (const orderId of orderIds) {
-                                await supabase
-                                    .from("orders")
-                                    .update({
-                                        status: "PAID",
-                                        payment_method: "stripe",
-                                        closed_at: new Date().toISOString(),
-                                    })
-                                    .eq("id", orderId);
-                            }
-                        }
+                        // NON marcare gli ordini come PAID qui — lo fa il ristorante quando chiude il tavolo.
+                        // Questo permette pagamenti parziali (alla romana, per piatti) senza bloccare
+                        // la possibilità di pagare ancora.
 
                         // Update session with payment info but DON'T close it
                         // The restaurant will close the table manually from gestione tavoli

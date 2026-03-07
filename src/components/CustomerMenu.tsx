@@ -1681,6 +1681,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       toast.success('Pagamento completato con successo!', { duration: 5000 })
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname)
+      // Refresh orders — session will update via realtime listener when webhook processes
+      if (sessionId) fetchOrders()
     } else if (params.get('payment') === 'cancelled') {
       toast.error('Pagamento annullato', { duration: 3000 })
       window.history.replaceState({}, '', window.location.pathname)
@@ -2029,7 +2031,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
             </motion.div>
           )}
           {/* Pagamento button - shows when cart is empty and there are unpaid orders */}
-          {!isViewOnly && cart.length === 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (
+          {!isViewOnly && cart.length === 0 && previousOrders.length > 0 && unpaidTotal > 0 && (
             <motion.div
               initial={{ y: 100, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -2784,7 +2786,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 </motion.div>
 
                 {/* Total */}
-                {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && unpaidTotal > 0 && (
+                {previousOrders.length > 0 && unpaidTotal > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -2802,7 +2804,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 )}
 
                 {/* Everything Paid UI */}
-                {previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && unpaidTotal === 0 && (
+                {previousOrders.length > 0 && unpaidTotal <= 0 && (activeSession?.paid_amount || 0) > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -2822,7 +2824,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           </main>
 
           {/* Fixed Bottom Container for Payment Options */}
-          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && unpaidTotal > 0 && (fullRestaurant as any)?.enable_stripe_payments && (
+          {!stripePaymentSuccess && paymentStep === 'options' && previousOrders.length > 0 && unpaidTotal > 0 && (fullRestaurant as any)?.enable_stripe_payments && (
             <motion.div
               initial={{ y: 200, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -2910,7 +2912,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           )}
 
           {/* Fixed Pay Button at bottom - only for selectItems step */}
-          {!stripePaymentSuccess && paymentStep === 'selectItems' && previousOrders.length > 0 && previousOrders.some(o => o.status !== 'PAID' && o.status !== 'CANCELLED') && (fullRestaurant as any)?.enable_stripe_payments && (
+          {!stripePaymentSuccess && paymentStep === 'selectItems' && previousOrders.length > 0 && unpaidTotal > 0 && (fullRestaurant as any)?.enable_stripe_payments && (
             <div className="flex-none p-4 backdrop-blur-xl" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.cardBg }}>
               <Button
                 className="w-full font-bold h-14 rounded-2xl text-lg shadow-lg"
