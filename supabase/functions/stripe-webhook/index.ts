@@ -19,7 +19,10 @@ serve(async (req) => {
         const platformSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
         const connectSecret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET");
 
+        console.log(`[WEBHOOK] Received request. Signature: ${!!signature}, Platform secret: ${!!platformSecret}, Connect secret: ${!!connectSecret}`);
+
         if (!signature || (!platformSecret && !connectSecret)) {
+            console.error(`[WEBHOOK] Missing signature or secrets. Sig: ${!!signature}, Platform: ${!!platformSecret}, Connect: ${!!connectSecret}`);
             return new Response("Manca la firma o il segreto del webhook", { status: 400 });
         }
 
@@ -31,6 +34,7 @@ serve(async (req) => {
         // Gli eventi Connect (pagamenti clienti, account.updated) usano STRIPE_CONNECT_WEBHOOK_SECRET
         const secretsToTry = [platformSecret, connectSecret].filter(Boolean) as string[];
         let verified = false;
+        let verifiedWith = '';
 
         for (const secret of secretsToTry) {
             try {
@@ -42,62 +46,85 @@ serve(async (req) => {
                     cryptoProvider
                 );
                 verified = true;
+                verifiedWith = secret === platformSecret ? 'platform' : 'connect';
                 break;
-            } catch {
-                // Prova il prossimo secret
+            } catch (err) {
+                console.log(`[WEBHOOK] Signature verification failed with ${secret === platformSecret ? 'platform' : 'connect'} secret: ${err.message}`);
             }
         }
 
         if (!verified || !event) {
-            console.error("Webhook signature verification failed with all secrets");
+            console.error(`[WEBHOOK] Signature verification FAILED with ALL secrets. Tried ${secretsToTry.length} secrets.`);
             return new Response("Webhook signature verification failed", { status: 400 });
         }
+
+        console.log(`[WEBHOOK] Event verified with ${verifiedWith} secret. Type: ${event.type}, ID: ${event.id}`);
 
         switch (event.type) {
             case "checkout.session.completed": {
                 const session = event.data.object;
                 const paymentType = session.metadata?.paymentType;
 
+                console.log(`[WEBHOOK] checkout.session.completed — paymentType: ${paymentType}, metadata:`, JSON.stringify(session.metadata));
+
                 if (paymentType === "customer_order") {
                     // === PAGAMENTO CLIENTE (ordine dal menu) ===
                     const restaurantId = session.metadata?.restaurantId;
                     const sessionId = session.metadata?.tableSessionId;
 
-                    if (restaurantId) {
-                        // NON marcare gli ordini come PAID qui — lo fa il ristorante quando chiude il tavolo.
-                        // Questo permette pagamenti parziali (alla romana, per piatti) senza bloccare
-                        // la possibilità di pagare ancora.
+                    console.log(`[WEBHOOK] customer_order — restaurantId: ${restaurantId}, sessionId: ${sessionId}, amount: €${((session.amount_total || 0) / 100).toFixed(2)}`);
 
-                        // Update session with payment info but DON'T close it
-                        // The restaurant will close the table manually from gestione tavoli
-                        if (sessionId) {
-                            const amountPaid = (session.amount_total || 0) / 100; // Stripe uses cents
-                            const splitLabel = session.metadata?.splitLabel || 'Pagamento online';
+                    if (!restaurantId) {
+                        console.error(`[WEBHOOK] customer_order SKIP: restaurantId mancante nel metadata`);
+                        break;
+                    }
 
-                            // Get current paid_amount to add to it
-                            const { data: currentSession } = await supabase
-                                .from("table_sessions")
-                                .select("paid_amount, notes")
-                                .eq("id", sessionId)
-                                .single();
+                    if (!sessionId) {
+                        console.warn(`[WEBHOOK] customer_order SKIP: tableSessionId vuoto/mancante per restaurant ${restaurantId}`);
+                        break;
+                    }
 
-                            const currentPaid = currentSession?.paid_amount || 0;
-                            const existingNotes = currentSession?.notes || '';
-                            const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
-                            const newNotes = existingNotes ? `${existingNotes}\n${paymentNote}` : paymentNote;
+                    const amountPaid = (session.amount_total || 0) / 100;
+                    const splitLabel = session.metadata?.splitLabel || 'Pagamento online';
 
-                            await supabase
-                                .from("table_sessions")
-                                .update({
-                                    paid_amount: currentPaid + amountPaid,
-                                    notes: newNotes,
-                                    updated_at: new Date().toISOString(),
-                                    restaurant_id: restaurantId, // CRITICAL: Include to trigger Postgres realtime filter!
-                                })
-                                .eq("id", sessionId);
+                    // Get current paid_amount to add to it
+                    const { data: currentSession, error: fetchError } = await supabase
+                        .from("table_sessions")
+                        .select("paid_amount, notes")
+                        .eq("id", sessionId)
+                        .single();
 
-                            console.log(`Pagamento cliente: €${amountPaid.toFixed(2)} per sessione ${sessionId} (${splitLabel})`);
-                        }
+                    if (fetchError) {
+                        console.error(`[WEBHOOK] Errore fetch sessione ${sessionId}:`, fetchError);
+                        break;
+                    }
+
+                    if (!currentSession) {
+                        console.error(`[WEBHOOK] Sessione ${sessionId} non trovata nel DB`);
+                        break;
+                    }
+
+                    const currentPaid = currentSession.paid_amount || 0;
+                    const existingNotes = currentSession.notes || '';
+                    const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
+                    const newNotes = existingNotes ? `${existingNotes}\n${paymentNote}` : paymentNote;
+                    const newPaidAmount = currentPaid + amountPaid;
+
+                    console.log(`[WEBHOOK] Updating session ${sessionId}: paid_amount ${currentPaid} → ${newPaidAmount}`);
+
+                    const { error: updateError } = await supabase
+                        .from("table_sessions")
+                        .update({
+                            paid_amount: newPaidAmount,
+                            notes: newNotes,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("id", sessionId);
+
+                    if (updateError) {
+                        console.error(`[WEBHOOK] ERRORE update sessione ${sessionId}:`, updateError);
+                    } else {
+                        console.log(`[WEBHOOK] ✅ Pagamento cliente registrato: €${amountPaid.toFixed(2)} per sessione ${sessionId} (${splitLabel}). Totale pagato: €${newPaidAmount.toFixed(2)}`);
                     }
                 } else {
                     // === ATTIVAZIONE ABBONAMENTO ===
@@ -210,8 +237,6 @@ serve(async (req) => {
                         .limit(1);
 
                     if (!activeBonus || activeBonus.length === 0) {
-                        // Segna come past_due ma NON sospendere subito — Stripe riprova automaticamente
-                        // Il ristorante riceverà l'avviso in dashboard finché non paga
                         await supabase
                             .from("restaurants")
                             .update({
@@ -246,7 +271,6 @@ serve(async (req) => {
                         .limit(1);
 
                     if (activeBonus && activeBonus.length > 0) {
-                        // Bonus attivo: mantieni il ristorante online ma aggiorna lo status
                         await supabase
                             .from("restaurants")
                             .update({ subscription_status: "canceled" })
@@ -285,10 +309,8 @@ serve(async (req) => {
                     };
 
                     if (subscription.cancel_at_period_end && subscription.cancel_at) {
-                        // Disdetta programmata: salva la data di fine
                         updates.subscription_cancel_at = new Date(subscription.cancel_at * 1000).toISOString();
                     } else if (!subscription.cancel_at_period_end) {
-                        // Disdetta annullata (ripristino): rimuovi la data
                         updates.subscription_cancel_at = null;
                     }
 
@@ -303,8 +325,6 @@ serve(async (req) => {
             }
 
             case "account.updated": {
-                // Stripe Connect: aggiorna stato account del ristorante
-                // Gestisce sia abilitazione che disabilitazione
                 const account = event.data.object;
                 await supabase
                     .from("restaurants")
@@ -318,7 +338,7 @@ serve(async (req) => {
 
         return new Response(JSON.stringify({ received: true }), { status: 200 });
     } catch (error) {
-        console.error("Errore generico Webhook:", error);
+        console.error("[WEBHOOK] Errore generico:", error);
         return new Response(JSON.stringify({ error: error.message }), { status: 500 });
     }
 });

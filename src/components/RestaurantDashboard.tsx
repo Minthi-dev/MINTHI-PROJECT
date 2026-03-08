@@ -2287,72 +2287,46 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         </DialogTitle>
                         <DialogDescription className="text-zinc-400">Visualizza le sessioni dei tavoli concluse con dettagli e incassi.</DialogDescription>
                       </DialogHeader>
-                      <div className="flex flex-wrap gap-3 py-3 border-b">
-                        <div className="relative flex-1 min-w-[200px]">
-                          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+                      <div className="flex items-center gap-2 py-3 border-b border-zinc-800">
+                        <div className="relative flex-1 min-w-[140px]">
+                          <MagnifyingGlass className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
                           <Input
-                            placeholder="Cerca per tavolo, PIN..."
+                            placeholder="Cerca tavolo, PIN..."
                             value={tableHistorySearch}
                             onChange={(e) => setTableHistorySearch(e.target.value)}
-                            className="pl-9 h-9"
+                            className="pl-8 h-8 text-sm bg-zinc-900 border-zinc-800"
                           />
                         </div>
                         <Select value={tableHistoryDateFilter} onValueChange={(v: any) => setTableHistoryDateFilter(v)}>
-                          <SelectTrigger className="w-[150px] h-9">
+                          <SelectTrigger className="w-[120px] h-8 text-xs bg-zinc-900 border-zinc-800">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="today">Oggi</SelectItem>
-                            <SelectItem value="week">Ultima settimana</SelectItem>
-                            <SelectItem value="month">Ultimo mese</SelectItem>
+                            <SelectItem value="week">Settimana</SelectItem>
+                            <SelectItem value="month">Mese</SelectItem>
                             <SelectItem value="all">Tutto</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Input
-                          type="number"
-                          placeholder="€ minimo"
-                          value={tableHistoryMinTotal}
-                          onChange={(e) => setTableHistoryMinTotal(e.target.value)}
-                          className="w-[120px] h-9"
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Coperti min"
-                          value={tableHistoryMinCovers}
-                          onChange={(e) => setTableHistoryMinCovers(e.target.value)}
-                          className="w-[120px] h-9"
-                        />
-                        <Select value={tableHistorySort} onValueChange={(v: any) => setTableHistorySort(v)}>
-                          <SelectTrigger className="w-[170px] h-9">
-                            <SelectValue placeholder="Ordina per" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="recent">Più recenti</SelectItem>
-                            <SelectItem value="amount">Incasso</SelectItem>
-                            <SelectItem value="duration">Durata</SelectItem>
-                            <SelectItem value="covers">Coperti</SelectItem>
-                          </SelectContent>
-                        </Select>
                         <Select value={tableHistoryPaymentFilter} onValueChange={(v: any) => setTableHistoryPaymentFilter(v)}>
-                          <SelectTrigger className={`w-[200px] h-9 ${tableHistoryPaymentFilter === 'pending_receipt' ? 'border-amber-500/50 text-amber-400' : ''}`}>
-                            <SelectValue placeholder="Pagamento" />
+                          <SelectTrigger className={`w-[155px] h-8 text-xs bg-zinc-900 border-zinc-800 ${tableHistoryPaymentFilter === 'pending_receipt' ? 'border-amber-500/50 text-amber-400' : ''}`}>
+                            <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">Tutti i tavoli</SelectItem>
-                            <SelectItem value="pending_receipt">🔴 Scontrino da fare</SelectItem>
-                            <SelectItem value="receipt_done">✅ Scontrino fatto</SelectItem>
-                            <SelectItem value="online">💳 Pagamento online</SelectItem>
-                            <SelectItem value="cash">💵 Contanti</SelectItem>
+                            <SelectItem value="all">Tutti</SelectItem>
+                            <SelectItem value="pending_receipt">Da registrare</SelectItem>
+                            <SelectItem value="receipt_done">Registrato</SelectItem>
+                            <SelectItem value="online">Online</SelectItem>
+                            <SelectItem value="cash">Contanti</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="flex-1 overflow-y-auto py-4 space-y-3">
+                      <div className="flex-1 overflow-y-auto py-3 space-y-2">
                         {(() => {
                           const now = new Date()
                           const closedSessions = sessions
                             .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId)
                             .filter(s => {
-                              // Use closed_at for date filtering (when the table was closed), fallback to created_at
                               const sessionDate = new Date(s.closed_at || s.created_at)
                               if (tableHistoryDateFilter === 'today') {
                                 return sessionDate.toDateString() === now.toDateString()
@@ -2382,15 +2356,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               const openDate = new Date(session.created_at)
                               const closeDate = session.closed_at ? new Date(session.closed_at) : null
                               const duration = closeDate ? Math.round((closeDate.getTime() - openDate.getTime()) / (1000 * 60)) : 0
-
                               return { session, table, sessionOrders, totalAmount, totalItems, openDate, closeDate, duration }
-                            })
-                            .filter(summary => {
-                              const minTotal = parseFloat(tableHistoryMinTotal || '0')
-                              const minCovers = parseInt(tableHistoryMinCovers || '0')
-                              const coversOk = minCovers ? (summary.session.customer_count || 0) >= minCovers : true
-                              const totalOk = minTotal ? summary.totalAmount >= minTotal : true
-                              return coversOk && totalOk
                             })
                             .filter(summary => {
                               if (tableHistoryPaymentFilter === 'all') return true
@@ -2401,170 +2367,172 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               if (tableHistoryPaymentFilter === 'cash') return !hasStripe
                               return true
                             })
-                            .sort((a, b) => {
-                              if (tableHistorySort === 'amount') return b.totalAmount - a.totalAmount
-                              if (tableHistorySort === 'duration') return (b.duration || 0) - (a.duration || 0)
-                              if (tableHistorySort === 'covers') return (b.session.customer_count || 0) - (a.session.customer_count || 0)
-                              return new Date(b.session.closed_at || b.session.created_at).getTime() - new Date(a.session.closed_at || a.session.created_at).getTime()
-                            })
+                            .sort((a, b) => new Date(b.session.closed_at || b.session.created_at).getTime() - new Date(a.session.closed_at || a.session.created_at).getTime())
 
                           if (closedSessions.length === 0) {
                             return (
-                              <div className="text-center py-12 text-muted-foreground">
-                                <ClockCounterClockwise size={48} className="mx-auto mb-4 opacity-30" />
-                                <p className="font-medium">Nessuna sessione trovata</p>
-                                <p className="text-sm">Prova a modificare i filtri di ricerca</p>
+                              <div className="flex flex-col items-center justify-center text-center py-16">
+                                <div className="w-14 h-14 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
+                                  <ClockCounterClockwise size={24} className="text-zinc-600" />
+                                </div>
+                                <p className="font-medium text-zinc-400 mb-1">Nessun tavolo trovato</p>
+                                <p className="text-sm text-zinc-600">Modifica i filtri per trovare altri risultati</p>
                               </div>
                             )
                           }
 
                           return closedSessions.map(({ session, table, sessionOrders, totalAmount, totalItems, openDate, closeDate, duration }) => {
                             const isExpanded = expandedHistorySessionId === session.id
-                            // Flatten all items across all orders for this session
                             const allItems = sessionOrders.flatMap((o: any) => (o.items || []).map((item: any) => ({ ...item, orderId: o.id })))
-                            const hasStripePayment = sessionOrders.some((o: any) => o.payment_method === 'stripe')
+                            const hasStripePayment = sessionOrders.some((o: any) => o.payment_method === 'stripe') || (session.paid_amount || 0) > 0
                             const needsReceipt = hasStripePayment && !session.receipt_issued
+
                             return (
-                              <div key={session.id} className={`rounded-xl overflow-hidden ${needsReceipt ? 'bg-amber-500/5 border-l-4 border-l-amber-500 border border-amber-500/20 shadow-[0_0_12px_-4px_rgba(245,158,11,0.3)]' : 'bg-muted/30 border border-border/50'}`}>
-                                {/* Summary row — click to expand/collapse bill */}
+                              <div key={session.id} className={`rounded-lg overflow-hidden transition-all ${
+                                needsReceipt
+                                  ? 'bg-amber-500/[0.03] border border-amber-500/25'
+                                  : session.receipt_issued
+                                    ? 'bg-zinc-900/30 border border-zinc-800/40'
+                                    : 'bg-zinc-900/40 border border-zinc-800/50'
+                              }`}>
+                                {/* Summary row */}
                                 <button
                                   type="button"
                                   onClick={() => setExpandedHistorySessionId(isExpanded ? null : session.id)}
-                                  className="w-full p-4 text-left hover:bg-muted/50 transition-colors"
+                                  className="w-full px-3 py-3 text-left transition-colors hover:bg-white/[0.02]"
                                 >
-                                  <div className="flex items-start justify-between gap-4 flex-wrap">
-                                    <div className="flex items-center gap-4">
-                                      <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center">
-                                        <span className="text-lg font-bold text-primary">{table?.number || '?'}</span>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
+                                        needsReceipt ? 'bg-amber-500/15 text-amber-400' : 'bg-zinc-800 text-zinc-300'
+                                      }`}>
+                                        {table?.number || '?'}
                                       </div>
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <span className="font-bold text-zinc-100">Tavolo {table?.number}</span>
-                                          {table?.room_id && rooms?.find(r => r.id === table.room_id)?.name && (
-                                            <Badge variant="outline" className="text-[10px] font-medium border-amber-500/30 text-amber-500/80">
-                                              {rooms.find(r => r.id === table.room_id)?.name}
-                                            </Badge>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-semibold text-sm text-zinc-100">Tavolo {table?.number}</span>
+                                          <span className="text-[10px] font-mono text-zinc-600">{session.session_pin}</span>
+                                          {hasStripePayment && (
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/25">
+                                              Online €{(session.paid_amount || 0).toFixed(2)}
+                                            </span>
                                           )}
-                                          <Badge variant="outline" className="text-[10px] font-mono border-zinc-700 text-zinc-400">{session.session_pin}</Badge>
-                                          {((session.paid_amount || 0) > 0 || sessionOrders.some((o: any) => o.payment_method === 'stripe')) && (
-                                            <div className="flex items-center gap-2">
-                                              <Badge className="text-[10px] bg-purple-500/10 text-purple-400 border-purple-500/30">
-                                                💳 Pagato Online {(session.paid_amount || 0) > 0 ? `(€${session.paid_amount?.toFixed(2)})` : ''}
-                                              </Badge>
-                                              {!session.receipt_issued ? (
-                                                <Button
-                                                  size="sm"
-                                                  className="h-6 px-2 text-[10px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
-                                                  onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    try {
-                                                      await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                                      toast.success('Scontrino confermato per questo tavolo!');
-                                                      refreshSessions();
-                                                    } catch (err) {
-                                                      toast.error('Errore durante la conferma dello scontrino');
-                                                    }
-                                                  }}
-                                                >
-                                                  <CheckCircle weight="fill" className="mr-1" size={12} />
-                                                  Conferma Scontrino
-                                                </Button>
-                                              ) : (
-                                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/30 flex items-center gap-1">
-                                                  <CheckCircle weight="fill" size={10} /> Registrato
-                                                </Badge>
-                                              )}
-                                            </div>
+                                          {session.receipt_issued && (
+                                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                                              Registrato
+                                            </span>
                                           )}
                                         </div>
-                                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                                          <span className="flex items-center gap-1">
-                                            <Calendar size={12} />
-                                            {openDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                          </span>
-                                          <span className="flex items-center gap-1">
-                                            <Clock size={12} />
-                                            {openDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                                            {closeDate && ` - ${closeDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`}
-                                          </span>
-                                          {duration > 0 && <span>({duration} min)</span>}
+                                        <div className="flex items-center gap-2 text-[11px] text-zinc-500 mt-0.5">
+                                          <span>{openDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
+                                          <span>{openDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}{closeDate ? ` - ${closeDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+                                          {duration > 0 && <span className="text-zinc-600">({duration}min)</span>}
+                                          {session.customer_count && <span className="text-zinc-600">{session.customer_count} cop.</span>}
                                         </div>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                      <div className="flex items-center gap-6">
-                                        <div className="text-center">
-                                          <p className="text-xs text-muted-foreground">Coperti</p>
-                                          <p className="font-bold text-lg">{session.customer_count || '-'}</p>
-                                        </div>
-                                        <div className="text-center">
-                                          <p className="text-xs text-muted-foreground">Piatti</p>
-                                          <p className="font-bold text-lg">{totalItems}</p>
-                                        </div>
-                                        <div className="text-center min-w-[80px]">
-                                          <p className="text-xs text-muted-foreground">Totale</p>
-                                          <p className="font-bold text-lg text-amber-500">€{totalAmount.toFixed(2)}</p>
-                                          {session.paid_amount && session.paid_amount > 0 ? (
-                                            <p className="text-[10px] text-emerald-400 font-bold -mt-0.5">Pagato: €{session.paid_amount.toFixed(2)}</p>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                      <CaretRight size={16} className={`text-zinc-500 transition-transform shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
+                                    <div className="flex items-center gap-3 shrink-0">
+                                      <p className="text-lg font-bold text-amber-500">€{totalAmount.toFixed(2)}</p>
+                                      <CaretRight size={14} className={`text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                                     </div>
                                   </div>
                                 </button>
 
-                                {/* Expanded bill detail */}
+                                {/* Conferma Scontrino — prominent full-width when collapsed */}
+                                {needsReceipt && !isExpanded && (
+                                  <div className="px-3 pb-3">
+                                    <Button
+                                      className="w-full h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          await DatabaseService.updateSessionReceiptIssued(session.id, true);
+                                          toast.success('Scontrino confermato!');
+                                          refreshSessions();
+                                        } catch (err) {
+                                          toast.error('Errore nella conferma');
+                                        }
+                                      }}
+                                    >
+                                      <CheckCircle weight="fill" className="mr-1.5" size={14} />
+                                      Conferma Scontrino Emesso
+                                    </Button>
+                                  </div>
+                                )}
+
+                                {/* Expanded detail */}
                                 {isExpanded && (
-                                  <div className="border-t border-border/50 px-4 pb-4 pt-3 space-y-1">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2">Conto dettagliato</p>
+                                  <div className="border-t border-zinc-800/50 px-3 pb-3 pt-2">
                                     {allItems.length === 0 ? (
-                                      <p className="text-xs text-zinc-500 italic">Nessun dettaglio disponibile</p>
+                                      <p className="text-xs text-zinc-500 italic py-2">Nessun dettaglio disponibile</p>
                                     ) : (
                                       <>
-                                        {allItems.map((item: any, idx: number) => (
-                                          <div key={item.id || idx} className="flex items-center justify-between text-sm py-1 border-b border-white/5 last:border-0">
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-zinc-400 text-xs w-5 text-center">{item.quantity}×</span>
-                                              <span className="text-zinc-200">{item.dish?.name || 'Piatto eliminato'}</span>
-                                              {item.note && <span className="text-[10px] text-zinc-500 italic">({item.note})</span>}
+                                        <div className="space-y-0">
+                                          {allItems.map((item: any, idx: number) => (
+                                            <div key={item.id || idx} className="flex items-center justify-between text-sm py-1.5 border-b border-zinc-800/30 last:border-0">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-zinc-500 text-xs w-5 text-center">{item.quantity}x</span>
+                                                <span className="text-zinc-200 text-sm">{item.dish?.name || 'Piatto eliminato'}</span>
+                                                {item.note && <span className="text-[10px] text-zinc-600 italic">({item.note})</span>}
+                                              </div>
+                                              <span className="text-zinc-400 text-xs font-mono">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
                                             </div>
-                                            <span className="text-zinc-300 font-mono text-xs">
-                                              €{((item.dish?.price || 0) * item.quantity).toFixed(2)}
-                                            </span>
-                                          </div>
-                                        ))}
-                                        <div className="flex items-center justify-between pt-2 border-t border-amber-500/30 mt-1">
-                                          <span className="text-sm font-bold text-zinc-100">Totale</span>
+                                          ))}
+                                        </div>
+                                        <div className="flex items-center justify-between pt-2 mt-1 border-t border-zinc-700">
+                                          <span className="text-sm font-bold text-zinc-200">Totale</span>
                                           <span className="text-base font-bold text-amber-500">€{totalAmount.toFixed(2)}</span>
                                         </div>
                                         {session.customer_count && (
-                                          <div className="flex items-center justify-between">
-                                            <span className="text-xs text-zinc-500">A coperto ({session.customer_count} coperti)</span>
-                                            <span className="text-xs text-zinc-400">€{(totalAmount / session.customer_count).toFixed(2)}</span>
+                                          <div className="flex items-center justify-between mt-0.5">
+                                            <span className="text-[11px] text-zinc-500">Per coperto ({session.customer_count})</span>
+                                            <span className="text-[11px] text-zinc-400">€{(totalAmount / session.customer_count).toFixed(2)}</span>
                                           </div>
                                         )}
-                                        {/* Pagamenti Parziali o Online */}
+
+                                        {/* Pagamenti online */}
                                         {((session.paid_amount && session.paid_amount > 0) || session.notes) && (
-                                          <div className="mt-4 pt-3 border-t border-emerald-500/30 bg-emerald-500/5 p-3 rounded-lg">
-                                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-2">Pagamenti Registrati</p>
+                                          <div className="mt-3 pt-2 border-t border-emerald-500/20 bg-emerald-500/[0.03] p-2.5 rounded-lg">
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-1.5">Pagamenti Online</p>
                                             {session.notes && (
-                                              <div className="text-xs text-emerald-400 whitespace-pre-wrap mb-2 font-mono">
+                                              <div className="text-[11px] text-emerald-400/80 whitespace-pre-wrap mb-1.5 font-mono leading-relaxed">
                                                 {session.notes}
                                               </div>
                                             )}
                                             {session.paid_amount && session.paid_amount > 0 && (
-                                              <div className="flex items-center justify-between font-bold">
-                                                <span className="text-emerald-400">Totale Pagato</span>
+                                              <div className="flex items-center justify-between text-sm font-bold">
+                                                <span className="text-emerald-400">Pagato Online</span>
                                                 <span className="text-emerald-400">€{session.paid_amount.toFixed(2)}</span>
                                               </div>
                                             )}
                                             {session.paid_amount && session.paid_amount < totalAmount && (
-                                              <div className="flex items-center justify-between mt-1 pt-1 border-t border-emerald-500/20 text-amber-500 font-bold">
-                                                <span>Da Incassare in cassa</span>
-                                                <span>€{(totalAmount - session.paid_amount).toFixed(2)}</span>
+                                              <div className="flex items-center justify-between mt-1 pt-1 border-t border-emerald-500/15 text-sm">
+                                                <span className="text-amber-400 font-bold">Da incassare in cassa</span>
+                                                <span className="text-amber-400 font-bold">€{(totalAmount - session.paid_amount).toFixed(2)}</span>
                                               </div>
                                             )}
+                                          </div>
+                                        )}
+
+                                        {/* Conferma scontrino in expanded view */}
+                                        {needsReceipt && (
+                                          <div className="mt-3 pt-2 border-t border-amber-500/20">
+                                            <Button
+                                              className="w-full h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg"
+                                              onClick={async (e) => {
+                                                e.stopPropagation();
+                                                try {
+                                                  await DatabaseService.updateSessionReceiptIssued(session.id, true);
+                                                  toast.success('Scontrino confermato!');
+                                                  refreshSessions();
+                                                } catch (err) {
+                                                  toast.error('Errore nella conferma');
+                                                }
+                                              }}
+                                            >
+                                              <CheckCircle weight="fill" className="mr-1.5" size={14} />
+                                              Conferma Scontrino Emesso
+                                            </Button>
                                           </div>
                                         )}
                                       </>
