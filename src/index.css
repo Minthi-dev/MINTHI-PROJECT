@@ -162,6 +162,11 @@
     appearance: textfield;
   }
 
+  /* Safe area padding for iOS notch/home indicator */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   /* Custom Scrollbar */
   ::-webkit-scrollbar {
     width: 6px;

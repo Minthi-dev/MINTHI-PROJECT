@@ -57,7 +57,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 // Icons
-import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users, Receipt } from '@phosphor-icons/react'
+import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users, Receipt, Timer } from '@phosphor-icons/react'
 import {
   ShoppingBasket, Utensils, ChefHat, Search,
   RefreshCw, AlertCircle, ChevronUp, ChevronDown, Layers, ArrowLeft, Send,
@@ -1357,6 +1357,34 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }, [ayceMaxOrders, previousOrders])
   const orderLimitReached = remainingOrders <= 0 && remainingOrders !== Infinity
 
+  // AYCE time-based order interval
+  const ayceOrderInterval = useMemo(() => {
+    if (!activeSession?.ayce_enabled) return 0
+    const weeklyAyce = (fullRestaurant as any)?.weekly_ayce
+    return weeklyAyce?.defaultOrderInterval || 0
+  }, [fullRestaurant, activeSession])
+
+  const timeUntilNextOrder = useMemo(() => {
+    if (!ayceOrderInterval || ayceOrderInterval <= 0 || previousOrders.length === 0) return 0
+    const lastOrder = previousOrders[0] // already sorted desc by created_at
+    if (!lastOrder?.created_at) return 0
+    const lastOrderTime = new Date(lastOrder.created_at).getTime()
+    const now = Date.now()
+    const intervalMs = ayceOrderInterval * 60 * 1000
+    const elapsed = now - lastOrderTime
+    return Math.max(0, intervalMs - elapsed)
+  }, [ayceOrderInterval, previousOrders])
+
+  const orderTimeBlocked = timeUntilNextOrder > 0
+
+  // Countdown timer for time-blocked orders
+  const [, forceUpdate] = useState(0)
+  useEffect(() => {
+    if (!orderTimeBlocked) return
+    const timer = setInterval(() => forceUpdate(v => v + 1), 1000)
+    return () => clearInterval(timer)
+  }, [orderTimeBlocked])
+
   const cartByCourse = useMemo(() => {
     const grouped: { [key: number]: CartItem[] } = {}
     cart.forEach(item => {
@@ -1602,6 +1630,11 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       toast.error('Hai raggiunto il limite massimo di ordini per questa sessione', { duration: 3000 })
       return
     }
+    if (orderTimeBlocked) {
+      const mins = Math.ceil(timeUntilNextOrder / 60000)
+      toast.error(`Devi attendere ancora ${mins} minut${mins === 1 ? 'o' : 'i'} prima del prossimo ordine`, { duration: 3000 })
+      return
+    }
     if ((!activeSession && !isWaiterMode) || cart.length === 0 || !restaurantId) return
 
     setIsOrderSubmitting(true)
@@ -1644,7 +1677,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         quantity: item.quantity,
         note: item.notes || '',
         status: 'PENDING' as const,
-        course_number: item.course_number || 1
+        course_number: item.course_number || 1,
+        restaurant_id: restaurantId
       }))
 
       await DatabaseService.createOrder({
@@ -1682,8 +1716,33 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       toast.success('Pagamento completato con successo!', { duration: 5000 })
       // Clean URL
       window.history.replaceState({}, '', window.location.pathname)
-      // Refresh orders — session will update via realtime listener when webhook processes
+      // Refresh orders
       if (sessionId) fetchOrders()
+
+      // POLLING FALLBACK: poll session for updated paid_amount every 3s for 30s
+      // This handles cases where the webhook is slow or realtime doesn't fire immediately
+      if (sessionId) {
+        let pollCount = 0
+        const maxPolls = 10
+        const pollInterval = setInterval(async () => {
+          pollCount++
+          try {
+            const freshSession = await DatabaseService.getSessionById(sessionId)
+            if (freshSession) {
+              setActiveSession(freshSession)
+              // Stop polling if paid_amount increased (webhook worked)
+              const currentPaid = activeSession?.paid_amount || 0
+              if ((freshSession.paid_amount || 0) > currentPaid) {
+                clearInterval(pollInterval)
+              }
+            }
+          } catch (e) {
+            console.error('Poll session error:', e)
+          }
+          if (pollCount >= maxPolls) clearInterval(pollInterval)
+        }, 3000)
+        return () => clearInterval(pollInterval)
+      }
     } else if (params.get('payment') === 'cancelled') {
       toast.error('Pagamento annullato', { duration: 3000 })
       window.history.replaceState({}, '', window.location.pathname)
@@ -2213,16 +2272,24 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                     </div>
                   )}
 
+                  {/* AYCE time interval badge */}
+                  {activeSession?.ayce_enabled && orderTimeBlocked && (
+                    <div className="flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-sm font-medium bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                      <Timer size={16} weight="bold" />
+                      <span>Prossimo ordine tra {Math.floor(timeUntilNextOrder / 60000)}:{String(Math.floor((timeUntilNextOrder % 60000) / 1000)).padStart(2, '0')}</span>
+                    </div>
+                  )}
+
                   <Button
                     className="w-full font-bold h-12 rounded-xl"
                     style={{
                       ...theme.floatingCartStyle,
-                      ...(orderLimitReached ? { opacity: 0.5, cursor: 'not-allowed' } : {})
+                      ...((orderLimitReached || orderTimeBlocked) ? { opacity: 0.5, cursor: 'not-allowed' } : {})
                     }}
                     onClick={() => {
                       handleSubmitClick()
                     }}
-                    disabled={isOrderSubmitting || orderLimitReached}
+                    disabled={isOrderSubmitting || orderLimitReached || orderTimeBlocked}
                   >
                     {isOrderSubmitting ? (
                       <div className="flex items-center gap-2">
@@ -2322,7 +2389,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           <DialogContent className="sm:max-w-sm" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8)' }}>
             <DialogHeader>
               <DialogTitle style={{ color: theme.primary, fontFamily: theme.headerFont }}>Conferma invio</DialogTitle>
-              <DialogDescription style={{ color: theme.textSecondary }}>Inviare l'ordine in cucina?</DialogDescription>
+              <DialogDescription style={{ color: theme.textSecondary }}>L'ordine verrà inviato in cucina per <strong style={{ color: theme.textPrimary }}>tutto il tavolo</strong>. Tutti i commensali vedranno lo stesso ordine.</DialogDescription>
             </DialogHeader>
             <div className="py-3">
               <div className="rounded-xl p-3 space-y-2" style={{ backgroundColor: theme.cardBg, border: `1px solid ${theme.cardBorder}` }}>
@@ -2521,7 +2588,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 <span className="text-sm">Menù</span>
               </button>
               <h1 className="text-base font-semibold tracking-wide text-center flex-1" style={{ color: theme.textPrimary }}>
-                {(fullRestaurant as any)?.enable_stripe_payments ? "💳 Conto e Pagamento" : "🧾 Il Tuo Ordine"}
+                {(fullRestaurant as any)?.enable_stripe_payments ? "Conto e Pagamento" : "Il Tuo Ordine"}
               </h1>
               <div className="min-w-[60px] pointer-events-none" /> {/* spacer - pointer-events-none to not block touches */}
             </div>
@@ -2540,7 +2607,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   Pagamento completato!
                 </h2>
                 <p className="text-base font-medium" style={{ color: theme.textPrimary }}>
-                  Grazie per aver scelto {fullRestaurant?.name || 'il nostro ristorante'} 🎉
+                  Grazie per aver scelto {fullRestaurant?.name || 'il nostro ristorante'}
                 </p>
                 <p className="text-sm" style={{ color: theme.textMuted }}>
                   Il pagamento è stato elaborato con successo.<br />
@@ -2670,7 +2737,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                             }}>
                             {isSelected && <Check size={14} weight="bold" style={{ color: '#fff' }} />}
                           </div>
-                          <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>🍽 Coperto {copertoInfo.count > 1 ? `(${i + 1}/${copertoInfo.count})` : ''}</p>
+                          <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>Coperto {copertoInfo.count > 1 ? `(${i + 1}/${copertoInfo.count})` : ''}</p>
                         </div>
                         <span className="text-sm font-bold" style={{ color: isSelected ? '#f59e0b' : theme.textSecondary }}>€{copertoInfo.price.toFixed(2)}</span>
                       </button>
@@ -2704,7 +2771,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                             }}>
                             {isSelected && <Check size={14} weight="bold" style={{ color: '#fff' }} />}
                           </div>
-                          <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>🔄 All You Can Eat {(activeSession?.customer_count || 1) > 1 ? `(${i + 1}/${activeSession?.customer_count || 1})` : ''}</p>
+                          <p className="text-sm font-medium" style={{ color: theme.textPrimary }}>All You Can Eat {(activeSession?.customer_count || 1) > 1 ? `(${i + 1}/${activeSession?.customer_count || 1})` : ''}</p>
                         </div>
                         <span className="text-sm font-bold" style={{ color: isSelected ? '#10B981' : theme.textSecondary }}>€{ayceInfo.price.toFixed(2)}</span>
                       </button>
@@ -2807,13 +2874,13 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                         ))}
                         {copertoInfo.enabled && (
                           <div className="flex items-center justify-between py-2.5" style={{ borderBottom: `1px solid ${theme.divider}` }}>
-                            <span className="text-sm" style={{ color: theme.textSecondary }}>🍽 Coperto × {copertoInfo.count}</span>
+                            <span className="text-sm" style={{ color: theme.textSecondary }}>Coperto × {copertoInfo.count}</span>
                             <span className="text-sm font-semibold" style={{ color: theme.textPrimary }}>€{(copertoInfo.price * copertoInfo.count).toFixed(2)}</span>
                           </div>
                         )}
                         {ayceInfo.enabled && ayceInfo.price > 0 && (
                           <div className="flex items-center justify-between py-2.5" style={{ borderBottom: `1px solid ${theme.divider}` }}>
-                            <span className="text-sm" style={{ color: theme.textSecondary }}>🔄 All You Can Eat × {activeSession?.customer_count || 1}</span>
+                            <span className="text-sm" style={{ color: theme.textSecondary }}>All You Can Eat × {activeSession?.customer_count || 1}</span>
                             <span className="text-sm font-semibold" style={{ color: theme.textPrimary }}>€{(ayceInfo.price * (activeSession?.customer_count || 1)).toFixed(2)}</span>
                           </div>
                         )}
@@ -2892,7 +2959,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                         )}
 
                         <p className="text-[9px] text-center font-medium uppercase tracking-[0.2em]" style={{ color: theme.textMuted }}>
-                          🔒 Pagamento sicuro tramite Stripe
+                          Pagamento sicuro tramite Stripe
                         </p>
                       </div>
                     )}

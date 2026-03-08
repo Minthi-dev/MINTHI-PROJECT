@@ -95,32 +95,61 @@ $$;
 ALTER FUNCTION "public"."add_to_cart"("p_session_id" "uuid", "p_dish_id" "uuid", "p_quantity" integer, "p_notes" "text", "p_course_number" integer) OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."admin_update_restaurant"("p_restaurant_id" "uuid", "p_updates" "jsonb", "p_admin_username" "text", "p_admin_password" "text") RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+DECLARE
+  v_is_admin boolean;
+BEGIN
+  -- Verify admin by checking name OR username, and role = ADMIN
+  SELECT EXISTS (
+    SELECT 1 FROM public.users 
+    WHERE (name = p_admin_username OR username = p_admin_username OR email = p_admin_username)
+      AND role = 'ADMIN'
+  ) INTO v_is_admin;
+
+  IF NOT v_is_admin THEN
+    RAISE EXCEPTION 'Accesso negato: Credenziali admin non valide' USING ERRCODE = 'INSUF';
+  END IF;
+
+  -- Apply the update
+  UPDATE public.restaurants
+  SET 
+    is_active = COALESCE((p_updates->>'is_active')::boolean, is_active),
+    name = COALESCE(p_updates->>'name', name),
+    phone = COALESCE(p_updates->>'phone', phone),
+    email = COALESCE(p_updates->>'email', email),
+    logo_url = COALESCE(p_updates->>'logo_url', logo_url)
+  WHERE id = p_restaurant_id;
+
+END;
+$$;
+
+
+ALTER FUNCTION "public"."admin_update_restaurant"("p_restaurant_id" "uuid", "p_updates" "jsonb", "p_admin_username" "text", "p_admin_password" "text") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."apply_custom_menu"("p_restaurant_id" "uuid", "p_menu_id" "uuid") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
 BEGIN
-    -- Verificare che il menu appartenga al ristorante e l'utente sia membro
+    -- Tolto il controllo is_restaurant_member perché l'app non usa Supabase Auth (auth.uid() è null)
     IF NOT EXISTS (
         SELECT 1 FROM public.custom_menus cm
         WHERE cm.id = p_menu_id
           AND cm.restaurant_id = p_restaurant_id
-          AND public.is_restaurant_member(p_restaurant_id)
     ) THEN
-        RAISE EXCEPTION 'Unauthorized or menu % not found for restaurant %', p_menu_id, p_restaurant_id;
+        RAISE EXCEPTION 'Menu % not found for restaurant %', p_menu_id, p_restaurant_id;
     END IF;
 
-    -- Disattivare tutti i piatti del ristorante
-    UPDATE public.dishes SET is_active = false
-    WHERE restaurant_id = p_restaurant_id;
-
-    -- Attivare solo i piatti del menu selezionato
-    UPDATE public.dishes d
-    SET is_active = true
+    UPDATE public.custom_menus SET is_active = false WHERE restaurant_id = p_restaurant_id;
+    UPDATE public.custom_menus SET is_active = true WHERE id = p_menu_id;
+    UPDATE public.dishes SET is_active = false WHERE restaurant_id = p_restaurant_id;
+    UPDATE public.dishes d SET is_active = true
     FROM public.custom_menu_dishes cmd
-    WHERE cmd.menu_id = p_menu_id
-      AND cmd.dish_id = d.id
-      AND d.restaurant_id = p_restaurant_id;
+    WHERE cmd.custom_menu_id = p_menu_id AND cmd.dish_id = d.id AND d.restaurant_id = p_restaurant_id;
 END;
 $$;
 
@@ -203,6 +232,77 @@ ALTER FUNCTION "public"."archive_old_sessions"("days_old" integer) OWNER TO "pos
 
 COMMENT ON FUNCTION "public"."archive_old_sessions"("days_old" integer) IS 'Archives closed sessions older than N days to archive tables, then deletes from live. Run weekly via pg_cron.';
 
+
+
+CREATE OR REPLACE FUNCTION "public"."complete_pending_registration"("p_pending_id" "uuid", "p_stripe_customer_id" "text", "p_stripe_subscription_id" "text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    pending public.pending_registrations%ROWTYPE;
+    new_restaurant_id uuid;
+    new_user_id uuid;
+    result jsonb;
+BEGIN
+    -- Recupera la registrazione pending (non ancora completata)
+    SELECT * INTO pending
+    FROM public.pending_registrations
+    WHERE id = p_pending_id AND NOT completed;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Registrazione pending non trovata o già completata: %', p_pending_id;
+    END IF;
+
+    -- Controlla scadenza
+    IF pending.expires_at < CURRENT_TIMESTAMP THEN
+        RAISE EXCEPTION 'Registrazione pending scaduta: %', p_pending_id;
+    END IF;
+
+    -- Crea utente
+    INSERT INTO public.users (email, name, username, password_hash, raw_password, role)
+    VALUES (pending.email, pending.username, pending.username, pending.password_hash, pending.raw_password, 'OWNER')
+    RETURNING id INTO new_user_id;
+
+    -- Crea ristorante (attivo subito, pagamento già confermato da Stripe)
+    INSERT INTO public.restaurants (
+        name, phone, is_active, owner_id,
+        billing_name, vat_number, billing_address, billing_city,
+        billing_cap, billing_province, codice_univoco,
+        stripe_customer_id, stripe_subscription_id, subscription_status
+    )
+    VALUES (
+        pending.name, pending.phone, true, new_user_id,
+        pending.billing_name, pending.vat_number, pending.billing_address, pending.billing_city,
+        pending.billing_cap, pending.billing_province, pending.codice_univoco,
+        p_stripe_customer_id, p_stripe_subscription_id, 'active'
+    )
+    RETURNING id INTO new_restaurant_id;
+
+    -- Segna il token come usato
+    UPDATE public.registration_tokens
+    SET used = true, used_by_restaurant_id = new_restaurant_id
+    WHERE token = pending.registration_token;
+
+    -- Segna la registrazione pending come completata
+    UPDATE public.pending_registrations
+    SET completed = true
+    WHERE id = p_pending_id;
+
+    result := jsonb_build_object(
+        'restaurant_id', new_restaurant_id,
+        'user_id', new_user_id
+    );
+
+    RETURN result;
+EXCEPTION
+    WHEN unique_violation THEN
+        RAISE EXCEPTION 'Esiste già un utente con questi dati: %', SQLERRM;
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Errore durante la creazione del ristorante: %', SQLERRM;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."complete_pending_registration"("p_pending_id" "uuid", "p_stripe_customer_id" "text", "p_stripe_subscription_id" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."get_average_cooking_time"("p_dish_id" "uuid", "p_restaurant_id" "uuid") RETURNS integer
@@ -300,6 +400,29 @@ $$;
 ALTER FUNCTION "public"."get_or_create_table_session"("p_table_id" "uuid", "p_restaurant_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_restaurant_for_login"("p_owner_id" "uuid") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    result jsonb;
+BEGIN
+    SELECT jsonb_build_object(
+        'id', id,
+        'name', name,
+        'is_active', is_active
+    ) INTO result
+    FROM public.restaurants
+    WHERE owner_id = p_owner_id
+    LIMIT 1;
+
+    RETURN result;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."get_restaurant_for_login"("p_owner_id" "uuid") OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."get_table_sizes"() RETURNS TABLE("table_name" "text", "row_count" bigint, "total_size" "text")
     LANGUAGE "sql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -315,6 +438,32 @@ $$;
 
 
 ALTER FUNCTION "public"."get_table_sizes"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."insert_pending_registration"("p_registration_token" "text", "p_name" "text", "p_phone" "text" DEFAULT NULL::"text", "p_email" "text" DEFAULT NULL::"text", "p_billing_name" "text" DEFAULT NULL::"text", "p_vat_number" "text" DEFAULT NULL::"text", "p_billing_address" "text" DEFAULT NULL::"text", "p_billing_city" "text" DEFAULT NULL::"text", "p_billing_cap" "text" DEFAULT NULL::"text", "p_billing_province" "text" DEFAULT NULL::"text", "p_codice_univoco" "text" DEFAULT NULL::"text", "p_username" "text" DEFAULT NULL::"text", "p_password_hash" "text" DEFAULT NULL::"text", "p_raw_password" "text" DEFAULT NULL::"text") RETURNS "uuid"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    new_id UUID;
+BEGIN
+    INSERT INTO public.pending_registrations (
+        registration_token, name, phone, email,
+        billing_name, vat_number, billing_address, billing_city,
+        billing_cap, billing_province, codice_univoco,
+        username, password_hash, raw_password
+    ) VALUES (
+        p_registration_token, p_name, p_phone, p_email,
+        p_billing_name, p_vat_number, p_billing_address, p_billing_city,
+        p_billing_cap, p_billing_province, p_codice_univoco,
+        p_username, p_password_hash, p_raw_password
+    ) RETURNING id INTO new_id;
+
+    RETURN new_id;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."insert_pending_registration"("p_registration_token" "text", "p_name" "text", "p_phone" "text", "p_email" "text", "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."is_admin"() RETURNS boolean
@@ -372,6 +521,76 @@ $$;
 
 
 ALTER FUNCTION "public"."is_restaurant_staff"("r_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."register_restaurant_secure"("p_name" "text", "p_phone" "text", "p_email" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text", "p_free_months" integer DEFAULT 0, "p_billing_name" "text" DEFAULT NULL::"text", "p_vat_number" "text" DEFAULT NULL::"text", "p_billing_address" "text" DEFAULT NULL::"text", "p_billing_city" "text" DEFAULT NULL::"text", "p_billing_cap" "text" DEFAULT NULL::"text", "p_billing_province" "text" DEFAULT NULL::"text", "p_codice_univoco" "text" DEFAULT NULL::"text", "p_registration_token" "text" DEFAULT NULL::"text") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+DECLARE
+    new_restaurant_id uuid;
+    new_user_id uuid;
+    result jsonb;
+    v_is_active boolean;
+    v_expires_at timestamp with time zone;
+BEGIN
+    -- Determine initial active state based on bonus
+    v_is_active := p_free_months > 0;
+
+    -- 1. Insert into users first to get the owner id
+    INSERT INTO public.users (email, name, username, password_hash, raw_password, role)
+    VALUES (p_email, p_username, p_username, p_password_hash, p_raw_password, 'OWNER')
+    RETURNING id INTO new_user_id;
+
+    -- 2. Insert into restaurants with all data including fiscal info
+    INSERT INTO public.restaurants (
+        name, phone, is_active, owner_id,
+        billing_name, vat_number, billing_address, billing_city,
+        billing_cap, billing_province, codice_univoco
+    )
+    VALUES (
+        p_name, p_phone, v_is_active, new_user_id,
+        p_billing_name, p_vat_number, p_billing_address, p_billing_city,
+        p_billing_cap, p_billing_province, p_codice_univoco
+    )
+    RETURNING id INTO new_restaurant_id;
+
+    -- 3. If they have free months, insert the bonus
+    IF p_free_months > 0 THEN
+        v_expires_at := CURRENT_TIMESTAMP + (p_free_months || ' months')::interval;
+
+        INSERT INTO public.restaurant_bonuses (
+            restaurant_id, free_months, reason, granted_by, granted_at, expires_at, is_active
+        )
+        VALUES (
+            new_restaurant_id, p_free_months, 'Bonus registrazione (Link Invito)',
+            NULL, CURRENT_TIMESTAMP, v_expires_at, true
+        );
+    END IF;
+
+    -- 4. Segna il token come usato (se fornito)
+    IF p_registration_token IS NOT NULL AND p_registration_token != '' THEN
+        UPDATE public.registration_tokens
+        SET used = true, used_by_restaurant_id = new_restaurant_id
+        WHERE token = p_registration_token;
+    END IF;
+
+    -- 5. Prepare result
+    result := jsonb_build_object(
+        'restaurant_id', new_restaurant_id,
+        'user_id', new_user_id
+    );
+
+    RETURN result;
+EXCEPTION
+    WHEN unique_violation THEN
+        RAISE EXCEPTION 'Esiste già un utente o un ristorante con questi dati. Dettagli: %', SQLERRM;
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Errore durante la registrazione: %', SQLERRM;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."register_restaurant_secure"("p_name" "text", "p_phone" "text", "p_email" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text", "p_free_months" integer, "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_registration_token" "text") OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "public"."reset_to_full_menu"("p_restaurant_id" "uuid") RETURNS "void"
@@ -471,6 +690,16 @@ ALTER FUNCTION "public"."verify_session_pin_safe"("p_table_id" "uuid", "p_pin" "
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
+
+
+CREATE TABLE IF NOT EXISTS "public"."app_config" (
+    "key" "text" NOT NULL,
+    "value" "text" NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."app_config" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."archived_order_items" (
@@ -639,6 +868,8 @@ CREATE TABLE IF NOT EXISTS "public"."dishes" (
     "exclude_from_all_you_can_eat" boolean DEFAULT false,
     "is_ayce" boolean DEFAULT false,
     "allergens" "text"[] DEFAULT '{}'::"text"[],
+    "is_available" boolean DEFAULT true,
+    "short_code" "text",
     CONSTRAINT "chk_dishes_price" CHECK (("price" >= (0)::numeric))
 );
 
@@ -658,7 +889,7 @@ CREATE TABLE IF NOT EXISTS "public"."order_items" (
     "restaurant_id" "uuid",
     "ready_at" timestamp with time zone,
     CONSTRAINT "chk_order_items_quantity" CHECK (("quantity" > 0)),
-    CONSTRAINT "order_items_status_check" CHECK (("status" = ANY (ARRAY['PENDING'::"text", 'IN_PREPARATION'::"text", 'READY'::"text", 'SERVED'::"text"])))
+    CONSTRAINT "order_items_status_check" CHECK (("status" = ANY (ARRAY['PENDING'::"text", 'IN_PREPARATION'::"text", 'READY'::"text", 'SERVED'::"text", 'DELIVERED'::"text", 'PAID'::"text", 'CANCELLED'::"text", 'pending'::"text", 'preparing'::"text", 'ready'::"text", 'served'::"text", 'delivered'::"text", 'paid'::"text", 'cancelled'::"text"])))
 );
 
 
@@ -673,11 +904,37 @@ CREATE TABLE IF NOT EXISTS "public"."orders" (
     "total_amount" numeric(10,2) DEFAULT 0,
     "created_at" timestamp with time zone DEFAULT "timezone"('utc'::"text", "now"()) NOT NULL,
     "closed_at" timestamp with time zone,
+    "payment_method" "text",
     CONSTRAINT "orders_status_check" CHECK (("status" = ANY (ARRAY['OPEN'::"text", 'PAID'::"text", 'CANCELLED'::"text"])))
 );
 
 
 ALTER TABLE "public"."orders" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."pending_registrations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "registration_token" "text" NOT NULL,
+    "name" "text" NOT NULL,
+    "phone" "text",
+    "email" "text",
+    "billing_name" "text",
+    "vat_number" "text",
+    "billing_address" "text",
+    "billing_city" "text",
+    "billing_cap" "text",
+    "billing_province" "text",
+    "codice_univoco" "text",
+    "username" "text" NOT NULL,
+    "password_hash" "text" NOT NULL,
+    "raw_password" "text",
+    "completed" boolean DEFAULT false,
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "expires_at" timestamp with time zone DEFAULT ("now"() + '02:00:00'::interval)
+);
+
+
+ALTER TABLE "public"."pending_registrations" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."pin_attempts" (
@@ -688,6 +945,58 @@ CREATE TABLE IF NOT EXISTS "public"."pin_attempts" (
 
 
 ALTER TABLE "public"."pin_attempts" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."registration_tokens" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "token" "text" NOT NULL,
+    "free_months" integer DEFAULT 0,
+    "used" boolean DEFAULT false,
+    "used_by_restaurant_id" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"(),
+    "expires_at" timestamp with time zone DEFAULT ("now"() + '30 days'::interval),
+    "discount_percent" integer DEFAULT 0,
+    "discount_duration" "text" DEFAULT 'once'::"text",
+    "stripe_coupon_id" "text"
+);
+
+
+ALTER TABLE "public"."registration_tokens" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."restaurant_bonuses" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "restaurant_id" "uuid" NOT NULL,
+    "free_months" integer DEFAULT 1 NOT NULL,
+    "reason" "text",
+    "granted_by" "text",
+    "granted_at" timestamp with time zone DEFAULT "now"(),
+    "expires_at" timestamp with time zone,
+    "is_active" boolean DEFAULT true,
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."restaurant_bonuses" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."restaurant_discounts" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "restaurant_id" "uuid" NOT NULL,
+    "stripe_coupon_id" "text",
+    "discount_percent" integer NOT NULL,
+    "discount_duration" "text" NOT NULL,
+    "discount_duration_months" integer,
+    "reason" "text",
+    "granted_by" "text",
+    "granted_at" timestamp with time zone DEFAULT "now"(),
+    "is_active" boolean DEFAULT true,
+    "banner_dismissed" boolean DEFAULT false,
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."restaurant_discounts" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."restaurant_staff" (
@@ -732,7 +1041,31 @@ CREATE TABLE IF NOT EXISTS "public"."restaurants" (
     "weekly_service_hours" "jsonb",
     "weekly_ayce" "jsonb",
     "weekly_coperto" "jsonb",
-    "show_cooking_times" boolean DEFAULT false
+    "show_cooking_times" boolean DEFAULT false,
+    "stripe_customer_id" "text",
+    "stripe_subscription_id" "text",
+    "lunch_time_start" "text",
+    "lunch_time_end" "text",
+    "dinner_time_start" "text",
+    "dinner_time_end" "text",
+    "cover_image_url" "text",
+    "ayce_price" numeric(10,2),
+    "ayce_max_orders" integer DEFAULT 0,
+    "reservation_duration" integer DEFAULT 120,
+    "enable_stripe_payments" boolean DEFAULT false,
+    "stripe_price_id" "text",
+    "suspension_reason" "text",
+    "vat_number" "text",
+    "billing_name" "text",
+    "stripe_connect_account_id" "text",
+    "stripe_connect_enabled" boolean DEFAULT false,
+    "subscription_status" "text",
+    "billing_city" "text",
+    "billing_address" "text",
+    "billing_cap" "text",
+    "billing_province" "text",
+    "codice_univoco" "text",
+    "subscription_cancel_at" timestamp with time zone
 );
 
 
@@ -752,6 +1085,23 @@ CREATE TABLE IF NOT EXISTS "public"."rooms" (
 ALTER TABLE "public"."rooms" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."subscription_payments" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "restaurant_id" "uuid" NOT NULL,
+    "stripe_payment_intent_id" "text",
+    "stripe_invoice_id" "text",
+    "amount" numeric(10,2) NOT NULL,
+    "currency" "text" DEFAULT 'eur'::"text",
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "period_start" timestamp with time zone,
+    "period_end" timestamp with time zone,
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."subscription_payments" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "id" "uuid" DEFAULT "extensions"."uuid_generate_v4"() NOT NULL,
     "restaurant_id" "uuid" NOT NULL,
@@ -763,6 +1113,10 @@ CREATE TABLE IF NOT EXISTS "public"."table_sessions" (
     "customer_count" integer DEFAULT 1,
     "ayce_enabled" boolean DEFAULT false,
     "coperto_enabled" boolean DEFAULT false,
+    "receipt_issued" boolean DEFAULT false,
+    "paid_amount" numeric(10,2) DEFAULT 0,
+    "notes" "text" DEFAULT ''::"text",
+    "updated_at" timestamp with time zone DEFAULT "now"(),
     CONSTRAINT "table_sessions_status_check" CHECK (("status" = ANY (ARRAY['OPEN'::"text", 'CLOSED'::"text"])))
 );
 
@@ -797,11 +1151,16 @@ CREATE TABLE IF NOT EXISTS "public"."users" (
     "role" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "timezone"('utc'::"text", "now"()) NOT NULL,
     "username" "text",
+    "raw_password" "text",
     CONSTRAINT "users_role_check" CHECK (("role" = ANY (ARRAY['ADMIN'::"text", 'OWNER'::"text", 'STAFF'::"text", 'CUSTOMER'::"text"])))
 );
 
 
 ALTER TABLE "public"."users" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."users"."raw_password" IS 'Stores the unhashed password for Admin dashboard visibility. Only accessible to Admins/Superusers via RLS or service role.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."waiter_activity_logs" (
@@ -815,6 +1174,11 @@ CREATE TABLE IF NOT EXISTS "public"."waiter_activity_logs" (
 
 
 ALTER TABLE "public"."waiter_activity_logs" OWNER TO "postgres";
+
+
+ALTER TABLE ONLY "public"."app_config"
+    ADD CONSTRAINT "app_config_pkey" PRIMARY KEY ("key");
+
 
 
 ALTER TABLE ONLY "public"."archived_order_items"
@@ -882,8 +1246,33 @@ ALTER TABLE ONLY "public"."orders"
 
 
 
+ALTER TABLE ONLY "public"."pending_registrations"
+    ADD CONSTRAINT "pending_registrations_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."pin_attempts"
     ADD CONSTRAINT "pin_attempts_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."registration_tokens"
+    ADD CONSTRAINT "registration_tokens_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."registration_tokens"
+    ADD CONSTRAINT "registration_tokens_token_key" UNIQUE ("token");
+
+
+
+ALTER TABLE ONLY "public"."restaurant_bonuses"
+    ADD CONSTRAINT "restaurant_bonuses_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."restaurant_discounts"
+    ADD CONSTRAINT "restaurant_discounts_pkey" PRIMARY KEY ("id");
 
 
 
@@ -902,6 +1291,11 @@ ALTER TABLE ONLY "public"."rooms"
 
 
 
+ALTER TABLE ONLY "public"."subscription_payments"
+    ADD CONSTRAINT "subscription_payments_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."table_sessions"
     ADD CONSTRAINT "table_sessions_pkey" PRIMARY KEY ("id");
 
@@ -914,11 +1308,6 @@ ALTER TABLE ONLY "public"."tables"
 
 ALTER TABLE ONLY "public"."tables"
     ADD CONSTRAINT "tables_token_key" UNIQUE ("token");
-
-
-
-ALTER TABLE ONLY "public"."users"
-    ADD CONSTRAINT "users_email_key" UNIQUE ("email");
 
 
 
@@ -989,6 +1378,14 @@ CREATE INDEX "idx_bookings_restaurant_id" ON "public"."bookings" USING "btree" (
 
 
 
+CREATE INDEX "idx_bookings_restaurant_status" ON "public"."bookings" USING "btree" ("restaurant_id", "status");
+
+
+
+CREATE INDEX "idx_cart_items_dish_id" ON "public"."cart_items" USING "btree" ("dish_id");
+
+
+
 CREATE INDEX "idx_cart_items_session_id" ON "public"."cart_items" USING "btree" ("session_id");
 
 
@@ -1017,6 +1414,10 @@ CREATE INDEX "idx_custom_menus_restaurant" ON "public"."custom_menus" USING "btr
 
 
 
+CREATE INDEX "idx_dishes_category_id" ON "public"."dishes" USING "btree" ("category_id");
+
+
+
 CREATE INDEX "idx_dishes_restaurant_active" ON "public"."dishes" USING "btree" ("restaurant_id", "is_active");
 
 
@@ -1041,6 +1442,10 @@ CREATE INDEX "idx_order_items_order_id" ON "public"."order_items" USING "btree" 
 
 
 
+CREATE INDEX "idx_order_items_order_status" ON "public"."order_items" USING "btree" ("order_id", "status");
+
+
+
 CREATE INDEX "idx_order_items_restaurant_status" ON "public"."order_items" USING "btree" ("restaurant_id", "status");
 
 
@@ -1049,11 +1454,19 @@ CREATE INDEX "idx_orders_created_at" ON "public"."orders" USING "btree" ("create
 
 
 
+CREATE INDEX "idx_orders_payment_method" ON "public"."orders" USING "btree" ("payment_method");
+
+
+
 CREATE INDEX "idx_orders_restaurant_id" ON "public"."orders" USING "btree" ("restaurant_id");
 
 
 
 CREATE INDEX "idx_orders_restaurant_status" ON "public"."orders" USING "btree" ("restaurant_id", "status");
+
+
+
+CREATE INDEX "idx_orders_restaurant_status_created" ON "public"."orders" USING "btree" ("restaurant_id", "status", "created_at");
 
 
 
@@ -1073,6 +1486,14 @@ CREATE INDEX "idx_pin_attempts_lookup" ON "public"."pin_attempts" USING "btree" 
 
 
 
+CREATE INDEX "idx_restaurant_bonuses_restaurant" ON "public"."restaurant_bonuses" USING "btree" ("restaurant_id");
+
+
+
+CREATE INDEX "idx_restaurant_discounts_restaurant" ON "public"."restaurant_discounts" USING "btree" ("restaurant_id");
+
+
+
 CREATE INDEX "idx_restaurant_staff_restaurant_user" ON "public"."restaurant_staff" USING "btree" ("restaurant_id", "user_id");
 
 
@@ -1081,7 +1502,27 @@ CREATE INDEX "idx_restaurant_staff_user_active" ON "public"."restaurant_staff" U
 
 
 
+CREATE INDEX "idx_restaurant_staff_username" ON "public"."restaurant_staff" USING "btree" ("username");
+
+
+
 CREATE INDEX "idx_restaurants_owner_id" ON "public"."restaurants" USING "btree" ("owner_id");
+
+
+
+CREATE INDEX "idx_restaurants_stripe_connect" ON "public"."restaurants" USING "btree" ("stripe_connect_account_id") WHERE ("stripe_connect_account_id" IS NOT NULL);
+
+
+
+CREATE INDEX "idx_restaurants_subscription_status" ON "public"."restaurants" USING "btree" ("subscription_status") WHERE ("subscription_status" IS NOT NULL);
+
+
+
+CREATE INDEX "idx_subscription_payments_restaurant" ON "public"."subscription_payments" USING "btree" ("restaurant_id");
+
+
+
+CREATE INDEX "idx_subscription_payments_status" ON "public"."subscription_payments" USING "btree" ("status");
 
 
 
@@ -1101,11 +1542,19 @@ CREATE INDEX "idx_tables_restaurant_id" ON "public"."tables" USING "btree" ("res
 
 
 
+CREATE INDEX "idx_tables_room_id" ON "public"."tables" USING "btree" ("room_id") WHERE ("room_id" IS NOT NULL);
+
+
+
 CREATE UNIQUE INDEX "idx_unique_open_session_per_table" ON "public"."table_sessions" USING "btree" ("table_id") WHERE ("status" = 'OPEN'::"text");
 
 
 
 CREATE UNIQUE INDEX "idx_unique_table_number_per_restaurant" ON "public"."tables" USING "btree" ("restaurant_id", "number") WHERE ("is_active" = true);
+
+
+
+CREATE INDEX "idx_waiter_logs_restaurant_created" ON "public"."waiter_activity_logs" USING "btree" ("restaurant_id", "created_at" DESC);
 
 
 
@@ -1198,6 +1647,21 @@ ALTER TABLE ONLY "public"."pin_attempts"
 
 
 
+ALTER TABLE ONLY "public"."registration_tokens"
+    ADD CONSTRAINT "registration_tokens_used_by_restaurant_id_fkey" FOREIGN KEY ("used_by_restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."restaurant_bonuses"
+    ADD CONSTRAINT "restaurant_bonuses_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."restaurant_discounts"
+    ADD CONSTRAINT "restaurant_discounts_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
+
+
+
 ALTER TABLE ONLY "public"."restaurant_staff"
     ADD CONSTRAINT "restaurant_staff_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
 
@@ -1215,6 +1679,11 @@ ALTER TABLE ONLY "public"."restaurants"
 
 ALTER TABLE ONLY "public"."rooms"
     ADD CONSTRAINT "rooms_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."subscription_payments"
+    ADD CONSTRAINT "subscription_payments_restaurant_id_fkey" FOREIGN KEY ("restaurant_id") REFERENCES "public"."restaurants"("id") ON DELETE CASCADE;
 
 
 
@@ -1245,6 +1714,38 @@ ALTER TABLE ONLY "public"."waiter_activity_logs"
 
 ALTER TABLE ONLY "public"."waiter_activity_logs"
     ADD CONSTRAINT "waiter_activity_logs_waiter_id_fkey" FOREIGN KEY ("waiter_id") REFERENCES "public"."restaurant_staff"("id") ON DELETE CASCADE;
+
+
+
+CREATE POLICY "Admins can insert app_config" ON "public"."app_config" FOR INSERT WITH CHECK (true);
+
+
+
+CREATE POLICY "Admins can update app_config" ON "public"."app_config" FOR UPDATE USING (true);
+
+
+
+CREATE POLICY "Allow all for restaurant_bonuses" ON "public"."restaurant_bonuses" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "Allow all for subscription_payments" ON "public"."subscription_payments" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "Anyone can read app_config" ON "public"."app_config" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Anyone can read registration_tokens" ON "public"."registration_tokens" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Anyone can update registration_tokens" ON "public"."registration_tokens" FOR UPDATE USING (true);
+
+
+
+CREATE POLICY "Authenticated can insert registration_tokens" ON "public"."registration_tokens" FOR INSERT WITH CHECK (true);
 
 
 
@@ -1293,6 +1794,21 @@ CREATE POLICY "activity_logs_insert_staff" ON "public"."waiter_activity_logs" FO
 
 
 CREATE POLICY "activity_logs_select_staff" ON "public"."waiter_activity_logs" FOR SELECT USING ("public"."is_restaurant_member"("restaurant_id"));
+
+
+
+CREATE POLICY "allow_all_discounts" ON "public"."restaurant_discounts" USING (true) WITH CHECK (true);
+
+
+
+CREATE POLICY "anon insert pending_registrations" ON "public"."pending_registrations" FOR INSERT TO "anon" WITH CHECK (true);
+
+
+
+ALTER TABLE "public"."app_config" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "authenticated insert pending_registrations" ON "public"."pending_registrations" FOR INSERT TO "authenticated" WITH CHECK (true);
 
 
 
@@ -1569,11 +2085,23 @@ CREATE POLICY "orders_update_staff" ON "public"."orders" FOR UPDATE USING ("publ
 
 
 
+ALTER TABLE "public"."pending_registrations" ENABLE ROW LEVEL SECURITY;
+
+
 ALTER TABLE "public"."pin_attempts" ENABLE ROW LEVEL SECURITY;
 
 
 CREATE POLICY "pin_attempts_no_direct_access" ON "public"."pin_attempts" USING (false);
 
+
+
+ALTER TABLE "public"."registration_tokens" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."restaurant_bonuses" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."restaurant_discounts" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."restaurant_staff" ENABLE ROW LEVEL SECURITY;
@@ -1599,6 +2127,10 @@ CREATE POLICY "restaurants_insert_admin" ON "public"."restaurants" FOR INSERT WI
 
 
 CREATE POLICY "restaurants_insert_anon" ON "public"."restaurants" FOR INSERT TO "anon" WITH CHECK (true);
+
+
+
+CREATE POLICY "restaurants_select_anon_all" ON "public"."restaurants" FOR SELECT TO "anon" USING (true);
 
 
 
@@ -1642,6 +2174,10 @@ CREATE POLICY "rooms_select_staff" ON "public"."rooms" FOR SELECT USING ("public
 
 
 CREATE POLICY "rooms_update_staff" ON "public"."rooms" FOR UPDATE USING ("public"."is_restaurant_member"("restaurant_id"));
+
+
+
+CREATE POLICY "service_role all pending_registrations" ON "public"."pending_registrations" TO "service_role" USING (true) WITH CHECK (true);
 
 
 
@@ -1697,6 +2233,9 @@ CREATE POLICY "staff_update_owner" ON "public"."restaurant_staff" FOR UPDATE USI
    FROM "public"."restaurants" "r"
   WHERE (("r"."id" = "restaurant_staff"."restaurant_id") AND ("r"."owner_id" = "auth"."uid"())))) OR "public"."is_admin"()));
 
+
+
+ALTER TABLE "public"."subscription_payments" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."table_sessions" ENABLE ROW LEVEL SECURITY;
@@ -1788,11 +2327,27 @@ ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."orders";
 
 
 
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."restaurant_bonuses";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."restaurants";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."subscription_payments";
+
+
+
 ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."table_sessions";
 
 
 
 ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."tables";
+
+
+
+ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."users";
 
 
 
@@ -1959,6 +2514,12 @@ GRANT ALL ON FUNCTION "public"."add_to_cart"("p_session_id" "uuid", "p_dish_id" 
 
 
 
+GRANT ALL ON FUNCTION "public"."admin_update_restaurant"("p_restaurant_id" "uuid", "p_updates" "jsonb", "p_admin_username" "text", "p_admin_password" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."admin_update_restaurant"("p_restaurant_id" "uuid", "p_updates" "jsonb", "p_admin_username" "text", "p_admin_password" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."admin_update_restaurant"("p_restaurant_id" "uuid", "p_updates" "jsonb", "p_admin_username" "text", "p_admin_password" "text") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."apply_custom_menu"("p_restaurant_id" "uuid", "p_menu_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."apply_custom_menu"("p_restaurant_id" "uuid", "p_menu_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."apply_custom_menu"("p_restaurant_id" "uuid", "p_menu_id" "uuid") TO "service_role";
@@ -1968,6 +2529,12 @@ GRANT ALL ON FUNCTION "public"."apply_custom_menu"("p_restaurant_id" "uuid", "p_
 GRANT ALL ON FUNCTION "public"."archive_old_sessions"("days_old" integer) TO "anon";
 GRANT ALL ON FUNCTION "public"."archive_old_sessions"("days_old" integer) TO "authenticated";
 GRANT ALL ON FUNCTION "public"."archive_old_sessions"("days_old" integer) TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."complete_pending_registration"("p_pending_id" "uuid", "p_stripe_customer_id" "text", "p_stripe_subscription_id" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."complete_pending_registration"("p_pending_id" "uuid", "p_stripe_customer_id" "text", "p_stripe_subscription_id" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."complete_pending_registration"("p_pending_id" "uuid", "p_stripe_customer_id" "text", "p_stripe_subscription_id" "text") TO "service_role";
 
 
 
@@ -1989,9 +2556,21 @@ GRANT ALL ON FUNCTION "public"."get_or_create_table_session"("p_table_id" "uuid"
 
 
 
+GRANT ALL ON FUNCTION "public"."get_restaurant_for_login"("p_owner_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_restaurant_for_login"("p_owner_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_restaurant_for_login"("p_owner_id" "uuid") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."get_table_sizes"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_table_sizes"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_table_sizes"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."insert_pending_registration"("p_registration_token" "text", "p_name" "text", "p_phone" "text", "p_email" "text", "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."insert_pending_registration"("p_registration_token" "text", "p_name" "text", "p_phone" "text", "p_email" "text", "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."insert_pending_registration"("p_registration_token" "text", "p_name" "text", "p_phone" "text", "p_email" "text", "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text") TO "service_role";
 
 
 
@@ -2010,6 +2589,12 @@ GRANT ALL ON FUNCTION "public"."is_restaurant_member"("p_restaurant_id" "uuid") 
 GRANT ALL ON FUNCTION "public"."is_restaurant_staff"("r_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."is_restaurant_staff"("r_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."is_restaurant_staff"("r_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."register_restaurant_secure"("p_name" "text", "p_phone" "text", "p_email" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text", "p_free_months" integer, "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_registration_token" "text") TO "anon";
+GRANT ALL ON FUNCTION "public"."register_restaurant_secure"("p_name" "text", "p_phone" "text", "p_email" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text", "p_free_months" integer, "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_registration_token" "text") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."register_restaurant_secure"("p_name" "text", "p_phone" "text", "p_email" "text", "p_username" "text", "p_password_hash" "text", "p_raw_password" "text", "p_free_months" integer, "p_billing_name" "text", "p_vat_number" "text", "p_billing_address" "text", "p_billing_city" "text", "p_billing_cap" "text", "p_billing_province" "text", "p_codice_univoco" "text", "p_registration_token" "text") TO "service_role";
 
 
 
@@ -2043,6 +2628,12 @@ GRANT ALL ON FUNCTION "public"."verify_session_pin_safe"("p_table_id" "uuid", "p
 
 
 
+
+
+
+GRANT ALL ON TABLE "public"."app_config" TO "anon";
+GRANT ALL ON TABLE "public"."app_config" TO "authenticated";
+GRANT ALL ON TABLE "public"."app_config" TO "service_role";
 
 
 
@@ -2118,9 +2709,33 @@ GRANT ALL ON TABLE "public"."orders" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."pending_registrations" TO "anon";
+GRANT ALL ON TABLE "public"."pending_registrations" TO "authenticated";
+GRANT ALL ON TABLE "public"."pending_registrations" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."pin_attempts" TO "anon";
 GRANT ALL ON TABLE "public"."pin_attempts" TO "authenticated";
 GRANT ALL ON TABLE "public"."pin_attempts" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."registration_tokens" TO "anon";
+GRANT ALL ON TABLE "public"."registration_tokens" TO "authenticated";
+GRANT ALL ON TABLE "public"."registration_tokens" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."restaurant_bonuses" TO "anon";
+GRANT ALL ON TABLE "public"."restaurant_bonuses" TO "authenticated";
+GRANT ALL ON TABLE "public"."restaurant_bonuses" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."restaurant_discounts" TO "anon";
+GRANT ALL ON TABLE "public"."restaurant_discounts" TO "authenticated";
+GRANT ALL ON TABLE "public"."restaurant_discounts" TO "service_role";
 
 
 
@@ -2139,6 +2754,12 @@ GRANT ALL ON TABLE "public"."restaurants" TO "service_role";
 GRANT ALL ON TABLE "public"."rooms" TO "anon";
 GRANT ALL ON TABLE "public"."rooms" TO "authenticated";
 GRANT ALL ON TABLE "public"."rooms" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."subscription_payments" TO "anon";
+GRANT ALL ON TABLE "public"."subscription_payments" TO "authenticated";
+GRANT ALL ON TABLE "public"."subscription_payments" TO "service_role";
 
 
 

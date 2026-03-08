@@ -15,13 +15,14 @@ interface KitchenViewProps {
     viewMode: 'table' | 'dish'
 
     onCompleteDish: (orderId: string, itemId: string) => void
+    onDeliverDish?: (orderId: string, itemId: string) => void
     onCompleteOrder: (orderId: string) => void
     sessions: TableSession[]
     zoom?: number
     waiterModeEnabled?: boolean // Added for persistent ready items
 }
 
-export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], viewMode, onCompleteDish, onCompleteOrder, sessions, zoom = 1, waiterModeEnabled = false }: KitchenViewProps) {
+export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], viewMode, onCompleteDish, onDeliverDish, onCompleteOrder, sessions, zoom = 1, waiterModeEnabled = false }: KitchenViewProps) {
     const [now, setNow] = useState(new Date())
     const [selectedDishInfo, setSelectedDishInfo] = useState<{ dish: Dish | undefined, itemId?: string } | null>(null)
 
@@ -208,11 +209,11 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                             className={cn(
                                                                 "flex items-center justify-between p-4 rounded-xl border transition-all duration-300 mb-3 group/item relative",
                                                                 isDelivered
-                                                                    ? "opacity-40 bg-zinc-950/50 border-transparent scale-[0.98]"
+                                                                    ? "opacity-20 bg-zinc-950/60 border-transparent scale-[0.97]"
                                                                     : isItemDone
-                                                                        ? "opacity-30 bg-zinc-950/50 border-transparent scale-[0.98] grayscale"
-                                                                        : isItemReady && waiterModeEnabled
-                                                                            ? "opacity-50 bg-amber-900/10 border-amber-500/30" // Persistent Ready State
+                                                                        ? "opacity-25 bg-zinc-950/50 border-transparent scale-[0.98] grayscale"
+                                                                        : isItemReady
+                                                                            ? "opacity-55 bg-zinc-900/60 border-emerald-500/20 shadow-inner" // Completato — visibilmente grigio, bordo verde
                                                                             : "bg-zinc-800/50 border-white/10 hover:border-amber-500/40 hover:bg-zinc-800 hover:shadow-lg shadow-sm"
                                                             )}
                                                         >
@@ -244,20 +245,33 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                                 )}
                                                             </div>
 
-                                                            <Button
-                                                                size="icon"
-                                                                variant={isItemDone ? "ghost" : "default"}
-                                                                className={cn(
-                                                                    "h-11 w-11 rounded-xl flex-shrink-0 ml-3 transition-all duration-500",
-                                                                    isItemDone
-                                                                        ? "text-zinc-800 bg-transparent"
-                                                                        : "bg-amber-500 hover:bg-amber-400 text-black shadow-[0_10px_20px_-10px_rgba(245,158,11,0.5)] active:scale-90"
-                                                                )}
-                                                                onClick={() => !isItemDone && onCompleteDish(item.orderId, item.id)}
-                                                                disabled={isItemDone}
-                                                            >
-                                                                <Check weight="bold" className="h-5 w-5" />
-                                                            </Button>
+                                                            {/* Action button: Completa → Consegnato → Done */}
+                                                            {isItemReady && !isItemDone && onDeliverDish ? (
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="default"
+                                                                    className="h-11 w-11 rounded-xl flex-shrink-0 ml-3 transition-all duration-500 bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_10px_20px_-10px_rgba(16,185,129,0.5)] active:scale-90"
+                                                                    onClick={() => onDeliverDish(item.orderId, item.id)}
+                                                                    title="Segna come consegnato"
+                                                                >
+                                                                    <Check weight="bold" className="h-5 w-5" />
+                                                                </Button>
+                                                            ) : (
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant={isItemDone || isDelivered ? "ghost" : "default"}
+                                                                    className={cn(
+                                                                        "h-11 w-11 rounded-xl flex-shrink-0 ml-3 transition-all duration-500",
+                                                                        isItemDone || isDelivered
+                                                                            ? "text-zinc-800 bg-transparent"
+                                                                            : "bg-amber-500 hover:bg-amber-400 text-black shadow-[0_10px_20px_-10px_rgba(245,158,11,0.5)] active:scale-90"
+                                                                    )}
+                                                                    onClick={() => !isItemDone && !isDelivered && onCompleteDish(item.orderId, item.id)}
+                                                                    disabled={isItemDone || isDelivered}
+                                                                >
+                                                                    <Check weight="bold" className="h-5 w-5" />
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     )
                                                 })}

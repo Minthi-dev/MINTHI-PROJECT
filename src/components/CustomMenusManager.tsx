@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +56,26 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     const [editorTab, setEditorTab] = useState<'dishes' | 'schedule'>('dishes')
     const [editingName, setEditingName] = useState(false)
     const [editNameValue, setEditNameValue] = useState('')
+
+    // Track current editor state for auto-save on unmount (dialog X button close)
+    const selectedMenuRef = useRef(selectedMenu)
+    const menuDishesRef = useRef(menuDishes)
+    useEffect(() => { selectedMenuRef.current = selectedMenu }, [selectedMenu])
+    useEffect(() => { menuDishesRef.current = menuDishes }, [menuDishes])
+
+    // Auto-activate menu when component unmounts (e.g., dialog closed via X)
+    useEffect(() => {
+        return () => {
+            const menu = selectedMenuRef.current
+            const dishes = menuDishesRef.current
+            if (menu && !menu.is_active && dishes.length > 0) {
+                // Fire and forget — component is unmounting
+                supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: menu.id })
+                    .then(() => onDishesChange())
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     // Data Fetching
     const fetchCustomMenus = async () => {
@@ -130,7 +150,19 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         setEditingName(false)
     }
 
-    const closeEditor = () => {
+    const closeEditor = async () => {
+        // Auto-activate the menu if it has dishes and is not yet active
+        if (selectedMenu && !selectedMenu.is_active && menuDishes.length > 0) {
+            const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: selectedMenu.id })
+            if (!error) {
+                toast.success('Menu salvato e attivato!')
+                onDishesChange()
+            }
+        } else if (selectedMenu && selectedMenu.is_active) {
+            // Already active — changes are already saved in real-time
+            toast.success('Menu salvato!')
+        }
+        fetchCustomMenus()
         setSelectedMenu(null)
         setViewMode('list')
         setDishSearch('')

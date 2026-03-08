@@ -176,6 +176,7 @@ export function createDefaultAyceSchedule(price: number = 0, maxOrders: number =
         enabled: false,
         defaultPrice: price,
         defaultMaxOrders: maxOrders,
+        defaultOrderInterval: 0,
         useWeeklySchedule: false,
         schedule: {}
     }

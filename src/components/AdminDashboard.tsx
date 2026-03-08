@@ -11,7 +11,7 @@ import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
 import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket } from '@phosphor-icons/react'
+import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
@@ -61,6 +61,17 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [discountReason, setDiscountReason] = useState('')
   const [applyingDiscount, setApplyingDiscount] = useState(false)
 
+  // Admin Payments Sub-Tabs
+  const [adminSubTab, setAdminSubTab] = useState<'abbonamenti' | 'fatturazione'>('abbonamenti')
+
+  // Fatturazione Filters
+  const [fatturazioneSearch, setFatturazioneSearch] = useState('')
+  const [fatturazioneStatus, setFatturazioneStatus] = useState<'all' | 'paid' | 'failed'>('all')
+  const [fatturazioneDateFrom, setFatturazioneDateFrom] = useState('')
+  const [fatturazioneDateTo, setFatturazioneDateTo] = useState('')
+  const [fatturazioneSortField, setFatturazioneSortField] = useState<'date' | 'amount' | 'restaurant'>('date')
+  const [fatturazioneSortDir, setFatturazioneSortDir] = useState<'asc' | 'desc'>('desc')
+
   // Registration Link Generator
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [inviteFreeMonths, setInviteFreeMonths] = useState(false)
@@ -70,6 +81,28 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [inviteDiscountDurationMonths, setInviteDiscountDurationMonths] = useState(1)
   const [generatedLink, setGeneratedLink] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
+
+  // Dedicated realtime subscription for new restaurant INSERTs.
+  // The useSupabaseData hook subscribes to postgres_changes, but INSERT events
+  // from RPC functions (register_restaurant_secure / complete_pending_registration)
+  // may not propagate to the hook's handler due to RLS context differences.
+  // This separate subscription does a full refetch to guarantee the admin sees new restaurants.
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin_restaurants_insert')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'restaurants' },
+        () => {
+          refreshRestaurants()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [refreshRestaurants])
 
   // Load admin data
   useEffect(() => {
@@ -175,6 +208,65 @@ export default function AdminDashboard({ user, onLogout }: Props) {
 
     return result
   }, [restaurants, salesByRestaurant, searchQuery, sortOption])
+
+  // Fatturazione: filtered and sorted subscription payments
+  const filteredFatturazionePayments = useMemo(() => {
+    let result = [...(subscriptionPayments || [])]
+
+    // Filter by status
+    if (fatturazioneStatus === 'paid') {
+      result = result.filter(p => p.status === 'paid')
+    } else if (fatturazioneStatus === 'failed') {
+      result = result.filter(p => p.status === 'failed')
+    }
+
+    // Filter by restaurant search
+    if (fatturazioneSearch) {
+      const q = fatturazioneSearch.toLowerCase()
+      result = result.filter(p => {
+        const restaurant = (restaurants || []).find(r => r.id === p.restaurant_id)
+        return restaurant?.name?.toLowerCase().includes(q) || p.stripe_invoice_id?.toLowerCase().includes(q)
+      })
+    }
+
+    // Filter by date range
+    if (fatturazioneDateFrom) {
+      const from = new Date(fatturazioneDateFrom)
+      from.setHours(0, 0, 0, 0)
+      result = result.filter(p => p.created_at && new Date(p.created_at) >= from)
+    }
+    if (fatturazioneDateTo) {
+      const to = new Date(fatturazioneDateTo)
+      to.setHours(23, 59, 59, 999)
+      result = result.filter(p => p.created_at && new Date(p.created_at) <= to)
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let cmp = 0
+      if (fatturazioneSortField === 'date') {
+        cmp = new Date(a.created_at || '').getTime() - new Date(b.created_at || '').getTime()
+      } else if (fatturazioneSortField === 'amount') {
+        cmp = a.amount - b.amount
+      } else if (fatturazioneSortField === 'restaurant') {
+        const nameA = (restaurants || []).find(r => r.id === a.restaurant_id)?.name || ''
+        const nameB = (restaurants || []).find(r => r.id === b.restaurant_id)?.name || ''
+        cmp = nameA.localeCompare(nameB)
+      }
+      return fatturazioneSortDir === 'desc' ? -cmp : cmp
+    })
+
+    return result
+  }, [subscriptionPayments, restaurants, fatturazioneSearch, fatturazioneStatus, fatturazioneDateFrom, fatturazioneDateTo, fatturazioneSortField, fatturazioneSortDir])
+
+  // Fatturazione summary stats
+  const fatturazioneStats = useMemo(() => {
+    const allPayments = subscriptionPayments || []
+    const totaleIncassato = allPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0)
+    const pagamentiInSospeso = allPayments.filter(p => p.status === 'pending' || p.status === 'failed').length
+    const fattureEmesse = allPayments.length
+    return { totaleIncassato, pagamentiInSospeso, fattureEmesse }
+  }, [subscriptionPayments])
 
   const handleLogoUpload = async (file: File) => {
     try {
@@ -503,19 +595,286 @@ export default function AdminDashboard({ user, onLogout }: Props) {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-white">Pagamenti</h2>
-                <p className="text-zinc-500 text-sm mt-0.5">Gestione abbonamenti e bonus</p>
+                <p className="text-zinc-500 text-sm mt-0.5">Gestione abbonamenti, bonus e fatturazione</p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 rounded-lg h-9"
-                onClick={() => setShowBonusDialog(true)}
-              >
-                <Gift size={15} className="mr-1.5" />
-                Assegna Bonus
-              </Button>
+              <div className="flex items-center gap-2">
+                {adminSubTab === 'abbonamenti' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 rounded-lg h-9"
+                    onClick={() => setShowBonusDialog(true)}
+                  >
+                    <Gift size={15} className="mr-1.5" />
+                    Assegna Bonus
+                  </Button>
+                )}
+              </div>
             </div>
 
+            {/* Sub-Tab Navigation */}
+            <div className="flex items-center gap-1 bg-zinc-900/50 p-1 rounded-xl border border-white/5 w-fit">
+              <button
+                onClick={() => setAdminSubTab('abbonamenti')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  adminSubTab === 'abbonamenti'
+                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <CreditCard size={16} weight={adminSubTab === 'abbonamenti' ? 'fill' : 'regular'} />
+                Abbonamenti
+              </button>
+              <button
+                onClick={() => setAdminSubTab('fatturazione')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  adminSubTab === 'fatturazione'
+                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
+                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Receipt size={16} weight={adminSubTab === 'fatturazione' ? 'fill' : 'regular'} />
+                Fatturazione
+              </button>
+            </div>
+
+            {/* ==================== FATTURAZIONE TAB ==================== */}
+            {adminSubTab === 'fatturazione' && (
+              <div className="space-y-5">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-emerald-500/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle size={14} className="text-emerald-500/70" weight="fill" />
+                      <p className="text-[11px] text-emerald-500/70 font-medium uppercase tracking-wider">Totale Incassato</p>
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-400">{'\u20AC'}{fatturazioneStats.totaleIncassato.toFixed(2)}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock size={14} className="text-amber-500/70" weight="fill" />
+                      <p className="text-[11px] text-amber-500/70 font-medium uppercase tracking-wider">Pagamenti in sospeso</p>
+                    </div>
+                    <p className="text-2xl font-bold text-amber-400">{fatturazioneStats.pagamentiInSospeso}</p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Receipt size={14} className="text-zinc-400" weight="fill" />
+                      <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Fatture Emesse</p>
+                    </div>
+                    <p className="text-2xl font-bold text-white">{fatturazioneStats.fattureEmesse}</p>
+                  </div>
+                </div>
+
+                {/* Filters Bar */}
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-4 rounded-xl bg-zinc-900/50 border border-white/5">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Funnel size={16} className="text-zinc-500" />
+                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Filtri</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 flex-1">
+                    {/* Search */}
+                    <div className="relative w-full md:w-52">
+                      <MagnifyingGlass className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                      <Input
+                        placeholder="Cerca ristorante..."
+                        value={fatturazioneSearch}
+                        onChange={(e) => setFatturazioneSearch(e.target.value)}
+                        className="h-9 pl-8 bg-black/40 border-white/5 text-sm"
+                      />
+                    </div>
+                    {/* Status filter */}
+                    <div className="flex items-center gap-1">
+                      {(['all', 'paid', 'failed'] as const).map(status => (
+                        <button
+                          key={status}
+                          onClick={() => setFatturazioneStatus(status)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            fatturazioneStatus === status
+                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                              : status === 'failed' ? 'bg-red-500/15 text-red-400 border border-red-500/20'
+                              : 'bg-white text-black'
+                              : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent'
+                          }`}
+                        >
+                          {status === 'all' && 'Tutti'}
+                          {status === 'paid' && 'Pagato'}
+                          {status === 'failed' && 'Fallito'}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Date range */}
+                    <div className="flex items-center gap-1.5">
+                      <CalendarBlank size={14} className="text-zinc-500 shrink-0" />
+                      <input
+                        type="date"
+                        value={fatturazioneDateFrom}
+                        onChange={(e) => setFatturazioneDateFrom(e.target.value)}
+                        className="h-9 px-2.5 rounded-lg bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
+                        title="Data da"
+                      />
+                      <span className="text-zinc-600 text-xs">-</span>
+                      <input
+                        type="date"
+                        value={fatturazioneDateTo}
+                        onChange={(e) => setFatturazioneDateTo(e.target.value)}
+                        className="h-9 px-2.5 rounded-lg bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
+                        title="Data a"
+                      />
+                    </div>
+                    {/* Clear filters */}
+                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
+                      <button
+                        onClick={() => {
+                          setFatturazioneSearch('')
+                          setFatturazioneStatus('all')
+                          setFatturazioneDateFrom('')
+                          setFatturazioneDateTo('')
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-all"
+                      >
+                        <XCircle size={14} />
+                        Cancella filtri
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Results count */}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-zinc-500">
+                    {filteredFatturazionePayments.length} {filteredFatturazionePayments.length === 1 ? 'risultato' : 'risultati'}
+                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
+                      <span> su {(subscriptionPayments || []).length} totali</span>
+                    )}
+                  </p>
+                </div>
+
+                {/* Payments Table */}
+                <div className="rounded-xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                  {/* Table Header */}
+                  <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-white/5 bg-black/30">
+                    <button
+                      className="col-span-3 flex items-center gap-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-300 transition-colors"
+                      onClick={() => { setFatturazioneSortField('restaurant'); setFatturazioneSortDir(prev => fatturazioneSortField === 'restaurant' ? (prev === 'asc' ? 'desc' : 'asc') : 'asc') }}
+                    >
+                      Ristorante
+                      {fatturazioneSortField === 'restaurant' && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
+                    </button>
+                    <button
+                      className="col-span-2 flex items-center gap-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-300 transition-colors"
+                      onClick={() => { setFatturazioneSortField('amount'); setFatturazioneSortDir(prev => fatturazioneSortField === 'amount' ? (prev === 'asc' ? 'desc' : 'asc') : 'desc') }}
+                    >
+                      Importo
+                      {fatturazioneSortField === 'amount' && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
+                    </button>
+                    <button
+                      className="col-span-2 flex items-center gap-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-300 transition-colors"
+                      onClick={() => { setFatturazioneSortField('date'); setFatturazioneSortDir(prev => fatturazioneSortField === 'date' ? (prev === 'asc' ? 'desc' : 'asc') : 'desc') }}
+                    >
+                      Data
+                      {fatturazioneSortField === 'date' && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
+                    </button>
+                    <div className="col-span-2 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Stato</div>
+                    <div className="col-span-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">N. Fattura</div>
+                  </div>
+
+                  {/* Table Body */}
+                  <div className="divide-y divide-white/[0.03]">
+                    {filteredFatturazionePayments.length === 0 ? (
+                      <div className="text-center py-12 text-zinc-500 text-sm">
+                        <Receipt size={32} className="mx-auto mb-3 text-zinc-700" />
+                        Nessun pagamento trovato per i filtri selezionati.
+                      </div>
+                    ) : (
+                      filteredFatturazionePayments.map(payment => {
+                        const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
+                        return (
+                          <div key={payment.id} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-white/[0.02] transition-colors items-center">
+                            {/* Restaurant */}
+                            <div className="col-span-3 flex items-center gap-2 min-w-0">
+                              {restaurant?.logo_url ? (
+                                <img src={restaurant.logo_url} alt="" className="w-7 h-7 rounded-md object-cover border border-white/10 shrink-0" />
+                              ) : (
+                                <div className="w-7 h-7 rounded-md bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
+                                  <Buildings size={12} className="text-zinc-600" />
+                                </div>
+                              )}
+                              <span className="text-sm font-medium text-white truncate">{restaurant?.name || 'Sconosciuto'}</span>
+                            </div>
+                            {/* Amount */}
+                            <div className="col-span-2">
+                              <span className={`text-sm font-semibold ${payment.status === 'paid' ? 'text-emerald-400' : payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'}`}>
+                                {'\u20AC'}{payment.amount.toFixed(2)}
+                              </span>
+                            </div>
+                            {/* Date */}
+                            <div className="col-span-2">
+                              <span className="text-sm text-zinc-400">
+                                {payment.created_at ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                              </span>
+                            </div>
+                            {/* Status */}
+                            <div className="col-span-2">
+                              <Badge
+                                variant="outline"
+                                className={`text-[10px] font-semibold border px-2 py-0.5 ${
+                                  payment.status === 'paid'
+                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                                    : payment.status === 'failed'
+                                    ? 'border-red-500/20 bg-red-500/10 text-red-400'
+                                    : payment.status === 'pending'
+                                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                                    : 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400'
+                                }`}
+                              >
+                                {payment.status === 'paid' && 'Pagato'}
+                                {payment.status === 'failed' && 'Fallito'}
+                                {payment.status === 'pending' && 'In sospeso'}
+                                {payment.status === 'refunded' && 'Rimborsato'}
+                              </Badge>
+                            </div>
+                            {/* Invoice Number */}
+                            <div className="col-span-3">
+                              <span className="text-xs font-mono text-zinc-500 truncate block">
+                                {payment.stripe_invoice_id || '-'}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+
+                  {/* Table Footer - Totals for filtered results */}
+                  {filteredFatturazionePayments.length > 0 && (
+                    <div className="grid grid-cols-12 gap-2 px-4 py-3 border-t border-white/5 bg-black/30">
+                      <div className="col-span-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center">
+                        Totale filtrato
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-sm font-bold text-white">
+                          {'\u20AC'}{filteredFatturazionePayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="col-span-2 text-xs text-zinc-500 flex items-center">
+                        {filteredFatturazionePayments.length} pagamenti
+                      </div>
+                      <div className="col-span-2 flex items-center gap-2">
+                        <span className="text-[10px] text-emerald-400">{filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati</span>
+                        {filteredFatturazionePayments.filter(p => p.status === 'failed').length > 0 && (
+                          <span className="text-[10px] text-red-400">{filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti</span>
+                        )}
+                      </div>
+                      <div className="col-span-3" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ==================== ABBONAMENTI TAB ==================== */}
+            {adminSubTab === 'abbonamenti' && <>
             {/* Stats Overview */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
@@ -776,6 +1135,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 </div>
               )}
             </div>
+            </>}
 
             {/* Discount Dialog */}
             <Dialog open={showDiscountDialog} onOpenChange={setShowDiscountDialog}>
@@ -1241,7 +1601,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 const isPasswordVisible = visiblePasswords[restaurant.id]
 
                 return (
-                  <Card key={restaurant.id} className="bg-zinc-900 border border-white/5 rounded-xl overflow-hidden hover:border-amber-500/20 transition-all group shadow-lg mb-4 ring-1 ring-white/5">
+                  <Card key={restaurant.id} className="bg-gradient-to-br from-zinc-900/90 via-zinc-950 to-black border border-white/[0.06] rounded-xl overflow-hidden hover:border-amber-500/20 transition-all group shadow-lg shadow-black/40 mb-4">
                     <CardContent className="p-0">
                       <div className={`flex flex-col md:flex-row items-center p-4 gap-4 transition-all duration-300 ${!restaurant.isActive ? 'opacity-50 grayscale' : ''}`}>
 

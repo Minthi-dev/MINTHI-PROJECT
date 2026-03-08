@@ -569,10 +569,21 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         const newNotes = payload.new?.notes || '';
 
         if (newAmount > oldAmount) {
-          const tableNumber = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)?.number || '?'
+          const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
+          const tableNumber = tableObj?.number || '?'
           toast.success(
             `💳 Tavolo ${tableNumber} ha pagato online! €${Number(newAmount - oldAmount).toFixed(2)}`,
-            { duration: 8000 }
+            {
+              duration: 10000,
+              description: 'Clicca per vedere il conto',
+              action: tableObj ? {
+                label: 'Vedi Conto',
+                onClick: () => {
+                  setSelectedTableForActions(tableObj)
+                  setShowTableBillDialog(true)
+                }
+              } : undefined
+            }
           )
           // Also play notification sound
           if (soundEnabledRef.current) {
@@ -580,10 +591,20 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           }
         } else if (newNotes !== oldNotes && newNotes.includes('Pagamento')) {
           // Fallback if paid_amount wasn't updated but notes were (e.g. some split logic scenario)
-          const tableNumber = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)?.number || '?'
+          const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
+          const tableNumber = tableObj?.number || '?'
           toast.success(
             `💳 Nuova notifica di pagamento: Tavolo ${tableNumber}`,
-            { duration: 8000 }
+            {
+              duration: 10000,
+              action: tableObj ? {
+                label: 'Vedi Conto',
+                onClick: () => {
+                  setSelectedTableForActions(tableObj)
+                  setShowTableBillDialog(true)
+                }
+              } : undefined
+            }
           )
           if (soundEnabledRef.current) {
             soundManager.play(selectedSoundRef.current)
@@ -1537,6 +1558,22 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     if (showToast) toast.success('Piatto pronto! Notifica inviata ai camerieri.')
   }
 
+  const handleDeliverDish = async (orderId: string, itemId: string) => {
+    await updateOrderItemStatus(orderId, itemId, 'SERVED')
+    setOrders(prevOrders => prevOrders.map(order => {
+      if (order.id === orderId) {
+        return {
+          ...order,
+          items: order.items?.map(item =>
+            item.id === itemId ? { ...item, status: 'SERVED' as const } : item
+          )
+        }
+      }
+      return order
+    }))
+    toast.success('Piatto consegnato!')
+  }
+
 
   const handleCreateCategory = () => {
     if (!newCategory.trim()) {
@@ -2125,6 +2162,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     viewMode={kitchenViewMode}
                     // columns={kitchenColumns} // Removed in favor of responsive grid
                     onCompleteDish={handleCompleteDish}
+                    onDeliverDish={handleDeliverDish}
                     onCompleteOrder={handleCompleteOrder}
                     sessions={sessions || []}
                     zoom={kitchenZoom}
@@ -2838,7 +2876,44 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       const isActive = session?.status === 'OPEN'
                       const activeOrder = restaurantOrders.find(o => getTableIdFromOrder(o) === table.id)
                       const allTableOrders = restaurantOrders.filter(o => getTableIdFromOrder(o) === table.id)
-                      const hasStripePaymentToConfirm = session && (session.paid_amount || 0) > 0 && !session.receipt_issued
+                      const hasStripePayment = session && (session.paid_amount || 0) > 0
+
+                      // Calculate full table total (orders + coperto + AYCE)
+                      const sessionOrders = session ? restaurantOrders.filter(o => o.table_session_id === session.id && o.status !== 'CANCELLED') : []
+                      const ordersTotal = sessionOrders.reduce((sum, o) => {
+                        if (!o.items) return sum
+                        return sum + o.items.reduce((iSum: number, item: any) => {
+                          if (item.status === 'CANCELLED' || item.status === 'PAID') return iSum
+                          const isAyceSession = session?.ayce_enabled === true
+                          const price = (isAyceSession && item.dish?.is_ayce) ? 0 : (item.dish?.price ?? item.price ?? 0)
+                          return iSum + price * (item.quantity || 1)
+                        }, 0)
+                      }, 0)
+
+                      // Add coperto
+                      let copertoTotal = 0
+                      if (session) {
+                        const isCopertoEnabled = session.coperto_enabled !== false
+                        const coperto = getCurrentCopertoPrice(currentRestaurant as any, lunchTimeStart, dinnerTimeStart)
+                        if (isCopertoEnabled && coperto.price > 0) {
+                          copertoTotal = coperto.price * (session.customer_count || 0)
+                        }
+                      }
+
+                      // Add AYCE cover charge
+                      let ayceTotal = 0
+                      if (session?.ayce_enabled) {
+                        const ayce = getCurrentAyceSettings(currentRestaurant as any, lunchTimeStart, dinnerTimeStart)
+                        if (ayce.price > 0) {
+                          ayceTotal = ayce.price * (session.customer_count || 0)
+                        }
+                      }
+
+                      const tableGrandTotal = ordersTotal + copertoTotal + ayceTotal
+                      const paidAmount = session?.paid_amount || 0
+                      const remainingToPay = Math.max(0, tableGrandTotal - paidAmount)
+                      const isFullyPaidOnline = hasStripePayment && remainingToPay <= 0 && tableGrandTotal > 0
+                      const isPartiallyPaidOnline = hasStripePayment && remainingToPay > 0
 
                       return (
                         <Card
@@ -2847,7 +2922,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             ? 'opacity-60 grayscale'
                             : (() => {
                               const status = getDetailedTableStatus(table.id)
-                              if (hasStripePaymentToConfirm) return 'bg-purple-900/40 border-purple-500/70 shadow-[0_0_20px_-5px_rgba(168,85,247,0.5)] animate-pulse-slow' // Purple Stripe
+                              if (isFullyPaidOnline && !session?.receipt_issued) return 'bg-emerald-900/40 border-emerald-500/70 shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] animate-pulse-slow' // Green - fully paid online, ready to close
+                              if (isPartiallyPaidOnline) return 'bg-orange-900/30 border-orange-500/60 shadow-[0_0_20px_-5px_rgba(249,115,22,0.5)]' // Orange - partially paid online
                               if (status === 'free') return 'bg-black/40 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.1)] hover:border-emerald-500/40' // Green (Free)
                               if (status === 'waiting') return 'bg-red-900/20 border-red-500/50 shadow-[0_0_15px_-5px_rgba(239,68,68,0.3)]' // Red (Waiting for food)
                               return 'bg-amber-900/20 border-amber-500/50 shadow-[0_0_15px_-5px_rgba(245,158,11,0.3)]' // Yellow (Eating)
@@ -2892,9 +2968,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               </div>
                               <Badge
                                 variant={isActive ? 'default' : 'outline'}
-                                className={isActive ? 'bg-amber-500 text-black border-none font-bold' : 'bg-transparent text-zinc-500 border-zinc-700'}
+                                className={
+                                  isFullyPaidOnline && !session?.receipt_issued
+                                    ? 'bg-emerald-500 text-white border-none font-bold'
+                                    : isPartiallyPaidOnline
+                                    ? 'bg-orange-500 text-white border-none font-bold'
+                                    : isActive ? 'bg-amber-500 text-black border-none font-bold' : 'bg-transparent text-zinc-500 border-zinc-700'
+                                }
                               >
-                                {isActive ? 'Occupato' : 'Libero'}
+                                {isFullyPaidOnline && !session?.receipt_issued ? '💳 Pagato' : isPartiallyPaidOnline ? '💳 Parziale' : isActive ? 'Occupato' : 'Libero'}
                               </Badge>
                             </div>
 
@@ -2915,10 +2997,21 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati
                                     </Badge>
                                   )}
-                                  {hasStripePaymentToConfirm && (
-                                    <Badge variant="outline" className="text-[10px] bg-purple-500/20 border-purple-500/50 text-purple-200 mt-1">
-                                      💳 Pagato Online {(session?.paid_amount || 0) > 0 ? `(€${session!.paid_amount!.toFixed(2)})` : ''}
-                                    </Badge>
+                                  {isFullyPaidOnline && !session?.receipt_issued && (
+                                    <div className="flex flex-col items-center gap-1 mt-1">
+                                      <Badge variant="outline" className="text-[10px] bg-emerald-500/20 border-emerald-500/50 text-emerald-200">
+                                        💳 Pagato Online €{paidAmount.toFixed(2)}
+                                      </Badge>
+                                      <span className="text-[9px] text-emerald-400 font-semibold">✓ Tutto pagato</span>
+                                    </div>
+                                  )}
+                                  {isPartiallyPaidOnline && (
+                                    <div className="flex flex-col items-center gap-1 mt-1">
+                                      <Badge variant="outline" className="text-[10px] bg-orange-500/20 border-orange-500/50 text-orange-200">
+                                        💳 Pagato: €{paidAmount.toFixed(2)}
+                                      </Badge>
+                                      <span className="text-[9px] text-red-400 font-bold">Da incassare: €{remainingToPay.toFixed(2)}</span>
+                                    </div>
                                   )}
                                 </>
                               ) : (
@@ -2931,15 +3024,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                             <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2">
                               {isActive ? (
-                                <div className={`grid gap-2 ${hasStripePaymentToConfirm ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                                  {hasStripePaymentToConfirm ? (
+                                <div className={`grid gap-2 ${isFullyPaidOnline && !session?.receipt_issued ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                  {isFullyPaidOnline && !session?.receipt_issued ? (
                                     <Button
                                       className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-8 text-xs font-bold"
                                       size="sm"
                                       onClick={async (e) => {
                                         e.stopPropagation();
+                                        const conferma = confirm('Tutto pagato online. Stampare scontrino e chiudere il tavolo?');
+                                        if (!conferma) return;
                                         try {
-                                          // Conferma scontrino + chiudi tavolo + segna ordini come PAID
                                           await DatabaseService.updateSessionReceiptIssued(session.id, true);
                                           await DatabaseService.closeSession(session.id);
                                           await DatabaseService.markOrdersPaidForSession(session.id, 'stripe');
@@ -2952,7 +3046,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       }}
                                     >
                                       <CheckCircle size={14} weight="fill" className="mr-1.5" />
-                                      Conferma Scontrino e Chiudi
+                                      Stampa Scontrino e Chiudi
                                     </Button>
                                   ) : (
                                     <>
@@ -2961,12 +3055,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         QR
                                       </Button>
                                       <Button
-                                        className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70 shadow-sm hover:shadow transition-all h-8 text-xs"
+                                        className={`shadow-sm hover:shadow transition-all h-8 text-xs ${isPartiallyPaidOnline
+                                          ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:from-orange-500 hover:to-orange-400 font-bold'
+                                          : 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70'
+                                        }`}
                                         size="sm"
                                         onClick={(e) => { e.stopPropagation(); setSelectedTableForActions(table); setShowTableBillDialog(true); }}
                                       >
                                         <Receipt size={14} className="mr-1.5" />
-                                        Conto
+                                        {isPartiallyPaidOnline ? `Conto (€${remainingToPay.toFixed(2)})` : 'Conto'}
                                       </Button>
                                     </>
                                   )}

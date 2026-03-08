@@ -53,8 +53,10 @@ export function useSupabaseData<T>(
 
         fetchData()
 
-        // Debounce ref per accumulare eventi rapidi
+        // Debounce: accumulate rapid events and do a single full refetch
         let debounceTimer: ReturnType<typeof setTimeout> | undefined
+        // Track pending events so single-event updates can still be applied inline
+        let pendingEvents: Array<{ eventType: string; new: any; old: any }> = []
 
         // Realtime subscription — channel name unico per istanza
         const channel = supabase
@@ -68,30 +70,48 @@ export function useSupabaseData<T>(
                     filter: filter ? `${filter.column}=eq.${filter.value}` : undefined
                 },
                 (payload) => {
-                    // Debounce: accumula eventi rapidi in un singolo batch (300ms)
+                    pendingEvents.push({
+                        eventType: payload.eventType,
+                        new: payload.new,
+                        old: payload.old
+                    })
+
                     if (debounceTimer) clearTimeout(debounceTimer)
                     debounceTimer = setTimeout(() => {
+                        const events = pendingEvents
+                        pendingEvents = []
+
+                        // If multiple events arrived within the window, do a full refetch
+                        // to avoid losing any INSERT/UPDATE/DELETE in the batch
+                        if (events.length > 1) {
+                            fetchData()
+                            return
+                        }
+
+                        // Single event — apply inline for lower latency
+                        const evt = events[0]
+                        if (!evt) return
                         const currentMapper = mapperRef.current
-                        if (payload.eventType === 'INSERT') {
-                            const newItem = currentMapper ? currentMapper(payload.new) : payload.new as T
+
+                        if (evt.eventType === 'INSERT') {
+                            const newItem = currentMapper ? currentMapper(evt.new) : evt.new as T
                             setData((prev) => {
-                                // Avoid duplicates if item already exists (e.g. from a manual refresh)
-                                const exists = prev.some((item: any) => item.id === (payload.new as any).id)
+                                const exists = prev.some((item: any) => item.id === (evt.new as any).id)
                                 if (exists) return prev
                                 return [...prev, newItem]
                             })
-                        } else if (payload.eventType === 'UPDATE') {
-                            const updatedItem = currentMapper ? currentMapper(payload.new) : payload.new as T
+                        } else if (evt.eventType === 'UPDATE') {
+                            const updatedItem = currentMapper ? currentMapper(evt.new) : evt.new as T
                             setData((prev) => {
-                                const exists = prev.some((item: any) => item.id === (payload.new as any).id)
+                                const exists = prev.some((item: any) => item.id === (evt.new as any).id)
                                 if (exists) {
-                                    return prev.map((item: any) => (item.id === (payload.new as any).id ? updatedItem : item))
+                                    return prev.map((item: any) => (item.id === (evt.new as any).id ? updatedItem : item))
                                 }
                                 // Item not in state yet (was previously invisible due to RLS) — add it
                                 return [...prev, updatedItem]
                             })
-                        } else if (payload.eventType === 'DELETE') {
-                            setData((prev) => prev.filter((item: any) => item.id !== payload.old.id))
+                        } else if (evt.eventType === 'DELETE') {
+                            setData((prev) => prev.filter((item: any) => item.id !== evt.old.id))
                         }
                     }, 300)
                 }

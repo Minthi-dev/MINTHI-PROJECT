@@ -111,6 +111,7 @@ export interface WeeklyAyceSchedule {
     enabled: boolean
     defaultPrice: number
     defaultMaxOrders: number
+    defaultOrderInterval: number // minutes between orders (0 = no limit)
     useWeeklySchedule: boolean
     schedule: {
         monday?: DaySchedule & { maxOrders?: number }

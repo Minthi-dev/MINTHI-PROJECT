@@ -421,180 +421,195 @@ export default function RestaurantOnboarding() {
                         initial={{ opacity: 0, y: 50 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="w-full max-w-md bg-zinc-950 border border-white/10 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+                        className="w-full max-w-md bg-zinc-950 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[95dvh] sm:max-h-[90vh] flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                                <Rocket size={20} weight="fill" className="text-amber-400" />
+                        {/* Fixed Header */}
+                        <div className="shrink-0 p-6 pb-4">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                                    <Rocket size={20} weight="fill" className="text-amber-400" />
+                                </div>
+                                <div className="flex-1">
+                                    <h2 className="text-lg font-bold text-white">Registra il tuo Ristorante</h2>
+                                    <p className="text-xs text-zinc-500">Compila i dati per iniziare</p>
+                                </div>
+                                <button
+                                    onClick={() => !submitting && setShowForm(false)}
+                                    className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                                >
+                                    <X size={16} weight="bold" />
+                                </button>
                             </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-white">Registra il tuo Ristorante</h2>
-                                <p className="text-xs text-zinc-500">Compila i dati per iniziare</p>
+
+                            {tokenData?.free_months > 0 && (
+                                <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-medium">
+                                    <CheckCircle size={16} weight="fill" />
+                                    Hai {tokenData.free_months} {tokenData.free_months === 1 ? 'mese gratuito' : 'mesi gratuiti'} — nessun pagamento richiesto!
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Scrollable Form Content */}
+                        <div className="flex-1 overflow-y-auto overscroll-contain px-6 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Nome Ristorante *</label>
+                                    <input
+                                        type="text"
+                                        value={form.name}
+                                        onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                                        className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                        placeholder="Es. Trattoria Da Mario"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Telefono</label>
+                                        <input
+                                            type="tel"
+                                            value={form.phone}
+                                            onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+                                            className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                            placeholder="+39 ..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Email</label>
+                                        <input
+                                            type="email"
+                                            value={form.email}
+                                            onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
+                                            className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                            placeholder="info@ristorante.it"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-white/5">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mb-3">Dati Fiscali</p>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Nome Azienda *</label>
+                                            <input
+                                                type="text"
+                                                value={form.billingName}
+                                                onChange={(e) => setForm(f => ({ ...f, billingName: e.target.value }))}
+                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                placeholder="Ristorante Da Mario S.r.l."
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">P. IVA *</label>
+                                            <input
+                                                type="text"
+                                                value={form.vatNumber}
+                                                onChange={(e) => setForm(f => ({ ...f, vatNumber: e.target.value }))}
+                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                placeholder="IT12345678901"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Via / Indirizzo *</label>
+                                            <input
+                                                type="text"
+                                                value={form.billingAddress}
+                                                onChange={(e) => setForm(f => ({ ...f, billingAddress: e.target.value }))}
+                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                placeholder="Via Roma 1"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div>
+                                                <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Comune *</label>
+                                                <input
+                                                    type="text"
+                                                    value={form.billingCity}
+                                                    onChange={(e) => setForm(f => ({ ...f, billingCity: e.target.value }))}
+                                                    className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                    placeholder="Milano"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-zinc-400 font-medium mb-1.5 block">CAP *</label>
+                                                <input
+                                                    type="text"
+                                                    value={form.billingCap}
+                                                    onChange={(e) => setForm(f => ({ ...f, billingCap: e.target.value }))}
+                                                    className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                    placeholder="20100"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Prov. *</label>
+                                                <input
+                                                    type="text"
+                                                    value={form.billingProvince}
+                                                    onChange={(e) => setForm(f => ({ ...f, billingProvince: e.target.value.toUpperCase().slice(0, 2) }))}
+                                                    className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors uppercase"
+                                                    placeholder="MI"
+                                                    maxLength={2}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Codice Univoco SDI *</label>
+                                            <input
+                                                type="text"
+                                                value={form.codiceUnivoco}
+                                                onChange={(e) => setForm(f => ({ ...f, codiceUnivoco: e.target.value.toUpperCase() }))}
+                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors uppercase font-mono"
+                                                placeholder="XXXXXXX"
+                                                maxLength={7}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-white/5">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mb-3">Credenziali di Accesso</p>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Username *</label>
+                                            <input
+                                                type="text"
+                                                value={form.username}
+                                                onChange={(e) => setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g, '') }))}
+                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors font-mono"
+                                                placeholder="trattoria_mario"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Password *</label>
+                                            <input
+                                                type="password"
+                                                value={form.password}
+                                                onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
+                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                placeholder="Min. 6 caratteri"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Conferma Password *</label>
+                                            <input
+                                                type="password"
+                                                value={form.confirmPassword}
+                                                onChange={(e) => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                placeholder="Ripeti la password"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        {tokenData?.free_months > 0 && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs font-medium mb-5">
-                                <CheckCircle size={16} weight="fill" />
-                                Hai {tokenData.free_months} {tokenData.free_months === 1 ? 'mese gratuito' : 'mesi gratuiti'} — nessun pagamento richiesto!
-                            </div>
-                        )}
-
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Nome Ristorante *</label>
-                                <input
-                                    type="text"
-                                    value={form.name}
-                                    onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-                                    className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                    placeholder="Es. Trattoria Da Mario"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Telefono</label>
-                                    <input
-                                        type="tel"
-                                        value={form.phone}
-                                        onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
-                                        className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                        placeholder="+39 ..."
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Email</label>
-                                    <input
-                                        type="email"
-                                        value={form.email}
-                                        onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
-                                        className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                        placeholder="info@ristorante.it"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="pt-2 border-t border-white/5">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mb-3">Dati Fiscali</p>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Nome Azienda *</label>
-                                        <input
-                                            type="text"
-                                            value={form.billingName}
-                                            onChange={(e) => setForm(f => ({ ...f, billingName: e.target.value }))}
-                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                            placeholder="Ristorante Da Mario S.r.l."
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">P. IVA *</label>
-                                        <input
-                                            type="text"
-                                            value={form.vatNumber}
-                                            onChange={(e) => setForm(f => ({ ...f, vatNumber: e.target.value }))}
-                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                            placeholder="IT12345678901"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Via / Indirizzo *</label>
-                                        <input
-                                            type="text"
-                                            value={form.billingAddress}
-                                            onChange={(e) => setForm(f => ({ ...f, billingAddress: e.target.value }))}
-                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                            placeholder="Via Roma 1"
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div>
-                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Comune *</label>
-                                            <input
-                                                type="text"
-                                                value={form.billingCity}
-                                                onChange={(e) => setForm(f => ({ ...f, billingCity: e.target.value }))}
-                                                className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                                placeholder="Milano"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">CAP *</label>
-                                            <input
-                                                type="text"
-                                                value={form.billingCap}
-                                                onChange={(e) => setForm(f => ({ ...f, billingCap: e.target.value }))}
-                                                className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                                placeholder="20100"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Prov. *</label>
-                                            <input
-                                                type="text"
-                                                value={form.billingProvince}
-                                                onChange={(e) => setForm(f => ({ ...f, billingProvince: e.target.value.toUpperCase().slice(0, 2) }))}
-                                                className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors uppercase"
-                                                placeholder="MI"
-                                                maxLength={2}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Codice Univoco SDI *</label>
-                                        <input
-                                            type="text"
-                                            value={form.codiceUnivoco}
-                                            onChange={(e) => setForm(f => ({ ...f, codiceUnivoco: e.target.value.toUpperCase() }))}
-                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors uppercase font-mono"
-                                            placeholder="XXXXXXX"
-                                            maxLength={7}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="pt-2 border-t border-white/5">
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mb-3">Credenziali di Accesso</p>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Username *</label>
-                                        <input
-                                            type="text"
-                                            value={form.username}
-                                            onChange={(e) => setForm(f => ({ ...f, username: e.target.value.toLowerCase().replace(/\s/g, '') }))}
-                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors font-mono"
-                                            placeholder="trattoria_mario"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Password *</label>
-                                        <input
-                                            type="password"
-                                            value={form.password}
-                                            onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
-                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                            placeholder="Min. 6 caratteri"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Conferma Password *</label>
-                                        <input
-                                            type="password"
-                                            value={form.confirmPassword}
-                                            onChange={(e) => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
-                                            className="w-full h-11 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-amber-500/50 transition-colors"
-                                            placeholder="Ripeti la password"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
+                        {/* Sticky Submit Button */}
+                        <div className="shrink-0 p-6 pt-4 border-t border-white/5 bg-zinc-950 rounded-b-none sm:rounded-b-3xl safe-bottom">
                             <button
                                 onClick={handleSubmit}
                                 disabled={submitting}
-                                className="w-full h-12 mt-2 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-bold rounded-xl text-sm hover:shadow-lg hover:shadow-amber-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+                                className="w-full h-13 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-bold rounded-xl text-sm hover:shadow-lg hover:shadow-amber-500/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
                             >
                                 {submitting ? (
                                     <>
@@ -615,7 +630,7 @@ export default function RestaurantOnboarding() {
                             </button>
 
                             {!tokenData?.free_months && (
-                                <p className="text-[10px] text-zinc-600 text-center mt-1">
+                                <p className="text-[10px] text-zinc-600 text-center mt-2 pb-[env(safe-area-inset-bottom)]">
                                     Verrai reindirizzato a Stripe per il pagamento dell'abbonamento.
                                 </p>
                             )}

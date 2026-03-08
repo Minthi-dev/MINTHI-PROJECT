@@ -238,11 +238,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 refreshDebounceRef.current = setTimeout(() => refreshOrders(), 300)
             })
             .on('postgres_changes', {
-                event: '*', schema: 'public', table: 'order_items',
-                filter: `restaurant_id=eq.${restaurantId}`
+                event: '*', schema: 'public', table: 'order_items'
             }, () => {
                 if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
-                refreshDebounceRef.current = setTimeout(() => refreshOrders(), 500)
+                refreshDebounceRef.current = setTimeout(() => refreshOrders(), 400)
             })
             .on('postgres_changes', {
                 event: '*', schema: 'public', table: 'tables',
@@ -1338,38 +1337,45 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                         ? "border-zinc-700/20 bg-zinc-900/20"
                                                         : "border-amber-500/10 bg-amber-500/5"
                                                 )}>
-                                                    <div className="flex items-center gap-3">
+                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                                         <div className={cn(
-                                                            "w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shadow-inner",
+                                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-inner shrink-0",
                                                             tableGroup.allDelivered
                                                                 ? "bg-zinc-700/50 text-zinc-400"
                                                                 : "bg-amber-500 text-black"
                                                         )}>
-                                                            {tableGroup.tableName}
+                                                            <span className="truncate px-1 max-w-[2.25rem] text-center leading-none">
+                                                                {tableGroup.tableName}
+                                                            </span>
                                                         </div>
-                                                        <div>
+                                                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                                             <p className={cn(
-                                                                "font-bold text-sm",
+                                                                "font-bold text-sm truncate",
                                                                 tableGroup.allDelivered ? "text-zinc-500" : "text-white"
                                                             )}>
                                                                 Tavolo {tableGroup.tableName}
                                                             </p>
                                                             {tableGroup.roomName && (
-                                                                <p className="text-xs text-zinc-500 flex items-center gap-1">
-                                                                    <House size={10} />
-                                                                    {tableGroup.roomName}
-                                                                </p>
+                                                                <span className={cn(
+                                                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate max-w-[7rem] shrink-0",
+                                                                    tableGroup.allDelivered
+                                                                        ? "bg-zinc-800 text-zinc-500"
+                                                                        : "bg-zinc-800 text-zinc-400"
+                                                                )}>
+                                                                    <House size={9} className="shrink-0" />
+                                                                    <span className="truncate">{tableGroup.roomName}</span>
+                                                                </span>
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 shrink-0">
                                                         <Badge
                                                             variant="outline"
                                                             className={cn(
-                                                                "text-[10px] font-bold",
+                                                                "text-[10px] font-bold whitespace-nowrap",
                                                                 tableGroup.allDelivered
                                                                     ? "border-zinc-600 text-zinc-500"
-                                                                    : "border-amber-500/40 text-amber-400"
+                                                                    : "border-amber-500/40 text-amber-400 bg-amber-500/5"
                                                             )}
                                                         >
                                                             {tableGroup.items.filter(i => !i.isDelivered).length} da servire

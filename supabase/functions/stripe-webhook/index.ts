@@ -14,12 +14,25 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 serve(async (req) => {
+    // Handle CORS preflight
+    if (req.method === "OPTIONS") {
+        return new Response("ok", {
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature",
+            },
+        });
+    }
+
     try {
         const signature = req.headers.get("Stripe-Signature");
+        const stripeAccount = req.headers.get("Stripe-Account");
         const platformSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
         const connectSecret = Deno.env.get("STRIPE_CONNECT_WEBHOOK_SECRET");
 
-        console.log(`[WEBHOOK] Received request. Signature: ${!!signature}, Platform secret: ${!!platformSecret}, Connect secret: ${!!connectSecret}`);
+        console.log(`[WEBHOOK] ====== NEW REQUEST ======`);
+        console.log(`[WEBHOOK] Method: ${req.method}, Stripe-Account header: ${stripeAccount || 'none (platform event)'}`);
+        console.log(`[WEBHOOK] Signature present: ${!!signature}, Platform secret present: ${!!platformSecret}, Connect secret present: ${!!connectSecret}`);
 
         if (!signature || (!platformSecret && !connectSecret)) {
             console.error(`[WEBHOOK] Missing signature or secrets. Sig: ${!!signature}, Platform: ${!!platformSecret}, Connect: ${!!connectSecret}`);
@@ -58,12 +71,14 @@ serve(async (req) => {
             return new Response("Webhook signature verification failed", { status: 400 });
         }
 
-        console.log(`[WEBHOOK] Event verified with ${verifiedWith} secret. Type: ${event.type}, ID: ${event.id}`);
+        console.log(`[WEBHOOK] Event verified with ${verifiedWith} secret. Type: ${event.type}, ID: ${event.id}, Account: ${(event as any).account || 'platform'}`);
 
         switch (event.type) {
             case "checkout.session.completed": {
                 const session = event.data.object;
                 const paymentType = session.metadata?.paymentType;
+                console.log(`[WEBHOOK] checkout.session.completed FULL metadata:`, JSON.stringify(session.metadata));
+                console.log(`[WEBHOOK] session.payment_status: ${session.payment_status}, amount_total: ${session.amount_total}`);
 
                 console.log(`[WEBHOOK] checkout.session.completed — paymentType: ${paymentType}, metadata:`, JSON.stringify(session.metadata));
 

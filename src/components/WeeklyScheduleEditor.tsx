@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Sun, Moon, CalendarBlank, CurrencyEur, Check, X } from '@phosphor-icons/react'
+import { Sun, Moon, CalendarBlank, CurrencyEur, Check, X, Timer } from '@phosphor-icons/react'
 import type { WeeklyCopertoSchedule, WeeklyAyceSchedule, DaySchedule, DayMealConfig } from '@/services/types'
 
 const DAYS = [
@@ -76,6 +76,10 @@ export default function WeeklyScheduleEditor({
 
     const updateDefaultMaxOrders = (maxOrders: number) => {
         onChange({ ...schedule, defaultMaxOrders: maxOrders } as any)
+    }
+
+    const updateDefaultOrderInterval = (interval: number) => {
+        onChange({ ...schedule, defaultOrderInterval: interval } as any)
     }
 
     const updateEnabled = (enabled: boolean) => {
@@ -189,6 +193,29 @@ export default function WeeklyScheduleEditor({
                                     min="0"
                                     className="bg-zinc-900 border-zinc-700 h-9 text-center"
                                 />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Order Interval (AYCE only) */}
+                    {type === 'ayce' && (
+                        <div className="flex items-center gap-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800/50">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Timer size={16} className="text-zinc-500 shrink-0" />
+                                <div>
+                                    <Label className="text-zinc-400 whitespace-nowrap">Intervallo tra ordini</Label>
+                                    <p className="text-[11px] text-zinc-600 mt-0.5">Minuti minimi tra un ordine e l'altro (0 = nessun limite)</p>
+                                </div>
+                            </div>
+                            <div className="relative w-[100px] flex items-center gap-1">
+                                <PriceInput
+                                    value={(schedule as WeeklyAyceSchedule).defaultOrderInterval || 0}
+                                    onChange={updateDefaultOrderInterval}
+                                    step="1"
+                                    min="0"
+                                    className="bg-zinc-900 border-zinc-700 h-9 text-center"
+                                />
+                                <span className="text-zinc-500 text-xs">min</span>
                             </div>
                         </div>
                     )}
