@@ -1751,13 +1751,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   // Helper: get all payable items (not PAID, not CANCELLED)
   const payableItems = useMemo(() => {
-    const items: { id: string, name: string, price: number, quantity: number, orderId: string }[] = []
+    const items: { id: string, itemId: string, name: string, price: number, quantity: number, orderId: string }[] = []
     previousOrders.forEach(order => {
       order.items?.forEach((item: any) => {
         if (item.status === 'PAID' || item.status === 'CANCELLED') return
         const dishName = item.dish?.name || dishes.find(d => d.id === item.dish_id)?.name || 'Piatto'
+        const itemId = item.id || ''
         items.push({
-          id: `${order.id}_${item.dish_id}_${item.id || items.length}`,
+          id: `${order.id}_${item.dish_id}_${itemId || items.length}`,
+          itemId,
           name: dishName,
           price: item.dish?.price || 0,
           quantity: item.quantity || 1,
@@ -1854,6 +1856,13 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
       const totalToPay = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
+      // Collect order_item IDs to mark as PAID in DB after payment (per-piatti only)
+      const paidOrderItemIds: string[] = mode === 'items'
+        ? payableItems
+            .filter(pi => selectedPaymentItems.has(pi.id) && pi.itemId)
+            .map(pi => pi.itemId)
+        : []
+
       toast.loading('Reindirizzamento a Stripe...', { id: 'stripe-pay' })
 
       const { url } = await DatabaseService.createStripeCustomerPayment({
@@ -1864,6 +1873,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         totalAmount: totalToPay,
         splitLabel,
         tableId: tableId || '',
+        paymentMode: mode === 'items' ? 'per_piatti' : 'romana_or_full',
+        paidOrderItemIds: paidOrderItemIds.length > 0 ? paidOrderItemIds : undefined,
       })
 
       if (url) {
@@ -1958,19 +1969,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
               </div>
             </div>
 
-            {/* Service Closed Banner */}
-            {!isViewOnly && isClosed && (
-              <div className="mx-4 mb-3 p-3 rounded-xl flex items-center gap-3 shadow-md border"
-                style={{ backgroundColor: `${theme.primary}15`, borderColor: `${theme.primary}40`, color: theme.textPrimary }}>
-                <div className="p-2 rounded-full" style={{ backgroundColor: `${theme.primary}30` }}>
-                  <Clock className="w-5 h-5 shrink-0" style={{ color: theme.primary }} weight="duotone" />
-                </div>
-                <p className="text-sm font-medium leading-tight" style={{ color: `${theme.textPrimary}e6` }}>
-                  <span className="font-bold block mb-0.5" style={{ color: theme.primary }}>Ristorante Chiuso</span>
-                  Gli ordini sono temporaneamente disattivati.
-                </p>
-              </div>
-            )}
+            {/* Service Closed Banner removed - service hours are only used for
+                reservations table and custom menus activation, not for blocking orders */}
 
             {/* Categories - Horizontally Scrollable */}
             <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">

@@ -29,6 +29,8 @@ serve(async (req) => {
             successUrl,
             cancelUrl,
             tableId,
+            paymentMode, // 'per_piatti' | 'romana_or_full'
+            paidOrderItemIds, // Array of order_item UUIDs to mark as PAID after payment (per_piatti only)
         } = await req.json();
 
         if (!restaurantId || !orderIds || !items || items.length === 0) {
@@ -100,6 +102,11 @@ serve(async (req) => {
                     tableSessionId: tableSessionId || "",
                     orderIds: safeOrderIdsMetadata,
                     splitLabel: splitLabel || "Pagamento",
+                    paymentMode: paymentMode || "romana_or_full",
+                    // Truncate to fit Stripe's 500-char metadata value limit
+                    paidOrderItemIds: paidOrderItemIds && paidOrderItemIds.length > 0
+                        ? JSON.stringify(paidOrderItemIds).slice(0, 490)
+                        : "",
                 },
                 ...(customerEmail ? { customer_email: customerEmail } : {}),
             },

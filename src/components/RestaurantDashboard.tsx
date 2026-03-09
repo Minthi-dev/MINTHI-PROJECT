@@ -189,11 +189,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   // Sound refs for stable subscription usage
   const soundEnabledRef = useRef(soundEnabled)
   const selectedSoundRef = useRef(selectedSound)
+  const activeSectionRef = useRef(activeSection)
   const lastScheduledMenuRef = useRef<{ menuId: string | null, mealType: string | null, day: number | null }>({
     menuId: null,
     mealType: null,
     day: null
   })
+  const weeklyServiceHoursRef = useRef<any>(null)
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled
@@ -202,6 +204,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   useEffect(() => {
     selectedSoundRef.current = selectedSound
   }, [selectedSound])
+
+  useEffect(() => {
+    activeSectionRef.current = activeSection
+  }, [activeSection])
+
+  useEffect(() => {
+    weeklyServiceHoursRef.current = weeklyServiceHours
+  }, [weeklyServiceHours])
 
   // Persist settings
   useEffect(() => {
@@ -246,35 +256,52 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           checkTime = currentTime + (24 * 60) // Add 24h for easier comparison
         }
 
-        // Determine current meal type based on effective ranges
-        let currentMealType: string | null = null
+        // Check service hours from weeklyServiceHours for the effective day
+        const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+        const effectiveDayKey = DAY_KEYS[effectiveDay]
+        const serviceHours = weeklyServiceHoursRef.current
 
-        if (lunchStart > 0 && dinnerStart > 0) {
-          // Both meals configured
-          if (lunchStart < dinnerStart) {
-            // Standard: Lunch 12:00, Dinner 19:00
-            if (checkTime >= lunchStart && checkTime < dinnerStart) {
-              currentMealType = 'lunch'
-            } else if (checkTime >= dinnerStart) {
-              currentMealType = 'dinner'
-            }
-          } else {
-            // Rare: Dinner starts before Lunch? (Logic fallback)
-            currentMealType = checkTime >= lunchStart ? 'lunch' : 'dinner'
-          }
-        } else if (lunchStart > 0) {
-          // Only Lunch
-          // Assume Lunch lasts until ~16:00 or just use start? 
-          // Let's assume valid if > start and < late night cutoff of NEXT day?
-          // Simplification: logic is "Active if > Start".
-          if (checkTime >= lunchStart) currentMealType = 'lunch'
-        } else if (dinnerStart > 0) {
-          // Only Dinner
-          if (checkTime >= dinnerStart) currentMealType = 'dinner'
+        // Helper: check if current time is within a service window
+        const isInWindow = (start: string, end: string) => {
+          const startMin = parseTime(start)
+          let endMin = parseTime(end)
+          // Handle midnight crossover (e.g. dinner 19:00-02:00)
+          if (endMin <= startMin) endMin += 24 * 60
+          return checkTime >= startMin && checkTime <= endMin
         }
 
-        // Special case: If we are in "late night" mode (e.g. 25:00), but the detected meal type is 'lunch' (unlikely)
-        // or null, we might want to default to 'dinner' if it was valid.
+        let currentMealType: string | null = null
+
+        if (serviceHours?.useWeeklySchedule && effectiveDayKey) {
+          // Use per-day service hours with exact start/end times
+          const dayService = serviceHours.schedule?.[effectiveDayKey]
+          const lunchService = dayService?.lunch
+          const dinnerService = dayService?.dinner
+
+          if (lunchService?.enabled && lunchService.start && lunchService.end) {
+            if (isInWindow(lunchService.start, lunchService.end)) currentMealType = 'lunch'
+          }
+          if (dinnerService?.enabled && dinnerService.start && dinnerService.end) {
+            if (isInWindow(dinnerService.start, dinnerService.end)) currentMealType = 'dinner'
+          }
+        } else {
+          // Fallback: use global lunch/dinner start times (original logic)
+          if (lunchStart > 0 && dinnerStart > 0) {
+            if (lunchStart < dinnerStart) {
+              if (checkTime >= lunchStart && checkTime < dinnerStart) {
+                currentMealType = 'lunch'
+              } else if (checkTime >= dinnerStart) {
+                currentMealType = 'dinner'
+              }
+            } else {
+              currentMealType = checkTime >= lunchStart ? 'lunch' : 'dinner'
+            }
+          } else if (lunchStart > 0) {
+            if (checkTime >= lunchStart) currentMealType = 'lunch'
+          } else if (dinnerStart > 0) {
+            if (checkTime >= dinnerStart) currentMealType = 'dinner'
+          }
+        }
 
         // Valid schedule day is the effective day
         const scheduleDay = effectiveDay
@@ -552,10 +579,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       .channel(`dashboard_orders_${restaurantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         debouncedFetch()
-        // Play sound on new order using refs to avoid re-subscription
-        if (payload.eventType === 'INSERT' && soundEnabledRef.current) {
-          soundManager.play(selectedSoundRef.current)
-          toast.info('Nuovo ordine ricevuto!', { icon: '🔔' })
+        // Play sound on new order — only notify when in orders section
+        if (payload.eventType === 'INSERT' && activeSectionRef.current === 'orders') {
+          if (soundEnabledRef.current) soundManager.play(selectedSoundRef.current)
+          toast.info('Nuovo ordine ricevuto!')
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'table_sessions', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
@@ -568,33 +595,36 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         const oldNotes = oldSession?.notes || '';
         const newNotes = payload.new?.notes || '';
 
+        // Payment notifications — only show when in tables section (not in orders or other sections)
+        const isInTablesSection = activeSectionRef.current === 'tables'
         if (newAmount > oldAmount) {
           const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
           const tableNumber = tableObj?.number || '?'
-          toast.success(
-            `💳 Tavolo ${tableNumber} ha pagato online! €${Number(newAmount - oldAmount).toFixed(2)}`,
-            {
-              duration: 10000,
-              description: 'Clicca per vedere il conto',
-              action: tableObj ? {
-                label: 'Vedi Conto',
-                onClick: () => {
-                  setSelectedTableForActions(tableObj)
-                  setShowTableBillDialog(true)
-                }
-              } : undefined
+          if (isInTablesSection) {
+            toast.success(
+              `Tavolo ${tableNumber} ha pagato online! €${Number(newAmount - oldAmount).toFixed(2)}`,
+              {
+                duration: 10000,
+                description: 'Clicca per vedere il conto',
+                action: tableObj ? {
+                  label: 'Vedi Conto',
+                  onClick: () => {
+                    setSelectedTableForActions(tableObj)
+                    setShowTableBillDialog(true)
+                  }
+                } : undefined
+              }
+            )
+            if (soundEnabledRef.current) {
+              soundManager.play(selectedSoundRef.current)
             }
-          )
-          // Also play notification sound
-          if (soundEnabledRef.current) {
-            soundManager.play(selectedSoundRef.current)
           }
-        } else if (newNotes !== oldNotes && newNotes.includes('Pagamento')) {
-          // Fallback if paid_amount wasn't updated but notes were (e.g. some split logic scenario)
+        } else if (newNotes !== oldNotes && newNotes.includes('Pagamento') && isInTablesSection) {
+          // Fallback if paid_amount wasn't updated but notes were
           const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
           const tableNumber = tableObj?.number || '?'
           toast.success(
-            `💳 Nuova notifica di pagamento: Tavolo ${tableNumber}`,
+            `Nuova notifica di pagamento: Tavolo ${tableNumber}`,
             {
               duration: 10000,
               action: tableObj ? {
@@ -2976,7 +3006,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                     : isActive ? 'bg-amber-500 text-black border-none font-bold' : 'bg-transparent text-zinc-500 border-zinc-700'
                                 }
                               >
-                                {isFullyPaidOnline && !session?.receipt_issued ? '💳 Pagato' : isPartiallyPaidOnline ? '💳 Parziale' : isActive ? 'Occupato' : 'Libero'}
+                                {isFullyPaidOnline && !session?.receipt_issued ? 'Pagato' : isPartiallyPaidOnline ? 'Parziale' : isActive ? 'Occupato' : 'Libero'}
                               </Badge>
                             </div>
 
@@ -2999,16 +3029,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   )}
                                   {isFullyPaidOnline && !session?.receipt_issued && (
                                     <div className="flex flex-col items-center gap-1 mt-1">
-                                      <Badge variant="outline" className="text-[10px] bg-emerald-500/20 border-emerald-500/50 text-emerald-200">
-                                        💳 Pagato Online €{paidAmount.toFixed(2)}
+                                      <Badge variant="outline" className="text-[10px] bg-emerald-500/20 border-emerald-500/50 text-emerald-200 flex items-center gap-1">
+                                        <CreditCard size={10} weight="fill" />
+                                        Online €{paidAmount.toFixed(2)}
                                       </Badge>
-                                      <span className="text-[9px] text-emerald-400 font-semibold">✓ Tutto pagato</span>
+                                      <span className="text-[9px] text-emerald-400 font-semibold">Tutto pagato</span>
                                     </div>
                                   )}
                                   {isPartiallyPaidOnline && (
                                     <div className="flex flex-col items-center gap-1 mt-1">
-                                      <Badge variant="outline" className="text-[10px] bg-orange-500/20 border-orange-500/50 text-orange-200">
-                                        💳 Pagato: €{paidAmount.toFixed(2)}
+                                      <Badge variant="outline" className="text-[10px] bg-orange-500/20 border-orange-500/50 text-orange-200 flex items-center gap-1">
+                                        <CreditCard size={10} weight="fill" />
+                                        Pagato €{paidAmount.toFixed(2)}
                                       </Badge>
                                       <span className="text-[9px] text-red-400 font-bold">Da incassare: €{remainingToPay.toFixed(2)}</span>
                                     </div>
@@ -3031,6 +3063,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       size="sm"
                                       onClick={async (e) => {
                                         e.stopPropagation();
+                                        // Check if any order items haven't been delivered yet
+                                        const undeliveredOrders = sessionOrders.filter(o =>
+                                          o.items?.some((item: any) =>
+                                            !['DELIVERED', 'SERVED', 'COMPLETED', 'CANCELLED', 'PAID'].includes((item.status || '').toUpperCase())
+                                          )
+                                        );
+                                        if (undeliveredOrders.length > 0) {
+                                          toast.error('Ci sono ancora piatti da consegnare. Consegna tutti i piatti prima di chiudere il tavolo.', { duration: 5000 });
+                                          return;
+                                        }
                                         const conferma = confirm('Tutto pagato online. Stampare scontrino e chiudere il tavolo?');
                                         if (!conferma) return;
                                         try {
@@ -3055,15 +3097,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         QR
                                       </Button>
                                       <Button
-                                        className={`shadow-sm hover:shadow transition-all h-8 text-xs ${isPartiallyPaidOnline
+                                        className={`shadow-sm hover:shadow transition-all h-8 text-xs min-w-0 ${isPartiallyPaidOnline
                                           ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:from-orange-500 hover:to-orange-400 font-bold'
                                           : 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70'
                                         }`}
                                         size="sm"
                                         onClick={(e) => { e.stopPropagation(); setSelectedTableForActions(table); setShowTableBillDialog(true); }}
                                       >
-                                        <Receipt size={14} className="mr-1.5" />
-                                        {isPartiallyPaidOnline ? `Conto (€${remainingToPay.toFixed(2)})` : 'Conto'}
+                                        <Receipt size={14} className="mr-1.5 shrink-0" />
+                                        <span className="truncate">
+                                          {isPartiallyPaidOnline ? `Conto €${remainingToPay.toFixed(2)}` : 'Conto'}
+                                        </span>
                                       </Button>
                                     </>
                                   )}

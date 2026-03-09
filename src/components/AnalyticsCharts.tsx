@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Area, AreaChart } from 'recharts'
-import { TrendUp, CurrencyEur, Users, ShoppingBag, Clock, ChartLine, CalendarBlank, List, CaretDown, Star, Package, TrendDown, Minus, Check, DownloadSimple, ArrowsLeftRight, ArrowUp, ArrowDown } from '@phosphor-icons/react'
+import { TrendUp, CurrencyEur, Users, ShoppingBag, Clock, ChartLine, CalendarBlank, List, CaretDown, Star, Package, TrendDown, Minus, Check, DownloadSimple, ArrowUp, ArrowDown } from '@phosphor-icons/react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { Order, Dish, Category, OrderItem, RestaurantStaff, WaiterActivityLog } from '../services/types'
@@ -95,22 +95,11 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
   const [inventoryCategories, setInventoryCategories] = useState<string[]>([])
   const [inventorySortBy, setInventorySortBy] = useState<'quantity' | 'revenue' | 'category' | 'price'>('quantity')
 
-  // Comparison (Confronto Periodi) state
-  const [compPeriodAStart, setCompPeriodAStart] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 14)
-    return d.toISOString().split('T')[0]
-  })
-  const [compPeriodAEnd, setCompPeriodAEnd] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 7)
-    return d.toISOString().split('T')[0]
-  })
-  const [compPeriodBStart, setCompPeriodBStart] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 7)
-    return d.toISOString().split('T')[0]
-  })
-  const [compPeriodBEnd, setCompPeriodBEnd] = useState(() => new Date().toISOString().split('T')[0])
-  const [compSortBy, setCompSortBy] = useState<'deltaQty' | 'deltaRevenue' | 'name' | 'category'>('deltaQty')
-  const [compCategories, setCompCategories] = useState<string[]>([])
+  // Magazzino comparison preset
+  const [inventoryCompare, setInventoryCompare] = useState<'none' | 'prev_period' | 'prev_month' | 'prev_year'>('prev_period')
+
+  // Waiter meal period filter
+  const [waiterMealFilter, setWaiterMealFilter] = useState<'all' | 'lunch' | 'dinner'>('all')
 
   // Chart Toggles
   const [timeSeriesMetric, setTimeSeriesMetric] = useState<'orders' | 'revenue' | 'average'>('orders')
@@ -320,55 +309,62 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     }
   }
 
-  // Inventory (Magazzino) calculations - NOW USES MAIN DATE FILTER
+  // Inventory (Magazzino) calculations - uses main date filter + comparison preset
   const inventoryData = useMemo(() => {
-    // Use the same date range as the main analytics (from dateFilter)
     const invStart = start
     const invEnd = end
     const periodDays = Math.max(1, Math.ceil((invEnd - invStart) / (24 * 60 * 60 * 1000)))
 
-    // Filter orders for inventory period (excluding cancelled)
+    // Compute comparison range from preset
+    let compStart: number | null = null
+    let compEnd: number | null = null
+    let compDays = 1
+    if (inventoryCompare !== 'none') {
+      if (inventoryCompare === 'prev_period') {
+        compEnd = invStart - 1
+        compStart = compEnd - (periodDays * 24 * 60 * 60 * 1000) + 1
+      } else if (inventoryCompare === 'prev_month') {
+        compStart = invStart - 30 * 24 * 60 * 60 * 1000
+        compEnd = invEnd - 30 * 24 * 60 * 60 * 1000
+      } else if (inventoryCompare === 'prev_year') {
+        compStart = invStart - 365 * 24 * 60 * 60 * 1000
+        compEnd = invEnd - 365 * 24 * 60 * 60 * 1000
+      }
+      if (compStart !== null && compEnd !== null) {
+        compDays = Math.max(1, Math.ceil((compEnd - compStart) / (24 * 60 * 60 * 1000)))
+      }
+    }
+
+    // Filter orders
     const inventoryOrders = allOrders.filter(order => {
-      const orderTime = new Date(order.created_at).getTime()
-      return orderTime >= invStart && orderTime <= invEnd && order.status !== 'CANCELLED'
+      const t = new Date(order.created_at).getTime()
+      return t >= invStart && t <= invEnd && order.status !== 'CANCELLED'
     })
+    const compOrders = (compStart !== null && compEnd !== null)
+      ? allOrders.filter(order => {
+          const t = new Date(order.created_at).getTime()
+          return t >= compStart! && t <= compEnd! && order.status !== 'CANCELLED'
+        })
+      : []
 
-    // Calculate historical average (limit to last 2 years for relevance) - EXCLUDE CURRENT PERIOD
-    const twoYearsAgo = Date.now() - (2 * 365 * 24 * 60 * 60 * 1000)
-    const historicalOrders = allOrders.filter(order => {
-      const orderTime = new Date(order.created_at).getTime()
-      // STRICTLY BEFORE the start of the current inventory period
-      return orderTime >= twoYearsAgo && orderTime < invStart && order.status !== 'CANCELLED'
-    })
-
-    const historicalDays = historicalOrders.length > 0
-      ? Math.max(1, Math.ceil((invStart - Math.max(twoYearsAgo, new Date(Math.min(...historicalOrders.map(o => new Date(o.created_at).getTime()))).getTime())) / (24 * 60 * 60 * 1000)))
-      : 1
-
-    // Calculate per-dish inventory stats - include ALL dishes (removed is_active filter)
     const dishInventory = dishes
-      .filter(dish => inventoryCategories.length === 0 || inventoryCategories.includes(dish.category_id)) // Filter by selected categories
+      .filter(dish => inventoryCategories.length === 0 || inventoryCategories.includes(dish.category_id))
       .map(dish => {
-        // Current period
-        const periodSales = inventoryOrders.flatMap(order =>
-          (order.items || []).filter(item => item.dish_id === dish.id)
-        )
+        const periodSales = inventoryOrders.flatMap(o => (o.items || []).filter(item => item.dish_id === dish.id))
         const periodQuantity = periodSales.reduce((sum, item) => sum + item.quantity, 0)
         const periodAvgPerDay = periodQuantity / periodDays
 
-        // Historical average (last 2 years)
-        const historicalSales = historicalOrders.flatMap(order =>
-          (order.items || []).filter(item => item.dish_id === dish.id)
-        )
-        const historicalQuantity = historicalSales.reduce((sum, item) => sum + item.quantity, 0)
-        const historicalAvgPerDay = historicalQuantity / historicalDays
+        const compSales = compOrders.flatMap(o => (o.items || []).filter(item => item.dish_id === dish.id))
+        const compQuantity = compSales.reduce((sum, item) => sum + item.quantity, 0)
+        const compAvgPerDay = compQuantity / compDays
 
-        // Calculate percentage change
         let percentageChange = 0
-        if (historicalAvgPerDay > 0) {
-          percentageChange = ((periodAvgPerDay - historicalAvgPerDay) / historicalAvgPerDay) * 100
-        } else if (periodAvgPerDay > 0) {
-          percentageChange = 100 // New dish with sales (or significant increase from zero)
+        if (inventoryCompare !== 'none') {
+          if (compAvgPerDay > 0) {
+            percentageChange = ((periodAvgPerDay - compAvgPerDay) / compAvgPerDay) * 100
+          } else if (periodAvgPerDay > 0) {
+            percentageChange = 100
+          }
         }
 
         const category = categories.find(c => c.id === dish.category_id)
@@ -379,201 +375,59 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
           category: category?.name || 'Sconosciuta',
           categoryId: dish.category_id,
           periodQuantity,
+          compQuantity,
           periodAvgPerDay: Math.round(periodAvgPerDay * 100) / 100,
-          allTimeAvgPerDay: Math.round(historicalAvgPerDay * 100) / 100,
+          allTimeAvgPerDay: Math.round(compAvgPerDay * 100) / 100,
           percentageChange: Math.round(percentageChange * 10) / 10,
           price: dish.price,
-          isActive: dish.is_active !== false // Track status for display
+          isActive: dish.is_active !== false
         }
       })
       .sort((a, b) => {
         switch (inventorySortBy) {
-          case 'quantity':
-            return b.periodQuantity - a.periodQuantity
-          case 'revenue':
-            return (b.periodQuantity * b.price) - (a.periodQuantity * a.price)
-          case 'category':
-            return a.category.localeCompare(b.category)
-          case 'price':
-            return b.price - a.price
-          default:
-            return b.periodQuantity - a.periodQuantity
+          case 'quantity': return b.periodQuantity - a.periodQuantity
+          case 'revenue': return (b.periodQuantity * b.price) - (a.periodQuantity * a.price)
+          case 'category': return a.category.localeCompare(b.category)
+          case 'price': return b.price - a.price
+          default: return b.periodQuantity - a.periodQuantity
         }
       })
 
-    // Generate trend alerts for significant variations (>15% or <-15%)
     const trendAlerts = dishInventory
-      .filter(dish => Math.abs(dish.percentageChange) >= 15 && dish.periodQuantity > 0)
+      .filter(dish => inventoryCompare !== 'none' && Math.abs(dish.percentageChange) >= 15 && dish.periodQuantity > 0)
       .sort((a, b) => Math.abs(b.percentageChange) - Math.abs(a.percentageChange))
-      .slice(0, 2) // Top 2 significant changes
-      .map(dish => ({
-        name: dish.name,
-        category: dish.category,
-        change: dish.percentageChange
-      }))
+      .slice(0, 2)
+      .map(dish => ({ name: dish.name, category: dish.category, change: dish.percentageChange }))
 
     return {
       dishes: dishInventory,
       periodDays,
+      compDays,
+      hasComparison: inventoryCompare !== 'none',
       totalPortions: dishInventory.reduce((sum, d) => sum + d.periodQuantity, 0),
+      totalCompPortions: dishInventory.reduce((sum, d) => sum + d.compQuantity, 0),
       trendAlerts
     }
-  }, [allOrders, dishes, categories, start, end, inventorySortBy, inventoryCategories])
+  }, [allOrders, dishes, categories, start, end, inventorySortBy, inventoryCategories, inventoryCompare])
 
-  // =============================================
-  // Comparison (Confronto Periodi) calculations
-  // =============================================
-  const comparisonData = useMemo(() => {
-    if (!compPeriodAStart || !compPeriodAEnd || !compPeriodBStart || !compPeriodBEnd) return null
-
-    const aStart = new Date(compPeriodAStart).getTime()
-    const aEndDate = new Date(compPeriodAEnd); aEndDate.setHours(23, 59, 59, 999)
-    const aEnd = aEndDate.getTime()
-    const bStart = new Date(compPeriodBStart).getTime()
-    const bEndDate = new Date(compPeriodBEnd); bEndDate.setHours(23, 59, 59, 999)
-    const bEnd = bEndDate.getTime()
-
-    const aDays = Math.max(1, Math.ceil((aEnd - aStart) / (24 * 60 * 60 * 1000)))
-    const bDays = Math.max(1, Math.ceil((bEnd - bStart) / (24 * 60 * 60 * 1000)))
-
-    // Filter orders for each period (exclude cancelled)
-    const ordersA = allOrders.filter(o => {
-      const t = new Date(o.created_at).getTime()
-      return t >= aStart && t <= aEnd && o.status !== 'CANCELLED'
-    })
-    const ordersB = allOrders.filter(o => {
-      const t = new Date(o.created_at).getTime()
-      return t >= bStart && t <= bEnd && o.status !== 'CANCELLED'
-    })
-
-    // Active comparison categories
-    const activeCompCats = compCategories.length > 0 ? compCategories : categories.map(c => c.id)
-
-    // Per-dish comparison
-    const dishComparison = dishes
-      .filter(dish => activeCompCats.includes(dish.category_id))
-      .map(dish => {
-        const category = categories.find(c => c.id === dish.category_id)
-
-        // Period A
-        const salesA = ordersA.flatMap(o => (o.items || []).filter(item => item.dish_id === dish.id))
-        const qtyA = salesA.reduce((sum, item) => sum + item.quantity, 0)
-        const revenueA = qtyA * dish.price
-        const avgPerDayA = qtyA / aDays
-
-        // Period B
-        const salesB = ordersB.flatMap(o => (o.items || []).filter(item => item.dish_id === dish.id))
-        const qtyB = salesB.reduce((sum, item) => sum + item.quantity, 0)
-        const revenueB = qtyB * dish.price
-        const avgPerDayB = qtyB / bDays
-
-        // Deltas
-        const deltaQty = qtyB - qtyA
-        const deltaRevenue = revenueB - revenueA
-        const deltaAvgPerDay = avgPerDayB - avgPerDayA
-        let pctChange = 0
-        if (avgPerDayA > 0) {
-          pctChange = ((avgPerDayB - avgPerDayA) / avgPerDayA) * 100
-        } else if (avgPerDayB > 0) {
-          pctChange = 100
-        }
-
-        return {
-          id: dish.id,
-          name: dish.name,
-          category: category?.name || 'Sconosciuta',
-          categoryId: dish.category_id,
-          price: dish.price,
-          qtyA, revenueA, avgPerDayA: Math.round(avgPerDayA * 100) / 100,
-          qtyB, revenueB, avgPerDayB: Math.round(avgPerDayB * 100) / 100,
-          deltaQty,
-          deltaRevenue,
-          deltaAvgPerDay: Math.round(deltaAvgPerDay * 100) / 100,
-          pctChange: Math.round(pctChange * 10) / 10
-        }
-      })
-      .filter(d => d.qtyA > 0 || d.qtyB > 0)
-      .sort((a, b) => {
-        switch (compSortBy) {
-          case 'deltaQty': return Math.abs(b.deltaQty) - Math.abs(a.deltaQty)
-          case 'deltaRevenue': return Math.abs(b.deltaRevenue) - Math.abs(a.deltaRevenue)
-          case 'name': return a.name.localeCompare(b.name)
-          case 'category': return a.category.localeCompare(b.category)
-          default: return Math.abs(b.deltaQty) - Math.abs(a.deltaQty)
-        }
-      })
-
-    // Aggregate summary
-    const totalQtyA = dishComparison.reduce((s, d) => s + d.qtyA, 0)
-    const totalQtyB = dishComparison.reduce((s, d) => s + d.qtyB, 0)
-    const totalRevenueA = dishComparison.reduce((s, d) => s + d.revenueA, 0)
-    const totalRevenueB = dishComparison.reduce((s, d) => s + d.revenueB, 0)
-    const totalOrdersA = ordersA.length
-    const totalOrdersB = ordersB.length
-
-    // Daily aggregation for chart (per-day totals for both periods)
-    const buildDailyAgg = (orders: typeof allOrders, periodStart: number, periodEnd: number) => {
-      const days = Math.max(1, Math.ceil((periodEnd - periodStart) / (24 * 60 * 60 * 1000)))
-      const data: { dayIndex: number; date: string; qty: number; revenue: number; orders: number }[] = []
-      for (let i = 0; i < days; i++) {
-        const dayStart = periodStart + (i * 24 * 60 * 60 * 1000)
-        const dayEnd = dayStart + (24 * 60 * 60 * 1000)
-        const dayOrders = orders.filter(o => {
-          const t = new Date(o.created_at).getTime()
-          return t >= dayStart && t < dayEnd
-        })
-        const qty = dayOrders.reduce((s, o) => s + (o.items || []).reduce((si, it) => si + it.quantity, 0), 0)
-        const revenue = dayOrders.reduce((s, o) => s + (o.total_amount || 0), 0)
-        const date = new Date(dayStart)
-        data.push({
-          dayIndex: i + 1,
-          date: `${date.getDate()}/${date.getMonth() + 1}`,
-          qty,
-          revenue: Math.round(revenue * 100) / 100,
-          orders: dayOrders.length
-        })
-      }
-      return data
-    }
-
-    const dailyA = buildDailyAgg(ordersA, aStart, aEnd)
-    const dailyB = buildDailyAgg(ordersB, bStart, bEnd)
-
-    // Merge for overlapping bar chart (aligned by day index)
-    const maxDays = Math.max(dailyA.length, dailyB.length)
-    const chartData: { dayIndex: number; label: string; qtyA: number; qtyB: number; revenueA: number; revenueB: number }[] = []
-    for (let i = 0; i < maxDays; i++) {
-      chartData.push({
-        dayIndex: i + 1,
-        label: `G${i + 1}`,
-        qtyA: dailyA[i]?.qty || 0,
-        qtyB: dailyB[i]?.qty || 0,
-        revenueA: dailyA[i]?.revenue || 0,
-        revenueB: dailyB[i]?.revenue || 0
-      })
-    }
-
-    // Top movers (biggest changes)
-    const topIncreases = [...dishComparison].filter(d => d.deltaQty > 0).sort((a, b) => b.deltaQty - a.deltaQty).slice(0, 5)
-    const topDecreases = [...dishComparison].filter(d => d.deltaQty < 0).sort((a, b) => a.deltaQty - b.deltaQty).slice(0, 5)
-
-    return {
-      dishes: dishComparison,
-      aDays, bDays,
-      totalQtyA, totalQtyB,
-      totalRevenueA, totalRevenueB,
-      totalOrdersA, totalOrdersB,
-      chartData,
-      topIncreases,
-      topDecreases
-    }
-  }, [allOrders, dishes, categories, compPeriodAStart, compPeriodAEnd, compPeriodBStart, compPeriodBEnd, compSortBy, compCategories])
 
   // Waiter Analytics Calculations
   const waiterStats = useMemo(() => {
+    // Meal period filter: lunch = 10:30-15:30, dinner = 17:30-24:00
+    const isMealTime = (timestamp: number, meal: 'lunch' | 'dinner') => {
+      const d = new Date(timestamp)
+      const minutes = d.getHours() * 60 + d.getMinutes()
+      if (meal === 'lunch') return minutes >= 630 && minutes <= 930   // 10:30-15:30
+      if (meal === 'dinner') return minutes >= 1050 || minutes <= 60  // 17:30-24:00/01:00
+      return true
+    }
+
     const logsInPeriod = waiterLogs.filter(log => {
       const logTime = new Date(log.created_at || Date.now()).getTime()
-      return logTime >= start && logTime <= end
+      const inPeriod = logTime >= start && logTime <= end
+      if (!inPeriod) return false
+      if (waiterMealFilter !== 'all') return isMealTime(logTime, waiterMealFilter)
+      return true
     })
 
     const waiterMap = new Map<string, { name: string; dishesDelivered: number; bellsResolved: number; firstActivity: number; lastActivity: number }>()
@@ -617,10 +471,13 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       }
     }).filter(w => w.totalActivities > 0).sort((a, b) => b.totalActivities - a.totalActivities)
 
-    // Orders in period for wait time calc
+    // Orders in period for wait time calc (also filtered by meal period)
     const ordersInPeriod = allOrders.filter(o => {
       const t = new Date(o.created_at).getTime()
-      return t >= start && t <= end
+      const inPeriod = t >= start && t <= end
+      if (!inPeriod) return false
+      if (waiterMealFilter !== 'all') return isMealTime(t, waiterMealFilter)
+      return true
     })
 
     // Avg wait time: use updated_at - created_at if available, or closed_at - created_at
@@ -708,7 +565,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       avgOrdersPerWaiterHour,
       dailyMetrics
     }
-  }, [waiterLogs, staffList, allOrders, start, end, dateFilter])
+  }, [waiterLogs, staffList, allOrders, start, end, dateFilter, waiterMealFilter])
 
   return (
     <>
@@ -809,10 +666,6 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="bg-zinc-900/50 border border-white/10 mb-8 p-1 rounded-xl flex-wrap">
             <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-amber-500 data-[state=active]:text-black transition-all font-bold">Panoramica & Magazzino</TabsTrigger>
-            <TabsTrigger value="comparison" className="rounded-lg data-[state=active]:bg-amber-500 data-[state=active]:text-black transition-all font-bold">
-              <ArrowsLeftRight size={16} className="mr-1.5" weight="bold" />
-              Confronto Periodi
-            </TabsTrigger>
             <TabsTrigger value="waiters" className="rounded-lg data-[state=active]:bg-amber-500 data-[state=active]:text-black transition-all font-bold">Performance Camerieri</TabsTrigger>
           </TabsList>
 
@@ -1070,7 +923,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                         Analisi Magazzino
                       </CardTitle>
                       <p className="text-sm text-zinc-400 mt-1">
-                        Confronto vendite vs periodo precedente (2 anni)
+                        Vendite e confronto con il periodo scelto
                       </p>
                     </div>
                   </div>
@@ -1123,7 +976,23 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                       </PopoverContent>
                     </Popover>
 
-                    {/* Note: Inventory now uses the main date filter at the top of the page */}
+                    {/* Comparison preset selector */}
+                    <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-1 border border-zinc-700/50">
+                      {([
+                        { value: 'prev_period', label: 'Periodo prec.' },
+                        { value: 'prev_month', label: 'Mese prec.' },
+                        { value: 'prev_year', label: 'Anno prec.' },
+                        { value: 'none', label: 'Nessuno' },
+                      ] as const).map(opt => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setInventoryCompare(opt.value)}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${inventoryCompare === opt.value ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
 
                     {/* Sort Selector - Fixed to show correct label */}
                     <Select value={inventorySortBy} onValueChange={(v: any) => setInventorySortBy(v)}>
@@ -1150,17 +1019,33 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                 {/* Quick Stats Bar */}
                 <div className="grid grid-cols-4 gap-px bg-white/5 border-b border-white/5">
                   {[
-                    { label: "Porzioni Vendute", value: inventoryData.totalPortions, icon: <Package size={16} weight="fill" className="text-blue-400" /> },
-                    { label: "Piatti Analizzati", value: inventoryData.dishes.length, icon: <List size={16} weight="bold" className="text-zinc-400" /> },
-                    { label: "Giorni Analizzati", value: inventoryData.periodDays, icon: <CalendarBlank size={16} weight="fill" className="text-zinc-400" /> },
-                    { label: "Piatti Attivi", value: inventoryData.dishes.filter(d => d.periodQuantity > 0).length, icon: <Check size={16} weight="bold" className="text-emerald-400" /> },
+                    {
+                      label: "Porzioni Vendute", icon: <Package size={16} weight="fill" className="text-blue-400" />,
+                      main: inventoryData.totalPortions,
+                      comp: inventoryData.hasComparison ? inventoryData.totalCompPortions : null
+                    },
+                    {
+                      label: "Piatti Analizzati", icon: <List size={16} weight="bold" className="text-zinc-400" />,
+                      main: inventoryData.dishes.length, comp: null
+                    },
+                    {
+                      label: "Giorni Analizzati", icon: <CalendarBlank size={16} weight="fill" className="text-zinc-400" />,
+                      main: inventoryData.periodDays, comp: null
+                    },
+                    {
+                      label: "Piatti Attivi", icon: <Check size={16} weight="bold" className="text-emerald-400" />,
+                      main: inventoryData.dishes.filter(d => d.periodQuantity > 0).length, comp: null
+                    },
                   ].map((stat, i) => (
                     <div key={i} className="p-4 flex flex-col items-center justify-center bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
                       <div className="flex items-center gap-2 mb-1 opacity-70">
                         {stat.icon}
                         <span className="text-[10px] uppercase font-bold text-zinc-400">{stat.label}</span>
                       </div>
-                      <span className="text-xl font-bold text-white">{stat.value}</span>
+                      <span className="text-xl font-bold text-white">{stat.main}</span>
+                      {stat.comp !== null && (
+                        <span className="text-[10px] text-zinc-600 mt-0.5">prec.: {stat.comp}</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1169,9 +1054,11 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                 <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-zinc-950/30 border-b border-white/5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                   <div className="col-span-4 pl-2">Piatto / Categoria</div>
                   <div className="col-span-2 text-center">Prezzo</div>
-                  <div className="col-span-2 text-center">Vendite Tot.</div>
+                  <div className="col-span-2 text-center">Vendite</div>
                   <div className="col-span-2 text-center">Media / GG</div>
-                  <div className="col-span-2 text-right pr-2">Trend (vs 2 Anni)</div>
+                  <div className="col-span-2 text-right pr-2">
+                    {inventoryData.hasComparison ? 'Confronto' : 'Trend'}
+                  </div>
                 </div>
 
                 {/* Scrollable List */}
@@ -1201,29 +1088,38 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                         </div>
 
                         {/* Sales */}
-                        <div className="col-span-2 text-center">
+                        <div className="col-span-2 flex flex-col items-center justify-center">
                           <span className={`text-sm font-bold ${dish.periodQuantity > 0 ? 'text-white' : 'text-zinc-600'}`}>
                             {dish.periodQuantity}
                           </span>
+                          {inventoryData.hasComparison && (
+                            <span className="text-[10px] text-zinc-600">prec.: {dish.compQuantity}</span>
+                          )}
                         </div>
 
                         {/* Avg/Day */}
                         <div className="col-span-2 flex flex-col items-center justify-center">
                           <span className="text-sm font-semibold text-zinc-300">{dish.periodAvgPerDay}</span>
-                          <span className="text-[10px] text-zinc-600">storico: {dish.allTimeAvgPerDay}</span>
+                          {inventoryData.hasComparison && (
+                            <span className="text-[10px] text-zinc-600">prec.: {dish.allTimeAvgPerDay}</span>
+                          )}
                         </div>
 
                         {/* Trend */}
                         <div className="col-span-2 flex justify-end pr-2">
-                          <div className={`
-                          flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border
-                          ${dish.percentageChange === 0 ? 'bg-zinc-900/50 text-zinc-500 border-zinc-800' : ''}
-                          ${dish.percentageChange > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
-                          ${dish.percentageChange < 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
-                       `}>
-                            {dish.percentageChange > 0 ? <TrendUp weight="bold" /> : dish.percentageChange < 0 ? <TrendDown weight="bold" /> : <Minus />}
-                            {Math.abs(dish.percentageChange)}%
-                          </div>
+                          {inventoryData.hasComparison ? (
+                            <div className={`
+                            flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border
+                            ${dish.percentageChange === 0 ? 'bg-zinc-900/50 text-zinc-500 border-zinc-800' : ''}
+                            ${dish.percentageChange > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
+                            ${dish.percentageChange < 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
+                         `}>
+                              {dish.percentageChange > 0 ? <TrendUp weight="bold" /> : dish.percentageChange < 0 ? <TrendDown weight="bold" /> : <Minus />}
+                              {dish.percentageChange > 0 ? '+' : ''}{Math.abs(dish.percentageChange)}%
+                            </div>
+                          ) : (
+                            <span className="text-xs text-zinc-600">—</span>
+                          )}
                         </div>
                       </div>
                     ))
@@ -1231,520 +1127,6 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* ======================================== */}
-          {/* CONFRONTO PERIODI TAB                  */}
-          {/* ======================================== */}
-          <TabsContent value="comparison" className="space-y-8 focus:outline-none">
-            {/* Period Pickers */}
-            <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden backdrop-blur-sm">
-              <CardHeader className="border-b border-white/5 pb-4 bg-black/20">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 shadow-inner">
-                    <ArrowsLeftRight size={24} className="text-amber-500" weight="duotone" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl font-bold text-white tracking-tight">
-                      Confronto Trend Magazzino
-                    </CardTitle>
-                    <p className="text-sm text-zinc-400 mt-1">
-                      Confronta vendite e consumi tra due periodi personalizzati
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Period A */}
-                  <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="text-sm font-bold text-blue-400 uppercase tracking-wider">Periodo A</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <Label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Da</Label>
-                        <Input
-                          type="date"
-                          value={compPeriodAStart}
-                          onChange={(e) => setCompPeriodAStart(e.target.value)}
-                          className="h-9 bg-black/40 border-zinc-700 text-zinc-300 text-sm"
-                        />
-                      </div>
-                      <span className="text-zinc-600 mt-4">-</span>
-                      <div className="flex-1">
-                        <Label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">A</Label>
-                        <Input
-                          type="date"
-                          value={compPeriodAEnd}
-                          onChange={(e) => setCompPeriodAEnd(e.target.value)}
-                          className="h-9 bg-black/40 border-zinc-700 text-zinc-300 text-sm"
-                        />
-                      </div>
-                    </div>
-                    {comparisonData && (
-                      <p className="text-[10px] text-zinc-500 mt-2">{comparisonData.aDays} giorni</p>
-                    )}
-                  </div>
-
-                  {/* Period B */}
-                  <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                      <span className="text-sm font-bold text-amber-400 uppercase tracking-wider">Periodo B</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <Label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">Da</Label>
-                        <Input
-                          type="date"
-                          value={compPeriodBStart}
-                          onChange={(e) => setCompPeriodBStart(e.target.value)}
-                          className="h-9 bg-black/40 border-zinc-700 text-zinc-300 text-sm"
-                        />
-                      </div>
-                      <span className="text-zinc-600 mt-4">-</span>
-                      <div className="flex-1">
-                        <Label className="text-[10px] text-zinc-500 uppercase tracking-wider mb-1 block">A</Label>
-                        <Input
-                          type="date"
-                          value={compPeriodBEnd}
-                          onChange={(e) => setCompPeriodBEnd(e.target.value)}
-                          className="h-9 bg-black/40 border-zinc-700 text-zinc-300 text-sm"
-                        />
-                      </div>
-                    </div>
-                    {comparisonData && (
-                      <p className="text-[10px] text-zinc-500 mt-2">{comparisonData.bDays} giorni</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Filters row */}
-                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-white/5">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-9 border-zinc-700 bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-all">
-                        <List size={16} className="mr-2 opacity-70" />
-                        Categorie
-                        {compCategories.length > 0 && compCategories.length < categories.length && (
-                          <Badge variant="secondary" className="ml-2 h-5 bg-amber-500/10 text-amber-500 border border-amber-500/20">
-                            {compCategories.length}
-                          </Badge>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 p-3 bg-zinc-900 border-zinc-800" align="start">
-                      <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/5">
-                        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Filtra per categoria</span>
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-zinc-500 hover:text-white" onClick={() => setCompCategories(categories.map(c => c.id))}>Tutte</Button>
-                          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-zinc-500 hover:text-white" onClick={() => setCompCategories([])}>Nessuna</Button>
-                        </div>
-                      </div>
-                      <div className="space-y-1 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-                        {categories.map(category => {
-                          const checked = compCategories.includes(category.id)
-                          return (
-                            <div
-                              key={category.id}
-                              className={`flex items-center gap-2 text-sm px-2 py-1.5 rounded-lg cursor-pointer transition-all ${checked ? 'bg-amber-500/10 text-amber-400' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                              onClick={() => {
-                                if (checked) {
-                                  setCompCategories(prev => prev.filter(id => id !== category.id))
-                                } else {
-                                  setCompCategories(prev => Array.from(new Set([...prev, category.id])))
-                                }
-                              }}
-                            >
-                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${checked ? 'bg-amber-500 border-amber-500' : 'border-zinc-600'}`}>
-                                {checked && <Check size={10} className="text-black" weight="bold" />}
-                              </div>
-                              <span className="truncate flex-1">{category.name}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-
-                  <Select value={compSortBy} onValueChange={(v: any) => setCompSortBy(v)}>
-                    <SelectTrigger className="w-[180px] h-9 border-zinc-700 bg-zinc-800/50 text-zinc-300">
-                      <span className="opacity-50 mr-2 text-xs uppercase">Ordina:</span>
-                      <span>
-                        {compSortBy === 'deltaQty' ? 'Variaz. Quantita' :
-                          compSortBy === 'deltaRevenue' ? 'Variaz. Incasso' :
-                            compSortBy === 'name' ? 'Nome' : 'Categoria'}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-300">
-                      <SelectItem value="deltaQty" className="focus:bg-zinc-800 focus:text-white">Variazione Quantita</SelectItem>
-                      <SelectItem value="deltaRevenue" className="focus:bg-zinc-800 focus:text-white">Variazione Incasso</SelectItem>
-                      <SelectItem value="name" className="focus:bg-zinc-800 focus:text-white">Nome Piatto</SelectItem>
-                      <SelectItem value="category" className="focus:bg-zinc-800 focus:text-white">Categoria</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            {comparisonData && (
-              <>
-                {/* Summary comparison cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* Total Portions A vs B */}
-                  <Card className="border-zinc-800/60 bg-gradient-to-br from-zinc-900/90 to-zinc-950/90 shadow-lg relative overflow-hidden group hover:border-blue-500/30 transition-all duration-300">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none"></div>
-                    <CardContent className="p-5 relative z-10">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2">Porzioni Vendute</p>
-                      <div className="flex items-baseline gap-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                          <span className="text-lg font-bold text-zinc-300">{comparisonData.totalQtyA}</span>
-                        </div>
-                        <span className="text-zinc-600">vs</span>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                          <span className="text-lg font-bold text-white">{comparisonData.totalQtyB}</span>
-                        </div>
-                      </div>
-                      {(() => {
-                        const delta = comparisonData.totalQtyB - comparisonData.totalQtyA
-                        const pct = comparisonData.totalQtyA > 0 ? ((delta / comparisonData.totalQtyA) * 100).toFixed(1) : '---'
-                        return (
-                          <div className={`mt-2 flex items-center gap-1 text-xs font-bold ${delta > 0 ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>
-                            {delta > 0 ? <ArrowUp size={12} weight="bold" /> : delta < 0 ? <ArrowDown size={12} weight="bold" /> : <Minus size={12} />}
-                            {delta > 0 ? '+' : ''}{delta} ({pct}%)
-                          </div>
-                        )
-                      })()}
-                    </CardContent>
-                  </Card>
-
-                  {/* Total Revenue A vs B */}
-                  <Card className="border-zinc-800/60 bg-gradient-to-br from-zinc-900/90 to-zinc-950/90 shadow-lg relative overflow-hidden group hover:border-amber-500/30 transition-all duration-300">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none"></div>
-                    <CardContent className="p-5 relative z-10">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2">Ricavi</p>
-                      <div className="flex items-baseline gap-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                          <span className="text-lg font-bold text-zinc-300">{comparisonData.totalRevenueA.toFixed(0)}</span>
-                        </div>
-                        <span className="text-zinc-600">vs</span>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                          <span className="text-lg font-bold text-amber-400">{comparisonData.totalRevenueB.toFixed(0)}</span>
-                        </div>
-                      </div>
-                      {(() => {
-                        const delta = comparisonData.totalRevenueB - comparisonData.totalRevenueA
-                        const pct = comparisonData.totalRevenueA > 0 ? ((delta / comparisonData.totalRevenueA) * 100).toFixed(1) : '---'
-                        return (
-                          <div className={`mt-2 flex items-center gap-1 text-xs font-bold ${delta > 0 ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>
-                            {delta > 0 ? <ArrowUp size={12} weight="bold" /> : delta < 0 ? <ArrowDown size={12} weight="bold" /> : <Minus size={12} />}
-                            {delta > 0 ? '+' : ''}EUR {delta.toFixed(0)} ({pct}%)
-                          </div>
-                        )
-                      })()}
-                    </CardContent>
-                  </Card>
-
-                  {/* Total Orders A vs B */}
-                  <Card className="border-zinc-800/60 bg-gradient-to-br from-zinc-900/90 to-zinc-950/90 shadow-lg relative overflow-hidden group hover:border-amber-500/30 transition-all duration-300">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none"></div>
-                    <CardContent className="p-5 relative z-10">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2">Ordini</p>
-                      <div className="flex items-baseline gap-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                          <span className="text-lg font-bold text-zinc-300">{comparisonData.totalOrdersA}</span>
-                        </div>
-                        <span className="text-zinc-600">vs</span>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                          <span className="text-lg font-bold text-white">{comparisonData.totalOrdersB}</span>
-                        </div>
-                      </div>
-                      {(() => {
-                        const delta = comparisonData.totalOrdersB - comparisonData.totalOrdersA
-                        const pct = comparisonData.totalOrdersA > 0 ? ((delta / comparisonData.totalOrdersA) * 100).toFixed(1) : '---'
-                        return (
-                          <div className={`mt-2 flex items-center gap-1 text-xs font-bold ${delta > 0 ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>
-                            {delta > 0 ? <ArrowUp size={12} weight="bold" /> : delta < 0 ? <ArrowDown size={12} weight="bold" /> : <Minus size={12} />}
-                            {delta > 0 ? '+' : ''}{delta} ({pct}%)
-                          </div>
-                        )
-                      })()}
-                    </CardContent>
-                  </Card>
-
-                  {/* Dishes Analyzed */}
-                  <Card className="border-zinc-800/60 bg-gradient-to-br from-zinc-900/90 to-zinc-950/90 shadow-lg relative overflow-hidden group hover:border-amber-500/30 transition-all duration-300">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-zinc-500/5 blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none"></div>
-                    <CardContent className="p-5 relative z-10">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-2">Piatti Confrontati</p>
-                      <p className="text-2xl font-bold text-white">{comparisonData.dishes.length}</p>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500">
-                        <span className="flex items-center gap-1">
-                          <TrendUp size={12} className="text-emerald-400" weight="bold" />
-                          {comparisonData.topIncreases.length} in crescita
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <TrendDown size={12} className="text-rose-400" weight="bold" />
-                          {comparisonData.topDecreases.length} in calo
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Comparison Chart - Porzioni vendute per giorno */}
-                <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden backdrop-blur-sm">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6 border-b border-white/5">
-                    <CardTitle className="flex items-center gap-2 text-base font-semibold text-zinc-100">
-                      <div className="w-1 h-5 bg-amber-500 rounded-full"></div>
-                      Confronto Giornaliero Porzioni Vendute
-                    </CardTitle>
-                    <div className="flex items-center gap-4 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                        <span className="text-zinc-400">Periodo A</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                        <span className="text-zinc-400">Periodo B</span>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-6 pl-0">
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={comparisonData.chartData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis
-                          dataKey="label"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fontSize: 11, fill: '#71717a' }}
-                          dy={10}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fontSize: 12, fill: '#71717a' }}
-                          dx={-10}
-                        />
-                        <Tooltip
-                          cursor={{ fill: 'rgba(245, 158, 11, 0.05)' }}
-                          contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 30px rgba(0,0,0,0.5)' }}
-                          labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
-                          formatter={(value: number, name: string) => [
-                            value,
-                            name === 'qtyA' ? 'Periodo A' : 'Periodo B'
-                          ]}
-                        />
-                        <Bar dataKey="qtyA" name="qtyA" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
-                        <Bar dataKey="qtyB" name="qtyB" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={20} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-
-                {/* Top Movers - Side by Side */}
-                {(comparisonData.topIncreases.length > 0 || comparisonData.topDecreases.length > 0) && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Top Increases */}
-                    <Card className="border-emerald-500/10 bg-zinc-900/40 shadow-xl overflow-hidden backdrop-blur-sm">
-                      <CardHeader className="border-b border-white/5 pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm font-bold text-emerald-400">
-                          <TrendUp size={18} weight="bold" />
-                          Maggiori Aumenti (B vs A)
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        {comparisonData.topIncreases.length === 0 ? (
-                          <div className="py-8 text-center text-zinc-600 text-sm">Nessun aumento significativo</div>
-                        ) : (
-                          comparisonData.topIncreases.map((dish, i) => (
-                            <div key={dish.id} className="flex items-center justify-between px-5 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-semibold text-zinc-200 text-sm truncate">{dish.name}</p>
-                                <p className="text-[10px] text-zinc-500">{dish.category}</p>
-                              </div>
-                              <div className="flex items-center gap-4 ml-4">
-                                <div className="text-right">
-                                  <span className="text-xs text-zinc-500">{dish.qtyA}</span>
-                                  <span className="text-zinc-600 mx-1.5">→</span>
-                                  <span className="text-sm font-bold text-white">{dish.qtyB}</span>
-                                </div>
-                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold min-w-[60px] justify-center">
-                                  <ArrowUp size={10} weight="bold" />
-                                  +{dish.deltaQty}
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    {/* Top Decreases */}
-                    <Card className="border-rose-500/10 bg-zinc-900/40 shadow-xl overflow-hidden backdrop-blur-sm">
-                      <CardHeader className="border-b border-white/5 pb-3">
-                        <CardTitle className="flex items-center gap-2 text-sm font-bold text-rose-400">
-                          <TrendDown size={18} weight="bold" />
-                          Maggiori Cali (B vs A)
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        {comparisonData.topDecreases.length === 0 ? (
-                          <div className="py-8 text-center text-zinc-600 text-sm">Nessun calo significativo</div>
-                        ) : (
-                          comparisonData.topDecreases.map((dish, i) => (
-                            <div key={dish.id} className="flex items-center justify-between px-5 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-semibold text-zinc-200 text-sm truncate">{dish.name}</p>
-                                <p className="text-[10px] text-zinc-500">{dish.category}</p>
-                              </div>
-                              <div className="flex items-center gap-4 ml-4">
-                                <div className="text-right">
-                                  <span className="text-xs text-zinc-500">{dish.qtyA}</span>
-                                  <span className="text-zinc-600 mx-1.5">→</span>
-                                  <span className="text-sm font-bold text-white">{dish.qtyB}</span>
-                                </div>
-                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold min-w-[60px] justify-center">
-                                  <ArrowDown size={10} weight="bold" />
-                                  {dish.deltaQty}
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-                )}
-
-                {/* Full Comparison Table */}
-                <Card className="shadow-2xl border-none overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 ring-1 ring-white/5">
-                  <CardHeader className="border-b border-white/5 pb-4 bg-black/20">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 shadow-inner">
-                        <Package size={24} className="text-amber-500" weight="duotone" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-xl font-bold text-white tracking-tight">
-                          Dettaglio Confronto per Piatto
-                        </CardTitle>
-                        <p className="text-sm text-zinc-400 mt-1">
-                          Periodo A vs Periodo B - analisi per singolo piatto
-                        </p>
-                      </div>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="p-0">
-                    {/* Table Header */}
-                    <div className="grid grid-cols-12 gap-2 px-6 py-3 bg-zinc-950/30 border-b border-white/5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                      <div className="col-span-3 pl-2">Piatto</div>
-                      <div className="col-span-1 text-center">Prezzo</div>
-                      <div className="col-span-2 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                          Qta A
-                        </div>
-                      </div>
-                      <div className="col-span-2 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <div className="w-2 h-2 rounded-full bg-amber-500"></div>
-                          Qta B
-                        </div>
-                      </div>
-                      <div className="col-span-2 text-center">Variazione</div>
-                      <div className="col-span-2 text-right pr-2">Delta Incasso</div>
-                    </div>
-
-                    {/* Scrollable List */}
-                    <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                      {comparisonData.dishes.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-                          <Package size={48} weight="duotone" className="mb-4 opacity-20" />
-                          <p>Nessun dato disponibile per i periodi selezionati</p>
-                        </div>
-                      ) : (
-                        comparisonData.dishes.map((dish) => (
-                          <div
-                            key={dish.id}
-                            className="grid grid-cols-12 gap-2 px-6 py-3.5 items-center border-b border-white/5 hover:bg-white/[0.02] transition-colors group"
-                          >
-                            {/* Dish Info */}
-                            <div className="col-span-3 pl-2 min-w-0">
-                              <p className="font-semibold text-zinc-200 group-hover:text-white transition-colors truncate text-sm">{dish.name}</p>
-                              <Badge variant="outline" className="mt-0.5 text-[9px] h-4 px-1.5 border-zinc-800 text-zinc-500 bg-zinc-900/50">
-                                {dish.category}
-                              </Badge>
-                            </div>
-
-                            {/* Price */}
-                            <div className="col-span-1 text-center">
-                              <span className="text-xs text-zinc-400">{dish.price.toFixed(2)}</span>
-                            </div>
-
-                            {/* Qty A */}
-                            <div className="col-span-2 text-center">
-                              <span className={`text-sm font-bold ${dish.qtyA > 0 ? 'text-blue-400' : 'text-zinc-600'}`}>
-                                {dish.qtyA}
-                              </span>
-                              <p className="text-[9px] text-zinc-600">{dish.avgPerDayA}/gg</p>
-                            </div>
-
-                            {/* Qty B */}
-                            <div className="col-span-2 text-center">
-                              <span className={`text-sm font-bold ${dish.qtyB > 0 ? 'text-amber-400' : 'text-zinc-600'}`}>
-                                {dish.qtyB}
-                              </span>
-                              <p className="text-[9px] text-zinc-600">{dish.avgPerDayB}/gg</p>
-                            </div>
-
-                            {/* Delta Qty + Percentage */}
-                            <div className="col-span-2 flex flex-col items-center justify-center">
-                              <div className={`
-                                flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold border
-                                ${dish.deltaQty === 0 ? 'bg-zinc-900/50 text-zinc-500 border-zinc-800' : ''}
-                                ${dish.deltaQty > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
-                                ${dish.deltaQty < 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
-                              `}>
-                                {dish.deltaQty > 0 ? <TrendUp weight="bold" size={12} /> : dish.deltaQty < 0 ? <TrendDown weight="bold" size={12} /> : <Minus size={12} />}
-                                {dish.deltaQty > 0 ? '+' : ''}{dish.deltaQty}
-                              </div>
-                              <span className={`text-[9px] mt-0.5 ${dish.pctChange > 0 ? 'text-emerald-500/60' : dish.pctChange < 0 ? 'text-rose-500/60' : 'text-zinc-600'}`}>
-                                {dish.pctChange > 0 ? '+' : ''}{dish.pctChange}%
-                              </span>
-                            </div>
-
-                            {/* Delta Revenue */}
-                            <div className="col-span-2 text-right pr-2">
-                              <span className={`text-sm font-bold ${dish.deltaRevenue > 0 ? 'text-emerald-400' : dish.deltaRevenue < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>
-                                {dish.deltaRevenue > 0 ? '+' : ''}{dish.deltaRevenue.toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-
-            {!comparisonData && (
-              <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-                <CalendarBlank size={48} weight="duotone" className="mb-4 opacity-20" />
-                <p className="text-lg font-medium">Seleziona i periodi da confrontare</p>
-                <p className="text-sm text-zinc-600 mt-1">Scegli le date di inizio e fine per entrambi i periodi</p>
-              </div>
-            )}
           </TabsContent>
 
           <TabsContent value="waiters" className="space-y-8 focus:outline-none">
@@ -1865,9 +1247,26 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
             {/* Waiter Performance Table */}
             <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden backdrop-blur-sm">
               <CardHeader className="border-b border-white/5 pb-4">
-                <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
-                  <Users size={20} className="text-amber-500" /> Performance Camerieri
-                </CardTitle>
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                    <Users size={20} className="text-amber-500" /> Performance Camerieri
+                  </CardTitle>
+                  <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-1 border border-zinc-700/50">
+                    {([
+                      { value: 'all', label: 'Tutti' },
+                      { value: 'lunch', label: 'Pranzo' },
+                      { value: 'dinner', label: 'Cena' },
+                    ] as const).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setWaiterMealFilter(opt.value)}
+                        className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${waiterMealFilter === opt.value ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="pt-4 px-0">
                 {waiterStats.waiterTable.length === 0 ? (

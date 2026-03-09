@@ -101,8 +101,8 @@ serve(async (req) => {
 
                     const amountPaid = (session.amount_total || 0) / 100;
                     const splitLabel = session.metadata?.splitLabel || 'Pagamento online';
+                    const paymentMode = session.metadata?.paymentMode || 'romana_or_full';
 
-                    // Get current paid_amount to add to it
                     const { data: currentSession, error: fetchError } = await supabase
                         .from("table_sessions")
                         .select("paid_amount, notes")
@@ -119,27 +119,53 @@ serve(async (req) => {
                         break;
                     }
 
-                    const currentPaid = currentSession.paid_amount || 0;
-                    const existingNotes = currentSession.notes || '';
-                    const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
-                    const newNotes = existingNotes ? `${existingNotes}\n${paymentNote}` : paymentNote;
-                    const newPaidAmount = currentPaid + amountPaid;
-
-                    console.log(`[WEBHOOK] Updating session ${sessionId}: paid_amount ${currentPaid} → ${newPaidAmount}`);
-
-                    const { error: updateError } = await supabase
-                        .from("table_sessions")
-                        .update({
-                            paid_amount: newPaidAmount,
-                            notes: newNotes,
-                            updated_at: new Date().toISOString(),
-                        })
-                        .eq("id", sessionId);
-
-                    if (updateError) {
-                        console.error(`[WEBHOOK] ERRORE update sessione ${sessionId}:`, updateError);
+                    if (paymentMode === 'per_piatti') {
+                        // Per-piatti: mark specific order_items as PAID, update notes only
+                        const paidItemIdsStr = session.metadata?.paidOrderItemIds;
+                        if (paidItemIdsStr && paidItemIdsStr.length > 0) {
+                            try {
+                                const paidItemIds: string[] = JSON.parse(paidItemIdsStr);
+                                if (paidItemIds.length > 0) {
+                                    const { error: itemsError } = await supabase
+                                        .from("order_items")
+                                        .update({ status: "PAID" })
+                                        .in("id", paidItemIds);
+                                    if (itemsError) {
+                                        console.error(`[WEBHOOK] Errore mark order_items PAID:`, itemsError);
+                                    } else {
+                                        console.log(`[WEBHOOK] ✅ ${paidItemIds.length} order_items marcati PAID (per_piatti) per sessione ${sessionId}`);
+                                    }
+                                }
+                            } catch (parseErr) {
+                                console.warn(`[WEBHOOK] Impossibile parsare paidOrderItemIds: ${paidItemIdsStr}`);
+                            }
+                        }
+                        // Also update notes for restaurant visibility
+                        const existingNotes = currentSession.notes || '';
+                        const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
+                        const newNotes = existingNotes ? `${existingNotes}\n${paymentNote}` : paymentNote;
+                        await supabase.from("table_sessions").update({ notes: newNotes, updated_at: new Date().toISOString() }).eq("id", sessionId);
+                        console.log(`[WEBHOOK] ✅ per_piatti: €${amountPaid.toFixed(2)} per sessione ${sessionId} (${splitLabel})`);
                     } else {
-                        console.log(`[WEBHOOK] ✅ Pagamento cliente registrato: €${amountPaid.toFixed(2)} per sessione ${sessionId} (${splitLabel}). Totale pagato: €${newPaidAmount.toFixed(2)}`);
+                        // Romana/full: update paid_amount (no item-level tracking)
+                        const currentPaid = currentSession.paid_amount || 0;
+                        const existingNotes = currentSession.notes || '';
+                        const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
+                        const newNotes = existingNotes ? `${existingNotes}\n${paymentNote}` : paymentNote;
+                        const newPaidAmount = currentPaid + amountPaid;
+
+                        console.log(`[WEBHOOK] Updating session ${sessionId}: paid_amount ${currentPaid} → ${newPaidAmount}`);
+
+                        const { error: updateError } = await supabase
+                            .from("table_sessions")
+                            .update({ paid_amount: newPaidAmount, notes: newNotes, updated_at: new Date().toISOString() })
+                            .eq("id", sessionId);
+
+                        if (updateError) {
+                            console.error(`[WEBHOOK] ERRORE update sessione ${sessionId}:`, updateError);
+                        } else {
+                            console.log(`[WEBHOOK] ✅ ${paymentMode}: €${amountPaid.toFixed(2)} per sessione ${sessionId}. Totale paid_amount: €${newPaidAmount.toFixed(2)}`);
+                        }
                     }
                 } else {
                     // === ATTIVAZIONE ABBONAMENTO ===
@@ -150,15 +176,28 @@ serve(async (req) => {
 
                     if (pendingRegistrationId) {
                         // Nuova registrazione: crea utente + ristorante dal pending
+                        console.log(`[WEBHOOK] complete_pending_registration → pendingId: ${pendingRegistrationId}, customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
                         const { error: rpcError } = await supabase.rpc("complete_pending_registration", {
                             p_pending_id: pendingRegistrationId,
                             p_stripe_customer_id: customerId,
                             p_stripe_subscription_id: subscriptionId,
                         });
                         if (rpcError) {
-                            console.error(`Errore complete_pending_registration ${pendingRegistrationId}:`, rpcError);
+                            console.error(`[WEBHOOK] ERRORE complete_pending_registration ${pendingRegistrationId}:`, JSON.stringify(rpcError));
+                            // If "already completed" it's idempotent - return 200 anyway.
+                            // For any other error (expired, not found, unique violation) return 500
+                            // so Stripe retries the event.
+                            const msg = (rpcError.message || '').toLowerCase();
+                            const isAlreadyDone = msg.includes('già completata') || msg.includes('already completed');
+                            if (!isAlreadyDone) {
+                                return new Response(
+                                    JSON.stringify({ error: `Pending registration failed: ${rpcError.message}` }),
+                                    { status: 500 }
+                                );
+                            }
+                            console.log(`[WEBHOOK] Registrazione ${pendingRegistrationId} già completata in precedenza — OK.`);
                         } else {
-                            console.log(`Ristorante creato da pending registration ${pendingRegistrationId}`);
+                            console.log(`[WEBHOOK] ✅ Ristorante creato da pending registration ${pendingRegistrationId}`);
                         }
                     } else if (restaurantId) {
                         // Ristorante esistente: aggiorna stato abbonamento

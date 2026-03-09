@@ -427,12 +427,23 @@ export default function TableBillDialog({
                                     </div>
 
                                     {/* Receipt Footer */}
-                                    <div className="p-6 border-t border-white/10 bg-black/20 backdrop-blur-md relative z-10 shrink-0">
-                                        <div className="flex justify-between items-end">
-                                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Totale</span>
-                                            <div className="text-right">
-                                                <span className="text-3xl font-black text-white tracking-tight drop-shadow-lg">€{totalAmount.toFixed(2)}</span>
+                                    <div className="p-5 border-t border-white/10 bg-black/20 backdrop-blur-md relative z-10 shrink-0 space-y-2">
+                                        {(session?.paid_amount || 0) > 0 && (
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-emerald-500 font-medium flex items-center gap-1.5">
+                                                    <CheckCircle size={14} weight="fill" />
+                                                    Pagato online
+                                                </span>
+                                                <span className="font-mono font-bold text-emerald-400">- €{(session?.paid_amount || 0).toFixed(2)}</span>
                                             </div>
+                                        )}
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
+                                                {(session?.paid_amount || 0) > 0 ? 'Da incassare' : 'Totale'}
+                                            </span>
+                                            <span className="text-3xl font-black text-white tracking-tight drop-shadow-lg">
+                                                €{remainingAmount.toFixed(2)}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -595,11 +606,12 @@ export default function TableBillDialog({
                                                 </Button>
                                                 <Button
                                                     size="sm"
-                                                    className="h-9 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold"
+                                                    className="h-9 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs"
                                                     onClick={() => setPaidPersons(Math.min(customSplitCount, paidPersons + 1))}
                                                     disabled={paidPersons >= customSplitCount}
                                                 >
-                                                    <CheckCircle weight="fill" size={14} className="mr-1" /> Incassa €{(totalAmount / Math.max(1, customSplitCount)).toFixed(2)}
+                                                    <CheckCircle weight="fill" size={14} className="mr-1 shrink-0" />
+                                                    <span className="truncate">€{(totalAmount / Math.max(1, customSplitCount)).toFixed(2)}</span>
                                                 </Button>
                                             </div>
                                         </div>
@@ -682,23 +694,23 @@ export default function TableBillDialog({
 
                                     {remainingAmount <= 0 && totalAmount > 0 && session?.paid_amount ? (
                                         <Button
-                                            className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xl rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 px-6"
+                                            className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-base rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 px-6"
                                             onClick={() => onPaymentComplete()}
                                         >
-                                            <CheckCircle weight="fill" size={24} />
-                                            <span>Conferma Scontrino e Chiudi</span>
+                                            <CheckCircle weight="fill" size={22} className="shrink-0" />
+                                            <span className="truncate">Conferma e Chiudi</span>
                                         </Button>
                                     ) : (
                                         <Button
-                                            className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xl rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between px-6"
+                                            className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-base rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between gap-2 px-6"
                                             onClick={() => onPaymentComplete()}
                                             disabled={remainingAmount <= 0 && totalAmount <= 0}
                                         >
-                                            <div className="flex items-center gap-2">
-                                                <CheckCircle weight="fill" size={24} />
-                                                <span>{session?.paid_amount ? 'Incassa Rimanente' : 'Salda Tutto'}</span>
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <CheckCircle weight="fill" size={22} className="shrink-0" />
+                                                <span className="truncate">{session?.paid_amount ? 'Incassa Rimanente' : 'Salda Tutto'}</span>
                                             </div>
-                                            <span>€{remainingAmount.toFixed(2)}</span>
+                                            <span className="shrink-0 font-mono">€{remainingAmount.toFixed(2)}</span>
                                         </Button>
                                     )}
 
