@@ -2191,12 +2191,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     dishes={dishes || []}
                     selectedCategoryIds={selectedKitchenCategories}
                     viewMode={kitchenViewMode}
-                    // columns={kitchenColumns} // Removed in favor of responsive grid
                     onCompleteDish={handleCompleteDish}
                     onDeliverDish={handleDeliverDish}
                     onCompleteOrder={handleCompleteOrder}
                     sessions={sessions || []}
                     zoom={kitchenZoom}
+                    waiterModeEnabled={waiterModeEnabled}
                   />
                 )}
             </TabsContent >

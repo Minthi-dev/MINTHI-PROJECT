@@ -313,7 +313,11 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                         })
                     })() : (
                         dishesViewData.map((data, idx) => {
-                            const allItemsDone = data.items.every(({ item }) => item.status === 'SERVED' || item.status === 'READY')
+                            const allItemsDone = data.items.every(({ item }) => {
+                                const s = item.status?.toUpperCase?.() || ''
+                                if (waiterModeEnabled) return s === 'SERVED' || s === 'DELIVERED'
+                                return s === 'SERVED' || s === 'READY'
+                            })
                             if (allItemsDone) return null
 
                             return (
@@ -338,7 +342,12 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                             const tableName = getTableName(undefined, order.table_session_id)
                                             const timeDiff = (now.getTime() - new Date(order.created_at).getTime()) / 1000 / 60
                                             const itemStatus = item.status?.toUpperCase?.() || item.status || ''
-                                            const isItemDone = ['SERVED', 'READY'].includes(itemStatus)
+                                            const isItemReady = itemStatus === 'READY'
+                                            // In waiter mode: READY = completato (step 1), SERVED = consegnato (step 2)
+                                            // Without waiter mode: READY = done
+                                            const isItemDone = waiterModeEnabled
+                                                ? itemStatus === 'SERVED'
+                                                : ['SERVED', 'READY'].includes(itemStatus)
                                             const isDelivered = itemStatus === 'DELIVERED'
 
                                             return (
@@ -346,23 +355,23 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                     key={`dv-${item.id}-${itemIdx}`}
                                                     className={cn(
                                                         "flex items-center justify-between p-2 rounded-lg border transition-all",
-                                                        isDelivered
-                                                            ? "opacity-40 bg-black/20 border-transparent"
-                                                            : isItemDone
-                                                                ? "opacity-30 bg-black/20 border-transparent"
+                                                        isDelivered || isItemDone
+                                                            ? "opacity-20 bg-black/20 border-transparent"
+                                                            : isItemReady && waiterModeEnabled
+                                                                ? "opacity-55 bg-zinc-900/60 border-emerald-500/20"
                                                                 : "bg-black/40 border-white/5 hover:border-amber-500/20"
                                                     )}
                                                 >
                                                     <div className="flex items-center gap-3">
                                                         <span className={cn(
                                                             "text-3xl font-light",
-                                                            isDelivered ? "text-zinc-600 line-through" : "text-amber-500"
+                                                            isDelivered || isItemDone ? "text-zinc-600 line-through" : "text-amber-500"
                                                         )}>
                                                             {item.quantity}
                                                         </span>
                                                         <span className={cn(
                                                             "text-2xl font-bold",
-                                                            isDelivered ? "text-zinc-600 line-through" : "text-zinc-300"
+                                                            isDelivered || isItemDone ? "text-zinc-600 line-through" : "text-zinc-300"
                                                         )}>
                                                             {tableName}
                                                         </span>
@@ -372,18 +381,33 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                         <div className="font-bold text-xl text-zinc-500 whitespace-nowrap">
                                                             {formatTime(timeDiff)}
                                                         </div>
-                                                        <Button
-                                                            size="icon"
-                                                            variant={isItemDone ? "ghost" : "default"}
-                                                            className={cn(
-                                                                "h-12 w-12 rounded-lg flex-shrink-0",
-                                                                isItemDone ? "text-zinc-600" : "bg-zinc-800 hover:bg-zinc-700 text-white border border-white/5"
-                                                            )}
-                                                            onClick={() => !isItemDone && onCompleteDish(order.id, item.id)}
-                                                            disabled={isItemDone}
-                                                        >
-                                                            <Check weight="bold" className="h-6 w-6" />
-                                                        </Button>
+                                                        {/* Waiter mode: READY → show green Consegnato button */}
+                                                        {waiterModeEnabled && isItemReady && onDeliverDish ? (
+                                                            <Button
+                                                                size="icon"
+                                                                variant="default"
+                                                                className="h-12 w-12 rounded-lg flex-shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_10px_20px_-10px_rgba(16,185,129,0.5)] active:scale-90"
+                                                                onClick={() => onDeliverDish(order.id, item.id)}
+                                                                title="Segna come consegnato"
+                                                            >
+                                                                <Check weight="bold" className="h-6 w-6" />
+                                                            </Button>
+                                                        ) : (
+                                                            <Button
+                                                                size="icon"
+                                                                variant={isItemDone || isDelivered ? "ghost" : "default"}
+                                                                className={cn(
+                                                                    "h-12 w-12 rounded-lg flex-shrink-0",
+                                                                    isItemDone || isDelivered
+                                                                        ? "text-zinc-600"
+                                                                        : "bg-zinc-800 hover:bg-zinc-700 text-white border border-white/5"
+                                                                )}
+                                                                onClick={() => !isItemDone && !isDelivered && onCompleteDish(order.id, item.id)}
+                                                                disabled={isItemDone || isDelivered}
+                                                            >
+                                                                <Check weight="bold" className="h-6 w-6" />
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )
