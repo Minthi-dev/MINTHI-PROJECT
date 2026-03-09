@@ -28,7 +28,8 @@ import {
     Buildings,
     Warning,
     WarningCircle,
-    ArrowClockwise
+    ArrowClockwise,
+    Sparkle
 } from '@phosphor-icons/react'
 import { SoundType } from '../utils/SoundManager'
 import WeeklyScheduleEditor from './WeeklyScheduleEditor'
@@ -110,6 +111,7 @@ interface SettingsViewProps {
     setShowCookingTimes: (enabled: boolean) => void
 
     restaurantId: string
+    onRestartTour?: () => void
 }
 
 export function SettingsView({
@@ -163,7 +165,8 @@ export function SettingsView({
     setViewOnlyMenuEnabled,
     showCookingTimes,
     setShowCookingTimes,
-    restaurantId
+    restaurantId,
+    onRestartTour
 }: SettingsViewProps) {
 
     const [stripePaymentsEnabled, setStripePaymentsEnabled] = useState(false)
@@ -546,7 +549,23 @@ export function SettingsView({
                             </div>
                         </div>
 
-
+                        {/* Guida Interattiva */}
+                        {onRestartTour && (
+                            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                                <h3 className="text-2xl font-bold mb-2 flex items-center gap-3">
+                                    <Sparkle className="text-amber-500 w-8 h-8" weight="duotone" />
+                                    Guida Interattiva
+                                </h3>
+                                <p className="text-zinc-400 text-sm mb-5">Rivedi il tour di presentazione con esempi di tutte le funzionalità.</p>
+                                <Button
+                                    onClick={onRestartTour}
+                                    className="bg-amber-500 hover:bg-amber-400 text-black font-bold h-11 px-6 shadow-[0_0_15px_-3px_rgba(245,158,11,0.4)]"
+                                >
+                                    <Sparkle size={16} weight="fill" className="mr-2" />
+                                    Riavvia Guida
+                                </Button>
+                            </div>
+                        )}
 
                     </motion.div>
                 </TabsContent>

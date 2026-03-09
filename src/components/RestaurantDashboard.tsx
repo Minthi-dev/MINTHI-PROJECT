@@ -72,6 +72,7 @@ import TableBillDialog from './TableBillDialog'
 import { SettingsView } from './SettingsView'
 import ReservationsManager from './ReservationsManager'
 import AnalyticsCharts from './AnalyticsCharts'
+import OnboardingTour from './OnboardingTour'
 import CustomMenusManager from './CustomMenusManager'
 import QRCodeGenerator from './QRCodeGenerator'
 import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, Room } from '../services/types'
@@ -93,6 +94,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const restaurantId = user?.restaurant_id || user?.user_metadata?.restaurant_id
   const [activeSection, setActiveSection] = useState('orders')
   const [pendingAutoOrderTableId, setPendingAutoOrderTableId] = useState<string | null>(null)
+
+  // Onboarding tour: auto-start on first login
+  const tourKey = `minthi_tour_done_${restaurantId}`
+  const [showTour, setShowTour] = useState(() => {
+    return !localStorage.getItem(tourKey)
+  })
+  const completeTour = () => {
+    localStorage.setItem(tourKey, '1')
+    setShowTour(false)
+  }
+  const restartTour = () => setShowTour(true)
   const [activeTab, setActiveTab] = useState('orders')
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
@@ -2907,14 +2919,25 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       const isActive = session?.status === 'OPEN'
                       const activeOrder = restaurantOrders.find(o => getTableIdFromOrder(o) === table.id)
                       const allTableOrders = restaurantOrders.filter(o => getTableIdFromOrder(o) === table.id)
-                      const hasStripePayment = session && (session.paid_amount || 0) > 0
-
                       // Calculate full table total (orders + coperto + AYCE)
                       const sessionOrders = session ? restaurantOrders.filter(o => o.table_session_id === session.id && o.status !== 'CANCELLED') : []
+
+                      // ordersTotal: unpaid items only (PAID already collected via per-piatti)
                       const ordersTotal = sessionOrders.reduce((sum, o) => {
                         if (!o.items) return sum
                         return sum + o.items.reduce((iSum: number, item: any) => {
                           if (item.status === 'CANCELLED' || item.status === 'PAID') return iSum
+                          const isAyceSession = session?.ayce_enabled === true
+                          const price = (isAyceSession && item.dish?.is_ayce) ? 0 : (item.dish?.price ?? item.price ?? 0)
+                          return iSum + price * (item.quantity || 1)
+                        }, 0)
+                      }, 0)
+
+                      // paidItemsTotal: sum of per-piatti paid items (per-piatti doesn't update paid_amount)
+                      const paidItemsTotal = sessionOrders.reduce((sum, o) => {
+                        if (!o.items) return sum
+                        return sum + o.items.reduce((iSum: number, item: any) => {
+                          if (item.status !== 'PAID') return iSum
                           const isAyceSession = session?.ayce_enabled === true
                           const price = (isAyceSession && item.dish?.is_ayce) ? 0 : (item.dish?.price ?? item.price ?? 0)
                           return iSum + price * (item.quantity || 1)
@@ -2942,8 +2965,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                       const tableGrandTotal = ordersTotal + copertoTotal + ayceTotal
                       const paidAmount = session?.paid_amount || 0
+                      // effectivePaidOnline: romana/full uses paid_amount; per-piatti uses paidItemsTotal
+                      const effectivePaidOnline = paidAmount + paidItemsTotal
+                      const hasStripePayment = session && effectivePaidOnline > 0
+                      // remainingToPay: tableGrandTotal already excludes PAID items; subtract paid_amount for romana/full
                       const remainingToPay = Math.max(0, tableGrandTotal - paidAmount)
-                      const isFullyPaidOnline = hasStripePayment && remainingToPay <= 0 && tableGrandTotal > 0
+                      const isFullyPaidOnline = hasStripePayment && remainingToPay <= 0 && (tableGrandTotal + paidItemsTotal) > 0
                       const isPartiallyPaidOnline = hasStripePayment && remainingToPay > 0
 
                       return (
@@ -3041,7 +3068,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         <CreditCard size={14} weight="fill" />
                                         <span>Pagato online</span>
                                       </div>
-                                      <span className="text-2xl font-black text-emerald-400 font-mono">€{paidAmount.toFixed(2)}</span>
+                                      <span className="text-2xl font-black text-emerald-400 font-mono">€{effectivePaidOnline.toFixed(2)}</span>
                                     </div>
                                   )}
 
@@ -3053,7 +3080,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                           <CreditCard size={12} weight="fill" />
                                           Online
                                         </span>
-                                        <span className="font-mono font-bold text-orange-300">€{paidAmount.toFixed(2)}</span>
+                                        <span className="font-mono font-bold text-orange-300">€{effectivePaidOnline.toFixed(2)}</span>
                                       </div>
                                       <div className="h-px bg-orange-500/20" />
                                       <div className="flex items-center justify-between text-xs">
@@ -3906,6 +3933,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     DatabaseService.updateRestaurant({ id: restaurantId, weekly_service_hours: schedule })
                   }
                 }}
+                onRestartTour={restartTour}
               />
             </TabsContent >
           </Tabs >
@@ -4528,6 +4556,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
         </div>
       </main>
+
+      {/* Onboarding Tour */}
+      {showTour && (
+        <OnboardingTour
+          onComplete={completeTour}
+          restaurantName={currentRestaurant?.name}
+        />
+      )}
 
       {/* HIDDEN PRINT VIEW FOR MENU EXPORT - ALL INLINE STYLES FOR PDF COMPATIBILITY */}
       <div id="menu-print-view" style={{

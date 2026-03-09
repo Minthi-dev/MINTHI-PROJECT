@@ -16,6 +16,7 @@ const WaiterOrderPage = lazyImportRetry(() => import('./components/waiter/Waiter
 const CustomerMenu = lazyImportRetry(() => import('./components/CustomerMenu'))
 const PublicReservationPage = lazyImportRetry(() => import('./components/reservations/PublicReservationPage'))
 const RestaurantOnboarding = lazyImportRetry(() => import('./components/RestaurantOnboarding'))
+const RegisterSuccessPage = lazyImportRetry(() => import('./components/RegisterSuccessPage'))
 
 // Loading spinner component
 const LoadingSpinner = () => (
@@ -200,6 +201,8 @@ const AppContent = () => {
           <Route path="/menu" element={<LegacyCustomerMenuRedirect />} />
           <Route path="/book/:restaurantId" element={<PublicReservationPage />} />
           <Route path="/register/:token" element={<RestaurantOnboarding />} />
+          <Route path="/register-success" element={<RegisterSuccessPage />} />
+          <Route path="/register-cancelled" element={<Navigate to="/" replace />} />
 
           {/* Fallback for unknown routes */}
           <Route path="*" element={<Navigate to="/" replace />} />
