@@ -209,10 +209,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     activeSectionRef.current = activeSection
   }, [activeSection])
 
-  useEffect(() => {
-    weeklyServiceHoursRef.current = weeklyServiceHours
-  }, [weeklyServiceHours])
-
   // Persist settings
   useEffect(() => {
     localStorage.setItem('soundEnabled', String(soundEnabled))
@@ -790,6 +786,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [weeklyCoperto, setWeeklyCoperto] = useState<any>(currentRestaurant?.weekly_coperto || null)
   const [weeklyAyce, setWeeklyAyce] = useState<any>(currentRestaurant?.weekly_ayce || null)
   const [weeklyServiceHours, setWeeklyServiceHours] = useState<any>(currentRestaurant?.weekly_service_hours || null)
+  useEffect(() => { weeklyServiceHoursRef.current = weeklyServiceHours }, [weeklyServiceHours])
 
   // Reservation Settings
   const [enableReservationRoomSelection, setEnableReservationRoomSelection] = useState(false)
