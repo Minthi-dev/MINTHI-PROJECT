@@ -465,6 +465,31 @@ export function SettingsView({
                         exit="exit"
                         className="grid gap-6"
                     >
+                        {/* Guida Interattiva — primo elemento visibile */}
+                        {onRestartTour && (
+                            <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-zinc-900/80 to-zinc-900/50 backdrop-blur-sm">
+                                <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl -translate-y-10 translate-x-10" />
+                                <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                                            <Sparkle className="text-amber-400 w-6 h-6" weight="fill" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-white">Guida Interattiva</h3>
+                                            <p className="text-zinc-400 text-sm mt-0.5">Scopri tutte le funzioni di Minthi passo per passo, direttamente nell'interfaccia.</p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        onClick={onRestartTour}
+                                        className="bg-amber-500 hover:bg-amber-400 text-black font-bold h-11 px-6 rounded-xl shadow-[0_0_20px_-4px_rgba(245,158,11,0.5)] hover:shadow-[0_0_25px_-4px_rgba(245,158,11,0.7)] transition-all shrink-0"
+                                    >
+                                        <Sparkle size={16} weight="fill" className="mr-2" />
+                                        Avvia Guida
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Nome Ristorante */}
                         <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
                             <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
@@ -549,23 +574,7 @@ export function SettingsView({
                             </div>
                         </div>
 
-                        {/* Guida Interattiva */}
-                        {onRestartTour && (
-                            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                                <h3 className="text-2xl font-bold mb-2 flex items-center gap-3">
-                                    <Sparkle className="text-amber-500 w-8 h-8" weight="duotone" />
-                                    Guida Interattiva
-                                </h3>
-                                <p className="text-zinc-400 text-sm mb-5">Rivedi il tour di presentazione con esempi di tutte le funzionalità.</p>
-                                <Button
-                                    onClick={onRestartTour}
-                                    className="bg-amber-500 hover:bg-amber-400 text-black font-bold h-11 px-6 shadow-[0_0_15px_-3px_rgba(245,158,11,0.4)]"
-                                >
-                                    <Sparkle size={16} weight="fill" className="mr-2" />
-                                    Riavvia Guida
-                                </Button>
-                            </div>
-                        )}
+                        {/* Guida Interattiva - REMOVED (moved to top) */}
 
                     </motion.div>
                 </TabsContent>

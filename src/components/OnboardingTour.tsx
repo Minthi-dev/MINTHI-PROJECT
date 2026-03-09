@@ -147,7 +147,8 @@ export default function OnboardingTour({
 
   // Initialize and start tour
   useEffect(() => {
-    // Open sidebar so nav items are in the DOM
+    // Reset to orders tab and open sidebar so all elements are available
+    setActiveTab('orders')
     setIsSidebarOpen(true)
 
     // Small delay to let sidebar render
@@ -173,27 +174,27 @@ export default function OnboardingTour({
           {
             popover: {
               title: `👋 Benvenuto${restaurantName ? ` su ${restaurantName}` : ' su Minthi'}!`,
-              description: `Ciao! Ti guido alla scoperta di tutte le funzioni del gestionale. Ci vorranno circa <strong>2 minuti</strong>. Clicca <strong>Avanti</strong> per iniziare — puoi uscire in qualsiasi momento con la ✕`,
+              description: `Ti guido alla scoperta di tutte le funzioni, <strong>direttamente nell'interfaccia</strong>. Ci vorranno circa 2 minuti.<br><br>Clicca <strong>Avanti</strong> per iniziare — puoi uscire in qualsiasi momento con la ✕`,
             },
           },
 
-          // ── 2. Orders nav item ────────────────────────────────────────
+          // ── 2. Orders nav ─────────────────────────────────────────────
           {
             element: '[data-tour="nav-orders"]',
             popover: {
               title: '🍳 Gestione Ordini',
-              description: 'Questa è la tua cucina digitale. Vedi in <strong>tempo reale</strong> tutti gli ordini attivi, i piatti da preparare e da servire. Perfetto per cucina e sala.',
+              description: 'Questa è la sezione <strong>Ordini</strong> nella barra laterale. Cliccala per vedere la cucina digitale in tempo reale: tutti gli ordini attivi, piatti da preparare e da consegnare.',
               side: 'right',
               align: 'center',
             },
           },
 
-          // ── 3. Orders content header ──────────────────────────────────
+          // ── 3. Orders header ──────────────────────────────────────────
           {
             element: '[data-tour="orders-header"]',
             popover: {
-              title: 'Vista Ordini',
-              description: 'Passa tra vista per <strong>Tavolo</strong> e vista per <strong>Piatto</strong>. Filtra per categoria e regola lo zoom. Ogni ordine appare qui <strong>istantaneamente</strong> appena il cliente ordina.',
+              title: 'Vista Cucina',
+              description: 'Qui vedi gli ordini in due modalità: per <strong>Tavolo</strong> o per <strong>Piatto</strong>. Puoi filtrare per categoria, regolare lo zoom e monitorare lo stato di ogni piatto. Ogni ordine arriva <strong>istantaneamente</strong>.',
               side: 'bottom',
               align: 'start',
             },
@@ -204,34 +205,39 @@ export default function OnboardingTour({
             },
           },
 
-          // ── 4. Tables nav item ────────────────────────────────────────
+          // ── 4. Tables nav ─────────────────────────────────────────────
           {
             element: '[data-tour="nav-tables"]',
             popover: {
-              title: '🪑 Tavoli della Sala',
-              description: 'Da qui controlli ogni tavolo: libero, occupato o in attesa di pagamento. Puoi aprire un tavolo per vedere gli ordini e gestire il conto.',
+              title: '🪑 Gestione Tavoli',
+              description: 'Clicca <strong>Tavoli</strong> per gestire la sala. Vedrai lo stato di ogni tavolo: libero, occupato o in attesa di pagamento. Da qui apri i tavoli, gestisci ordini e chiudi i conti.',
               side: 'right',
               align: 'center',
             },
+            onPrevClick: () => {
+              setActiveTab('orders')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.movePrevious(), 300)
+            },
           },
 
-          // ── 5. Add table button ───────────────────────────────────────
+          // ── 5. Add table ──────────────────────────────────────────────
           {
             element: '[data-tour="add-table-btn"]',
             popover: {
-              title: 'Crea i Tuoi Tavoli',
-              description: 'Clicca qui per aggiungere un nuovo tavolo. Scegli il numero o il nome e sarà subito attivo. Puoi creare quanti tavoli vuoi.',
+              title: '➕ Crea i Tuoi Tavoli',
+              description: '<strong>Primo passo!</strong> Clicca questo pulsante per aggiungere i tavoli del tuo ristorante. Scegli numero o nome — saranno subito pronti a ricevere ordini.',
               side: 'bottom',
               align: 'start',
             },
           },
 
-          // ── 6. Download QR ────────────────────────────────────────────
+          // ── 6. QR ─────────────────────────────────────────────────────
           {
             element: '[data-tour="download-qr-btn"]',
             popover: {
-              title: '📱 QR Code per i Tavoli',
-              description: 'Scarica un PDF con il QR Code di ogni tavolo. I clienti lo scansionano, vedono il tuo menu e ordinano dal loro telefono. Gli ordini arrivano <strong>direttamente in cucina</strong>.',
+              title: '📱 Scarica i QR Code',
+              description: 'Questo pulsante genera un <strong>PDF con tutti i QR Code</strong> dei tuoi tavoli. Stampali e posizionali sui tavoli: i clienti scansionano, vedono il menu e ordinano dal telefono.',
               side: 'bottom',
               align: 'start',
             },
@@ -242,23 +248,28 @@ export default function OnboardingTour({
             },
           },
 
-          // ── 7. Menu nav item ──────────────────────────────────────────
+          // ── 7. Menu nav ───────────────────────────────────────────────
           {
             element: '[data-tour="nav-menu"]',
             popover: {
               title: '📋 Menu Digitale',
-              description: 'Qui costruisci il tuo menu: aggiungi piatti con foto, prezzi, descrizioni e allergeni. Organizza in categorie. Ogni modifica è visibile ai clienti <strong>istantaneamente</strong>.',
+              description: 'Da <strong>Menu</strong> costruisci il tuo menu digitale: piatti, categorie, prezzi, foto, descrizioni e allergeni. Ogni modifica è visibile ai clienti <strong>immediatamente</strong>.',
               side: 'right',
               align: 'center',
             },
+            onPrevClick: () => {
+              setActiveTab('tables')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.movePrevious(), 300)
+            },
           },
 
-          // ── 8. Add dish button ────────────────────────────────────────
+          // ── 8. Add dish ───────────────────────────────────────────────
           {
             element: '[data-tour="add-dish-btn"]',
             popover: {
-              title: 'Aggiungi i Tuoi Piatti',
-              description: 'Clicca per aggiungere un nuovo piatto. Puoi inserire nome, prezzo, foto, descrizione e allergeni. Crea anche <strong>categorie</strong> per organizzare il menu.',
+              title: '🍽️ Aggiungi Piatti',
+              description: '<strong>Secondo passo!</strong> Clicca per creare i tuoi piatti. Per ognuno puoi impostare: nome, prezzo, foto, descrizione e allergeni. Crea prima le <strong>categorie</strong> (Antipasti, Primi, etc.).',
               side: 'bottom',
               align: 'start',
             },
@@ -269,14 +280,19 @@ export default function OnboardingTour({
             },
           },
 
-          // ── 9. Reservations ───────────────────────────────────────────
+          // ── 9. Reservations nav ───────────────────────────────────────
           {
             element: '[data-tour="nav-reservations"]',
             popover: {
               title: '📅 Prenotazioni Online',
-              description: 'I clienti possono prenotare tramite un <strong>link pubblico</strong> dedicato al tuo ristorante. Ricevi notifiche, conferma o rifiuta le prenotazioni con un click.',
+              description: 'Nella sezione <strong>Prenotazioni</strong> gestisci le prenotazioni dei clienti. Puoi attivare un <strong>link pubblico</strong> per far prenotare online. Conferma o rifiuta con un click.',
               side: 'right',
               align: 'center',
+            },
+            onPrevClick: () => {
+              setActiveTab('menu')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.movePrevious(), 300)
             },
           },
 
@@ -284,8 +300,8 @@ export default function OnboardingTour({
           {
             element: '[data-tour="reservations-header"]',
             popover: {
-              title: 'Gestione Prenotazioni',
-              description: 'Filtra per data, vedi quante persone arrivano e in quali fasce orarie. Puoi configurare orari, numero massimo di coperti e sale da Impostazioni.',
+              title: 'Calendario Prenotazioni',
+              description: 'Filtra per giorno, vedi quante persone arrivano e in quali fasce orarie. Configura orari disponibili, sale e numero massimo di coperti da <strong>Impostazioni → Prenotazioni</strong>.',
               side: 'bottom',
               align: 'start',
             },
@@ -296,14 +312,19 @@ export default function OnboardingTour({
             },
           },
 
-          // ── 11. Analytics ─────────────────────────────────────────────
+          // ── 11. Analytics nav ─────────────────────────────────────────
           {
             element: '[data-tour="nav-analytics"]',
             popover: {
               title: '📊 Analitiche',
-              description: 'Monitora le performance del tuo ristorante: incassi, piatti più ordinati, ore di punta e statistiche dello staff. Dati in <strong>tempo reale</strong>.',
+              description: 'In <strong>Analitiche</strong> monitori le performance: incassi giornalieri, piatti più venduti, ore di punta e statistiche del personale. Tutti i dati sono aggiornati in <strong>tempo reale</strong>.',
               side: 'right',
               align: 'center',
+            },
+            onPrevClick: () => {
+              setActiveTab('reservations')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.movePrevious(), 300)
             },
           },
 
@@ -312,7 +333,7 @@ export default function OnboardingTour({
             element: '[data-tour="analytics-header"]',
             popover: {
               title: 'I Tuoi Numeri',
-              description: 'Grafici interattivi su vendite, piatti più ordinati e performance del personale. Puoi anche esportare i dati e confrontare diversi periodi.',
+              description: 'Grafici interattivi su vendite, piatti più ordinati e andamento settimanale. Puoi confrontare periodi diversi ed esportare i dati.',
               side: 'bottom',
               align: 'start',
             },
@@ -323,14 +344,19 @@ export default function OnboardingTour({
             },
           },
 
-          // ── 13. Settings nav item ─────────────────────────────────────
+          // ── 13. Settings nav ──────────────────────────────────────────
           {
             element: '[data-tour="nav-settings"]',
             popover: {
               title: '⚙️ Impostazioni',
-              description: 'Configura tutto: coperto, orari di servizio, modalità cameriere, pagamenti Stripe, prenotazioni e abbonamento. È qui che <strong>attivi il servizio completo</strong>.',
+              description: 'In <strong>Impostazioni</strong> configuri tutto il ristorante: coperto, orari di servizio, modalità cameriere, pagamenti Stripe e abbonamento. È qui che <strong>attivi il servizio completo</strong>.',
               side: 'right',
               align: 'center',
+            },
+            onPrevClick: () => {
+              setActiveTab('analytics')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.movePrevious(), 300)
             },
           },
 
@@ -338,8 +364,8 @@ export default function OnboardingTour({
           {
             element: '[data-tour="settings-header"]',
             popover: {
-              title: 'Configura il Ristorante',
-              description: 'Vai su <strong>Abbonamento & Pagamenti</strong> per attivare il piano Minthi e sbloccare tutte le funzioni. Ricordati di collegare Stripe per ricevere i pagamenti online dai clienti.',
+              title: 'Configura e Attiva',
+              description: 'Da qui configura: <strong>Generale</strong> (nome, suoni), <strong>Costi & Menu</strong> (coperto, AYCE), <strong>Staff</strong> (camerieri), <strong>Prenotazioni</strong> e <strong>Abbonamento & Pagamenti</strong> per attivare Stripe e il piano Minthi.',
               side: 'bottom',
               align: 'start',
             },
@@ -349,7 +375,7 @@ export default function OnboardingTour({
           {
             popover: {
               title: '✅ Sei Pronto!',
-              description: `Per iniziare: <br>1. Vai in <strong>Menu</strong> e aggiungi i tuoi piatti<br>2. Vai in <strong>Tavoli</strong> e crea i tuoi tavoli<br>3. Attiva il piano in <strong>Impostazioni → Abbonamento</strong><br><br>Puoi rivedere questa guida da <strong>Impostazioni → Guida Interattiva</strong>.`,
+              description: `<strong>3 passi per iniziare:</strong><br>1. Vai in <strong>Menu</strong> → crea categorie e aggiungi i tuoi piatti<br>2. Vai in <strong>Tavoli</strong> → aggiungi i tavoli e scarica i QR Code<br>3. Vai in <strong>Impostazioni → Abbonamento</strong> → attiva il piano<br><br>Puoi rivedere questa guida da <strong>Impostazioni → Generale → Avvia Guida</strong>.`,
             },
           },
         ],
