@@ -1873,6 +1873,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               ].map((item) => (
                 <Button
                   key={item.id}
+                  data-tour={`nav-${item.id}`}
                   variant="ghost"
                   className={`w-full justify-start h-12 px-4 rounded-xl transition-all duration-300 group relative overflow-hidden ${activeTab === item.id
                     // Active State: Minimal & Elegant
@@ -1908,6 +1909,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             <div className="p-3 border-t border-white/5 bg-black/20 min-w-[272px] flex flex-col gap-1">
               <Button
+                data-tour="nav-settings"
                 variant="ghost"
                 onClick={() => {
                   setActiveTab('settings')
@@ -2034,7 +2036,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8 animate-in fade-in-30 duration-500">
             {/* Orders Tab */}
             <TabsContent value="orders" className="space-y-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div data-tour="orders-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Ordini</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci gli ordini in tempo reale</p>
@@ -2230,12 +2232,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       className="pl-9 h-10 w-[180px] lg:w-[230px] bg-background/50 backdrop-blur-sm"
                     />
                   </div>
-                  <Button onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
+                  <Button data-tour="add-table-btn" onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
                     <Plus size={16} className="mr-2" />
                     Nuovo Tavolo
                   </Button>
 
                   <Button
+                    data-tour="download-qr-btn"
                     variant="outline"
                     size="sm"
                     className="h-10 shadow-sm hover:shadow-md transition-shadow border-dashed border-zinc-700 hover:border-amber-500 hover:text-amber-500"
@@ -3244,7 +3247,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             {/* Menu Tab */}
             <TabsContent value="menu" className="space-y-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div data-tour="menu-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Menu</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci piatti e categorie</p>
@@ -3430,7 +3433,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog open={isAddItemDialogOpen} onOpenChange={setIsAddItemDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button>
+                      <Button data-tour="add-dish-btn">
                         <Plus size={16} className="mr-2" />
                         Nuovo Piatto
                       </Button>
@@ -3721,7 +3724,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             {/* Reservations Tab */}
             <TabsContent value="reservations" className="space-y-6 p-6">
               {/* Date Quick Filters */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div data-tour="reservations-header" className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium text-muted-foreground mr-2">Seleziona data:</span>
                 <Button
                   variant={selectedReservationDate.toDateString() === new Date().toDateString() ? 'default' : 'outline'}
@@ -3810,18 +3813,20 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
               {/* Analytics Content */}
-              <AnalyticsCharts
-                orders={restaurantOrders}
-                dishes={restaurantDishes}
-                categories={restaurantCategories}
-                completedOrders={pastOrders}
-                restaurantName={restaurantName}
-                restaurantId={restaurantId || ''}
-              />
+              <div data-tour="analytics-header">
+                <AnalyticsCharts
+                  orders={restaurantOrders}
+                  dishes={restaurantDishes}
+                  categories={restaurantCategories}
+                  completedOrders={pastOrders}
+                  restaurantName={restaurantName}
+                  restaurantId={restaurantId || ''}
+                />
+              </div>
             </TabsContent >
 
             {/* Settings Tab */}
-            <TabsContent value="settings" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
+            <TabsContent value="settings" data-tour="settings-header" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
               <SettingsView
                 restaurantName={restaurantName}
                 setRestaurantName={setRestaurantName}
@@ -4562,6 +4567,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         <OnboardingTour
           onComplete={completeTour}
           restaurantName={currentRestaurant?.name}
+          setActiveTab={setActiveTab}
+          setIsSidebarOpen={setIsSidebarOpen}
         />
       )}
 

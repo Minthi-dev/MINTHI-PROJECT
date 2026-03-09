@@ -1,475 +1,371 @@
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import {
-  X, ArrowRight, ArrowLeft, CheckCircle, ForkKnife, Table, ChartBar,
-  Gear, QrCode, CalendarBlank, Users, CreditCard, Bell, Sparkle,
-  Receipt, Clock, Star, Lightning
-} from '@phosphor-icons/react'
+import { useEffect, useRef } from 'react'
+import { driver } from 'driver.js'
+import 'driver.js/dist/driver.css'
 
 interface OnboardingTourProps {
   onComplete: () => void
   restaurantName?: string
+  setActiveTab: (tab: string) => void
+  setIsSidebarOpen: (open: boolean) => void
 }
 
-const STEPS = [
-  {
-    id: 'welcome',
-    icon: Sparkle,
-    iconColor: 'text-amber-400',
-    iconBg: 'bg-amber-500/15 border-amber-500/30',
-    title: 'Benvenuto su Minthi! 🎉',
-    subtitle: 'Il tuo sistema di gestione ristorante',
-    description: 'In pochi minuti scoprirai tutto quello che puoi fare con Minthi. Gestisci tavoli, ordini, prenotazioni e molto altro — tutto in un unico posto.',
-    mockup: null,
-  },
-  {
-    id: 'tables',
-    icon: Table,
-    iconColor: 'text-amber-400',
-    iconBg: 'bg-amber-500/15 border-amber-500/30',
-    title: 'Gestione Tavoli',
-    subtitle: 'Controlla ogni tavolo in tempo reale',
-    description: 'Dalla sezione Tavoli vedi lo stato di ogni tavolo: libero, occupato o in attesa di pagamento. Clicca su un tavolo per aprirlo, vedere gli ordini e gestire il conto.',
-    mockup: 'tables',
-  },
-  {
-    id: 'orders',
-    icon: ForkKnife,
-    iconColor: 'text-orange-400',
-    iconBg: 'bg-orange-500/15 border-orange-500/30',
-    title: 'Gestione Ordini',
-    subtitle: 'La cucina sempre aggiornata',
-    description: 'In Gestione Ordini vedi tutti i piatti da preparare in tempo reale. Segna ogni piatto come "Pronto" e poi "Consegnato". I camerieri ricevono tutto sul loro dispositivo.',
-    mockup: 'orders',
-  },
-  {
-    id: 'menu',
-    icon: Star,
-    iconColor: 'text-purple-400',
-    iconBg: 'bg-purple-500/15 border-purple-500/30',
-    title: 'Menu Digitale',
-    subtitle: 'Crea e aggiorna il tuo menu',
-    description: 'Aggiungi piatti con foto, descrizione, prezzo e allergeni. Organizzali in categorie. Il menu viene aggiornato istantaneamente su tutti i dispositivi dei clienti.',
-    mockup: 'menu',
-  },
-  {
-    id: 'qr',
-    icon: QrCode,
-    iconColor: 'text-sky-400',
-    iconBg: 'bg-sky-500/15 border-sky-500/30',
-    title: 'Ordini via QR Code',
-    subtitle: 'I clienti ordinano dal proprio telefono',
-    description: 'Ogni tavolo ha un QR Code unico. I clienti lo scansionano, vedono il menu e ordinano direttamente. Gli ordini arrivano subito in cucina. Puoi anche accettare pagamenti online via Stripe.',
-    mockup: 'qr',
-  },
-  {
-    id: 'reservations',
-    icon: CalendarBlank,
-    iconColor: 'text-indigo-400',
-    iconBg: 'bg-indigo-500/15 border-indigo-500/30',
-    title: 'Prenotazioni',
-    subtitle: 'Gestisci le prenotazioni online',
-    description: 'I clienti possono prenotare dal link pubblico del tuo ristorante. Ricevi notifiche, conferma o rifiuta con un click. Imposta orari, sale e numero massimo di coperti.',
-    mockup: 'reservations',
-  },
-  {
-    id: 'waiters',
-    icon: Users,
-    iconColor: 'text-emerald-400',
-    iconBg: 'bg-emerald-500/15 border-emerald-500/30',
-    title: 'Modalità Cameriere',
-    subtitle: 'Il tuo staff sempre connesso',
-    description: 'Attiva la modalità cameriere per permettere al personale di prendere ordini dal loro smartphone. Ogni cameriere vede i propri tavoli e riceve notifiche quando i piatti sono pronti.',
-    mockup: 'waiters',
-  },
-  {
-    id: 'analytics',
-    icon: ChartBar,
-    iconColor: 'text-rose-400',
-    iconBg: 'bg-rose-500/15 border-rose-500/30',
-    title: 'Analytics',
-    subtitle: 'Dati e statistiche del tuo ristorante',
-    description: 'Monitora vendite, piatti più ordinati, incasso per fascia oraria e performance dei camerieri. I grafici si aggiornano in tempo reale e puoi esportare i dati.',
-    mockup: 'analytics',
-  },
-  {
-    id: 'settings',
-    icon: Gear,
-    iconColor: 'text-zinc-400',
-    iconBg: 'bg-zinc-500/15 border-zinc-500/30',
-    title: 'Impostazioni',
-    subtitle: 'Configura il tuo ristorante',
-    description: 'Imposta coperto, AYCE, orari di servizio, staff, prenotazioni e pagamenti online. Puoi anche personalizzare suoni di notifica e collegare il tuo account Stripe per ricevere pagamenti.',
-    mockup: 'settings',
-  },
-  {
-    id: 'activate',
-    icon: Lightning,
-    iconColor: 'text-amber-400',
-    iconBg: 'bg-amber-500/15 border-amber-500/30',
-    title: 'Come iniziare',
-    subtitle: '3 passi per essere operativo',
-    description: '',
-    mockup: 'activate',
-  },
-  {
-    id: 'done',
-    icon: CheckCircle,
-    iconColor: 'text-emerald-400',
-    iconBg: 'bg-emerald-500/15 border-emerald-500/30',
-    title: 'Sei pronto!',
-    subtitle: 'Inizia subito a usare Minthi',
-    description: 'Questa guida è disponibile in qualsiasi momento da Impostazioni → Guida Interattiva. Buon lavoro!',
-    mockup: null,
-  },
-]
-
-// ── Fake data mockups ──────────────────────────────────────────────────────────
-
-const TablesMockup = () => (
-  <div className="grid grid-cols-3 gap-2 mt-2">
-    {[
-      { n: '1', status: 'Occupato', color: 'border-amber-500/60 bg-amber-900/20', badge: 'bg-amber-500 text-black', pin: '4721' },
-      { n: '2', status: 'Libero', color: 'border-zinc-700/40 bg-black/40', badge: 'bg-transparent text-zinc-500 border border-zinc-700', pin: null },
-      { n: '3', status: 'Pagato', color: 'border-emerald-500/60 bg-emerald-900/30', badge: 'bg-emerald-500 text-white', pin: '8834' },
-    ].map(t => (
-      <div key={t.n} className={`rounded-xl border p-2.5 ${t.color}`}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xl font-black text-white">{t.n}</span>
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${t.badge}`}>{t.status}</span>
-        </div>
-        {t.pin ? (
-          <div className="text-center">
-            <p className="text-[8px] text-amber-500/60 uppercase tracking-widest mb-1">PIN</p>
-            <span className="text-lg font-mono font-black text-amber-400">{t.pin}</span>
-          </div>
-        ) : (
-          <div className="text-center text-zinc-700 py-1">
-            <ForkKnife size={16} className="mx-auto" weight="duotone" />
-          </div>
-        )}
-      </div>
-    ))}
-  </div>
-)
-
-const OrdersMockup = () => (
-  <div className="space-y-2 mt-2">
-    {[
-      { qty: 2, name: 'Tagliatelle al ragù', status: 'Da preparare', statusColor: 'text-amber-400', dot: 'bg-amber-400' },
-      { qty: 1, name: 'Bistecca alla fiorentina', status: 'Pronto!', statusColor: 'text-emerald-400', dot: 'bg-emerald-400' },
-      { qty: 3, name: 'Tiramisù', status: 'Da preparare', statusColor: 'text-amber-400', dot: 'bg-amber-400' },
-    ].map((item, i) => (
-      <div key={i} className="flex items-center justify-between bg-zinc-800/60 rounded-lg px-3 py-2 border border-zinc-700/40">
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-black text-amber-500">{item.qty}</span>
-          <span className="text-xs font-medium text-zinc-300">{item.name}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className={`w-1.5 h-1.5 rounded-full ${item.dot} animate-pulse`} />
-          <span className={`text-[9px] font-bold ${item.statusColor}`}>{item.status}</span>
-        </div>
-      </div>
-    ))}
-  </div>
-)
-
-const MenuMockup = () => (
-  <div className="space-y-2 mt-2">
-    {[
-      { name: 'Carbonara', cat: 'Primi', price: '14.00', emoji: '🍝' },
-      { name: 'Tiramisù', cat: 'Dolci', price: '7.50', emoji: '🍮' },
-      { name: 'Bistecca', cat: 'Secondi', price: '22.00', emoji: '🥩' },
-    ].map((d, i) => (
-      <div key={i} className="flex items-center gap-3 bg-zinc-800/60 rounded-lg px-3 py-2 border border-zinc-700/40">
-        <span className="text-xl">{d.emoji}</span>
-        <div className="flex-1">
-          <p className="text-xs font-bold text-zinc-200">{d.name}</p>
-          <p className="text-[9px] text-zinc-500">{d.cat}</p>
-        </div>
-        <span className="text-xs font-black text-amber-400">€{d.price}</span>
-      </div>
-    ))}
-  </div>
-)
-
-const QrMockup = () => (
-  <div className="flex items-center gap-4 mt-2">
-    <div className="bg-white p-3 rounded-xl">
-      <div className="w-16 h-16 grid grid-cols-4 gap-0.5">
-        {Array.from({ length: 16 }).map((_, i) => (
-          <div key={i} className={`rounded-[1px] ${[0,1,4,5,2,7,8,11,13,14,15,3,6,9,10,12][i] % 3 !== 0 ? 'bg-black' : 'bg-white'}`} />
-        ))}
-      </div>
-    </div>
-    <div className="flex-1 space-y-2">
-      <p className="text-xs text-zinc-300 font-medium">Il cliente scansiona e ordina</p>
-      <div className="bg-zinc-800/60 rounded-lg px-3 py-2 border border-zinc-700/40">
-        <div className="flex items-center gap-2">
-          <Receipt size={12} className="text-amber-400" />
-          <span className="text-[10px] text-zinc-400">Ordine ricevuto · Tavolo 3</span>
-        </div>
-      </div>
-      <div className="bg-emerald-900/30 rounded-lg px-3 py-1.5 border border-emerald-500/30">
-        <span className="text-[9px] text-emerald-400 font-semibold">✓ Pagamento online disponibile</span>
-      </div>
-    </div>
-  </div>
-)
-
-const ReservationsMockup = () => (
-  <div className="space-y-2 mt-2">
-    {[
-      { name: 'Famiglia Rossi', time: '20:00', covers: 4, status: 'Confermata', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
-      { name: 'Marco Bianchi', time: '21:00', covers: 2, status: 'In attesa', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
-    ].map((r, i) => (
-      <div key={i} className="flex items-center justify-between bg-zinc-800/60 rounded-lg px-3 py-2 border border-zinc-700/40">
-        <div>
-          <p className="text-xs font-bold text-zinc-200">{r.name}</p>
-          <p className="text-[9px] text-zinc-500"><Clock size={8} className="inline mr-1" />{r.time} · {r.covers} persone</p>
-        </div>
-        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${r.color}`}>{r.status}</span>
-      </div>
-    ))}
-  </div>
-)
-
-const WaitersMockup = () => (
-  <div className="space-y-2 mt-2">
-    {[
-      { name: 'Mario', tables: '1, 3, 5', orders: 8, color: 'text-emerald-400' },
-      { name: 'Sara', tables: '2, 4', orders: 5, color: 'text-sky-400' },
-    ].map((w, i) => (
-      <div key={i} className="flex items-center gap-3 bg-zinc-800/60 rounded-lg px-3 py-2 border border-zinc-700/40">
-        <div className={`w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center font-black text-sm ${w.color}`}>
-          {w.name[0]}
-        </div>
-        <div className="flex-1">
-          <p className="text-xs font-bold text-zinc-200">{w.name}</p>
-          <p className="text-[9px] text-zinc-500">Tavoli: {w.tables}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs font-black text-amber-400">{w.orders}</p>
-          <p className="text-[9px] text-zinc-600">ordini</p>
-        </div>
-      </div>
-    ))}
-  </div>
-)
-
-const AnalyticsMockup = () => (
-  <div className="mt-2 space-y-2">
-    <div className="grid grid-cols-3 gap-2">
-      {[
-        { label: 'Incasso oggi', value: '€ 842', color: 'text-emerald-400' },
-        { label: 'Ordini', value: '34', color: 'text-amber-400' },
-        { label: 'Media ordine', value: '€ 24', color: 'text-sky-400' },
-      ].map((s, i) => (
-        <div key={i} className="bg-zinc-800/60 rounded-lg px-2 py-2 border border-zinc-700/40 text-center">
-          <p className={`text-sm font-black ${s.color}`}>{s.value}</p>
-          <p className="text-[8px] text-zinc-600 mt-0.5">{s.label}</p>
-        </div>
-      ))}
-    </div>
-    <div className="bg-zinc-800/60 rounded-lg px-3 py-2 border border-zinc-700/40">
-      <p className="text-[9px] text-zinc-500 mb-1.5">Piatti più ordinati</p>
-      {[['Carbonara', 28], ['Tiramisù', 22], ['Bistecca', 17]].map(([name, n], i) => (
-        <div key={i} className="flex items-center gap-2 mb-1">
-          <span className="text-[9px] text-zinc-400 w-16 truncate">{name}</span>
-          <div className="flex-1 bg-zinc-700/40 rounded-full h-1.5">
-            <div className="bg-amber-500 h-1.5 rounded-full" style={{ width: `${(n as number / 28) * 100}%` }} />
-          </div>
-          <span className="text-[9px] text-zinc-500">{n}</span>
-        </div>
-      ))}
-    </div>
-  </div>
-)
-
-const SettingsMockup = () => (
-  <div className="space-y-2 mt-2">
-    {[
-      { label: 'Coperto', value: '€ 2.00', icon: Users },
-      { label: 'Pagamenti Stripe', value: 'Attivo', icon: CreditCard },
-      { label: 'Notifiche audio', value: 'Classic', icon: Bell },
-      { label: 'Modalità cameriere', value: 'Attiva', icon: Users },
-    ].map(({ label, value, icon: Icon }, i) => (
-      <div key={i} className="flex items-center justify-between bg-zinc-800/60 rounded-lg px-3 py-2 border border-zinc-700/40">
-        <div className="flex items-center gap-2">
-          <Icon size={12} className="text-zinc-400" />
-          <span className="text-xs text-zinc-300">{label}</span>
-        </div>
-        <span className="text-xs font-bold text-amber-400">{value}</span>
-      </div>
-    ))}
-  </div>
-)
-
-const ActivateMockup = () => (
-  <div className="space-y-3 mt-2">
-    {[
-      {
-        step: '1', title: 'Crea il tuo menu',
-        desc: 'Vai in Menu e aggiungi piatti e categorie', icon: ForkKnife, color: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-      },
-      {
-        step: '2', title: 'Configura i tavoli',
-        desc: 'In Tavoli crea i tuoi tavoli e scarica i QR Code', icon: Table, color: 'text-sky-400 bg-sky-500/10 border-sky-500/30',
-      },
-      {
-        step: '3', title: 'Attiva l\'abbonamento',
-        desc: 'In Impostazioni → Abbonamento sblocca tutte le funzioni', icon: Sparkle, color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
-      },
-    ].map(({ step, title, desc, icon: Icon, color }) => (
-      <div key={step} className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 ${color}`}>
-        <div className="w-6 h-6 rounded-full bg-black/30 flex items-center justify-center shrink-0 mt-0.5">
-          <span className="text-xs font-black text-white">{step}</span>
-        </div>
-        <div>
-          <p className="text-xs font-bold text-zinc-200">{title}</p>
-          <p className="text-[10px] text-zinc-500 mt-0.5">{desc}</p>
-        </div>
-      </div>
-    ))}
-  </div>
-)
-
-const MOCKUP_MAP: Record<string, React.ComponentType> = {
-  tables: TablesMockup,
-  orders: OrdersMockup,
-  menu: MenuMockup,
-  qr: QrMockup,
-  reservations: ReservationsMockup,
-  waiters: WaitersMockup,
-  analytics: AnalyticsMockup,
-  settings: SettingsMockup,
-  activate: ActivateMockup,
-}
-
-// ── Main Component ─────────────────────────────────────────────────────────────
-
-export default function OnboardingTour({ onComplete, restaurantName }: OnboardingTourProps) {
-  const [currentStep, setCurrentStep] = useState(0)
-  const step = STEPS[currentStep]
-  const isLast = currentStep === STEPS.length - 1
-  const isFirst = currentStep === 0
-  const MockupComponent = step.mockup ? MOCKUP_MAP[step.mockup] : null
-  const StepIcon = step.icon
-
-  const handleNext = () => {
-    if (isLast) onComplete()
-    else setCurrentStep(s => s + 1)
+const DRIVER_DARK_CSS = `
+  .minthi-tour-popover.driver-popover {
+    background: #18181b !important;
+    border: 1px solid rgba(255,255,255,0.09) !important;
+    border-radius: 18px !important;
+    color: #f4f4f5 !important;
+    box-shadow: 0 32px 64px -16px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04) !important;
+    max-width: 360px !important;
+    padding: 0 !important;
   }
-
-  const handleBack = () => {
-    if (!isFirst) setCurrentStep(s => s - 1)
+  .minthi-tour-popover .driver-popover-title {
+    color: #ffffff !important;
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.02em !important;
+    padding: 20px 20px 0 20px !important;
+    line-height: 1.3 !important;
   }
+  .minthi-tour-popover .driver-popover-description {
+    color: #a1a1aa !important;
+    font-size: 13px !important;
+    line-height: 1.65 !important;
+    padding: 8px 20px 0 20px !important;
+  }
+  .minthi-tour-popover .driver-popover-description strong {
+    color: #f59e0b !important;
+    font-weight: 700 !important;
+  }
+  .minthi-tour-popover .driver-popover-footer {
+    margin-top: 0 !important;
+    padding: 16px 20px 20px 20px !important;
+    gap: 8px !important;
+    border-top: 1px solid rgba(255,255,255,0.06) !important;
+    margin-top: 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+  .minthi-tour-popover .driver-popover-navigation-btns {
+    display: flex !important;
+    gap: 8px !important;
+  }
+  .minthi-tour-popover .driver-popover-next-btn {
+    background: #f59e0b !important;
+    color: #000000 !important;
+    font-weight: 800 !important;
+    border-radius: 10px !important;
+    border: none !important;
+    padding: 9px 20px !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+    text-shadow: none !important;
+    transition: background 0.15s !important;
+    letter-spacing: -0.01em !important;
+  }
+  .minthi-tour-popover .driver-popover-next-btn:hover {
+    background: #fbbf24 !important;
+  }
+  .minthi-tour-popover .driver-popover-prev-btn {
+    background: transparent !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    color: #71717a !important;
+    border-radius: 10px !important;
+    padding: 9px 16px !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+    text-shadow: none !important;
+    transition: all 0.15s !important;
+  }
+  .minthi-tour-popover .driver-popover-prev-btn:hover {
+    border-color: rgba(255,255,255,0.25) !important;
+    color: #f4f4f5 !important;
+  }
+  .minthi-tour-popover .driver-popover-close-btn {
+    color: #3f3f46 !important;
+    font-size: 16px !important;
+    line-height: 1 !important;
+    position: absolute !important;
+    top: 16px !important;
+    right: 16px !important;
+    cursor: pointer !important;
+    transition: color 0.15s !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 4px !important;
+  }
+  .minthi-tour-popover .driver-popover-close-btn:hover {
+    color: #a1a1aa !important;
+  }
+  .minthi-tour-popover .driver-popover-progress-text {
+    color: #3f3f46 !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.02em !important;
+  }
+  .minthi-tour-popover .driver-popover-arrow-side-left.driver-popover-arrow {
+    border-right-color: #18181b !important;
+  }
+  .minthi-tour-popover .driver-popover-arrow-side-right.driver-popover-arrow {
+    border-left-color: #18181b !important;
+  }
+  .minthi-tour-popover .driver-popover-arrow-side-top.driver-popover-arrow {
+    border-bottom-color: #18181b !important;
+  }
+  .minthi-tour-popover .driver-popover-arrow-side-bottom.driver-popover-arrow {
+    border-top-color: #18181b !important;
+  }
+  .driver-active-element {
+    border-radius: 10px !important;
+  }
+  .driver-overlay {
+    background: rgba(0,0,0,0.72) !important;
+  }
+`
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentStep}
-          initial={{ opacity: 0, y: 24, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -16, scale: 0.97 }}
-          transition={{ duration: 0.28, ease: 'easeOut' }}
-          className="relative bg-zinc-900 border border-zinc-700/60 rounded-3xl shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9)] w-full max-w-sm overflow-hidden"
-        >
-          {/* Skip button */}
-          {!isLast && (
-            <button
-              onClick={onComplete}
-              className="absolute top-4 right-4 z-10 text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1 text-xs"
-            >
-              Salta guida
-              <X size={14} />
-            </button>
-          )}
+export default function OnboardingTour({
+  onComplete,
+  restaurantName,
+  setActiveTab,
+  setIsSidebarOpen,
+}: OnboardingTourProps) {
+  const driverRef = useRef<ReturnType<typeof driver> | null>(null)
 
-          {/* Progress bar */}
-          <div className="absolute top-0 left-0 right-0 h-1 bg-zinc-800">
-            <motion.div
-              className="h-full bg-amber-500 rounded-full"
-              animate={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
-              transition={{ duration: 0.3 }}
-            />
-          </div>
+  // Inject custom dark CSS
+  useEffect(() => {
+    const existing = document.getElementById('minthi-driver-styles')
+    if (existing) existing.remove()
+    const styleEl = document.createElement('style')
+    styleEl.id = 'minthi-driver-styles'
+    styleEl.textContent = DRIVER_DARK_CSS
+    document.head.appendChild(styleEl)
+    return () => {
+      document.getElementById('minthi-driver-styles')?.remove()
+    }
+  }, [])
 
-          <div className="pt-8 px-6 pb-6 space-y-5">
-            {/* Header */}
-            <div className="flex flex-col items-center text-center gap-3 pt-2">
-              <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center ${step.iconBg}`}>
-                <StepIcon size={28} weight="duotone" className={step.iconColor} />
-              </div>
-              <div>
-                <h2 className="text-xl font-black text-white leading-tight">{step.title}</h2>
-                <p className="text-sm text-zinc-500 mt-0.5">{step.subtitle}</p>
-              </div>
-            </div>
+  // Initialize and start tour
+  useEffect(() => {
+    // Open sidebar so nav items are in the DOM
+    setIsSidebarOpen(true)
 
-            {/* Description */}
-            {step.description && (
-              <p className="text-sm text-zinc-400 leading-relaxed text-center">{step.description}</p>
-            )}
+    // Small delay to let sidebar render
+    const startTimeout = setTimeout(() => {
+      const driverObj = driver({
+        showProgress: true,
+        smoothScroll: true,
+        allowClose: true,
+        overlayOpacity: 0.72,
+        stagePadding: 6,
+        stageRadius: 12,
+        popoverClass: 'minthi-tour-popover',
+        progressText: '{{current}} di {{total}}',
+        nextBtnText: 'Avanti →',
+        prevBtnText: '← Indietro',
+        doneBtnText: 'Inizia subito! ✓',
+        onDestroyStarted: () => {
+          driverObj.destroy()
+          onComplete()
+        },
+        steps: [
+          // ── 1. Welcome ────────────────────────────────────────────────
+          {
+            popover: {
+              title: `👋 Benvenuto${restaurantName ? ` su ${restaurantName}` : ' su Minthi'}!`,
+              description: `Ciao! Ti guido alla scoperta di tutte le funzioni del gestionale. Ci vorranno circa <strong>2 minuti</strong>. Clicca <strong>Avanti</strong> per iniziare — puoi uscire in qualsiasi momento con la ✕`,
+            },
+          },
 
-            {/* Mockup */}
-            {MockupComponent && (
-              <div className="bg-zinc-800/40 border border-zinc-700/40 rounded-2xl p-3">
-                <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-1">Esempio</p>
-                <MockupComponent />
-              </div>
-            )}
+          // ── 2. Orders nav item ────────────────────────────────────────
+          {
+            element: '[data-tour="nav-orders"]',
+            popover: {
+              title: '🍳 Gestione Ordini',
+              description: 'Questa è la tua cucina digitale. Vedi in <strong>tempo reale</strong> tutti gli ordini attivi, i piatti da preparare e da servire. Perfetto per cucina e sala.',
+              side: 'right',
+              align: 'center',
+            },
+          },
 
-            {/* Step dots */}
-            <div className="flex items-center justify-center gap-1.5">
-              {STEPS.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentStep(i)}
-                  className={`rounded-full transition-all duration-300 ${
-                    i === currentStep ? 'w-4 h-1.5 bg-amber-500' : 'w-1.5 h-1.5 bg-zinc-700 hover:bg-zinc-500'
-                  }`}
-                />
-              ))}
-            </div>
+          // ── 3. Orders content header ──────────────────────────────────
+          {
+            element: '[data-tour="orders-header"]',
+            popover: {
+              title: 'Vista Ordini',
+              description: 'Passa tra vista per <strong>Tavolo</strong> e vista per <strong>Piatto</strong>. Filtra per categoria e regola lo zoom. Ogni ordine appare qui <strong>istantaneamente</strong> appena il cliente ordina.',
+              side: 'bottom',
+              align: 'start',
+            },
+            onNextClick: () => {
+              setActiveTab('tables')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.moveNext(), 300)
+            },
+          },
 
-            {/* Buttons */}
-            <div className="flex gap-3">
-              {!isFirst && (
-                <button
-                  onClick={handleBack}
-                  className="flex-1 h-11 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-all text-sm font-semibold flex items-center justify-center gap-1.5"
-                >
-                  <ArrowLeft size={16} />
-                  Indietro
-                </button>
-              )}
-              <button
-                onClick={handleNext}
-                className="flex-1 h-11 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-sm transition-all flex items-center justify-center gap-1.5 shadow-[0_8px_20px_-8px_rgba(245,158,11,0.6)] hover:shadow-[0_12px_25px_-8px_rgba(245,158,11,0.7)]"
-              >
-                {isLast ? (
-                  <>
-                    <CheckCircle size={16} weight="fill" />
-                    Inizia ora!
-                  </>
-                ) : (
-                  <>
-                    {isFirst ? 'Iniziamo' : 'Avanti'}
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            </div>
+          // ── 4. Tables nav item ────────────────────────────────────────
+          {
+            element: '[data-tour="nav-tables"]',
+            popover: {
+              title: '🪑 Tavoli della Sala',
+              description: 'Da qui controlli ogni tavolo: libero, occupato o in attesa di pagamento. Puoi aprire un tavolo per vedere gli ordini e gestire il conto.',
+              side: 'right',
+              align: 'center',
+            },
+          },
 
-            {/* Step counter */}
-            <p className="text-center text-[10px] text-zinc-600">
-              {currentStep + 1} di {STEPS.length}
-            </p>
-          </div>
-        </motion.div>
-      </AnimatePresence>
-    </div>
-  )
+          // ── 5. Add table button ───────────────────────────────────────
+          {
+            element: '[data-tour="add-table-btn"]',
+            popover: {
+              title: 'Crea i Tuoi Tavoli',
+              description: 'Clicca qui per aggiungere un nuovo tavolo. Scegli il numero o il nome e sarà subito attivo. Puoi creare quanti tavoli vuoi.',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+
+          // ── 6. Download QR ────────────────────────────────────────────
+          {
+            element: '[data-tour="download-qr-btn"]',
+            popover: {
+              title: '📱 QR Code per i Tavoli',
+              description: 'Scarica un PDF con il QR Code di ogni tavolo. I clienti lo scansionano, vedono il tuo menu e ordinano dal loro telefono. Gli ordini arrivano <strong>direttamente in cucina</strong>.',
+              side: 'bottom',
+              align: 'start',
+            },
+            onNextClick: () => {
+              setActiveTab('menu')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.moveNext(), 300)
+            },
+          },
+
+          // ── 7. Menu nav item ──────────────────────────────────────────
+          {
+            element: '[data-tour="nav-menu"]',
+            popover: {
+              title: '📋 Menu Digitale',
+              description: 'Qui costruisci il tuo menu: aggiungi piatti con foto, prezzi, descrizioni e allergeni. Organizza in categorie. Ogni modifica è visibile ai clienti <strong>istantaneamente</strong>.',
+              side: 'right',
+              align: 'center',
+            },
+          },
+
+          // ── 8. Add dish button ────────────────────────────────────────
+          {
+            element: '[data-tour="add-dish-btn"]',
+            popover: {
+              title: 'Aggiungi i Tuoi Piatti',
+              description: 'Clicca per aggiungere un nuovo piatto. Puoi inserire nome, prezzo, foto, descrizione e allergeni. Crea anche <strong>categorie</strong> per organizzare il menu.',
+              side: 'bottom',
+              align: 'start',
+            },
+            onNextClick: () => {
+              setActiveTab('reservations')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.moveNext(), 300)
+            },
+          },
+
+          // ── 9. Reservations ───────────────────────────────────────────
+          {
+            element: '[data-tour="nav-reservations"]',
+            popover: {
+              title: '📅 Prenotazioni Online',
+              description: 'I clienti possono prenotare tramite un <strong>link pubblico</strong> dedicato al tuo ristorante. Ricevi notifiche, conferma o rifiuta le prenotazioni con un click.',
+              side: 'right',
+              align: 'center',
+            },
+          },
+
+          // ── 10. Reservations content ──────────────────────────────────
+          {
+            element: '[data-tour="reservations-header"]',
+            popover: {
+              title: 'Gestione Prenotazioni',
+              description: 'Filtra per data, vedi quante persone arrivano e in quali fasce orarie. Puoi configurare orari, numero massimo di coperti e sale da Impostazioni.',
+              side: 'bottom',
+              align: 'start',
+            },
+            onNextClick: () => {
+              setActiveTab('analytics')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.moveNext(), 300)
+            },
+          },
+
+          // ── 11. Analytics ─────────────────────────────────────────────
+          {
+            element: '[data-tour="nav-analytics"]',
+            popover: {
+              title: '📊 Analitiche',
+              description: 'Monitora le performance del tuo ristorante: incassi, piatti più ordinati, ore di punta e statistiche dello staff. Dati in <strong>tempo reale</strong>.',
+              side: 'right',
+              align: 'center',
+            },
+          },
+
+          // ── 12. Analytics content ─────────────────────────────────────
+          {
+            element: '[data-tour="analytics-header"]',
+            popover: {
+              title: 'I Tuoi Numeri',
+              description: 'Grafici interattivi su vendite, piatti più ordinati e performance del personale. Puoi anche esportare i dati e confrontare diversi periodi.',
+              side: 'bottom',
+              align: 'start',
+            },
+            onNextClick: () => {
+              setActiveTab('settings')
+              setIsSidebarOpen(true)
+              setTimeout(() => driverObj.moveNext(), 300)
+            },
+          },
+
+          // ── 13. Settings nav item ─────────────────────────────────────
+          {
+            element: '[data-tour="nav-settings"]',
+            popover: {
+              title: '⚙️ Impostazioni',
+              description: 'Configura tutto: coperto, orari di servizio, modalità cameriere, pagamenti Stripe, prenotazioni e abbonamento. È qui che <strong>attivi il servizio completo</strong>.',
+              side: 'right',
+              align: 'center',
+            },
+          },
+
+          // ── 14. Settings content ──────────────────────────────────────
+          {
+            element: '[data-tour="settings-header"]',
+            popover: {
+              title: 'Configura il Ristorante',
+              description: 'Vai su <strong>Abbonamento & Pagamenti</strong> per attivare il piano Minthi e sbloccare tutte le funzioni. Ricordati di collegare Stripe per ricevere i pagamenti online dai clienti.',
+              side: 'bottom',
+              align: 'start',
+            },
+          },
+
+          // ── 15. Done ──────────────────────────────────────────────────
+          {
+            popover: {
+              title: '✅ Sei Pronto!',
+              description: `Per iniziare: <br>1. Vai in <strong>Menu</strong> e aggiungi i tuoi piatti<br>2. Vai in <strong>Tavoli</strong> e crea i tuoi tavoli<br>3. Attiva il piano in <strong>Impostazioni → Abbonamento</strong><br><br>Puoi rivedere questa guida da <strong>Impostazioni → Guida Interattiva</strong>.`,
+            },
+          },
+        ],
+      })
+
+      driverRef.current = driverObj
+      driverObj.drive()
+    }, 150)
+
+    return () => {
+      clearTimeout(startTimeout)
+      if (driverRef.current) {
+        driverRef.current.destroy()
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return null
 }
