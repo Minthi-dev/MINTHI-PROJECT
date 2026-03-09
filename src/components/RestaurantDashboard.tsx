@@ -581,6 +581,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           toast.info('Nuovo ordine ricevuto!')
         }
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
+        // Refresh orders when item status changes (e.g. Stripe marks items as PAID)
+        debouncedFetch()
+      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'table_sessions', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         // Notify when a customer pays online via Stripe (paid_amount increased)
         // using sessionsRef instead of payload.old since payload.old might be empty without replica identity full
@@ -2983,80 +2987,97 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 blur-xl rounded-full -mr-8 -mt-8 pointer-events-none"></div>
                           )}
                           <CardContent className="p-0 flex flex-col h-full">
-                            <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-b border-white/5">
-                              <div className="flex items-center gap-3">
-                                <span className={`text-2xl font-bold tracking-tight whitespace-nowrap ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
+                            {/* Header */}
+                            <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-2 border-b border-white/5">
+                              <div className="flex items-center gap-2.5">
+                                <span className={`text-3xl font-black tracking-tight whitespace-nowrap ${isActive ? 'text-amber-400' : 'text-zinc-200'}`}>
                                   {table.number}
                                 </span>
-                                <div className="flex items-center gap-1.5 text-zinc-400 bg-white/5 px-3 py-1 rounded-full">
-                                  <Users size={16} weight="bold" />
+                                <div className="flex items-center gap-1.5 text-zinc-400 bg-white/5 px-2.5 py-1 rounded-full">
+                                  <Users size={14} weight="bold" />
                                   <span className="text-sm font-bold">{table.seats || 4}</span>
                                 </div>
                               </div>
                               <Badge
                                 variant={isActive ? 'default' : 'outline'}
-                                className={
+                                className={`text-xs font-bold px-2.5 py-0.5 ${
                                   isFullyPaidOnline && !session?.receipt_issued
-                                    ? 'bg-emerald-500 text-white border-none font-bold'
+                                    ? 'bg-emerald-500 text-white border-none'
                                     : isPartiallyPaidOnline
-                                    ? 'bg-orange-500 text-white border-none font-bold'
-                                    : isActive ? 'bg-amber-500 text-black border-none font-bold' : 'bg-transparent text-zinc-500 border-zinc-700'
-                                }
+                                    ? 'bg-orange-500 text-white border-none'
+                                    : isActive ? 'bg-amber-500 text-black border-none' : 'bg-transparent text-zinc-500 border-zinc-700'
+                                }`}
                               >
                                 {isFullyPaidOnline && !session?.receipt_issued ? 'Pagato' : isPartiallyPaidOnline ? 'Parziale' : isActive ? 'Occupato' : 'Libero'}
                               </Badge>
                             </div>
 
-                            <div className="flex-1 p-5 flex flex-col items-center justify-center gap-3">
+                            {/* Body */}
+                            <div className="flex-1 px-4 py-3 flex flex-col items-center justify-center gap-2.5">
                               {isActive ? (
                                 <>
-                                  <div className="text-center">
-                                    <p className="text-[9px] text-amber-500/70 mb-1 uppercase tracking-[0.2em] font-semibold">PIN</p>
-                                    <div className="bg-black/40 px-6 py-3 rounded-xl border border-amber-500/20 shadow-inner min-w-[120px]">
-                                      <span className="text-4xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
+                                  {/* PIN */}
+                                  <div className="text-center w-full">
+                                    <p className="text-[10px] text-amber-500/60 mb-1.5 uppercase tracking-[0.25em] font-semibold">PIN</p>
+                                    <div className="bg-black/50 px-5 py-2.5 rounded-xl border border-amber-500/25 shadow-inner">
+                                      <span className="text-3xl font-mono font-black tracking-[0.25em] text-amber-400 whitespace-nowrap">
                                         {session?.session_pin || '...'}
                                       </span>
                                     </div>
                                   </div>
+
+                                  {/* Items served badge */}
                                   {activeOrder && (
-                                    <Badge variant="outline" className="text-[10px] bg-black/40 border-amber-500/30 text-amber-200">
-                                      <CheckCircle size={10} className="mr-1" weight="fill" />
-                                      {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati
-                                    </Badge>
-                                  )}
-                                  {isFullyPaidOnline && !session?.receipt_issued && (
-                                    <div className="flex flex-col items-center gap-1 mt-1">
-                                      <Badge variant="outline" className="text-[10px] bg-emerald-500/20 border-emerald-500/50 text-emerald-200 flex items-center gap-1">
-                                        <CreditCard size={10} weight="fill" />
-                                        Online €{paidAmount.toFixed(2)}
-                                      </Badge>
-                                      <span className="text-[9px] text-emerald-400 font-semibold">Tutto pagato</span>
+                                    <div className="flex items-center gap-1.5 text-xs text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
+                                      <CheckCircle size={12} className="" weight="fill" />
+                                      <span className="font-semibold">{activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati</span>
                                     </div>
                                   )}
+
+                                  {/* Fully paid online */}
+                                  {isFullyPaidOnline && !session?.receipt_issued && (
+                                    <div className="w-full mt-1 bg-emerald-500/15 border border-emerald-500/40 rounded-xl px-3 py-2.5 flex flex-col items-center gap-1">
+                                      <div className="flex items-center gap-1.5 text-emerald-300 font-bold text-sm">
+                                        <CreditCard size={14} weight="fill" />
+                                        <span>Pagato online</span>
+                                      </div>
+                                      <span className="text-2xl font-black text-emerald-400 font-mono">€{paidAmount.toFixed(2)}</span>
+                                    </div>
+                                  )}
+
+                                  {/* Partially paid online */}
                                   {isPartiallyPaidOnline && (
-                                    <div className="flex flex-col items-center gap-1 mt-1">
-                                      <Badge variant="outline" className="text-[10px] bg-orange-500/20 border-orange-500/50 text-orange-200 flex items-center gap-1">
-                                        <CreditCard size={10} weight="fill" />
-                                        Pagato €{paidAmount.toFixed(2)}
-                                      </Badge>
-                                      <span className="text-[9px] text-red-400 font-bold">Da incassare: €{remainingToPay.toFixed(2)}</span>
+                                    <div className="w-full mt-1 bg-orange-500/10 border border-orange-500/40 rounded-xl px-3 py-2.5 space-y-1.5">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="flex items-center gap-1 text-orange-300 font-semibold">
+                                          <CreditCard size={12} weight="fill" />
+                                          Online
+                                        </span>
+                                        <span className="font-mono font-bold text-orange-300">€{paidAmount.toFixed(2)}</span>
+                                      </div>
+                                      <div className="h-px bg-orange-500/20" />
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className="text-zinc-400 font-medium">Da incassare</span>
+                                        <span className="font-mono font-black text-red-400 text-sm">€{remainingToPay.toFixed(2)}</span>
+                                      </div>
                                     </div>
                                   )}
                                 </>
                               ) : (
                                 <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-all duration-300">
-                                  <ForkKnife size={32} className="mx-auto mb-1" weight="duotone" />
-                                  <p className="text-xs font-medium">Clicca per Ordinare</p>
+                                  <ForkKnife size={32} className="mx-auto mb-1.5" weight="duotone" />
+                                  <p className="text-sm font-medium">Clicca per Ordinare</p>
                                 </div>
                               )}
                             </div>
 
+                            {/* Footer buttons */}
                             <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2">
                               {isActive ? (
                                 <div className={`grid gap-2 ${isFullyPaidOnline && !session?.receipt_issued ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                   {isFullyPaidOnline && !session?.receipt_issued ? (
                                     <Button
-                                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-8 text-xs font-bold"
+                                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-9 text-sm"
                                       size="sm"
                                       onClick={async (e) => {
                                         e.stopPropagation();
@@ -3084,34 +3105,32 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         }
                                       }}
                                     >
-                                      <CheckCircle size={14} weight="fill" className="mr-1.5" />
+                                      <CheckCircle size={15} weight="fill" className="mr-1.5" />
                                       Stampa Scontrino e Chiudi
                                     </Button>
                                   ) : (
                                     <>
-                                      <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleShowTableQr(table); }} className="shadow-sm hover:shadow transition-shadow h-8 text-xs">
-                                        <QrCode size={14} className="mr-1.5" />
+                                      <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleShowTableQr(table); }} className="shadow-sm hover:shadow transition-shadow h-9 text-sm font-medium">
+                                        <QrCode size={15} className="mr-1.5" />
                                         QR
                                       </Button>
                                       <Button
-                                        className={`shadow-sm hover:shadow transition-all h-8 text-xs min-w-0 ${isPartiallyPaidOnline
-                                          ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:from-orange-500 hover:to-orange-400 font-bold'
+                                        className={`shadow-sm hover:shadow transition-all h-9 text-sm font-bold ${isPartiallyPaidOnline
+                                          ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:from-orange-500 hover:to-orange-400'
                                           : 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70'
                                         }`}
                                         size="sm"
                                         onClick={(e) => { e.stopPropagation(); setSelectedTableForActions(table); setShowTableBillDialog(true); }}
                                       >
-                                        <Receipt size={14} className="mr-1.5 shrink-0" />
-                                        <span className="truncate">
-                                          {isPartiallyPaidOnline ? `Conto €${remainingToPay.toFixed(2)}` : 'Conto'}
-                                        </span>
+                                        <Receipt size={15} className="mr-1.5 shrink-0" />
+                                        Conto
                                       </Button>
                                     </>
                                   )}
                                 </div>
                               ) : (
                                 <Button
-                                  className="w-full shadow-sm hover:shadow transition-shadow h-8 text-xs"
+                                  className="w-full shadow-sm hover:shadow transition-shadow h-9 text-sm font-medium"
                                   size="sm"
                                   onClick={(e) => { e.stopPropagation(); handleToggleTable(table.id); }}
                                 >
