@@ -277,8 +277,8 @@ VALUES (
     'admin@minthi.it',
     'Admin',
     'admin',
-    '$2b$10$placeholderHashForAdmin',
-    'admin',
+    '$2b$10$oPuBTzAZXtHhpOMPitzFOu4QNOF..kwZj8NLS8oeSWmdQ6QeQnAwu',
+    'Minthi2026!',
     'ADMIN'
 );
 
