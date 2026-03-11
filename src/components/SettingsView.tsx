@@ -476,7 +476,7 @@ export function SettingsView({
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-bold text-white">Guida Interattiva</h3>
-                                            <p className="text-zinc-400 text-sm mt-0.5">Scopri tutte le funzioni di Minthi passo per passo, direttamente nell'interfaccia.</p>
+                                            <p className="text-zinc-400 text-sm mt-0.5">Naviga un sito demo con dati di esempio e scopri tutte le funzioni di Minthi.</p>
                                         </div>
                                     </div>
                                     <Button
@@ -484,7 +484,7 @@ export function SettingsView({
                                         className="bg-amber-500 hover:bg-amber-400 text-black font-bold h-11 px-6 rounded-xl shadow-[0_0_20px_-4px_rgba(245,158,11,0.5)] hover:shadow-[0_0_25px_-4px_rgba(245,158,11,0.7)] transition-all shrink-0"
                                     >
                                         <Sparkle size={16} weight="fill" className="mr-2" />
-                                        Avvia Guida
+                                        Avvia Demo
                                     </Button>
                                 </div>
                             </div>

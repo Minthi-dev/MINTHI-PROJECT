@@ -82,6 +82,11 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [generatedLink, setGeneratedLink] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
 
+  // Clear generated link when params change so user can generate a new one
+  useEffect(() => {
+    setGeneratedLink('')
+  }, [inviteFreeMonths, inviteMonthsCount, inviteDiscountPercent, inviteDiscountDuration])
+
   // Dedicated realtime subscription for new restaurant INSERTs.
   // The useSupabaseData hook subscribes to postgres_changes, but INSERT events
   // from RPC functions (register_restaurant_secure / complete_pending_registration)

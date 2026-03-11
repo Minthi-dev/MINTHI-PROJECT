@@ -72,7 +72,9 @@ import TableBillDialog from './TableBillDialog'
 import { SettingsView } from './SettingsView'
 import ReservationsManager from './ReservationsManager'
 import AnalyticsCharts from './AnalyticsCharts'
-import OnboardingTour from './OnboardingTour'
+import DemoGuidePanel from './DemoGuidePanel'
+import SetupWizard from './SetupWizard'
+import { DEMO_ROOMS, DEMO_CATEGORIES, DEMO_DISHES, DEMO_TABLES, DEMO_SESSIONS, DEMO_ORDERS, DEMO_PAST_ORDERS, DEMO_BOOKINGS } from './demoData'
 import CustomMenusManager from './CustomMenusManager'
 import QRCodeGenerator from './QRCodeGenerator'
 import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, Room } from '../services/types'
@@ -95,16 +97,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [activeSection, setActiveSection] = useState('orders')
   const [pendingAutoOrderTableId, setPendingAutoOrderTableId] = useState<string | null>(null)
 
-  // Onboarding tour: auto-start on first login
+  // Demo mode + Setup wizard state (logic moved after data hooks below)
   const tourKey = `minthi_tour_done_${restaurantId}`
-  const [showTour, setShowTour] = useState(() => {
-    return !localStorage.getItem(tourKey)
-  })
-  const completeTour = () => {
-    localStorage.setItem(tourKey, '1')
-    setShowTour(false)
-  }
-  const restartTour = () => setShowTour(true)
+  const [demoMode, setDemoMode] = useState(false)
+  const [demoStep, setDemoStep] = useState(0)
+  const [showSetupWizard, setShowSetupWizard] = useState(false)
+  const demoModeRef = useRef(false)
   const [activeTab, setActiveTab] = useState('orders')
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
@@ -129,9 +127,85 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
   const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
-  const [bookings, , refreshBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
-  const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
+  const [bookings, , refreshBookings, setBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
+  const [sessions, , refreshSessions, setSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
   const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
+
+  // Ref so stopDemo can call fetchOrders
+  const fetchOrdersRef = useRef<(() => void) | null>(null)
+
+  // Saved real data for restoring after demo
+  const realDataRef = useRef<{
+    dishes: Dish[], tables: Table[], categories: Category[], rooms: Room[],
+    orders: Order[], pastOrders: Order[], bookings: Booking[], sessions: TableSession[]
+  } | null>(null)
+
+  const startDemo = useCallback(() => {
+    // Save real data before injecting demo data
+    realDataRef.current = {
+      dishes: dishes || [], tables: tables || [], categories: categories || [],
+      rooms: rooms || [], orders, pastOrders, bookings: bookings || [], sessions: sessions || [],
+    }
+    demoModeRef.current = true
+    setDemoMode(true)
+    setDemoStep(0)
+    // Inject fake data
+    setDishes(DEMO_DISHES)
+    setTables(DEMO_TABLES)
+    setCategories(DEMO_CATEGORIES)
+    setRooms(DEMO_ROOMS)
+    setOrders(DEMO_ORDERS)
+    setPastOrders(DEMO_PAST_ORDERS)
+    setBookings(DEMO_BOOKINGS)
+    setSessions(DEMO_SESSIONS)
+    setActiveTab('orders')
+  }, [dishes, tables, categories, rooms, orders, pastOrders, bookings, sessions, setDishes, setTables, setCategories, setRooms, setBookings, setSessions])
+
+  const stopDemo = useCallback(() => {
+    demoModeRef.current = false
+    setDemoMode(false)
+    setDemoStep(0)
+    // Restore real data
+    if (realDataRef.current) {
+      setDishes(realDataRef.current.dishes)
+      setTables(realDataRef.current.tables)
+      setCategories(realDataRef.current.categories)
+      setRooms(realDataRef.current.rooms)
+      setOrders(realDataRef.current.orders)
+      setPastOrders(realDataRef.current.pastOrders)
+      setBookings(realDataRef.current.bookings)
+      setSessions(realDataRef.current.sessions)
+      realDataRef.current = null
+    }
+    // Also refresh from DB to get latest
+    refreshDishes(); refreshTables(); refreshCategories(); refreshRooms()
+    refreshBookings(); refreshSessions(); fetchOrdersRef.current?.()
+  }, [setDishes, setTables, setCategories, setRooms, setBookings, setSessions, refreshDishes, refreshTables, refreshCategories, refreshRooms, refreshBookings, refreshSessions])
+
+  // First login: auto-start demo
+  const firstLoginChecked = useRef(false)
+  useEffect(() => {
+    if (firstLoginChecked.current) return
+    if (!restaurantId) return
+    firstLoginChecked.current = true
+    if (!localStorage.getItem(tourKey)) {
+      // Small delay to let dashboard render
+      setTimeout(() => startDemo(), 500)
+    }
+  }, [restaurantId, tourKey, startDemo])
+
+  const handleDemoExit = useCallback(() => {
+    // Check real data BEFORE stopDemo clears it
+    const real = realDataRef.current
+    const hasNoData = !real || (real.tables.length === 0 && real.dishes.length === 0 && real.categories.length === 0)
+    stopDemo()
+    // Mark tour as done
+    localStorage.setItem(tourKey, '1')
+    // Show setup wizard if no real data exists
+    if (hasNoData) {
+      setShowSetupWizard(true)
+    }
+  }, [stopDemo, tourKey])
 
   // Initialize selected categories when available
   const categoriesInitializedRef = useRef(false)
@@ -558,7 +632,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   // Fetch Orders with Relations
   const fetchOrders = async () => {
-    if (!restaurantId) return
+    if (!restaurantId || demoModeRef.current) return
     try {
       const data = await DatabaseService.getOrders(restaurantId)
       setOrders(data)
@@ -571,6 +645,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }
 
+  // Keep ref updated
+  fetchOrdersRef.current = fetchOrders
+
   useEffect(() => {
     if (!restaurantId) return // Ensure restaurantId is present
 
@@ -579,6 +656,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     // Debounced fetch to avoid rapid re-fetches and ensure items are committed
     let fetchTimeout: ReturnType<typeof setTimeout> | null = null
     const debouncedFetch = () => {
+      if (demoModeRef.current) return // Skip during demo mode
       if (fetchTimeout) clearTimeout(fetchTimeout)
       fetchTimeout = setTimeout(() => fetchOrders(), 500)
     }
@@ -3938,7 +4016,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     DatabaseService.updateRestaurant({ id: restaurantId, weekly_service_hours: schedule })
                   }
                 }}
-                onRestartTour={restartTour}
+                onRestartTour={startDemo}
               />
             </TabsContent >
           </Tabs >
@@ -4562,13 +4640,24 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         </div>
       </main>
 
-      {/* Onboarding Tour */}
-      {showTour && (
-        <OnboardingTour
-          onComplete={completeTour}
-          restaurantName={currentRestaurant?.name}
+      {/* Demo Mode Guide */}
+      {demoMode && (
+        <DemoGuidePanel
+          currentStep={demoStep}
+          setCurrentStep={setDemoStep}
           setActiveTab={setActiveTab}
-          setIsSidebarOpen={setIsSidebarOpen}
+          onExit={handleDemoExit}
+        />
+      )}
+
+      {/* Setup Wizard (after demo, for new restaurants) */}
+      {showSetupWizard && !demoMode && (
+        <SetupWizard
+          setActiveTab={setActiveTab}
+          onComplete={() => setShowSetupWizard(false)}
+          tablesCount={tables?.length || 0}
+          dishesCount={dishes?.length || 0}
+          categoriesCount={categories?.length || 0}
         />
       )}
 
