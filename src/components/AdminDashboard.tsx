@@ -104,8 +104,15 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       )
       .subscribe()
 
+    // Periodic polling fallback: RPC-created restaurants may not trigger realtime events
+    // due to RLS context differences. Poll every 30s to ensure new restaurants appear.
+    const pollInterval = setInterval(() => {
+      refreshRestaurants()
+    }, 30_000)
+
     return () => {
       supabase.removeChannel(channel)
+      clearInterval(pollInterval)
     }
   }, [refreshRestaurants])
 

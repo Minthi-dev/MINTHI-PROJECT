@@ -180,6 +180,32 @@ export default function TableBillDialog({
         return splitPayableItems.filter(i => !paidItemIds.has(i.id))
     }, [splitPayableItems, paidItemIds])
 
+    // Items already marked as PAID in the database (for display in overview)
+    const paidDbItems = useMemo(() => {
+        const items: { name: string, price: number, quantity: number }[] = []
+        const isAyceEnabled = session?.ayce_enabled === true
+
+        orders.forEach(order => {
+            if (order.items) {
+                order.items.forEach((item: any) => {
+                    if (item.status !== 'PAID') return
+
+                    let price = item.dish?.price ?? 0
+                    if (isAyceEnabled && item.dish?.is_ayce) {
+                        price = 0
+                    }
+
+                    items.push({
+                        name: item.dish?.name || item.name || 'Piatto',
+                        price: price,
+                        quantity: item.quantity || 1
+                    })
+                })
+            }
+        })
+        return items
+    }, [orders, session])
+
 
     // Calculate Total Amount (Full Bill)
     const totalAmount = useMemo(() => {
@@ -379,7 +405,25 @@ export default function TableBillDialog({
                                     <div className="max-h-[40vh] overflow-y-auto overscroll-contain relative z-10" style={{ WebkitOverflowScrolling: 'touch' }}>
                                         <div className="p-6 space-y-3">
                                             {(() => {
-                                                // Group items for clean receipt display — show ALL items including €0 AYCE dishes
+                                                // Group PAID items for display (greyed out, strikethrough)
+                                                const paidGroups = new Map<string, { name: string, quantity: number, price: number, total: number }>()
+                                                paidDbItems.forEach(item => {
+                                                    const key = `${item.name}-${item.price}`
+                                                    const existing = paidGroups.get(key)
+                                                    if (existing) {
+                                                        existing.quantity += item.quantity
+                                                        existing.total += item.price * item.quantity
+                                                    } else {
+                                                        paidGroups.set(key, {
+                                                            name: item.name,
+                                                            quantity: item.quantity,
+                                                            price: item.price,
+                                                            total: item.price * item.quantity
+                                                        })
+                                                    }
+                                                })
+
+                                                // Group UNPAID items for clean receipt display — show ALL items including €0 AYCE dishes
                                                 const displayGroups = new Map<string, { name: string, quantity: number, price: number, total: number, isAyce: boolean }>()
 
                                                 splitPayableItems.forEach(item => {
@@ -399,7 +443,7 @@ export default function TableBillDialog({
                                                     }
                                                 })
 
-                                                if (displayGroups.size === 0) {
+                                                if (displayGroups.size === 0 && paidGroups.size === 0) {
                                                     return (
                                                         <div className="py-12 flex flex-col items-center justify-center text-zinc-500 space-y-3 opacity-50">
                                                             <Receipt size={40} weight="duotone" />
@@ -408,42 +452,84 @@ export default function TableBillDialog({
                                                     )
                                                 }
 
-                                                return Array.from(displayGroups.entries()).map(([key, item]) => (
-                                                    <div key={key} className="flex justify-between items-baseline py-2 border-b border-white/5 last:border-0 group hover:bg-white/5 transition-colors rounded-lg px-2 -mx-2">
-                                                        <div className="flex gap-3 text-sm items-center">
-                                                            <span className="font-bold min-w-[24px] h-6 rounded bg-white/10 flex items-center justify-center text-xs text-zinc-300">{item.quantity}x</span>
-                                                            <div className="flex flex-col">
-                                                                <span className="font-medium text-zinc-200">{item.name}</span>
-                                                                {item.isAyce && <span className="text-[10px] text-amber-500/70 font-bold uppercase tracking-wider">AYCE incluso</span>}
+                                                return (
+                                                    <>
+                                                        {/* Paid items section */}
+                                                        {paidGroups.size > 0 && (
+                                                            <>
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <CheckCircle size={14} weight="fill" className="text-emerald-500" />
+                                                                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">Pagato</span>
+                                                                </div>
+                                                                {Array.from(paidGroups.entries()).map(([key, item]) => (
+                                                                    <div key={`paid-${key}`} className="flex justify-between items-baseline py-2 border-b border-white/5 last:border-0 rounded-lg px-2 -mx-2 opacity-50">
+                                                                        <div className="flex gap-3 text-sm items-center">
+                                                                            <span className="font-bold min-w-[24px] h-6 rounded bg-emerald-500/10 flex items-center justify-center text-xs text-emerald-500">{item.quantity}x</span>
+                                                                            <span className="font-medium text-zinc-500 line-through">{item.name}</span>
+                                                                        </div>
+                                                                        <span className="font-mono font-bold text-sm tabular-nums text-zinc-600 line-through">
+                                                                            {'\u20AC'}{item.total.toFixed(2)}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                                {displayGroups.size > 0 && (
+                                                                    <div className="border-t border-white/10 my-2" />
+                                                                )}
+                                                            </>
+                                                        )}
+
+                                                        {/* Unpaid items section */}
+                                                        {paidGroups.size > 0 && displayGroups.size > 0 && (
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <Clock size={14} weight="bold" className="text-amber-500" />
+                                                                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Da pagare</span>
                                                             </div>
-                                                        </div>
-                                                        <span className="font-mono font-bold text-sm tabular-nums text-zinc-300">
-                                                            {item.price === 0 ? <span className="text-emerald-500/70">€0.00</span> : `€${item.total.toFixed(2)}`}
-                                                        </span>
-                                                    </div>
-                                                ))
+                                                        )}
+                                                        {Array.from(displayGroups.entries()).map(([key, item]) => (
+                                                            <div key={key} className="flex justify-between items-baseline py-2 border-b border-white/5 last:border-0 group hover:bg-white/5 transition-colors rounded-lg px-2 -mx-2">
+                                                                <div className="flex gap-3 text-sm items-center">
+                                                                    <span className="font-bold min-w-[24px] h-6 rounded bg-white/10 flex items-center justify-center text-xs text-zinc-300">{item.quantity}x</span>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="font-medium text-zinc-200">{item.name}</span>
+                                                                        {item.isAyce && <span className="text-[10px] text-amber-500/70 font-bold uppercase tracking-wider">AYCE incluso</span>}
+                                                                    </div>
+                                                                </div>
+                                                                <span className="font-mono font-bold text-sm tabular-nums text-zinc-300">
+                                                                    {item.price === 0 ? <span className="text-emerald-500/70">{'\u20AC'}0.00</span> : `\u20AC${item.total.toFixed(2)}`}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </>
+                                                )
                                             })()}
                                         </div>
                                     </div>
 
                                     {/* Receipt Footer */}
-                                    <div className="p-5 border-t border-white/10 bg-black/20 backdrop-blur-md relative z-10 shrink-0 space-y-2">
+                                    <div className="p-6 border-t border-white/10 bg-black/20 backdrop-blur-md relative z-10 shrink-0">
                                         {(session?.paid_amount || 0) > 0 && (
-                                            <div className="flex justify-between items-center text-sm">
-                                                <span className="text-emerald-500 font-medium flex items-center gap-1.5">
-                                                    <CheckCircle size={14} weight="fill" />
-                                                    Pagato online
-                                                </span>
-                                                <span className="font-mono font-bold text-emerald-400">- €{(session?.paid_amount || 0).toFixed(2)}</span>
+                                            <div className="mb-3 space-y-1.5">
+                                                <div className="flex justify-between items-center text-sm">
+                                                    <span className="text-emerald-500 font-medium flex items-center gap-1.5">
+                                                        <CheckCircle size={14} weight="fill" />
+                                                        Pagato online
+                                                    </span>
+                                                    <span className="font-mono font-bold text-emerald-400">{'\u20AC'}{(session?.paid_amount || 0).toFixed(2)}</span>
+                                                </div>
+                                                {remainingAmount > 0 && (
+                                                    <div className="flex justify-between items-center text-sm">
+                                                        <span className="text-amber-500 font-medium">Da incassare</span>
+                                                        <span className="font-mono font-bold text-amber-400">{'\u20AC'}{remainingAmount.toFixed(2)}</span>
+                                                    </div>
+                                                )}
+                                                <div className="border-t border-white/10 pt-1.5" />
                                             </div>
                                         )}
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">
-                                                {(session?.paid_amount || 0) > 0 ? 'Da incassare' : 'Totale'}
-                                            </span>
-                                            <span className="text-3xl font-black text-white tracking-tight drop-shadow-lg">
-                                                €{remainingAmount.toFixed(2)}
-                                            </span>
+                                        <div className="flex justify-between items-end">
+                                            <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-1">Totale</span>
+                                            <div className="text-right">
+                                                <span className="text-3xl font-black text-white tracking-tight drop-shadow-lg">{'\u20AC'}{totalAmount.toFixed(2)}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -606,12 +692,11 @@ export default function TableBillDialog({
                                                 </Button>
                                                 <Button
                                                     size="sm"
-                                                    className="h-9 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs"
+                                                    className="h-9 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold"
                                                     onClick={() => setPaidPersons(Math.min(customSplitCount, paidPersons + 1))}
                                                     disabled={paidPersons >= customSplitCount}
                                                 >
-                                                    <CheckCircle weight="fill" size={14} className="mr-1 shrink-0" />
-                                                    <span className="truncate">€{(totalAmount / Math.max(1, customSplitCount)).toFixed(2)}</span>
+                                                    <CheckCircle weight="fill" size={14} className="mr-1" /> Incassa €{(totalAmount / Math.max(1, customSplitCount)).toFixed(2)}
                                                 </Button>
                                             </div>
                                         </div>
@@ -694,23 +779,23 @@ export default function TableBillDialog({
 
                                     {remainingAmount <= 0 && totalAmount > 0 && session?.paid_amount ? (
                                         <Button
-                                            className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-base rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 px-6"
+                                            className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xl rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 px-6"
                                             onClick={() => onPaymentComplete()}
                                         >
-                                            <CheckCircle weight="fill" size={22} className="shrink-0" />
-                                            <span className="truncate">Conferma e Chiudi</span>
+                                            <CheckCircle weight="fill" size={24} />
+                                            <span>Conferma Scontrino e Chiudi</span>
                                         </Button>
                                     ) : (
                                         <Button
-                                            className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-base rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between gap-2 px-6"
+                                            className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xl rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between px-6"
                                             onClick={() => onPaymentComplete()}
                                             disabled={remainingAmount <= 0 && totalAmount <= 0}
                                         >
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <CheckCircle weight="fill" size={22} className="shrink-0" />
-                                                <span className="truncate">{session?.paid_amount ? 'Incassa Rimanente' : 'Salda Tutto'}</span>
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle weight="fill" size={24} />
+                                                <span>{session?.paid_amount ? 'Incassa Rimanente' : 'Salda Tutto'}</span>
                                             </div>
-                                            <span className="shrink-0 font-mono">€{remainingAmount.toFixed(2)}</span>
+                                            <span>€{remainingAmount.toFixed(2)}</span>
                                         </Button>
                                     )}
 

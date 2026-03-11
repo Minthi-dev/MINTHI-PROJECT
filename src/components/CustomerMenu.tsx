@@ -1751,15 +1751,13 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   // Helper: get all payable items (not PAID, not CANCELLED)
   const payableItems = useMemo(() => {
-    const items: { id: string, itemId: string, name: string, price: number, quantity: number, orderId: string }[] = []
+    const items: { id: string, name: string, price: number, quantity: number, orderId: string }[] = []
     previousOrders.forEach(order => {
       order.items?.forEach((item: any) => {
         if (item.status === 'PAID' || item.status === 'CANCELLED') return
         const dishName = item.dish?.name || dishes.find(d => d.id === item.dish_id)?.name || 'Piatto'
-        const itemId = item.id || ''
         items.push({
-          id: `${order.id}_${item.dish_id}_${itemId || items.length}`,
-          itemId,
+          id: `${order.id}_${item.dish_id}_${item.id || items.length}`,
           name: dishName,
           price: item.dish?.price || 0,
           quantity: item.quantity || 1,
@@ -1856,14 +1854,17 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
       const totalToPay = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
-      // Collect order_item IDs to mark as PAID in DB after payment (per-piatti only)
-      const paidOrderItemIds: string[] = mode === 'items'
-        ? payableItems
-            .filter(pi => selectedPaymentItems.has(pi.id) && pi.itemId)
-            .map(pi => pi.itemId)
-        : []
-
       toast.loading('Reindirizzamento a Stripe...', { id: 'stripe-pay' })
+
+      // Collect paid order_item IDs for per-piatti payments
+      const paidOrderItemIds: string[] = []
+      if (mode === 'items') {
+        payableItems.filter(pi => selectedPaymentItems.has(pi.id)).forEach(pi => {
+          // pi.id format: "orderId_dishId_itemId" — extract the itemId (last segment)
+          const parts = pi.id.split('_')
+          if (parts.length >= 3) paidOrderItemIds.push(parts[parts.length - 1])
+        })
+      }
 
       const { url } = await DatabaseService.createStripeCustomerPayment({
         restaurantId: fullRestaurant.id,
@@ -1873,7 +1874,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         totalAmount: totalToPay,
         splitLabel,
         tableId: tableId || '',
-        paymentMode: mode === 'items' ? 'per_piatti' : 'romana_or_full',
         paidOrderItemIds: paidOrderItemIds.length > 0 ? paidOrderItemIds : undefined,
       })
 
@@ -1969,8 +1969,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
               </div>
             </div>
 
-            {/* Service Closed Banner removed - service hours are only used for
-                reservations table and custom menus activation, not for blocking orders */}
+            {/* Service hours are used only for custom menu activation and reservations, NOT to block customer orders */}
 
             {/* Categories - Horizontally Scrollable */}
             <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 pb-1">

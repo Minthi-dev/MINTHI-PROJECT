@@ -72,9 +72,6 @@ import TableBillDialog from './TableBillDialog'
 import { SettingsView } from './SettingsView'
 import ReservationsManager from './ReservationsManager'
 import AnalyticsCharts from './AnalyticsCharts'
-import DemoGuidePanel from './DemoGuidePanel'
-import SetupWizard from './SetupWizard'
-import { DEMO_ROOMS, DEMO_CATEGORIES, DEMO_DISHES, DEMO_TABLES, DEMO_SESSIONS, DEMO_ORDERS, DEMO_PAST_ORDERS, DEMO_BOOKINGS } from './demoData'
 import CustomMenusManager from './CustomMenusManager'
 import QRCodeGenerator from './QRCodeGenerator'
 import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, Room } from '../services/types'
@@ -96,13 +93,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const restaurantId = user?.restaurant_id || user?.user_metadata?.restaurant_id
   const [activeSection, setActiveSection] = useState('orders')
   const [pendingAutoOrderTableId, setPendingAutoOrderTableId] = useState<string | null>(null)
-
-  // Demo mode + Setup wizard state (logic moved after data hooks below)
-  const tourKey = `minthi_tour_done_${restaurantId}`
-  const [demoMode, setDemoMode] = useState(false)
-  const [demoStep, setDemoStep] = useState(0)
-  const [showSetupWizard, setShowSetupWizard] = useState(false)
-  const demoModeRef = useRef(false)
   const [activeTab, setActiveTab] = useState('orders')
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
@@ -127,85 +117,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
   const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
-  const [bookings, , refreshBookings, setBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
-  const [sessions, , refreshSessions, setSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
+  const [bookings, , refreshBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
+  const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
   const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
-
-  // Ref so stopDemo can call fetchOrders
-  const fetchOrdersRef = useRef<(() => void) | null>(null)
-
-  // Saved real data for restoring after demo
-  const realDataRef = useRef<{
-    dishes: Dish[], tables: Table[], categories: Category[], rooms: Room[],
-    orders: Order[], pastOrders: Order[], bookings: Booking[], sessions: TableSession[]
-  } | null>(null)
-
-  const startDemo = useCallback(() => {
-    // Save real data before injecting demo data
-    realDataRef.current = {
-      dishes: dishes || [], tables: tables || [], categories: categories || [],
-      rooms: rooms || [], orders, pastOrders, bookings: bookings || [], sessions: sessions || [],
-    }
-    demoModeRef.current = true
-    setDemoMode(true)
-    setDemoStep(0)
-    // Inject fake data
-    setDishes(DEMO_DISHES)
-    setTables(DEMO_TABLES)
-    setCategories(DEMO_CATEGORIES)
-    setRooms(DEMO_ROOMS)
-    setOrders(DEMO_ORDERS)
-    setPastOrders(DEMO_PAST_ORDERS)
-    setBookings(DEMO_BOOKINGS)
-    setSessions(DEMO_SESSIONS)
-    setActiveTab('orders')
-  }, [dishes, tables, categories, rooms, orders, pastOrders, bookings, sessions, setDishes, setTables, setCategories, setRooms, setBookings, setSessions])
-
-  const stopDemo = useCallback(() => {
-    demoModeRef.current = false
-    setDemoMode(false)
-    setDemoStep(0)
-    // Restore real data
-    if (realDataRef.current) {
-      setDishes(realDataRef.current.dishes)
-      setTables(realDataRef.current.tables)
-      setCategories(realDataRef.current.categories)
-      setRooms(realDataRef.current.rooms)
-      setOrders(realDataRef.current.orders)
-      setPastOrders(realDataRef.current.pastOrders)
-      setBookings(realDataRef.current.bookings)
-      setSessions(realDataRef.current.sessions)
-      realDataRef.current = null
-    }
-    // Also refresh from DB to get latest
-    refreshDishes(); refreshTables(); refreshCategories(); refreshRooms()
-    refreshBookings(); refreshSessions(); fetchOrdersRef.current?.()
-  }, [setDishes, setTables, setCategories, setRooms, setBookings, setSessions, refreshDishes, refreshTables, refreshCategories, refreshRooms, refreshBookings, refreshSessions])
-
-  // First login: auto-start demo
-  const firstLoginChecked = useRef(false)
-  useEffect(() => {
-    if (firstLoginChecked.current) return
-    if (!restaurantId) return
-    firstLoginChecked.current = true
-    if (!localStorage.getItem(tourKey)) {
-      // Small delay to let dashboard render
-      setTimeout(() => startDemo(), 500)
-    }
-  }, [restaurantId, tourKey, startDemo])
-
-  const handleDemoExit = useCallback(() => {
-    // Check real data BEFORE stopDemo clears it
-    const real = realDataRef.current
-    const hasNoData = !real || (real.tables.length === 0 && real.dishes.length === 0 && real.categories.length === 0)
-    stopDemo()
-    // Mark tour as done
-    localStorage.setItem(tourKey, '1')
-    // Show setup wizard if no real data exists
-    if (hasNoData) {
-      setShowSetupWizard(true)
-    }
-  }, [stopDemo, tourKey])
 
   // Initialize selected categories when available
   const categoriesInitializedRef = useRef(false)
@@ -275,13 +189,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   // Sound refs for stable subscription usage
   const soundEnabledRef = useRef(soundEnabled)
   const selectedSoundRef = useRef(selectedSound)
-  const activeSectionRef = useRef(activeSection)
+  const activeTabRef = useRef(activeTab)
+  useEffect(() => { activeTabRef.current = activeTab }, [activeTab])
   const lastScheduledMenuRef = useRef<{ menuId: string | null, mealType: string | null, day: number | null }>({
     menuId: null,
     mealType: null,
     day: null
   })
-  const weeklyServiceHoursRef = useRef<any>(null)
 
   useEffect(() => {
     soundEnabledRef.current = soundEnabled
@@ -290,10 +204,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   useEffect(() => {
     selectedSoundRef.current = selectedSound
   }, [selectedSound])
-
-  useEffect(() => {
-    activeSectionRef.current = activeSection
-  }, [activeSection])
 
   // Persist settings
   useEffect(() => {
@@ -321,60 +231,43 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return h * 60 + m
         }
 
-        const lunchStart = parseTime(lunchTimeStart)
-        const dinnerStart = parseTime(dinnerTimeStart)
-
-        // Improved Logic for "Restaurant Day" (Customer Issue: "wrong date")
-        // If currentTime is before 06:00 AM, we consider it the "late night" of the previous day.
-        // This ensures that a dinner service ending at 2 AM is still linked to Yesterday's menu.
+        // Improved Logic for "Restaurant Day"
         const LATE_NIGHT_CUTOFF = 6 * 60 // 06:00 AM
 
         let effectiveDay = dayOfWeek
         let checkTime = currentTime
 
-        // If it's late night (e.g. 01:00 AM), treat it as previous day (e.g. 25:00)
         if (currentTime < LATE_NIGHT_CUTOFF) {
-          effectiveDay = (dayOfWeek + 6) % 7 // Previous day
-          checkTime = currentTime + (24 * 60) // Add 24h for easier comparison
+          effectiveDay = (dayOfWeek + 6) % 7
+          checkTime = currentTime + (24 * 60)
         }
 
-        // Check service hours from weeklyServiceHours for the effective day
-        const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
-        const effectiveDayKey = DAY_KEYS[effectiveDay]
-        const serviceHours = weeklyServiceHoursRef.current
-
-        // Helper: check if current time is within a service window
-        const isInWindow = (start: string, end: string) => {
-          const startMin = parseTime(start)
-          let endMin = parseTime(end)
-          // Handle midnight crossover (e.g. dinner 19:00-02:00)
-          if (endMin <= startMin) endMin += 24 * 60
-          return checkTime >= startMin && checkTime <= endMin
-        }
-
+        // Determine current meal type using weekly_service_hours if available
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+        const dayName = dayNames[effectiveDay]
         let currentMealType: string | null = null
 
-        if (serviceHours?.useWeeklySchedule && effectiveDayKey) {
-          // Use per-day service hours with exact start/end times
-          const dayService = serviceHours.schedule?.[effectiveDayKey]
-          const lunchService = dayService?.lunch
-          const dinnerService = dayService?.dinner
-
-          if (lunchService?.enabled && lunchService.start && lunchService.end) {
-            if (isInWindow(lunchService.start, lunchService.end)) currentMealType = 'lunch'
+        const wsHours = currentRestaurant?.weekly_service_hours
+        if (wsHours?.useWeeklySchedule && wsHours.schedule?.[dayName]) {
+          const daySchedule = wsHours.schedule[dayName]
+          if (daySchedule.lunch?.enabled) {
+            const lStart = parseTime(daySchedule.lunch.start)
+            const lEnd = parseTime(daySchedule.lunch.end)
+            if (checkTime >= lStart && checkTime < lEnd) currentMealType = 'lunch'
           }
-          if (dinnerService?.enabled && dinnerService.start && dinnerService.end) {
-            if (isInWindow(dinnerService.start, dinnerService.end)) currentMealType = 'dinner'
+          if (daySchedule.dinner?.enabled) {
+            const dStart = parseTime(daySchedule.dinner.start)
+            const dEnd = parseTime(daySchedule.dinner.end)
+            if (checkTime >= dStart && (dEnd > dStart ? checkTime < dEnd : true)) currentMealType = 'dinner'
           }
         } else {
-          // Fallback: use global lunch/dinner start times (original logic)
+          // Fallback to legacy lunchTimeStart/dinnerTimeStart
+          const lunchStart = parseTime(lunchTimeStart)
+          const dinnerStart = parseTime(dinnerTimeStart)
           if (lunchStart > 0 && dinnerStart > 0) {
             if (lunchStart < dinnerStart) {
-              if (checkTime >= lunchStart && checkTime < dinnerStart) {
-                currentMealType = 'lunch'
-              } else if (checkTime >= dinnerStart) {
-                currentMealType = 'dinner'
-              }
+              if (checkTime >= lunchStart && checkTime < dinnerStart) currentMealType = 'lunch'
+              else if (checkTime >= dinnerStart) currentMealType = 'dinner'
             } else {
               currentMealType = checkTime >= lunchStart ? 'lunch' : 'dinner'
             }
@@ -632,7 +525,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   // Fetch Orders with Relations
   const fetchOrders = async () => {
-    if (!restaurantId || demoModeRef.current) return
+    if (!restaurantId) return
     try {
       const data = await DatabaseService.getOrders(restaurantId)
       setOrders(data)
@@ -645,9 +538,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }
 
-  // Keep ref updated
-  fetchOrdersRef.current = fetchOrders
-
   useEffect(() => {
     if (!restaurantId) return // Ensure restaurantId is present
 
@@ -656,7 +546,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     // Debounced fetch to avoid rapid re-fetches and ensure items are committed
     let fetchTimeout: ReturnType<typeof setTimeout> | null = null
     const debouncedFetch = () => {
-      if (demoModeRef.current) return // Skip during demo mode
       if (fetchTimeout) clearTimeout(fetchTimeout)
       fetchTimeout = setTimeout(() => fetchOrders(), 500)
     }
@@ -665,15 +554,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       .channel(`dashboard_orders_${restaurantId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         debouncedFetch()
-        // Play sound on new order — only notify when in orders section
-        if (payload.eventType === 'INSERT' && activeSectionRef.current === 'orders') {
-          if (soundEnabledRef.current) soundManager.play(selectedSoundRef.current)
+        // Play sound on new order using refs to avoid re-subscription
+        // Only show order notifications when in orders tab
+        if (payload.eventType === 'INSERT' && soundEnabledRef.current && activeTabRef.current === 'orders') {
+          soundManager.play(selectedSoundRef.current)
           toast.info('Nuovo ordine ricevuto!')
         }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'order_items', filter: `restaurant_id=eq.${restaurantId}` }, () => {
-        // Refresh orders when item status changes (e.g. Stripe marks items as PAID)
-        debouncedFetch()
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'table_sessions', filter: `restaurant_id=eq.${restaurantId}` }, (payload) => {
         // Notify when a customer pays online via Stripe (paid_amount increased)
@@ -685,32 +571,29 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         const oldNotes = oldSession?.notes || '';
         const newNotes = payload.new?.notes || '';
 
-        // Payment notifications — only show when in tables section (not in orders or other sections)
-        const isInTablesSection = activeSectionRef.current === 'tables'
-        if (newAmount > oldAmount) {
+        if (newAmount > oldAmount && activeTabRef.current !== 'orders') {
           const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
           const tableNumber = tableObj?.number || '?'
-          if (isInTablesSection) {
-            toast.success(
-              `Tavolo ${tableNumber} ha pagato online! €${Number(newAmount - oldAmount).toFixed(2)}`,
-              {
-                duration: 10000,
-                description: 'Clicca per vedere il conto',
-                action: tableObj ? {
-                  label: 'Vedi Conto',
-                  onClick: () => {
-                    setSelectedTableForActions(tableObj)
-                    setShowTableBillDialog(true)
-                  }
-                } : undefined
-              }
-            )
-            if (soundEnabledRef.current) {
-              soundManager.play(selectedSoundRef.current)
+          toast.success(
+            `Tavolo ${tableNumber} ha pagato online! €${Number(newAmount - oldAmount).toFixed(2)}`,
+            {
+              duration: 10000,
+              description: 'Clicca per vedere il conto',
+              action: tableObj ? {
+                label: 'Vedi Conto',
+                onClick: () => {
+                  setSelectedTableForActions(tableObj)
+                  setShowTableBillDialog(true)
+                }
+              } : undefined
             }
+          )
+          // Also play notification sound
+          if (soundEnabledRef.current) {
+            soundManager.play(selectedSoundRef.current)
           }
-        } else if (newNotes !== oldNotes && newNotes.includes('Pagamento') && isInTablesSection) {
-          // Fallback if paid_amount wasn't updated but notes were
+        } else if (newNotes !== oldNotes && newNotes.includes('Pagamento')) {
+          // Fallback if paid_amount wasn't updated but notes were (e.g. some split logic scenario)
           const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
           const tableNumber = tableObj?.number || '?'
           toast.success(
@@ -880,7 +763,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [weeklyCoperto, setWeeklyCoperto] = useState<any>(currentRestaurant?.weekly_coperto || null)
   const [weeklyAyce, setWeeklyAyce] = useState<any>(currentRestaurant?.weekly_ayce || null)
   const [weeklyServiceHours, setWeeklyServiceHours] = useState<any>(currentRestaurant?.weekly_service_hours || null)
-  useEffect(() => { weeklyServiceHoursRef.current = weeklyServiceHours }, [weeklyServiceHours])
 
   // Reservation Settings
   const [enableReservationRoomSelection, setEnableReservationRoomSelection] = useState(false)
@@ -1282,6 +1164,21 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const handleCloseTable = async (tableId: string, markPaid: boolean) => {
     const openSession = getOpenSessionForTable(tableId)
     if (openSession) {
+      // Check for undelivered items before closing
+      const sessionOrdersForClose = restaurantOrders.filter(o => o.table_session_id === openSession.id)
+      const undeliveredItems = sessionOrdersForClose.flatMap(o =>
+        (o.items || []).filter((item: any) =>
+          item.status !== 'SERVED' && item.status !== 'CANCELLED' && item.status !== 'PAID'
+        )
+      )
+      if (undeliveredItems.length > 0 && markPaid) {
+        const pendingCount = undeliveredItems.length
+        const shouldContinue = confirm(
+          `Attenzione: ci sono ancora ${pendingCount} piatt${pendingCount === 1 ? 'o' : 'i'} non servit${pendingCount === 1 ? 'o' : 'i'} (in preparazione o in attesa).\n\nVuoi chiudere comunque il tavolo?`
+        )
+        if (!shouldContinue) return
+      }
+
       try {
         await DatabaseService.closeSession(openSession.id)
         if (markPaid) {
@@ -1951,7 +1848,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               ].map((item) => (
                 <Button
                   key={item.id}
-                  data-tour={`nav-${item.id}`}
                   variant="ghost"
                   className={`w-full justify-start h-12 px-4 rounded-xl transition-all duration-300 group relative overflow-hidden ${activeTab === item.id
                     // Active State: Minimal & Elegant
@@ -1987,7 +1883,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             <div className="p-3 border-t border-white/5 bg-black/20 min-w-[272px] flex flex-col gap-1">
               <Button
-                data-tour="nav-settings"
                 variant="ghost"
                 onClick={() => {
                   setActiveTab('settings')
@@ -2114,7 +2009,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8 animate-in fade-in-30 duration-500">
             {/* Orders Tab */}
             <TabsContent value="orders" className="space-y-6">
-              <div data-tour="orders-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Ordini</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci gli ordini in tempo reale</p>
@@ -2283,12 +2178,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     dishes={dishes || []}
                     selectedCategoryIds={selectedKitchenCategories}
                     viewMode={kitchenViewMode}
+                    // columns={kitchenColumns} // Removed in favor of responsive grid
                     onCompleteDish={handleCompleteDish}
                     onDeliverDish={handleDeliverDish}
                     onCompleteOrder={handleCompleteOrder}
                     sessions={sessions || []}
                     zoom={kitchenZoom}
-                    waiterModeEnabled={waiterModeEnabled}
                   />
                 )}
             </TabsContent >
@@ -2310,13 +2205,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       className="pl-9 h-10 w-[180px] lg:w-[230px] bg-background/50 backdrop-blur-sm"
                     />
                   </div>
-                  <Button data-tour="add-table-btn" onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
+                  <Button onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
                     <Plus size={16} className="mr-2" />
                     Nuovo Tavolo
                   </Button>
 
                   <Button
-                    data-tour="download-qr-btn"
                     variant="outline"
                     size="sm"
                     className="h-10 shadow-sm hover:shadow-md transition-shadow border-dashed border-zinc-700 hover:border-amber-500 hover:text-amber-500"
@@ -2442,7 +2336,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               .length
                             return pendingCount > 0 ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
-                                🔔 {pendingCount} scontrin{pendingCount === 1 ? 'o' : 'i'} da registrare
+                                {pendingCount} scontrin{pendingCount === 1 ? 'o' : 'i'} da registrare
                               </span>
                             ) : null
                           })()}
@@ -3000,25 +2894,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       const isActive = session?.status === 'OPEN'
                       const activeOrder = restaurantOrders.find(o => getTableIdFromOrder(o) === table.id)
                       const allTableOrders = restaurantOrders.filter(o => getTableIdFromOrder(o) === table.id)
+                      const hasStripePayment = session && (session.paid_amount || 0) > 0
+
                       // Calculate full table total (orders + coperto + AYCE)
                       const sessionOrders = session ? restaurantOrders.filter(o => o.table_session_id === session.id && o.status !== 'CANCELLED') : []
-
-                      // ordersTotal: unpaid items only (PAID already collected via per-piatti)
                       const ordersTotal = sessionOrders.reduce((sum, o) => {
                         if (!o.items) return sum
                         return sum + o.items.reduce((iSum: number, item: any) => {
                           if (item.status === 'CANCELLED' || item.status === 'PAID') return iSum
-                          const isAyceSession = session?.ayce_enabled === true
-                          const price = (isAyceSession && item.dish?.is_ayce) ? 0 : (item.dish?.price ?? item.price ?? 0)
-                          return iSum + price * (item.quantity || 1)
-                        }, 0)
-                      }, 0)
-
-                      // paidItemsTotal: sum of per-piatti paid items (per-piatti doesn't update paid_amount)
-                      const paidItemsTotal = sessionOrders.reduce((sum, o) => {
-                        if (!o.items) return sum
-                        return sum + o.items.reduce((iSum: number, item: any) => {
-                          if (item.status !== 'PAID') return iSum
                           const isAyceSession = session?.ayce_enabled === true
                           const price = (isAyceSession && item.dish?.is_ayce) ? 0 : (item.dish?.price ?? item.price ?? 0)
                           return iSum + price * (item.quantity || 1)
@@ -3046,12 +2929,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                       const tableGrandTotal = ordersTotal + copertoTotal + ayceTotal
                       const paidAmount = session?.paid_amount || 0
-                      // effectivePaidOnline: romana/full uses paid_amount; per-piatti uses paidItemsTotal
-                      const effectivePaidOnline = paidAmount + paidItemsTotal
-                      const hasStripePayment = session && effectivePaidOnline > 0
-                      // remainingToPay: tableGrandTotal already excludes PAID items; subtract paid_amount for romana/full
                       const remainingToPay = Math.max(0, tableGrandTotal - paidAmount)
-                      const isFullyPaidOnline = hasStripePayment && remainingToPay <= 0 && (tableGrandTotal + paidItemsTotal) > 0
+                      const isFullyPaidOnline = hasStripePayment && remainingToPay <= 0 && tableGrandTotal > 0
                       const isPartiallyPaidOnline = hasStripePayment && remainingToPay > 0
 
                       return (
@@ -3095,112 +2974,100 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 blur-xl rounded-full -mr-8 -mt-8 pointer-events-none"></div>
                           )}
                           <CardContent className="p-0 flex flex-col h-full">
-                            {/* Header */}
-                            <div className="px-4 pt-4 pb-3 flex items-center justify-between gap-2 border-b border-white/5">
-                              <div className="flex items-center gap-2.5">
-                                <span className={`text-3xl font-black tracking-tight whitespace-nowrap ${isActive ? 'text-amber-400' : 'text-zinc-200'}`}>
+                            <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-b border-white/5">
+                              <div className="flex items-center gap-3">
+                                <span className={`text-2xl font-bold tracking-tight whitespace-nowrap ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
                                   {table.number}
                                 </span>
-                                <div className="flex items-center gap-1.5 text-zinc-400 bg-white/5 px-2.5 py-1 rounded-full">
-                                  <Users size={14} weight="bold" />
+                                <div className="flex items-center gap-1.5 text-zinc-400 bg-white/5 px-3 py-1 rounded-full">
+                                  <Users size={16} weight="bold" />
                                   <span className="text-sm font-bold">{table.seats || 4}</span>
                                 </div>
                               </div>
                               <Badge
                                 variant={isActive ? 'default' : 'outline'}
-                                className={`text-xs font-bold px-2.5 py-0.5 ${
+                                className={
                                   isFullyPaidOnline && !session?.receipt_issued
-                                    ? 'bg-emerald-500 text-white border-none'
+                                    ? 'bg-emerald-500 text-white border-none font-bold'
                                     : isPartiallyPaidOnline
-                                    ? 'bg-orange-500 text-white border-none'
-                                    : isActive ? 'bg-amber-500 text-black border-none' : 'bg-transparent text-zinc-500 border-zinc-700'
-                                }`}
+                                    ? 'bg-orange-500 text-white border-none font-bold'
+                                    : isActive ? 'bg-amber-500 text-black border-none font-bold' : 'bg-transparent text-zinc-500 border-zinc-700'
+                                }
                               >
                                 {isFullyPaidOnline && !session?.receipt_issued ? 'Pagato' : isPartiallyPaidOnline ? 'Parziale' : isActive ? 'Occupato' : 'Libero'}
                               </Badge>
                             </div>
 
-                            {/* Body */}
-                            <div className="flex-1 px-4 py-3 flex flex-col items-center justify-center gap-2.5">
+                            <div className="flex-1 p-5 flex flex-col items-center justify-center gap-3">
                               {isActive ? (
                                 <>
-                                  {/* PIN */}
-                                  <div className="text-center w-full">
-                                    <p className="text-[10px] text-amber-500/60 mb-1.5 uppercase tracking-[0.25em] font-semibold">PIN</p>
-                                    <div className="bg-black/50 px-5 py-2.5 rounded-xl border border-amber-500/25 shadow-inner">
-                                      <span className="text-3xl font-mono font-black tracking-[0.25em] text-amber-400 whitespace-nowrap">
+                                  <div className="text-center">
+                                    <p className="text-[9px] text-amber-500/70 mb-1 uppercase tracking-[0.2em] font-semibold">PIN</p>
+                                    <div className="bg-black/40 px-6 py-3 rounded-xl border border-amber-500/20 shadow-inner min-w-[120px]">
+                                      <span className="text-4xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
                                         {session?.session_pin || '...'}
                                       </span>
                                     </div>
                                   </div>
-
-                                  {/* Items served badge */}
                                   {activeOrder && (
-                                    <div className="flex items-center gap-1.5 text-xs text-amber-300/80 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
-                                      <CheckCircle size={12} className="" weight="fill" />
-                                      <span className="font-semibold">{activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati</span>
-                                    </div>
+                                    <Badge variant="outline" className="text-[10px] bg-black/40 border-amber-500/30 text-amber-200">
+                                      <CheckCircle size={10} className="mr-1" weight="fill" />
+                                      {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati
+                                    </Badge>
                                   )}
-
-                                  {/* Fully paid online */}
                                   {isFullyPaidOnline && !session?.receipt_issued && (
-                                    <div className="w-full mt-1 bg-emerald-500/15 border border-emerald-500/40 rounded-xl px-3 py-2.5 flex flex-col items-center gap-1">
-                                      <div className="flex items-center gap-1.5 text-emerald-300 font-bold text-sm">
-                                        <CreditCard size={14} weight="fill" />
-                                        <span>Pagato online</span>
+                                    <div className="flex flex-col items-center gap-1.5 mt-2">
+                                      <div className="flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/40 rounded-lg px-3 py-1.5">
+                                        <CreditCard size={14} weight="fill" className="text-emerald-400 shrink-0" />
+                                        <span className="text-sm font-bold text-emerald-300 whitespace-nowrap">Pagato Online</span>
                                       </div>
-                                      <span className="text-2xl font-black text-emerald-400 font-mono">€{effectivePaidOnline.toFixed(2)}</span>
+                                      <span className="text-base font-black text-emerald-400 tabular-nums">{'\u20AC'}{paidAmount.toFixed(2)}</span>
+                                      <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1">
+                                        <CheckCircle size={12} weight="fill" />
+                                        Tutto saldato
+                                      </span>
                                     </div>
                                   )}
-
-                                  {/* Partially paid online */}
                                   {isPartiallyPaidOnline && (
-                                    <div className="w-full mt-1 bg-orange-500/10 border border-orange-500/40 rounded-xl px-3 py-2.5 space-y-1.5">
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="flex items-center gap-1 text-orange-300 font-semibold">
-                                          <CreditCard size={12} weight="fill" />
-                                          Online
-                                        </span>
-                                        <span className="font-mono font-bold text-orange-300">€{effectivePaidOnline.toFixed(2)}</span>
+                                    <div className="flex flex-col items-center gap-1.5 mt-2">
+                                      <div className="flex items-center gap-1.5 bg-orange-500/15 border border-orange-500/40 rounded-lg px-3 py-1.5">
+                                        <CreditCard size={14} weight="fill" className="text-orange-400 shrink-0" />
+                                        <span className="text-sm font-bold text-orange-300 whitespace-nowrap">Pagato Online</span>
                                       </div>
-                                      <div className="h-px bg-orange-500/20" />
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className="text-zinc-400 font-medium">Da incassare</span>
-                                        <span className="font-mono font-black text-red-400 text-sm">€{remainingToPay.toFixed(2)}</span>
-                                      </div>
+                                      <span className="text-base font-black text-orange-400 tabular-nums">{'\u20AC'}{paidAmount.toFixed(2)}</span>
+                                      <span className="text-sm font-bold text-red-400">Da incassare: {'\u20AC'}{remainingToPay.toFixed(2)}</span>
                                     </div>
                                   )}
                                 </>
                               ) : (
                                 <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-all duration-300">
-                                  <ForkKnife size={32} className="mx-auto mb-1.5" weight="duotone" />
-                                  <p className="text-sm font-medium">Clicca per Ordinare</p>
+                                  <ForkKnife size={32} className="mx-auto mb-1" weight="duotone" />
+                                  <p className="text-xs font-medium">Clicca per Ordinare</p>
                                 </div>
                               )}
                             </div>
 
-                            {/* Footer buttons */}
                             <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2">
                               {isActive ? (
                                 <div className={`grid gap-2 ${isFullyPaidOnline && !session?.receipt_issued ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                   {isFullyPaidOnline && !session?.receipt_issued ? (
                                     <Button
-                                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-9 text-sm"
+                                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-8 text-xs font-bold"
                                       size="sm"
                                       onClick={async (e) => {
                                         e.stopPropagation();
-                                        // Check if any order items haven't been delivered yet
-                                        const undeliveredOrders = sessionOrders.filter(o =>
-                                          o.items?.some((item: any) =>
-                                            !['DELIVERED', 'SERVED', 'COMPLETED', 'CANCELLED', 'PAID'].includes((item.status || '').toUpperCase())
+                                        // Check for undelivered items
+                                        const undelivered = sessionOrders.flatMap(o =>
+                                          (o.items || []).filter((item: any) =>
+                                            item.status !== 'SERVED' && item.status !== 'CANCELLED' && item.status !== 'PAID'
                                           )
                                         );
-                                        if (undeliveredOrders.length > 0) {
-                                          toast.error('Ci sono ancora piatti da consegnare. Consegna tutti i piatti prima di chiudere il tavolo.', { duration: 5000 });
-                                          return;
+                                        if (undelivered.length > 0) {
+                                          const msg = `Attenzione: ci sono ancora ${undelivered.length} piatt${undelivered.length === 1 ? 'o' : 'i'} non servit${undelivered.length === 1 ? 'o' : 'i'}.\n\nVuoi chiudere comunque il tavolo?`;
+                                          if (!confirm(msg)) return;
+                                        } else {
+                                          if (!confirm('Tutto pagato online. Stampare scontrino e chiudere il tavolo?')) return;
                                         }
-                                        const conferma = confirm('Tutto pagato online. Stampare scontrino e chiudere il tavolo?');
-                                        if (!conferma) return;
                                         try {
                                           await DatabaseService.updateSessionReceiptIssued(session.id, true);
                                           await DatabaseService.closeSession(session.id);
@@ -3213,32 +3080,32 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         }
                                       }}
                                     >
-                                      <CheckCircle size={15} weight="fill" className="mr-1.5" />
+                                      <CheckCircle size={14} weight="fill" className="mr-1.5" />
                                       Stampa Scontrino e Chiudi
                                     </Button>
                                   ) : (
                                     <>
-                                      <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleShowTableQr(table); }} className="shadow-sm hover:shadow transition-shadow h-9 text-sm font-medium">
-                                        <QrCode size={15} className="mr-1.5" />
+                                      <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleShowTableQr(table); }} className="shadow-sm hover:shadow transition-shadow h-8 text-xs">
+                                        <QrCode size={14} className="mr-1.5" />
                                         QR
                                       </Button>
                                       <Button
-                                        className={`shadow-sm hover:shadow transition-all h-9 text-sm font-bold ${isPartiallyPaidOnline
-                                          ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:from-orange-500 hover:to-orange-400'
+                                        className={`shadow-sm hover:shadow transition-all h-8 text-xs overflow-hidden ${isPartiallyPaidOnline
+                                          ? 'bg-gradient-to-r from-orange-600 to-orange-500 text-white hover:from-orange-500 hover:to-orange-400 font-bold'
                                           : 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:from-primary/90 hover:to-primary/70'
                                         }`}
                                         size="sm"
                                         onClick={(e) => { e.stopPropagation(); setSelectedTableForActions(table); setShowTableBillDialog(true); }}
                                       >
-                                        <Receipt size={15} className="mr-1.5 shrink-0" />
-                                        Conto
+                                        <Receipt size={14} className="mr-1 shrink-0" />
+                                        <span className="truncate whitespace-nowrap">{isPartiallyPaidOnline ? `Conto` : 'Conto'}</span>
                                       </Button>
                                     </>
                                   )}
                                 </div>
                               ) : (
                                 <Button
-                                  className="w-full shadow-sm hover:shadow transition-shadow h-9 text-sm font-medium"
+                                  className="w-full shadow-sm hover:shadow transition-shadow h-8 text-xs"
                                   size="sm"
                                   onClick={(e) => { e.stopPropagation(); handleToggleTable(table.id); }}
                                 >
@@ -3325,7 +3192,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             {/* Menu Tab */}
             <TabsContent value="menu" className="space-y-6">
-              <div data-tour="menu-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Menu</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci piatti e categorie</p>
@@ -3511,7 +3378,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog open={isAddItemDialogOpen} onOpenChange={setIsAddItemDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button data-tour="add-dish-btn">
+                      <Button>
                         <Plus size={16} className="mr-2" />
                         Nuovo Piatto
                       </Button>
@@ -3802,7 +3669,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             {/* Reservations Tab */}
             <TabsContent value="reservations" className="space-y-6 p-6">
               {/* Date Quick Filters */}
-              <div data-tour="reservations-header" className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium text-muted-foreground mr-2">Seleziona data:</span>
                 <Button
                   variant={selectedReservationDate.toDateString() === new Date().toDateString() ? 'default' : 'outline'}
@@ -3891,20 +3758,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
               {/* Analytics Content */}
-              <div data-tour="analytics-header">
-                <AnalyticsCharts
-                  orders={restaurantOrders}
-                  dishes={restaurantDishes}
-                  categories={restaurantCategories}
-                  completedOrders={pastOrders}
-                  restaurantName={restaurantName}
-                  restaurantId={restaurantId || ''}
-                />
-              </div>
+              <AnalyticsCharts
+                orders={restaurantOrders}
+                dishes={restaurantDishes}
+                categories={restaurantCategories}
+                completedOrders={pastOrders}
+                restaurantName={restaurantName}
+                restaurantId={restaurantId || ''}
+              />
             </TabsContent >
 
             {/* Settings Tab */}
-            <TabsContent value="settings" data-tour="settings-header" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
+            <TabsContent value="settings" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
               <SettingsView
                 restaurantName={restaurantName}
                 setRestaurantName={setRestaurantName}
@@ -4016,7 +3881,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     DatabaseService.updateRestaurant({ id: restaurantId, weekly_service_hours: schedule })
                   }
                 }}
-                onRestartTour={startDemo}
               />
             </TabsContent >
           </Tabs >
@@ -4591,7 +4455,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             <AlertDialogContent className="bg-zinc-950 border-zinc-800 text-white">
               <AlertDialogHeader>
                 <AlertDialogTitle className="text-xl font-bold">
-                  {closeConfirmAction?.markPaid ? '💳 Conferma Pagamento' : '🗑️ Conferma Liberazione'}
+                  {closeConfirmAction?.markPaid ? 'Conferma Pagamento' : 'Conferma Liberazione'}
                 </AlertDialogTitle>
                 <AlertDialogDescription className="text-zinc-400">
                   {closeConfirmAction?.markPaid
@@ -4639,27 +4503,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
         </div>
       </main>
-
-      {/* Demo Mode Guide */}
-      {demoMode && (
-        <DemoGuidePanel
-          currentStep={demoStep}
-          setCurrentStep={setDemoStep}
-          setActiveTab={setActiveTab}
-          onExit={handleDemoExit}
-        />
-      )}
-
-      {/* Setup Wizard (after demo, for new restaurants) */}
-      {showSetupWizard && !demoMode && (
-        <SetupWizard
-          setActiveTab={setActiveTab}
-          onComplete={() => setShowSetupWizard(false)}
-          tablesCount={tables?.length || 0}
-          dishesCount={dishes?.length || 0}
-          categoriesCount={categories?.length || 0}
-        />
-      )}
 
       {/* HIDDEN PRINT VIEW FOR MENU EXPORT - ALL INLINE STYLES FOR PDF COMPATIBILITY */}
       <div id="menu-print-view" style={{

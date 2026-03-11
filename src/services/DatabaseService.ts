@@ -1000,7 +1000,6 @@ export const DatabaseService = {
         totalAmount: number,
         splitLabel?: string,
         tableId?: string,
-        paymentMode?: 'per_piatti' | 'romana_or_full',
         paidOrderItemIds?: string[],
     }) {
         const { data, error } = await supabase.functions.invoke('stripe-customer-payment', {
@@ -1013,7 +1012,6 @@ export const DatabaseService = {
                 splitLabel: params.splitLabel || 'Pagamento',
                 successUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=success`,
                 cancelUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=cancelled`,
-                paymentMode: params.paymentMode,
                 paidOrderItemIds: params.paidOrderItemIds,
             }
         });

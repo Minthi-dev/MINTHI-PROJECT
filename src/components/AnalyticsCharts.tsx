@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Area, AreaChart } from 'recharts'
-import { TrendUp, CurrencyEur, Users, ShoppingBag, Clock, ChartLine, CalendarBlank, List, CaretDown, Star, Package, TrendDown, Minus, Check, DownloadSimple, ArrowUp, ArrowDown } from '@phosphor-icons/react'
+import { TrendUp, CurrencyEur, Users, ShoppingBag, Clock, ChartLine, CalendarBlank, List, CaretDown, Star, Package, TrendDown, Minus, Check, DownloadSimple, ArrowsLeftRight, ArrowUp, ArrowDown } from '@phosphor-icons/react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { Order, Dish, Category, OrderItem, RestaurantStaff, WaiterActivityLog } from '../services/types'
@@ -95,11 +95,11 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
   const [inventoryCategories, setInventoryCategories] = useState<string[]>([])
   const [inventorySortBy, setInventorySortBy] = useState<'quantity' | 'revenue' | 'category' | 'price'>('quantity')
 
-  // Magazzino comparison preset
-  const [inventoryCompare, setInventoryCompare] = useState<'none' | 'prev_period' | 'prev_month' | 'prev_year'>('prev_period')
-
-  // Waiter meal period filter
-  const [waiterMealFilter, setWaiterMealFilter] = useState<'all' | 'lunch' | 'dinner'>('all')
+  // Magazzino comparison state
+  const [magCompareEnabled, setMagCompareEnabled] = useState(false)
+  const [magCompareMode, setMagCompareMode] = useState<'prev_week' | 'prev_month' | 'custom'>('prev_week')
+  const [magCompareCustomStart, setMagCompareCustomStart] = useState('')
+  const [magCompareCustomEnd, setMagCompareCustomEnd] = useState('')
 
   // Chart Toggles
   const [timeSeriesMetric, setTimeSeriesMetric] = useState<'orders' | 'revenue' | 'average'>('orders')
@@ -109,7 +109,6 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
   useEffect(() => {
     setSelectedCategories(categories.map(c => c.id))
     setInventoryCategories(categories.map(c => c.id))
-    setCompCategories(categories.map(c => c.id))
   }, [categories])
 
   // Helper function to get date range
@@ -309,61 +308,108 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     }
   }
 
-  // Inventory (Magazzino) calculations - uses main date filter + comparison preset
+  // Helper to compute comparison period range based on mode
+  const getComparisonRange = () => {
+    const currentDuration = end - start
+    if (magCompareMode === 'prev_week') {
+      const compEnd = start - 1
+      const compStart = compEnd - (7 * 24 * 60 * 60 * 1000)
+      return { compStart, compEnd }
+    } else if (magCompareMode === 'prev_month') {
+      const compEnd = start - 1
+      const compStart = compEnd - (30 * 24 * 60 * 60 * 1000)
+      return { compStart, compEnd }
+    } else if (magCompareMode === 'custom' && magCompareCustomStart && magCompareCustomEnd) {
+      const cs = new Date(magCompareCustomStart).getTime()
+      const ceDate = new Date(magCompareCustomEnd)
+      ceDate.setHours(23, 59, 59, 999)
+      return { compStart: cs, compEnd: ceDate.getTime() }
+    }
+    // fallback: previous equivalent period
+    return { compStart: start - currentDuration, compEnd: start - 1 }
+  }
+
+  // Inventory (Magazzino) calculations - NOW USES MAIN DATE FILTER
   const inventoryData = useMemo(() => {
+    // Use the same date range as the main analytics (from dateFilter)
     const invStart = start
     const invEnd = end
     const periodDays = Math.max(1, Math.ceil((invEnd - invStart) / (24 * 60 * 60 * 1000)))
 
-    // Compute comparison range from preset
-    let compStart: number | null = null
-    let compEnd: number | null = null
+    // Filter orders for inventory period (excluding cancelled)
+    const inventoryOrders = allOrders.filter(order => {
+      const orderTime = new Date(order.created_at).getTime()
+      return orderTime >= invStart && orderTime <= invEnd && order.status !== 'CANCELLED'
+    })
+
+    // Calculate historical average (limit to last 2 years for relevance) - EXCLUDE CURRENT PERIOD
+    const twoYearsAgo = Date.now() - (2 * 365 * 24 * 60 * 60 * 1000)
+    const historicalOrders = allOrders.filter(order => {
+      const orderTime = new Date(order.created_at).getTime()
+      // STRICTLY BEFORE the start of the current inventory period
+      return orderTime >= twoYearsAgo && orderTime < invStart && order.status !== 'CANCELLED'
+    })
+
+    const historicalDays = historicalOrders.length > 0
+      ? Math.max(1, Math.ceil((invStart - Math.max(twoYearsAgo, new Date(Math.min(...historicalOrders.map(o => new Date(o.created_at).getTime()))).getTime())) / (24 * 60 * 60 * 1000)))
+      : 1
+
+    // Comparison period calculations (when enabled)
+    let compOrders: typeof allOrders = []
     let compDays = 1
-    if (inventoryCompare !== 'none') {
-      if (inventoryCompare === 'prev_period') {
-        compEnd = invStart - 1
-        compStart = compEnd - (periodDays * 24 * 60 * 60 * 1000) + 1
-      } else if (inventoryCompare === 'prev_month') {
-        compStart = invStart - 30 * 24 * 60 * 60 * 1000
-        compEnd = invEnd - 30 * 24 * 60 * 60 * 1000
-      } else if (inventoryCompare === 'prev_year') {
-        compStart = invStart - 365 * 24 * 60 * 60 * 1000
-        compEnd = invEnd - 365 * 24 * 60 * 60 * 1000
-      }
-      if (compStart !== null && compEnd !== null) {
-        compDays = Math.max(1, Math.ceil((compEnd - compStart) / (24 * 60 * 60 * 1000)))
-      }
+    let compLabel = ''
+    if (magCompareEnabled) {
+      const { compStart: cs, compEnd: ce } = getComparisonRange()
+      compDays = Math.max(1, Math.ceil((ce - cs) / (24 * 60 * 60 * 1000)))
+      compOrders = allOrders.filter(order => {
+        const orderTime = new Date(order.created_at).getTime()
+        return orderTime >= cs && orderTime <= ce && order.status !== 'CANCELLED'
+      })
+      const csDate = new Date(cs)
+      const ceDate = new Date(ce)
+      compLabel = `${csDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })} - ${ceDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`
     }
 
-    // Filter orders
-    const inventoryOrders = allOrders.filter(order => {
-      const t = new Date(order.created_at).getTime()
-      return t >= invStart && t <= invEnd && order.status !== 'CANCELLED'
-    })
-    const compOrders = (compStart !== null && compEnd !== null)
-      ? allOrders.filter(order => {
-          const t = new Date(order.created_at).getTime()
-          return t >= compStart! && t <= compEnd! && order.status !== 'CANCELLED'
-        })
-      : []
-
+    // Calculate per-dish inventory stats - include ALL dishes (removed is_active filter)
     const dishInventory = dishes
-      .filter(dish => inventoryCategories.length === 0 || inventoryCategories.includes(dish.category_id))
+      .filter(dish => inventoryCategories.length === 0 || inventoryCategories.includes(dish.category_id)) // Filter by selected categories
       .map(dish => {
-        const periodSales = inventoryOrders.flatMap(o => (o.items || []).filter(item => item.dish_id === dish.id))
+        // Current period
+        const periodSales = inventoryOrders.flatMap(order =>
+          (order.items || []).filter(item => item.dish_id === dish.id)
+        )
         const periodQuantity = periodSales.reduce((sum, item) => sum + item.quantity, 0)
         const periodAvgPerDay = periodQuantity / periodDays
 
-        const compSales = compOrders.flatMap(o => (o.items || []).filter(item => item.dish_id === dish.id))
-        const compQuantity = compSales.reduce((sum, item) => sum + item.quantity, 0)
-        const compAvgPerDay = compQuantity / compDays
+        // Historical average (last 2 years)
+        const historicalSales = historicalOrders.flatMap(order =>
+          (order.items || []).filter(item => item.dish_id === dish.id)
+        )
+        const historicalQuantity = historicalSales.reduce((sum, item) => sum + item.quantity, 0)
+        const historicalAvgPerDay = historicalQuantity / historicalDays
 
+        // Calculate percentage change
         let percentageChange = 0
-        if (inventoryCompare !== 'none') {
+        if (historicalAvgPerDay > 0) {
+          percentageChange = ((periodAvgPerDay - historicalAvgPerDay) / historicalAvgPerDay) * 100
+        } else if (periodAvgPerDay > 0) {
+          percentageChange = 100 // New dish with sales (or significant increase from zero)
+        }
+
+        // Comparison period stats
+        let compQuantity = 0
+        let compAvgPerDay = 0
+        let compPercentageChange = 0
+        if (magCompareEnabled) {
+          const compSales = compOrders.flatMap(order =>
+            (order.items || []).filter(item => item.dish_id === dish.id)
+          )
+          compQuantity = compSales.reduce((sum, item) => sum + item.quantity, 0)
+          compAvgPerDay = compQuantity / compDays
           if (compAvgPerDay > 0) {
-            percentageChange = ((periodAvgPerDay - compAvgPerDay) / compAvgPerDay) * 100
+            compPercentageChange = ((periodAvgPerDay - compAvgPerDay) / compAvgPerDay) * 100
           } else if (periodAvgPerDay > 0) {
-            percentageChange = 100
+            compPercentageChange = 100
           }
         }
 
@@ -375,59 +421,66 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
           category: category?.name || 'Sconosciuta',
           categoryId: dish.category_id,
           periodQuantity,
-          compQuantity,
           periodAvgPerDay: Math.round(periodAvgPerDay * 100) / 100,
-          allTimeAvgPerDay: Math.round(compAvgPerDay * 100) / 100,
+          allTimeAvgPerDay: Math.round(historicalAvgPerDay * 100) / 100,
           percentageChange: Math.round(percentageChange * 10) / 10,
           price: dish.price,
-          isActive: dish.is_active !== false
+          isActive: dish.is_active !== false, // Track status for display
+          // Comparison data
+          compQuantity,
+          compAvgPerDay: Math.round(compAvgPerDay * 100) / 100,
+          compPercentageChange: Math.round(compPercentageChange * 10) / 10
         }
       })
       .sort((a, b) => {
         switch (inventorySortBy) {
-          case 'quantity': return b.periodQuantity - a.periodQuantity
-          case 'revenue': return (b.periodQuantity * b.price) - (a.periodQuantity * a.price)
-          case 'category': return a.category.localeCompare(b.category)
-          case 'price': return b.price - a.price
-          default: return b.periodQuantity - a.periodQuantity
+          case 'quantity':
+            return b.periodQuantity - a.periodQuantity
+          case 'revenue':
+            return (b.periodQuantity * b.price) - (a.periodQuantity * a.price)
+          case 'category':
+            return a.category.localeCompare(b.category)
+          case 'price':
+            return b.price - a.price
+          default:
+            return b.periodQuantity - a.periodQuantity
         }
       })
 
+    // Generate trend alerts for significant variations (>15% or <-15%)
     const trendAlerts = dishInventory
-      .filter(dish => inventoryCompare !== 'none' && Math.abs(dish.percentageChange) >= 15 && dish.periodQuantity > 0)
+      .filter(dish => Math.abs(dish.percentageChange) >= 15 && dish.periodQuantity > 0)
       .sort((a, b) => Math.abs(b.percentageChange) - Math.abs(a.percentageChange))
-      .slice(0, 2)
-      .map(dish => ({ name: dish.name, category: dish.category, change: dish.percentageChange }))
+      .slice(0, 2) // Top 2 significant changes
+      .map(dish => ({
+        name: dish.name,
+        category: dish.category,
+        change: dish.percentageChange
+      }))
+
+    // Comparison aggregate stats
+    const compTotalPortions = magCompareEnabled ? dishInventory.reduce((sum, d) => sum + d.compQuantity, 0) : 0
+    const compTotalRevenue = magCompareEnabled ? dishInventory.reduce((sum, d) => sum + d.compQuantity * d.price, 0) : 0
+    const currentTotalRevenue = dishInventory.reduce((sum, d) => sum + d.periodQuantity * d.price, 0)
 
     return {
       dishes: dishInventory,
       periodDays,
-      compDays,
-      hasComparison: inventoryCompare !== 'none',
       totalPortions: dishInventory.reduce((sum, d) => sum + d.periodQuantity, 0),
-      totalCompPortions: dishInventory.reduce((sum, d) => sum + d.compQuantity, 0),
-      trendAlerts
+      trendAlerts,
+      compLabel,
+      compDays,
+      compTotalPortions,
+      compTotalRevenue,
+      currentTotalRevenue
     }
-  }, [allOrders, dishes, categories, start, end, inventorySortBy, inventoryCategories, inventoryCompare])
-
+  }, [allOrders, dishes, categories, start, end, inventorySortBy, inventoryCategories, magCompareEnabled, magCompareMode, magCompareCustomStart, magCompareCustomEnd])
 
   // Waiter Analytics Calculations
   const waiterStats = useMemo(() => {
-    // Meal period filter: lunch = 10:30-15:30, dinner = 17:30-24:00
-    const isMealTime = (timestamp: number, meal: 'lunch' | 'dinner') => {
-      const d = new Date(timestamp)
-      const minutes = d.getHours() * 60 + d.getMinutes()
-      if (meal === 'lunch') return minutes >= 630 && minutes <= 930   // 10:30-15:30
-      if (meal === 'dinner') return minutes >= 1050 || minutes <= 60  // 17:30-24:00/01:00
-      return true
-    }
-
     const logsInPeriod = waiterLogs.filter(log => {
       const logTime = new Date(log.created_at || Date.now()).getTime()
-      const inPeriod = logTime >= start && logTime <= end
-      if (!inPeriod) return false
-      if (waiterMealFilter !== 'all') return isMealTime(logTime, waiterMealFilter)
-      return true
+      return logTime >= start && logTime <= end
     })
 
     const waiterMap = new Map<string, { name: string; dishesDelivered: number; bellsResolved: number; firstActivity: number; lastActivity: number }>()
@@ -471,13 +524,10 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       }
     }).filter(w => w.totalActivities > 0).sort((a, b) => b.totalActivities - a.totalActivities)
 
-    // Orders in period for wait time calc (also filtered by meal period)
+    // Orders in period for wait time calc
     const ordersInPeriod = allOrders.filter(o => {
       const t = new Date(o.created_at).getTime()
-      const inPeriod = t >= start && t <= end
-      if (!inPeriod) return false
-      if (waiterMealFilter !== 'all') return isMealTime(t, waiterMealFilter)
-      return true
+      return t >= start && t <= end
     })
 
     // Avg wait time: use updated_at - created_at if available, or closed_at - created_at
@@ -565,7 +615,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       avgOrdersPerWaiterHour,
       dailyMetrics
     }
-  }, [waiterLogs, staffList, allOrders, start, end, dateFilter, waiterMealFilter])
+  }, [waiterLogs, staffList, allOrders, start, end, dateFilter])
 
   return (
     <>
@@ -923,7 +973,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                         Analisi Magazzino
                       </CardTitle>
                       <p className="text-sm text-zinc-400 mt-1">
-                        Vendite e confronto con il periodo scelto
+                        Confronto vendite vs periodo precedente (2 anni)
                       </p>
                     </div>
                   </div>
@@ -976,25 +1026,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                       </PopoverContent>
                     </Popover>
 
-                    {/* Comparison preset selector */}
-                    <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-1 border border-zinc-700/50">
-                      {([
-                        { value: 'prev_period', label: 'Periodo prec.' },
-                        { value: 'prev_month', label: 'Mese prec.' },
-                        { value: 'prev_year', label: 'Anno prec.' },
-                        { value: 'none', label: 'Nessuno' },
-                      ] as const).map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={() => setInventoryCompare(opt.value)}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${inventoryCompare === opt.value ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Sort Selector - Fixed to show correct label */}
+                    {/* Sort Selector */}
                     <Select value={inventorySortBy} onValueChange={(v: any) => setInventorySortBy(v)}>
                       <SelectTrigger className="w-[160px] h-9 border-zinc-700 bg-zinc-800/50 text-zinc-300">
                         <span className="opacity-50 mr-2 text-xs uppercase">Ordina:</span>
@@ -1013,52 +1045,139 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                     </Select>
                   </div>
                 </div>
+
+                {/* Comparison Toggle & Controls */}
+                <div className="mt-4 pt-4 border-t border-white/5">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    {/* Toggle */}
+                    <button
+                      onClick={() => setMagCompareEnabled(!magCompareEnabled)}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        magCompareEnabled
+                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                          : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50 hover:text-zinc-300 hover:border-zinc-600'
+                      }`}
+                    >
+                      <div className={`w-8 h-4.5 rounded-full relative transition-all ${magCompareEnabled ? 'bg-amber-500' : 'bg-zinc-700'}`}>
+                        <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-all ${magCompareEnabled ? 'left-[18px]' : 'left-0.5'}`}></div>
+                      </div>
+                      <ArrowsLeftRight size={14} weight="bold" />
+                      Confronta periodo
+                    </button>
+
+                    {/* Comparison mode selector (visible only when enabled) */}
+                    {magCompareEnabled && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Select value={magCompareMode} onValueChange={(v: any) => setMagCompareMode(v)}>
+                          <SelectTrigger className="w-[200px] h-9 border-zinc-700 bg-zinc-800/50 text-zinc-300 text-sm">
+                            <span className="opacity-50 mr-1.5 text-xs">vs</span>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-zinc-900 border-zinc-800 text-zinc-300">
+                            <SelectItem value="prev_week" className="focus:bg-zinc-800 focus:text-white">Settimana precedente</SelectItem>
+                            <SelectItem value="prev_month" className="focus:bg-zinc-800 focus:text-white">Mese precedente</SelectItem>
+                            <SelectItem value="custom" className="focus:bg-zinc-800 focus:text-white">Periodo personalizzato</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {magCompareMode === 'custom' && (
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="date"
+                              value={magCompareCustomStart}
+                              onChange={(e) => setMagCompareCustomStart(e.target.value)}
+                              className="w-32 h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 text-sm"
+                            />
+                            <span className="text-zinc-600 text-xs">-</span>
+                            <Input
+                              type="date"
+                              value={magCompareCustomEnd}
+                              onChange={(e) => setMagCompareCustomEnd(e.target.value)}
+                              className="w-32 h-9 bg-zinc-800/50 border-zinc-700 text-zinc-300 text-sm"
+                            />
+                          </div>
+                        )}
+
+                        {magCompareEnabled && inventoryData.compLabel && (
+                          <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">
+                            ({inventoryData.compLabel})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </CardHeader>
 
               <CardContent className="p-0">
                 {/* Quick Stats Bar */}
                 <div className="grid grid-cols-4 gap-px bg-white/5 border-b border-white/5">
-                  {[
-                    {
-                      label: "Porzioni Vendute", icon: <Package size={16} weight="fill" className="text-blue-400" />,
-                      main: inventoryData.totalPortions,
-                      comp: inventoryData.hasComparison ? inventoryData.totalCompPortions : null
-                    },
-                    {
-                      label: "Piatti Analizzati", icon: <List size={16} weight="bold" className="text-zinc-400" />,
-                      main: inventoryData.dishes.length, comp: null
-                    },
-                    {
-                      label: "Giorni Analizzati", icon: <CalendarBlank size={16} weight="fill" className="text-zinc-400" />,
-                      main: inventoryData.periodDays, comp: null
-                    },
-                    {
-                      label: "Piatti Attivi", icon: <Check size={16} weight="bold" className="text-emerald-400" />,
-                      main: inventoryData.dishes.filter(d => d.periodQuantity > 0).length, comp: null
-                    },
-                  ].map((stat, i) => (
-                    <div key={i} className="p-4 flex flex-col items-center justify-center bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
-                      <div className="flex items-center gap-2 mb-1 opacity-70">
-                        {stat.icon}
-                        <span className="text-[10px] uppercase font-bold text-zinc-400">{stat.label}</span>
+                  {(() => {
+                    const portionsDelta = magCompareEnabled && inventoryData.compTotalPortions > 0
+                      ? ((inventoryData.totalPortions - inventoryData.compTotalPortions) / inventoryData.compTotalPortions * 100)
+                      : null
+                    const revenueDelta = magCompareEnabled && inventoryData.compTotalRevenue > 0
+                      ? ((inventoryData.currentTotalRevenue - inventoryData.compTotalRevenue) / inventoryData.compTotalRevenue * 100)
+                      : null
+
+                    const stats = [
+                      {
+                        label: "Porzioni Vendute",
+                        value: inventoryData.totalPortions,
+                        icon: <Package size={16} weight="fill" className="text-blue-400" />,
+                        delta: portionsDelta
+                      },
+                      {
+                        label: "Piatti Analizzati",
+                        value: inventoryData.dishes.length,
+                        icon: <List size={16} weight="bold" className="text-zinc-400" />,
+                        delta: null
+                      },
+                      {
+                        label: "Giorni Analizzati",
+                        value: inventoryData.periodDays,
+                        icon: <CalendarBlank size={16} weight="fill" className="text-zinc-400" />,
+                        delta: null
+                      },
+                      {
+                        label: magCompareEnabled ? "Incasso Periodo" : "Piatti Attivi",
+                        value: magCompareEnabled
+                          ? `€${Math.round(inventoryData.currentTotalRevenue)}`
+                          : inventoryData.dishes.filter(d => d.periodQuantity > 0).length,
+                        icon: magCompareEnabled
+                          ? <CurrencyEur size={16} weight="fill" className="text-amber-400" />
+                          : <Check size={16} weight="bold" className="text-emerald-400" />,
+                        delta: revenueDelta
+                      },
+                    ]
+
+                    return stats.map((stat, i) => (
+                      <div key={i} className="p-4 flex flex-col items-center justify-center bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
+                        <div className="flex items-center gap-2 mb-1 opacity-70">
+                          {stat.icon}
+                          <span className="text-[10px] uppercase font-bold text-zinc-400">{stat.label}</span>
+                        </div>
+                        <span className="text-xl font-bold text-white">{stat.value}</span>
+                        {stat.delta !== null && (
+                          <span className={`text-[10px] font-bold mt-0.5 flex items-center gap-0.5 ${
+                            stat.delta > 0 ? 'text-emerald-400' : stat.delta < 0 ? 'text-rose-400' : 'text-zinc-500'
+                          }`}>
+                            {stat.delta > 0 ? <ArrowUp size={10} weight="bold" /> : stat.delta < 0 ? <ArrowDown size={10} weight="bold" /> : null}
+                            {stat.delta > 0 ? '+' : ''}{Math.round(stat.delta * 10) / 10}% vs periodo
+                          </span>
+                        )}
                       </div>
-                      <span className="text-xl font-bold text-white">{stat.main}</span>
-                      {stat.comp !== null && (
-                        <span className="text-[10px] text-zinc-600 mt-0.5">prec.: {stat.comp}</span>
-                      )}
-                    </div>
-                  ))}
+                    ))
+                  })()}
                 </div>
 
                 {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-zinc-950/30 border-b border-white/5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                   <div className="col-span-4 pl-2">Piatto / Categoria</div>
                   <div className="col-span-2 text-center">Prezzo</div>
-                  <div className="col-span-2 text-center">Vendite</div>
+                  <div className="col-span-2 text-center">Vendite Tot.</div>
                   <div className="col-span-2 text-center">Media / GG</div>
-                  <div className="col-span-2 text-right pr-2">
-                    {inventoryData.hasComparison ? 'Confronto' : 'Trend'}
-                  </div>
+                  <div className="col-span-2 text-right pr-2">Trend (vs 2 Anni)</div>
                 </div>
 
                 {/* Scrollable List */}
@@ -1088,38 +1207,29 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                         </div>
 
                         {/* Sales */}
-                        <div className="col-span-2 flex flex-col items-center justify-center">
+                        <div className="col-span-2 text-center">
                           <span className={`text-sm font-bold ${dish.periodQuantity > 0 ? 'text-white' : 'text-zinc-600'}`}>
                             {dish.periodQuantity}
                           </span>
-                          {inventoryData.hasComparison && (
-                            <span className="text-[10px] text-zinc-600">prec.: {dish.compQuantity}</span>
-                          )}
                         </div>
 
                         {/* Avg/Day */}
                         <div className="col-span-2 flex flex-col items-center justify-center">
                           <span className="text-sm font-semibold text-zinc-300">{dish.periodAvgPerDay}</span>
-                          {inventoryData.hasComparison && (
-                            <span className="text-[10px] text-zinc-600">prec.: {dish.allTimeAvgPerDay}</span>
-                          )}
+                          <span className="text-[10px] text-zinc-600">storico: {dish.allTimeAvgPerDay}</span>
                         </div>
 
                         {/* Trend */}
                         <div className="col-span-2 flex justify-end pr-2">
-                          {inventoryData.hasComparison ? (
-                            <div className={`
-                            flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border
-                            ${dish.percentageChange === 0 ? 'bg-zinc-900/50 text-zinc-500 border-zinc-800' : ''}
-                            ${dish.percentageChange > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
-                            ${dish.percentageChange < 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
-                         `}>
-                              {dish.percentageChange > 0 ? <TrendUp weight="bold" /> : dish.percentageChange < 0 ? <TrendDown weight="bold" /> : <Minus />}
-                              {dish.percentageChange > 0 ? '+' : ''}{Math.abs(dish.percentageChange)}%
-                            </div>
-                          ) : (
-                            <span className="text-xs text-zinc-600">—</span>
-                          )}
+                          <div className={`
+                          flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold border
+                          ${dish.percentageChange === 0 ? 'bg-zinc-900/50 text-zinc-500 border-zinc-800' : ''}
+                          ${dish.percentageChange > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : ''}
+                          ${dish.percentageChange < 0 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : ''}
+                       `}>
+                            {dish.percentageChange > 0 ? <TrendUp weight="bold" /> : dish.percentageChange < 0 ? <TrendDown weight="bold" /> : <Minus />}
+                            {Math.abs(dish.percentageChange)}%
+                          </div>
                         </div>
                       </div>
                     ))
@@ -1247,26 +1357,9 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
             {/* Waiter Performance Table */}
             <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden backdrop-blur-sm">
               <CardHeader className="border-b border-white/5 pb-4">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
-                    <Users size={20} className="text-amber-500" /> Performance Camerieri
-                  </CardTitle>
-                  <div className="flex items-center gap-1 bg-zinc-800/60 rounded-lg p-1 border border-zinc-700/50">
-                    {([
-                      { value: 'all', label: 'Tutti' },
-                      { value: 'lunch', label: 'Pranzo' },
-                      { value: 'dinner', label: 'Cena' },
-                    ] as const).map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setWaiterMealFilter(opt.value)}
-                        className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${waiterMealFilter === opt.value ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                  <Users size={20} className="text-amber-500" /> Performance Camerieri
+                </CardTitle>
               </CardHeader>
               <CardContent className="pt-4 px-0">
                 {waiterStats.waiterTable.length === 0 ? (

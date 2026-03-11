@@ -349,15 +349,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             return
         }
 
-        // Check for new Orders (always shown to all devices - customer triggered)
-        if (currentOrderCount > prevOrderCountRef.current) {
-            soundManager.play('chime')
-            toast.info(`Nuovo ordine ricevuto!`, {
-                icon: '📋',
-                duration: 5000,
-                style: { background: '#1e1b4b', border: '1px solid #6366f1', color: '#c7d2fe' }
-            })
-        }
+        // Track order count changes (no toast - order notifications are only for RestaurantDashboard "Gestione Ordini" view)
         prevOrderCountRef.current = currentOrderCount
 
         // Check for new Ready Items (filter by room if active)
@@ -1575,23 +1567,75 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                             <span className="text-2xl font-black text-amber-500">€{tableTotal.toFixed(2)}</span>
                                         </div>
 
+                                        {/* Primary Action: Ordina */}
+                                        <Button
+                                            className="w-full h-12 text-base font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 rounded-xl"
+                                            onClick={() => {
+                                                setIsTableModalOpen(false)
+                                                handleQuickOrderClick(selectedTable)
+                                            }}
+                                        >
+                                            <Plus size={20} className="mr-2" weight="bold" />
+                                            Ordina
+                                        </Button>
+
+                                        {/* Payment buttons — only if permissions are active */}
                                         {restaurant?.allow_waiter_payments && (
                                             <Button
-                                                className="w-full h-12 text-base font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 rounded-xl"
+                                                className="w-full h-11 text-sm font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 rounded-xl"
                                                 onClick={() => {
                                                     setIsTableModalOpen(false)
                                                     setSelectedTableForPayment(selectedTable)
                                                     setIsPaymentDialogOpen(true)
                                                 }}
                                             >
-                                                <Receipt size={20} className="mr-2" />
+                                                <Receipt size={18} className="mr-2" />
                                                 Vai al Conto
                                             </Button>
                                         )}
 
+                                        {/* Svuota Tavolo — always available */}
                                         <Button
                                             variant="outline"
-                                            className="w-full h-10 text-sm border-white/10 text-zinc-400 hover:text-white"
+                                            className="w-full h-10 text-sm border-red-500/20 text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-xl"
+                                            onClick={async () => {
+                                                if (!confirm(`Vuoi svuotare il tavolo ${selectedTable.number}? Gli ordini attivi verranno chiusi.`)) return
+                                                try {
+                                                    const sessionOrders = activeOrders.filter(o => o.table_session_id === session.id)
+                                                    if (sessionOrders.length > 0) {
+                                                        await supabase
+                                                            .from('orders')
+                                                            .update({ status: 'completed' })
+                                                            .in('id', sessionOrders.map(o => o.id))
+                                                        const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
+                                                        if (allItemIds.length > 0) {
+                                                            await supabase.from('order_items').update({ status: 'SERVED' }).in('id', allItemIds)
+                                                        }
+                                                    }
+                                                    await DatabaseService.updateSession({
+                                                        ...session,
+                                                        status: 'CLOSED',
+                                                        closed_at: new Date().toISOString()
+                                                    })
+                                                    await DatabaseService.clearCart(session.id)
+                                                    setSessions(prev => prev.filter(s => s.id !== session.id))
+                                                    setActiveOrders(prev => prev.filter(o => o.table_session_id !== session.id))
+                                                    setIsTableModalOpen(false)
+                                                    toast.success(`Tavolo ${selectedTable.number} liberato`)
+                                                    refreshData()
+                                                } catch (error) {
+                                                    console.error('Error emptying table:', error)
+                                                    toast.error('Errore nello svuotamento del tavolo')
+                                                }
+                                            }}
+                                        >
+                                            <Trash size={16} className="mr-2" />
+                                            Svuota Tavolo
+                                        </Button>
+
+                                        <Button
+                                            variant="ghost"
+                                            className="w-full h-9 text-xs text-zinc-500 hover:text-zinc-300"
                                             onClick={() => setIsTableModalOpen(false)}
                                         >
                                             Chiudi
