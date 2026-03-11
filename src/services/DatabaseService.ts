@@ -176,16 +176,30 @@ export const DatabaseService = {
             await supabase.from('order_items').delete().in('order_id', orderIds)
         }
 
-        // 2. Elimina Tabelle dipendenti direttamente da restaurant_id (Ordine Strict)
-        // IMPORTANTE: Elimina restaurant_staff PRIMA di tutto il resto per liberare referenze agli utenti
+        // 2. Elimina TUTTE le tabelle dipendenti da restaurant_id (ordine: foglie → radice)
+        await supabase.from('waiter_activity_logs').delete().eq('restaurant_id', restaurantId)
         await supabase.from('restaurant_staff').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('subscription_payments').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('restaurant_bonuses').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('restaurant_discounts').delete().eq('restaurant_id', restaurantId)
 
         await supabase.from('orders').delete().eq('restaurant_id', restaurantId)
         await supabase.from('table_sessions').delete().eq('restaurant_id', restaurantId)
         await supabase.from('bookings').delete().eq('restaurant_id', restaurantId)
+
+        // Custom menus (dishes dipende da custom_menu_dishes che dipende da custom_menus)
+        const { data: menus } = await supabase.from('custom_menus').select('id').eq('restaurant_id', restaurantId)
+        if (menus && menus.length > 0) {
+            const menuIds = menus.map(m => m.id)
+            await supabase.from('custom_menu_schedules').delete().in('custom_menu_id', menuIds)
+            await supabase.from('custom_menu_dishes').delete().in('custom_menu_id', menuIds)
+        }
+        await supabase.from('custom_menus').delete().eq('restaurant_id', restaurantId)
+
         await supabase.from('dishes').delete().eq('restaurant_id', restaurantId)
         await supabase.from('categories').delete().eq('restaurant_id', restaurantId)
         await supabase.from('tables').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('rooms').delete().eq('restaurant_id', restaurantId)
 
         // 3. Elimina logo dallo Storage se esiste
         if (restaurant?.logo_url) {
@@ -212,10 +226,8 @@ export const DatabaseService = {
         if (error) throw error
 
         // 5. Tenta di eliminare l'utente proprietario (se esiste), MA NON SE È ADMIN
-        // Questo va fatto DOPO aver eliminato il ristorante e lo staff
         if (restaurant?.owner_id) {
             try {
-                // Check if user is ADMIN first
                 const { data: user } = await supabase.from('users').select('role').eq('id', restaurant.owner_id).single()
 
                 if (user?.role !== 'ADMIN') {
@@ -225,7 +237,6 @@ export const DatabaseService = {
                 }
             } catch (e) {
                 console.warn("Could not auto-delete owner user", e)
-                // Non lanciamo errore qui per non bloccare l'operazione se il ristorante è già andato
             }
         }
     },
@@ -234,6 +245,7 @@ export const DatabaseService = {
         // ATTENZIONE: Ordine inverso di dipendenza per evitare errori di Foreign Key
 
         // 1. Dati volatili di sessione
+        await supabase.from('pin_attempts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
         await supabase.from('cart_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
         await supabase.from('order_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
         await supabase.from('orders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
@@ -251,11 +263,26 @@ export const DatabaseService = {
         await supabase.from('tables').delete().neq('id', '00000000-0000-0000-0000-000000000000')
         await supabase.from('rooms').delete().neq('id', '00000000-0000-0000-0000-000000000000')
 
-        // 4. Staff e Ristoranti
+        // 4. Logs e dati admin
+        await supabase.from('waiter_activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('subscription_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('restaurant_bonuses').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('restaurant_discounts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 5. Staff e Ristoranti
         await supabase.from('restaurant_staff').delete().neq('restaurant_id', '00000000-0000-0000-0000-000000000000')
         await supabase.from('restaurants').delete().neq('id', '00000000-0000-0000-0000-000000000000')
 
-        // 5. Utenti (tranne ADMIN)
+        // 6. Registrazioni e tokens
+        await supabase.from('pending_registrations').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('registration_tokens').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 7. Archivi
+        await supabase.from('archived_order_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('archived_orders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('archived_table_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 8. Utenti (tranne ADMIN)
         await supabase.from('users').delete().neq('role', 'ADMIN')
     },
 
