@@ -1273,14 +1273,13 @@ export const DatabaseService = {
         discountDuration: string = 'once',
         discountDurationMonths?: number
     ): Promise<{ token: string, id: string }> {
-        // Controlla se esiste già un token con gli stessi parametri (non usato, non scaduto)
+        // Controlla se esiste già un token con gli stessi parametri (non scaduto)
         const { data: existing } = await supabase
             .from('registration_tokens')
             .select('id, token')
             .eq('free_months', freeMonths)
             .eq('discount_percent', discountPercent)
             .eq('discount_duration', discountDuration)
-            .eq('used', false)
             .gt('expires_at', new Date().toISOString())
             .maybeSingle()
 
@@ -1327,7 +1326,7 @@ export const DatabaseService = {
             .maybeSingle()
         if (error) throw error
         if (!data) return null
-        if (data.used) return null // Token già usato
+        // Tokens are never invalidated after use - they stay active forever
         if (data.expires_at && new Date(data.expires_at) < new Date()) return null
         return data
     },

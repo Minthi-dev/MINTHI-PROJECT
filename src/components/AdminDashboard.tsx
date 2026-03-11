@@ -11,7 +11,7 @@ import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
 import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle } from '@phosphor-icons/react'
+import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
@@ -178,6 +178,12 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [editingRestaurant, setEditingRestaurant] = useState<Restaurant | null>(null)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [editLogoFile, setEditLogoFile] = useState<File | null>(null)
+
+  // Detail view state
+  const [showDetailDialog, setShowDetailDialog] = useState(false)
+  const [detailRestaurant, setDetailRestaurant] = useState<Restaurant | null>(null)
+  const [detailUser, setDetailUser] = useState<User | null>(null)
+  const [detailPasswordVisible, setDetailPasswordVisible] = useState(false)
 
   // Visibility state for passwords
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({})
@@ -466,6 +472,13 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         phone: updatedRestaurant.phone,
         email: updatedRestaurant.email,
         logo_url: finalLogoUrl,
+        billing_name: updatedRestaurant.billing_name || null,
+        vat_number: updatedRestaurant.vat_number || null,
+        billing_address: updatedRestaurant.billing_address || null,
+        billing_city: updatedRestaurant.billing_city || null,
+        billing_cap: updatedRestaurant.billing_cap || null,
+        billing_province: updatedRestaurant.billing_province || null,
+        codice_univoco: updatedRestaurant.codice_univoco || null,
       }, user)
 
       if (editingUser) {
@@ -1642,29 +1655,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             </div>
                           </div>
 
-                          {/* Credentials (Compact & Clean) */}
-                          {restaurantUser && (
-                            <div className="flex items-center gap-3 bg-black/20 px-3 py-1.5 rounded-md border border-white/5 flex-1">
-                              <div className="flex items-center gap-2 text-xs truncate">
-                                <span className="uppercase font-bold text-zinc-500 tracking-wider text-[9px] mr-1">User:</span>
-                                <span className="font-medium text-zinc-300">{restaurantUser.name}</span>
-                              </div>
-                              <div className="h-4 w-px bg-white/10 mx-auto" />
-                              <div className="flex items-center gap-2 justify-end">
-                                <span className="uppercase font-bold text-zinc-500 tracking-wider text-[9px]">Pass:</span>
-                                <div className="font-mono text-sm text-amber-500 tracking-wider min-w-[60px] text-right">
-                                  {isPasswordVisible ? (restaurantUser.raw_password || restaurantUser.password_hash?.substring(0, 8) + '...') : '••••••••'}
-                                </div>
-                                <button
-                                  onClick={() => togglePasswordVisibility(restaurant.id)}
-                                  className="text-zinc-500 hover:text-white transition-colors ml-1"
-                                  title="Mostra password vera"
-                                >
-                                  {isPasswordVisible ? <EyeSlash size={14} /> : <Eye size={14} />}
-                                </button>
-                              </div>
-                            </div>
-                          )}
                         </div>
 
                         {/* Right: Actions */}
@@ -1697,6 +1687,21 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             title={restaurant.isActive ? "Disattiva" : "Attiva"}
                           >
                             {restaurant.isActive ? <Eye size={16} /> : <EyeSlash size={16} />}
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-md"
+                            onClick={() => {
+                              setDetailRestaurant(restaurant)
+                              setDetailUser(restaurantUser || null)
+                              setDetailPasswordVisible(false)
+                              setShowDetailDialog(true)
+                            }}
+                            title="Vedi Tutti i Dati"
+                          >
+                            <Info size={16} />
                           </Button>
 
                           <Button
@@ -1739,17 +1744,156 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         }
       </div >
 
+      {/* Detail Dialog - All Restaurant Data */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-lg bg-zinc-950 border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Info size={18} className="text-blue-400" weight="duotone" />
+              Dettagli Ristorante
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">Tutti i dati del ristorante in un unico posto.</DialogDescription>
+          </DialogHeader>
+          {detailRestaurant && (
+            <div className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-1">
+              {/* Logo & Name */}
+              <div className="flex items-center gap-3">
+                {detailRestaurant.logo_url ? (
+                  <img src={detailRestaurant.logo_url} alt="" className="w-12 h-12 rounded-xl object-cover border border-white/10" />
+                ) : (
+                  <div className="w-12 h-12 rounded-xl bg-zinc-800 flex items-center justify-center border border-white/5">
+                    <Buildings size={20} className="text-zinc-600" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="font-bold text-white text-lg">{detailRestaurant.name}</h3>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${detailRestaurant.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {detailRestaurant.isActive ? 'Attivo' : 'Disattivato'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Contact Info */}
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Contatto</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-zinc-500 text-xs">Email</span>
+                    <p className="text-zinc-200 font-medium truncate">{detailRestaurant.email || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 text-xs">Telefono</span>
+                    <p className="text-zinc-200 font-medium">{detailRestaurant.phone || '—'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Billing / Fiscal Data */}
+              <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Dati Fiscali / Fatturazione</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <span className="text-zinc-500 text-xs">Nome Azienda</span>
+                    <p className="text-zinc-200 font-medium">{detailRestaurant.billing_name || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 text-xs">P. IVA</span>
+                    <p className="text-zinc-200 font-medium font-mono">{detailRestaurant.vat_number || '—'}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-zinc-500 text-xs">Indirizzo</span>
+                    <p className="text-zinc-200 font-medium">{detailRestaurant.billing_address || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 text-xs">Comune</span>
+                    <p className="text-zinc-200 font-medium">{detailRestaurant.billing_city || '—'}</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <div>
+                      <span className="text-zinc-500 text-xs">CAP</span>
+                      <p className="text-zinc-200 font-medium">{detailRestaurant.billing_cap || '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 text-xs">Prov.</span>
+                      <p className="text-zinc-200 font-medium uppercase">{detailRestaurant.billing_province || '—'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500 text-xs">Codice Univoco SDI</span>
+                    <p className="text-zinc-200 font-medium font-mono uppercase">{detailRestaurant.codice_univoco || '—'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Credentials */}
+              {detailUser && (
+                <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Credenziali Accesso</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-zinc-500 text-xs">Username</span>
+                      <p className="text-zinc-200 font-medium font-mono">{detailUser.name || '—'}</p>
+                    </div>
+                    <div>
+                      <span className="text-zinc-500 text-xs">Password</span>
+                      <div className="flex items-center gap-2">
+                        <p className="text-amber-400 font-medium font-mono">
+                          {detailPasswordVisible ? (detailUser.raw_password || detailUser.password_hash?.substring(0, 8) + '...') : '••••••••'}
+                        </p>
+                        <button
+                          onClick={() => setDetailPasswordVisible(v => !v)}
+                          className="text-zinc-500 hover:text-white transition-colors"
+                        >
+                          {detailPasswordVisible ? <EyeSlash size={14} /> : <Eye size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Stripe Info */}
+              {(detailRestaurant.stripe_subscription_id || detailRestaurant.stripe_customer_id) && (
+                <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Stripe</p>
+                  <div className="space-y-1 text-xs">
+                    {detailRestaurant.stripe_customer_id && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-zinc-500">Customer:</span>
+                        <span className="text-zinc-300 font-mono truncate">{detailRestaurant.stripe_customer_id}</span>
+                      </div>
+                    )}
+                    {detailRestaurant.stripe_subscription_id && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-zinc-500">Subscription:</span>
+                        <span className="text-zinc-300 font-mono truncate">{detailRestaurant.stripe_subscription_id}</span>
+                      </div>
+                    )}
+                    {detailRestaurant.subscription_status && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-zinc-500">Stato:</span>
+                        <span className="text-zinc-300 capitalize">{detailRestaurant.subscription_status}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Edit Dialog */}
-      < Dialog open={showEditDialog} onOpenChange={setShowEditDialog} >
-        <DialogContent>
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-md bg-zinc-950 border-white/10 text-white">
           <DialogHeader>
             <DialogTitle>Modifica Ristorante</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-zinc-500 text-sm">
               Modifica i dettagli del ristorante e le credenziali di accesso.
             </DialogDescription>
           </DialogHeader>
           {editingRestaurant && (
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-2 max-h-[65vh] overflow-y-auto pr-1">
               <div className="space-y-2">
                 <Label>Nome</Label>
                 <Input
@@ -1785,9 +1929,55 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 </div>
               </div>
 
+              {/* Billing Data */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <Label className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Dati Fiscali</Label>
+                <Input
+                  placeholder="Nome Azienda / Ragione Sociale"
+                  value={editingRestaurant.billing_name || ''}
+                  onChange={(e) => setEditingRestaurant(prev => prev ? ({ ...prev, billing_name: e.target.value }) : null)}
+                />
+                <Input
+                  placeholder="Partita IVA"
+                  value={editingRestaurant.vat_number || ''}
+                  onChange={(e) => setEditingRestaurant(prev => prev ? ({ ...prev, vat_number: e.target.value }) : null)}
+                />
+                <Input
+                  placeholder="Via / Indirizzo"
+                  value={editingRestaurant.billing_address || ''}
+                  onChange={(e) => setEditingRestaurant(prev => prev ? ({ ...prev, billing_address: e.target.value }) : null)}
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <Input
+                    placeholder="Comune"
+                    value={editingRestaurant.billing_city || ''}
+                    onChange={(e) => setEditingRestaurant(prev => prev ? ({ ...prev, billing_city: e.target.value }) : null)}
+                  />
+                  <Input
+                    placeholder="CAP"
+                    value={editingRestaurant.billing_cap || ''}
+                    onChange={(e) => setEditingRestaurant(prev => prev ? ({ ...prev, billing_cap: e.target.value }) : null)}
+                  />
+                  <Input
+                    placeholder="Prov."
+                    value={editingRestaurant.billing_province || ''}
+                    onChange={(e) => setEditingRestaurant(prev => prev ? ({ ...prev, billing_province: e.target.value.toUpperCase().slice(0, 2) }) : null)}
+                    maxLength={2}
+                    className="uppercase"
+                  />
+                </div>
+                <Input
+                  placeholder="Codice Univoco SDI"
+                  value={editingRestaurant.codice_univoco || ''}
+                  onChange={(e) => setEditingRestaurant(prev => prev ? ({ ...prev, codice_univoco: e.target.value.toUpperCase() }) : null)}
+                  maxLength={7}
+                  className="uppercase font-mono"
+                />
+              </div>
+
               {editingUser && (
-                <div className="space-y-2 pt-2 border-t">
-                  <Label>Credenziali Proprietario</Label>
+                <div className="space-y-2 pt-2 border-t border-white/10">
+                  <Label className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Credenziali Proprietario</Label>
                   <div className="space-y-2">
                     <Label className="text-xs text-muted-foreground">Username</Label>
                     <Input
@@ -1820,7 +2010,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
             </div>
           )}
         </DialogContent>
-      </Dialog >
+      </Dialog>
     </div >
   )
 }

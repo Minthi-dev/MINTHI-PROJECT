@@ -78,6 +78,8 @@ import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, R
 import { soundManager, type SoundType } from '../utils/SoundManager'
 import { ModeToggle } from './ModeToggle'
 import { motion, AnimatePresence } from 'framer-motion'
+import DemoGuidePanel from './DemoGuidePanel'
+import SetupWizard from './SetupWizard'
 
 
 interface RestaurantDashboardProps {
@@ -97,6 +99,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
   const [tableSearchTerm, setTableSearchTerm] = useState('')
+
+  // Demo Guide & Setup Wizard state (first-access flow)
+  const [showDemoGuide, setShowDemoGuide] = useState(false)
+  const [demoGuideStep, setDemoGuideStep] = useState(0)
+  const [showSetupWizard, setShowSetupWizard] = useState(false)
 
   // Schedule Settings State
   const [lunchTimeStart, setLunchTimeStart] = useState('12:00')
@@ -152,6 +159,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       const active = discounts.find((d: any) => d.is_active)
       setActiveDiscount(active || null)
     }).catch(() => { })
+  }, [restaurantId])
+
+  // First-access detection: show demo guide + setup wizard on first login
+  useEffect(() => {
+    if (!restaurantId) return
+    const key = `minthi_guide_done_${restaurantId}`
+    if (!localStorage.getItem(key)) {
+      // First access: auto-start demo guide
+      setShowDemoGuide(true)
+    }
   }, [restaurantId])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
@@ -4694,6 +4711,40 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           })
         }
       </div>
+
+      {/* Demo Guide Overlay - first access */}
+      {showDemoGuide && (
+        <DemoGuidePanel
+          currentStep={demoGuideStep}
+          setCurrentStep={setDemoGuideStep}
+          setActiveTab={setActiveTab}
+          onExit={() => {
+            setShowDemoGuide(false)
+            // Mark guide as done
+            if (restaurantId) {
+              localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
+            }
+            // Auto-start setup wizard after demo guide
+            setShowSetupWizard(true)
+          }}
+        />
+      )}
+
+      {/* Setup Wizard - assisted configuration */}
+      {showSetupWizard && !showDemoGuide && (
+        <SetupWizard
+          setActiveTab={setActiveTab}
+          onComplete={() => {
+            setShowSetupWizard(false)
+            if (restaurantId) {
+              localStorage.setItem(`minthi_setup_done_${restaurantId}`, 'true')
+            }
+          }}
+          tablesCount={restaurantTables.length}
+          dishesCount={restaurantDishes.length}
+          categoriesCount={restaurantCategories.length}
+        />
+      )}
     </div>
   )
 }

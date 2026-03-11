@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     ForkKnife, QrCode, ChartBar, CreditCard, CalendarBlank,
-    Users, CheckCircle, ArrowRight, Eye, Rocket, ShieldCheck, Clock,
+    Users, CheckCircle, ArrowRight, Eye, EyeSlash, Rocket, ShieldCheck, Clock,
     X, Sparkle, ChefHat, Tray
 } from '@phosphor-icons/react'
 import { supabase } from '../lib/supabase'
@@ -66,6 +66,7 @@ export default function RestaurantOnboarding() {
     const [submitting, setSubmitting] = useState(false)
     const [selectedFeature, setSelectedFeature] = useState<typeof MACRO_FEATURES[0] | null>(null)
     const [priceAmount, setPriceAmount] = useState<number>(0)
+    const [passwordVisible, setPasswordVisible] = useState(false)
 
     const [form, setForm] = useState({
         name: '',
@@ -73,7 +74,6 @@ export default function RestaurantOnboarding() {
         email: '',
         username: '',
         password: '',
-        confirmPassword: '',
         // Dati fiscali
         billingName: '',
         vatNumber: '',
@@ -106,7 +106,6 @@ export default function RestaurantOnboarding() {
         if (!form.name.trim()) return toast.error('Inserisci il nome del ristorante')
         if (!form.username.trim()) return toast.error('Inserisci un username')
         if (form.password.length < 6) return toast.error('La password deve avere almeno 6 caratteri')
-        if (form.password !== form.confirmPassword) return toast.error('Le password non coincidono')
         if (!form.billingName.trim()) return toast.error('Inserisci il nome azienda')
         if (!form.vatNumber.trim()) return toast.error('Inserisci la Partita IVA')
         if (!form.billingAddress.trim()) return toast.error('Inserisci l\'indirizzo')
@@ -584,23 +583,22 @@ export default function RestaurantOnboarding() {
                                         </div>
                                         <div>
                                             <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Password *</label>
-                                            <input
-                                                type="password"
-                                                value={form.password}
-                                                onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
-                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
-                                                placeholder="Min. 6 caratteri"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-zinc-400 font-medium mb-1.5 block">Conferma Password *</label>
-                                            <input
-                                                type="password"
-                                                value={form.confirmPassword}
-                                                onChange={(e) => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
-                                                className="w-full h-12 px-4 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
-                                                placeholder="Ripeti la password"
-                                            />
+                                            <div className="relative">
+                                                <input
+                                                    type={passwordVisible ? 'text' : 'password'}
+                                                    value={form.password}
+                                                    onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))}
+                                                    className="w-full h-12 px-4 pr-12 bg-zinc-900 border border-white/10 rounded-xl text-white text-base focus:outline-none focus:border-amber-500/50 transition-colors"
+                                                    placeholder="Min. 6 caratteri"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPasswordVisible(v => !v)}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                                                >
+                                                    {passwordVisible ? <EyeSlash size={18} /> : <Eye size={18} />}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
