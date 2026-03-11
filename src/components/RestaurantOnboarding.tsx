@@ -173,10 +173,13 @@ export default function RestaurantOnboarding() {
         } catch (err: any) {
             toast.dismiss('stripe')
             console.error('Registration error:', err)
-            if (err.message?.includes('duplicate') || err.message?.includes('unique') || err.message?.includes('Esiste già')) {
-                toast.error('Username o email già in uso. Prova con dati diversi.')
+            const msg = err.message || ''
+            if (msg.includes('Esiste già')) {
+                toast.error(msg)
+            } else if (msg.includes('duplicate') || msg.includes('unique')) {
+                toast.error('Nome ristorante già in uso. Scegli un nome diverso.')
             } else {
-                toast.error('Errore durante la registrazione: ' + (err.message || 'Riprova'))
+                toast.error('Errore durante la registrazione: ' + (msg || 'Riprova'))
             }
             setSubmitting(false)
         }
