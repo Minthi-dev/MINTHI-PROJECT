@@ -105,17 +105,17 @@ export default function SetupWizard({
         className="bg-zinc-950/98 border-t border-emerald-500/20 backdrop-blur-xl shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.8)]"
       >
         {/* Top bar */}
-        <div className="bg-gradient-to-r from-emerald-600/20 via-emerald-500/10 to-transparent border-b border-white/5 px-4 sm:px-6 py-2.5 flex items-center justify-between">
+        <div className="bg-gradient-to-r from-emerald-600/20 via-emerald-500/10 to-transparent border-b border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkle size={16} weight="fill" className="text-emerald-400" />
-            <span className="text-sm font-bold text-emerald-400">Configurazione Guidata</span>
-            <span className="text-xs text-zinc-500 hidden sm:inline">— {completedCount}/{STEPS.length} completati</span>
+            <Sparkle size={20} weight="fill" className="text-emerald-400" />
+            <span className="text-base font-bold text-emerald-400">Configurazione Guidata</span>
+            <span className="text-sm text-zinc-500 hidden sm:inline">— {completedCount}/{STEPS.length} completati</span>
           </div>
           <button
             onClick={onComplete}
-            className="text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1 text-xs"
+            className="text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1 text-sm font-medium"
           >
-            <X size={14} />
+            <X size={16} />
             <span className="hidden sm:inline">Chiudi</span>
           </button>
         </div>
@@ -161,16 +161,16 @@ export default function SetupWizard({
               transition={{ duration: 0.2 }}
               className="flex items-start justify-between gap-4"
             >
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
+              <div className="flex-1 pr-4">
+                <div className="flex items-center gap-2 mb-2">
                   {isStepDone(step.id) ? (
-                    <CheckCircle size={18} weight="fill" className="text-emerald-400" />
+                    <CheckCircle size={22} weight="fill" className="text-emerald-400" />
                   ) : (
-                    <Circle size={18} className="text-zinc-600" />
+                    <Circle size={22} className="text-zinc-600" />
                   )}
-                  <h3 className="text-base font-bold text-white">{step.title}</h3>
+                  <h3 className="text-lg font-bold text-white">{step.title}</h3>
                 </div>
-                <p className="text-zinc-400 text-sm leading-relaxed pl-[26px]">
+                <p className="text-zinc-400 text-base leading-relaxed pl-[30px]">
                   {step.description}
                 </p>
               </div>
@@ -179,19 +179,19 @@ export default function SetupWizard({
                 {!isStepDone(step.id) && (
                   <button
                     onClick={handleAction}
-                    className="h-9 px-5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-all flex items-center gap-1.5 shadow-[0_4px_12px_-4px_rgba(245,158,11,0.5)]"
+                    className="h-10 px-6 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.5)] animate-pulse hover:animate-none"
                   >
                     {step.ctaLabel}
-                    <ArrowRight size={14} />
+                    <ArrowRight size={16} weight="bold" />
                   </button>
                 )}
                 {isStepDone(step.id) && currentStep < STEPS.length - 1 && (
                   <button
                     onClick={handleNext}
-                    className="h-9 px-5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition-all flex items-center gap-1.5"
+                    className="h-10 px-6 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.4)] animate-pulse hover:animate-none"
                   >
                     Prossimo
-                    <ArrowRight size={14} />
+                    <ArrowRight size={16} weight="bold" />
                   </button>
                 )}
                 {currentStep === STEPS.length - 1 && (

@@ -80,6 +80,16 @@ import { ModeToggle } from './ModeToggle'
 import { motion, AnimatePresence } from 'framer-motion'
 import DemoGuidePanel from './DemoGuidePanel'
 import SetupWizard from './SetupWizard'
+import {
+  DEMO_CATEGORIES,
+  DEMO_DISHES,
+  DEMO_TABLES,
+  DEMO_SESSIONS,
+  DEMO_ORDERS,
+  DEMO_PAST_ORDERS,
+  DEMO_BOOKINGS,
+  DEMO_ROOMS
+} from './demoData'
 
 
 interface RestaurantDashboardProps {
@@ -172,16 +182,22 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }, [restaurantId])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
-  // Aliases for compatibility and lint fixes
-  const restaurantCategories = categories || []
-  const restaurantDishes = dishes || []
-  const restaurantTables = tables || []
+  // Aliases for compatibility and lint fixes (switching to demo data when active)
+  const restaurantCategories = showDemoGuide ? DEMO_CATEGORIES : (categories || [])
+  const restaurantDishes = showDemoGuide ? DEMO_DISHES : (dishes || [])
+  const restaurantTables = showDemoGuide ? DEMO_TABLES : (tables || [])
+  const restaurantRooms = showDemoGuide ? DEMO_ROOMS : (rooms || [])
+  
+  const activeSessions = showDemoGuide ? DEMO_SESSIONS : (sessions || [])
+  const restaurantOrders = showDemoGuide ? DEMO_ORDERS : (orders || [])
+  const restaurantPastOrders = showDemoGuide ? DEMO_PAST_ORDERS : (pastOrders || [])
+  const restaurantBookings = showDemoGuide ? DEMO_BOOKINGS : (bookings || [])
+
   const restaurantTablesRef = useRef<Table[]>(restaurantTables)
-  const sessionsRef = useRef<TableSession[]>(sessions || [])
+  const sessionsRef = useRef<TableSession[]>(activeSessions)
   useEffect(() => { restaurantTablesRef.current = restaurantTables }, [restaurantTables])
-  useEffect(() => { sessionsRef.current = sessions || [] }, [sessions])
-  const restaurantOrders = orders || []
-  const restaurantCompletedOrders = useMemo(() => orders?.filter(o => o.status === 'completed') || [], [orders])
+  useEffect(() => { sessionsRef.current = activeSessions }, [activeSessions])
+  const restaurantCompletedOrders = useMemo(() => restaurantPastOrders?.filter(o => o.status === 'completed') || [], [restaurantPastOrders])
 
   // Mappa piatti per categoria — evita O(categories × dishes) per render
   const dishesByCategory = useMemo(() => {

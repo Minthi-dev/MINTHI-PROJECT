@@ -44,8 +44,8 @@ export default function DemoGuidePanel({
   return (
     <>
       {/* Top banner */}
-      <div className="fixed top-0 left-0 right-0 z-[9998] bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 text-black px-4 py-2 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-2 text-sm font-bold">
+      <div className="sticky top-0 left-0 right-0 z-[9998] bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 text-black px-4 py-3 flex items-center justify-between shadow-lg">
+        <div className="flex items-center gap-2 text-base font-bold">
           <Eye size={18} weight="bold" />
           <span>MODALITÀ DEMO</span>
           <span className="font-normal opacity-80 hidden sm:inline">— Stai navigando con dati di esempio</span>
