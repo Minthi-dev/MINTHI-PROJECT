@@ -112,6 +112,7 @@ interface SettingsViewProps {
 
     restaurantId: string
     onRestartTour?: () => void
+    onRestartSetup?: () => void
 }
 
 export function SettingsView({
@@ -166,7 +167,8 @@ export function SettingsView({
     showCookingTimes,
     setShowCookingTimes,
     restaurantId,
-    onRestartTour
+    onRestartTour,
+    onRestartSetup
 }: SettingsViewProps) {
 
     const [stripePaymentsEnabled, setStripePaymentsEnabled] = useState(false)
@@ -579,17 +581,35 @@ export function SettingsView({
                             </div>
                         </div>
 
+                        {/* Configurazione Guidata */}
+                        {onRestartSetup && (
+                            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-base font-semibold text-white">Configurazione Guidata</h3>
+                                        <p className="text-zinc-400 text-sm mt-0.5">Segui i passaggi per configurare categorie, piatti, tavoli e impostazioni.</p>
+                                    </div>
+                                    <Button
+                                        onClick={onRestartSetup}
+                                        variant="outline"
+                                        className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 shrink-0"
+                                    >
+                                        Avvia Configurazione
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Assistenza */}
                         <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
                             <h3 className="text-base font-semibold text-white mb-1">Assistenza</h3>
-                            <p className="text-zinc-400 text-sm mb-3">Hai bisogno di aiuto con la configurazione?</p>
+                            <p className="text-zinc-400 text-sm mb-3">Hai bisogno di aiuto?</p>
                             <p className="text-sm text-zinc-300">
                                 Contattaci al{' '}
                                 <a href="tel:+393517570155" className="text-amber-400 font-medium hover:text-amber-300 transition-colors">
                                     +39 351 757 0155
                                 </a>
                             </p>
-                            <p className="text-xs text-zinc-600 mt-1">Disponibili lun-ven 9:00-18:00</p>
                         </div>
 
                     </motion.div>

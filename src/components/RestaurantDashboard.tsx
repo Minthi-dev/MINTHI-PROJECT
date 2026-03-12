@@ -153,33 +153,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   } | null>(null)
 
   const startDemo = useCallback(() => {
-    // Save real data before injecting demo data
-    realDataRef.current = {
-      dishes: dishes || [], tables: tables || [], categories: categories || [],
-      rooms: rooms || [], orders, pastOrders, bookings: bookings || [], sessions: sessions || [],
-    }
-    demoModeRef.current = true
-    setDemoMode(true)
-    setDemoStep(0)
-    // Inject fake data — map restaurant_id to real ID so filters work (e.g. ReservationsManager)
-    const rid = restaurantId
-    const mapRid = <T extends { restaurant_id: string }>(arr: T[]): T[] => arr.map(x => ({ ...x, restaurant_id: rid }))
-    setDishes(mapRid(DEMO_DISHES))
-    setTables(mapRid(DEMO_TABLES))
-    setCategories(mapRid(DEMO_CATEGORIES))
-    setRooms(mapRid(DEMO_ROOMS))
-    setOrders(mapRid(DEMO_ORDERS))
-    setPastOrders(mapRid(DEMO_PAST_ORDERS))
-    setBookings(mapRid(DEMO_BOOKINGS))
-    setSessions(mapRid(DEMO_SESSIONS))
+    // Use the unified demo system — showDemoGuide swaps data via aliases
+    setDemoGuideStep(0)
+    setShowDemoGuide(true)
     setActiveTab('orders')
-  }, [restaurantId, dishes, tables, categories, rooms, orders, pastOrders, bookings, sessions, setDishes, setTables, setCategories, setRooms, setBookings, setSessions])
+  }, [])
 
   const stopDemo = useCallback(() => {
-    demoModeRef.current = false
+    setShowDemoGuide(false)
     setDemoMode(false)
-    setDemoStep(0)
-    // Restore real data
+    setDemoGuideStep(0)
+    // Restore real data (if the old system was used)
     if (realDataRef.current) {
       setDishes(realDataRef.current.dishes)
       setTables(realDataRef.current.tables)
@@ -196,17 +180,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     refreshBookings(); refreshSessions(); fetchOrdersRef.current?.()
   }, [setDishes, setTables, setCategories, setRooms, setBookings, setSessions, refreshDishes, refreshTables, refreshCategories, refreshRooms, refreshBookings, refreshSessions])
 
-  // First login: auto-start demo
-  const firstLoginChecked = useRef(false)
-  useEffect(() => {
-    if (firstLoginChecked.current) return
-    if (!restaurantId) return
-    firstLoginChecked.current = true
-    if (!localStorage.getItem(tourKey)) {
-      // Small delay to let dashboard render
-      setTimeout(() => startDemo(), 500)
-    }
-  }, [restaurantId, tourKey, startDemo])
+  // First login is handled by showDemoGuide (line ~257) — no need for demoMode here
 
   const handleDemoExit = useCallback(() => {
     // Check real data BEFORE stopDemo clears it
@@ -264,16 +238,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }, [restaurantId])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
-  // Aliases for compatibility and lint fixes (switching to demo data when active)
-  const restaurantCategories = showDemoGuide ? DEMO_CATEGORIES : (categories || [])
-  const restaurantDishes = showDemoGuide ? DEMO_DISHES : (dishes || [])
-  const restaurantTables = showDemoGuide ? DEMO_TABLES : (tables || [])
-  const restaurantRooms = showDemoGuide ? DEMO_ROOMS : (rooms || [])
-  
-  const activeSessions = showDemoGuide ? DEMO_SESSIONS : (sessions || [])
-  const restaurantOrders = showDemoGuide ? DEMO_ORDERS : (orders || [])
-  const restaurantPastOrders = showDemoGuide ? DEMO_PAST_ORDERS : (pastOrders || [])
-  const restaurantBookings = showDemoGuide ? DEMO_BOOKINGS : (bookings || [])
+  // Aliases: when demo is active (either first-access or manual restart), use demo data
+  const isDemoActive = showDemoGuide || demoMode
+  const restaurantCategories = isDemoActive ? DEMO_CATEGORIES : (categories || [])
+  const restaurantDishes = isDemoActive ? DEMO_DISHES : (dishes || [])
+  const restaurantTables = isDemoActive ? DEMO_TABLES : (tables || [])
+  const restaurantRooms = isDemoActive ? DEMO_ROOMS : (rooms || [])
+
+  const activeSessions = isDemoActive ? DEMO_SESSIONS : (sessions || [])
+  const restaurantOrders = isDemoActive ? DEMO_ORDERS : (orders || [])
+  const restaurantPastOrders = isDemoActive ? DEMO_PAST_ORDERS : (pastOrders || [])
+  const restaurantBookings = isDemoActive ? DEMO_BOOKINGS : (bookings || [])
 
   const restaurantTablesRef = useRef<Table[]>(restaurantTables)
   const sessionsRef = useRef<TableSession[]>(activeSessions)
@@ -1192,10 +1167,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const filteredOrders = useMemo(() => {
-    return orders.map(order => {
+    return restaurantOrders.map(order => {
       if (selectedKitchenCategories.length === 0) return order
       const filteredItems = order.items?.filter(item => {
-        const dish = dishes?.find(d => d.id === item.dish_id)
+        const dish = restaurantDishes?.find(d => d.id === item.dish_id)
         return dish && selectedKitchenCategories.includes(dish.category_id)
       })
       return { ...order, items: filteredItems }
@@ -2344,15 +2319,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 ) : (
                   <KitchenView
                     orders={filteredOrders}
-                    tables={tables || []}
-                    dishes={dishes || []}
+                    tables={restaurantTables}
+                    dishes={restaurantDishes}
                     selectedCategoryIds={selectedKitchenCategories}
                     viewMode={kitchenViewMode}
                     // columns={kitchenColumns} // Removed in favor of responsive grid
                     onCompleteDish={handleCompleteDish}
                     onDeliverDish={handleDeliverDish}
                     onCompleteOrder={handleCompleteOrder}
-                    sessions={sessions || []}
+                    sessions={activeSessions}
                     zoom={kitchenZoom}
                   />
                 )}
@@ -3345,9 +3320,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     <ReservationsManager
                       user={user}
                       restaurantId={restaurantId}
-                      tables={tables || []}
-                      rooms={rooms || []}
-                      bookings={bookings || []}
+                      tables={restaurantTables}
+                      rooms={restaurantRooms}
+                      bookings={restaurantBookings}
                       selectedDate={selectedDate}
                       openingTime={effOpen}
                       closingTime={effClose}
@@ -4022,8 +3997,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     user={user}
                     restaurantId={restaurantId}
                     tables={restaurantTables}
-                    rooms={rooms || []}
-                    bookings={bookings || []}
+                    rooms={restaurantRooms}
+                    bookings={restaurantBookings}
                     selectedDate={selectedReservationDate}
                     openingTime={effOpen}
                     closingTime={effClose}
@@ -4162,6 +4137,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     DatabaseService.updateRestaurant({ id: restaurantId, weekly_service_hours: schedule })
                   }
                 }}
+                onRestartTour={startDemo}
+                onRestartSetup={() => setShowSetupWizard(true)}
               />
             </TabsContent >
           </Tabs >
@@ -4831,31 +4808,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         </div>
       </main>
 
-      {/* Demo Mode Guide */}
-      {demoMode && (
-        <DemoGuidePanel
-          currentStep={demoStep}
-          setCurrentStep={setDemoStep}
-          setActiveTab={setActiveTab}
-          onExit={handleDemoExit}
-          setSettingsSubTab={(tab) => {
-            // Programmatically click the settings sub-tab trigger
-            const trigger = document.querySelector(`[data-settings-tab="${tab}"]`) as HTMLElement
-            trigger?.click()
-          }}
-        />
-      )}
-
-      {/* Setup Wizard (after demo, for new restaurants) */}
-      {showSetupWizard && !demoMode && (
-        <SetupWizard
-          setActiveTab={setActiveTab}
-          onComplete={() => setShowSetupWizard(false)}
-          tablesCount={tables?.length || 0}
-          dishesCount={dishes?.length || 0}
-          categoriesCount={categories?.length || 0}
-        />
-      )}
+      {/* Demo & Setup Wizard are rendered at end of component (showDemoGuide / showSetupWizard) */}
 
       {/* HIDDEN PRINT VIEW FOR MENU EXPORT - ALL INLINE STYLES FOR PDF COMPATIBILITY */}
       <div id="menu-print-view" style={{
@@ -5048,26 +5001,35 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         }
       </div>
 
-      {/* Demo Guide Overlay - first access */}
-      {showDemoGuide && (
+      {/* Demo Guide Overlay — first access OR manual restart from settings */}
+      {isDemoActive && (
         <DemoGuidePanel
           currentStep={demoGuideStep}
           setCurrentStep={setDemoGuideStep}
           setActiveTab={setActiveTab}
           onExit={() => {
             setShowDemoGuide(false)
+            setDemoMode(false)
             // Mark guide as done
             if (restaurantId) {
               localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
+              localStorage.setItem(tourKey, '1')
             }
-            // Auto-start setup wizard after demo guide
-            setShowSetupWizard(true)
+            // Auto-start setup wizard if no real data exists
+            const hasNoData = (!tables || tables.length === 0) && (!dishes || dishes.length === 0) && (!categories || categories.length === 0)
+            if (hasNoData) {
+              setShowSetupWizard(true)
+            }
+          }}
+          setSettingsSubTab={(tab) => {
+            const trigger = document.querySelector(`[data-settings-tab="${tab}"]`) as HTMLElement
+            trigger?.click()
           }}
         />
       )}
 
       {/* Setup Wizard - assisted configuration */}
-      {showSetupWizard && !showDemoGuide && (
+      {showSetupWizard && !isDemoActive && (
         <SetupWizard
           setActiveTab={setActiveTab}
           onComplete={() => {
