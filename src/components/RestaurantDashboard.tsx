@@ -114,6 +114,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [showDemoGuide, setShowDemoGuide] = useState(false)
   const [demoGuideStep, setDemoGuideStep] = useState(0)
   const [showSetupWizard, setShowSetupWizard] = useState(false)
+  const tourKey = restaurantId ? `minthi_tour_done_${restaurantId}` : 'minthi_tour_done'
 
   // Schedule Settings State
   const [lunchTimeStart, setLunchTimeStart] = useState('12:00')
