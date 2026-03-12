@@ -3079,7 +3079,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                       // Add coperto
                       let copertoTotal = 0
-                      if (session) {
+                      if (session && currentRestaurant) {
                         const isCopertoEnabled = session.coperto_enabled !== false
                         const coperto = getCurrentCopertoPrice(currentRestaurant as any, lunchTimeStart, dinnerTimeStart)
                         if (isCopertoEnabled && coperto.price > 0) {
@@ -3089,7 +3089,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                       // Add AYCE cover charge
                       let ayceTotal = 0
-                      if (session?.ayce_enabled) {
+                      if (session?.ayce_enabled && currentRestaurant) {
                         const ayce = getCurrentAyceSettings(currentRestaurant as any, lunchTimeStart, dinnerTimeStart)
                         if (ayce.price > 0) {
                           ayceTotal = ayce.price * (session.customer_count || 0)
