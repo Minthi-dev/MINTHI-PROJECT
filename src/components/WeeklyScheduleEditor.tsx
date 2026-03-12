@@ -157,15 +157,15 @@ export default function WeeklyScheduleEditor({
                 <>
                     {/* Default Price */}
                     <div className="flex items-center gap-4 p-4 bg-zinc-900/30 rounded-xl border border-zinc-800/50">
-                        <Label className="text-zinc-400 whitespace-nowrap">Prezzo Base:</Label>
+                        <Label className="text-zinc-200 whitespace-nowrap font-medium">Prezzo Base:</Label>
                         <div className="relative flex-1 max-w-[120px]">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">€</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">€</span>
                             <PriceInput
                                 value={schedule.defaultPrice}
                                 onChange={updateDefaultPrice}
                                 step="0.5"
                                 min="0"
-                                className="pl-7 bg-zinc-900 border-zinc-700 h-9"
+                                className="pl-7 bg-zinc-900 border-zinc-700 h-9 text-white"
                             />
                         </div>
                     </div>
@@ -174,8 +174,8 @@ export default function WeeklyScheduleEditor({
                     <div className="p-4 bg-zinc-900/30 rounded-xl border border-zinc-800/50 space-y-1">
                         <div className="flex items-center justify-between">
                             <div className="flex-1 min-w-0">
-                                <Label className="text-zinc-400">Varia per giorno</Label>
-                                <p className="text-[11px] text-zinc-600 mt-0.5">Imposta prezzi diversi per pranzo e cena in ogni giorno della settimana</p>
+                                <Label className="text-zinc-200 font-medium">Varia per giorno</Label>
+                                <p className="text-xs text-zinc-400 mt-0.5">Imposta prezzi diversi per pranzo e cena in ogni giorno della settimana</p>
                             </div>
                             <Switch
                                 checked={showAdvanced}
@@ -189,8 +189,8 @@ export default function WeeklyScheduleEditor({
                         <div className="p-4 bg-zinc-900/30 rounded-xl border border-zinc-800/50 space-y-3">
                             <div className="flex items-center justify-between">
                                 <div className="flex-1 min-w-0">
-                                    <Label className="text-zinc-400 whitespace-nowrap">Limite ordini per tavolo</Label>
-                                    <p className="text-[11px] text-zinc-600 mt-0.5">Limita il numero massimo di ordini per sessione</p>
+                                    <Label className="text-zinc-200 font-medium whitespace-nowrap">Limite ordini per tavolo</Label>
+                                    <p className="text-xs text-zinc-400 mt-0.5">Limita il numero massimo di ordini per sessione</p>
                                 </div>
                                 <Switch
                                     checked={((schedule as WeeklyAyceSchedule).defaultMaxOrders || 0) > 0}
@@ -205,14 +205,14 @@ export default function WeeklyScheduleEditor({
                             </div>
                             {((schedule as WeeklyAyceSchedule).defaultMaxOrders || 0) > 0 && (
                                 <div className="flex items-center gap-3 pl-1">
-                                    <span className="text-xs text-zinc-500">Max ordini:</span>
+                                    <span className="text-sm text-zinc-300">Max ordini:</span>
                                     <div className="relative w-[80px]">
                                         <PriceInput
                                             value={(schedule as WeeklyAyceSchedule).defaultMaxOrders || 0}
                                             onChange={(val) => updateDefaultMaxOrders(Math.max(1, val))}
                                             step="1"
                                             min="1"
-                                            className="bg-zinc-900 border-zinc-700 h-9 text-center"
+                                            className="bg-zinc-900 border-zinc-700 h-9 text-center text-white"
                                         />
                                     </div>
                                 </div>
@@ -225,10 +225,10 @@ export default function WeeklyScheduleEditor({
                         <div className="p-4 bg-zinc-900/30 rounded-xl border border-zinc-800/50 space-y-3">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                                    <Timer size={16} className="text-zinc-500 shrink-0" />
+                                    <Timer size={16} className="text-zinc-400 shrink-0" />
                                     <div>
-                                        <Label className="text-zinc-400 whitespace-nowrap">Intervallo tra ordini</Label>
-                                        <p className="text-[11px] text-zinc-600 mt-0.5">Imposta un tempo minimo tra un ordine e l'altro</p>
+                                        <Label className="text-zinc-200 font-medium whitespace-nowrap">Intervallo tra ordini</Label>
+                                        <p className="text-xs text-zinc-400 mt-0.5">Imposta un tempo minimo tra un ordine e l'altro</p>
                                     </div>
                                 </div>
                                 <Switch
@@ -244,16 +244,16 @@ export default function WeeklyScheduleEditor({
                             </div>
                             {((schedule as WeeklyAyceSchedule).defaultOrderInterval || 0) > 0 && (
                                 <div className="flex items-center gap-3 pl-1">
-                                    <span className="text-xs text-zinc-500">Intervallo:</span>
+                                    <span className="text-sm text-zinc-300">Intervallo:</span>
                                     <div className="relative w-[100px] flex items-center gap-1">
                                         <PriceInput
                                             value={(schedule as WeeklyAyceSchedule).defaultOrderInterval || 0}
                                             onChange={(val) => updateDefaultOrderInterval(Math.max(1, val))}
                                             step="1"
                                             min="1"
-                                            className="bg-zinc-900 border-zinc-700 h-9 text-center"
+                                            className="bg-zinc-900 border-zinc-700 h-9 text-center text-white"
                                         />
-                                        <span className="text-zinc-500 text-xs">min</span>
+                                        <span className="text-zinc-400 text-sm">min</span>
                                     </div>
                                 </div>
                             )}

@@ -760,6 +760,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     is_ayce: boolean
     allergens?: string[]
     imageFile?: File
+    ayce_max_orders_per_person?: number | null
   }>({
     name: '',
     description: '',
@@ -768,8 +769,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     image: '',
     is_ayce: false,
     allergens: [],
-    imageFile: undefined
+    imageFile: undefined,
+    ayce_max_orders_per_person: null
   })
+  // Inline category creation state (for both create and edit dish dialogs)
+  const [inlineCatName, setInlineCatName] = useState('')
+  const [showInlineCatCreate, setShowInlineCatCreate] = useState(false)
+  const [showInlineCatEdit, setShowInlineCatEdit] = useState(false)
+  // Quick AYCE per-dish limit editor on cards
+  const [ayceEditDishId, setAyceEditDishId] = useState<string | null>(null)
+  const [ayceEditDishVal, setAyceEditDishVal] = useState('')
   const [newCategory, setNewCategory] = useState('')
   const [showNewCategoryPopup, setShowNewCategoryPopup] = useState(false)
   const [draggedCategory, setDraggedCategory] = useState<Category | null>(null)
@@ -803,6 +812,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     is_ayce: boolean
     allergens?: string[]
     imageFile?: File
+    ayce_max_orders_per_person?: number | null
   }>({
     name: '',
     description: '',
@@ -811,7 +821,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     image: '',
     is_ayce: false,
     allergens: [],
-    imageFile: undefined
+    imageFile: undefined,
+    ayce_max_orders_per_person: null
   })
   const [showQrDialog, setShowQrDialog] = useState(false)
   const [customerCount, setCustomerCount] = useState('')
@@ -1545,12 +1556,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       is_active: true,
       is_ayce: newDish.is_ayce,
       excludeFromAllYouCanEat: !newDish.is_ayce,
-      allergens: newDish.allergens || []
+      allergens: newDish.allergens || [],
+      ayce_max_orders_per_person: newDish.is_ayce ? (newDish.ayce_max_orders_per_person ?? null) : null
     }
 
     DatabaseService.createDish(newItem)
       .then(() => {
-        setNewDish({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [] })
+        setNewDish({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], ayce_max_orders_per_person: null })
         setAllergenInput('')
         setIsAddItemDialogOpen(false)
         toast.success('Piatto aggiunto al menu')
@@ -1601,9 +1613,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       categoryId: item.category_id,
       image: item.image_url || '',
       is_ayce: item.is_ayce || false,
-      allergens: item.allergens || []
+      allergens: item.allergens || [],
+      ayce_max_orders_per_person: item.ayce_max_orders_per_person ?? null
     })
     setAllergenInput(item.allergens?.join(', ') || '')
+    setShowInlineCatEdit(false)
+    setInlineCatName('')
   }
 
   const handleSaveDish = async () => {
@@ -1632,7 +1647,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       image_url: imageUrl,
       is_ayce: editDishData.is_ayce,
       excludeFromAllYouCanEat: !editDishData.is_ayce,
-      allergens: editDishData.allergens || []
+      allergens: editDishData.allergens || [],
+      ayce_max_orders_per_person: editDishData.is_ayce ? (editDishData.ayce_max_orders_per_person ?? null) : null
     }
 
     DatabaseService.updateDish(updatedItem)
@@ -1641,7 +1657,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           prev.map(d => d.id === updatedItem.id ? { ...d, ...updatedItem } : d)
         )
         setEditingDish(null)
-        setEditDishData({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [] })
+        setEditDishData({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], ayce_max_orders_per_person: null })
         setAllergenInput('')
         toast.success('Piatto modificato')
       })
@@ -1649,7 +1665,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const handleCancelDishEdit = () => {
     setEditingDish(null)
-    setEditDishData({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], imageFile: undefined })
+    setEditDishData({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], imageFile: undefined, ayce_max_orders_per_person: null })
+    setShowInlineCatEdit(false)
+    setInlineCatName('')
   }
 
 
@@ -1702,6 +1720,42 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     toast.success('Piatto consegnato!')
   }
 
+
+  const handleCreateCategoryInline = async (isEditDialog: boolean) => {
+    if (!inlineCatName.trim()) return
+    try {
+      const cat = await DatabaseService.createCategory({
+        restaurant_id: restaurantId,
+        name: inlineCatName.trim(),
+        order: restaurantCategories.length
+      })
+      if (isEditDialog) {
+        setEditDishData(prev => ({ ...prev, categoryId: cat.id }))
+        setShowInlineCatEdit(false)
+      } else {
+        setNewDish(prev => ({ ...prev, categoryId: cat.id }))
+        setShowInlineCatCreate(false)
+      }
+      setInlineCatName('')
+      toast.success('Categoria creata')
+    } catch {
+      toast.error('Errore creazione categoria')
+    }
+  }
+
+  const handleUpdateDishAyceLimit = (dish: Dish, limitStr: string) => {
+    const limit = limitStr.trim() === '' ? null : parseInt(limitStr, 10)
+    if (limit !== null && (isNaN(limit) || limit < 1)) return
+    const updated = { ...dish, ayce_max_orders_per_person: limit }
+    setDishes(prev => prev.map(d => d.id === dish.id ? updated : d))
+    DatabaseService.updateDish(updated)
+      .then(() => toast.success(limit ? `Limite: ${limit} per persona` : 'Limite rimosso'))
+      .catch(() => {
+        toast.error('Errore aggiornamento limite')
+        setDishes(prev => prev.map(d => d.id === dish.id ? dish : d))
+      })
+    setAyceEditDishId(null)
+  }
 
   const handleCreateCategory = () => {
     if (!newCategory.trim()) {
@@ -3526,7 +3580,29 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>Categoria</Label>
+                            <div className="flex items-center justify-between">
+                              <Label>Categoria</Label>
+                              <button
+                                type="button"
+                                onClick={() => { setShowInlineCatCreate(v => !v); setInlineCatName('') }}
+                                className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                              >
+                                <Plus size={11} weight="bold" /> Nuova
+                              </button>
+                            </div>
+                            {showInlineCatCreate && (
+                              <div className="flex gap-2">
+                                <Input
+                                  value={inlineCatName}
+                                  onChange={e => setInlineCatName(e.target.value)}
+                                  placeholder="Nome categoria..."
+                                  className="h-8 text-sm"
+                                  onKeyDown={e => { if (e.key === 'Enter') handleCreateCategoryInline(false) }}
+                                  autoFocus
+                                />
+                                <Button size="sm" className="h-8 shrink-0 px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950" onClick={() => handleCreateCategoryInline(false)}>Crea</Button>
+                              </div>
+                            )}
                             <Select
                               value={newDish.categoryId}
                               onValueChange={(value) => setNewDish({ ...newDish, categoryId: value })}
@@ -3561,13 +3637,37 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             placeholder="Glutine, Lattosio, etc."
                           />
                         </div>
-                        <div className="flex items-center space-x-2 pt-4">
-                          <Switch
-                            id="new_is_ayce"
-                            checked={newDish.is_ayce}
-                            onCheckedChange={(checked) => setNewDish({ ...newDish, is_ayce: checked })}
-                          />
-                          <Label htmlFor="new_is_ayce">Incluso in All You Can Eat</Label>
+                        <div className="space-y-3 pt-4 border-t border-zinc-800">
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="new_is_ayce"
+                              checked={newDish.is_ayce}
+                              onCheckedChange={(checked) => setNewDish({ ...newDish, is_ayce: checked, ayce_max_orders_per_person: checked ? newDish.ayce_max_orders_per_person : null })}
+                            />
+                            <Label htmlFor="new_is_ayce">Incluso in All You Can Eat</Label>
+                          </div>
+                          {newDish.is_ayce && (
+                            <div className="flex items-center gap-3 pl-1">
+                              <Switch
+                                id="new_ayce_limit"
+                                checked={!!newDish.ayce_max_orders_per_person}
+                                onCheckedChange={(checked) => setNewDish({ ...newDish, ayce_max_orders_per_person: checked ? 2 : null })}
+                              />
+                              <div>
+                                <Label htmlFor="new_ayce_limit" className="text-sm">Limite ordini per persona</Label>
+                                <p className="text-[11px] text-zinc-500">Quante volte può essere ordinato questo piatto per persona</p>
+                              </div>
+                              {!!newDish.ayce_max_orders_per_person && (
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={newDish.ayce_max_orders_per_person || ''}
+                                  onChange={e => setNewDish({ ...newDish, ayce_max_orders_per_person: parseInt(e.target.value) || 1 })}
+                                  className="w-16 h-8 text-center ml-auto"
+                                />
+                              )}
+                            </div>
+                          )}
                         </div>
                         <Button onClick={handleCreateDish} className="w-full">Aggiungi Piatto</Button>
                       </div>
@@ -3739,6 +3839,38 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               <div className="px-3 py-2">
                                 <h4 className="font-medium text-sm text-zinc-100 leading-snug line-clamp-1 group-hover:text-amber-400 transition-colors">{dish.name}</h4>
                                 {dish.description && <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{dish.description}</p>}
+                                {/* AYCE per-person limit quick editor */}
+                                {ayceEnabled && dish.is_ayce && (
+                                  <div className="mt-1.5">
+                                    {ayceEditDishId === dish.id ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-zinc-500">Max/persona:</span>
+                                        <Input
+                                          type="number" min="1"
+                                          value={ayceEditDishVal}
+                                          onChange={e => setAyceEditDishVal(e.target.value)}
+                                          onKeyDown={e => { if (e.key === 'Enter') handleUpdateDishAyceLimit(dish, ayceEditDishVal); if (e.key === 'Escape') setAyceEditDishId(null) }}
+                                          className="h-6 w-14 text-center text-xs px-1"
+                                          placeholder="∞"
+                                          autoFocus
+                                        />
+                                        <Button size="sm" className="h-6 px-2 text-[10px] bg-amber-500 hover:bg-amber-400 text-zinc-950" onClick={() => handleUpdateDishAyceLimit(dish, ayceEditDishVal)}>OK</Button>
+                                        <Button size="sm" variant="ghost" className="h-6 px-1 text-[10px] text-zinc-500" onClick={() => setAyceEditDishId(null)}>✕</Button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => { setAyceEditDishId(dish.id); setAyceEditDishVal(dish.ayce_max_orders_per_person?.toString() || '') }}
+                                        className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-amber-400 transition-colors"
+                                      >
+                                        <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-mono">
+                                          {dish.ayce_max_orders_per_person ? `${dish.ayce_max_orders_per_person}x max` : '∞ illimitato'}
+                                        </span>
+                                        <PencilSimple size={9} />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                                 {/* Mobile Actions */}
                                 <div className="flex items-center justify-end gap-1 mt-1.5 sm:hidden">
                                   <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-amber-500 rounded-full" onClick={() => handleEditDish(dish)}><PencilSimple size={14} /></Button>
@@ -3751,7 +3883,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             /* === COMPACT CARD WITHOUT IMAGE === */
                             <div
                               key={dish.id}
-                              className={`group flex items-center gap-3 bg-zinc-900/80 rounded-xl px-3 py-2.5 border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300 ${!dish.is_active ? 'opacity-50 grayscale' : ''}`}
+                              className={`group flex items-start gap-3 bg-zinc-900/80 rounded-xl px-3 py-2.5 border border-zinc-800/50 hover:border-amber-500/30 transition-all duration-300 ${!dish.is_active ? 'opacity-50 grayscale' : ''}`}
                             >
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
@@ -3759,8 +3891,40 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   {dish.is_ayce && <span className="shrink-0 px-1.5 py-0.5 bg-amber-500 text-zinc-950 font-bold text-[9px] rounded-full uppercase">AYCE</span>}
                                 </div>
                                 {dish.description && <p className="text-xs text-zinc-500 truncate mt-0.5">{dish.description}</p>}
+                                {/* AYCE per-person limit quick editor */}
+                                {ayceEnabled && dish.is_ayce && (
+                                  <div className="mt-1">
+                                    {ayceEditDishId === dish.id ? (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[10px] text-zinc-500">Max/persona:</span>
+                                        <Input
+                                          type="number" min="1"
+                                          value={ayceEditDishVal}
+                                          onChange={e => setAyceEditDishVal(e.target.value)}
+                                          onKeyDown={e => { if (e.key === 'Enter') handleUpdateDishAyceLimit(dish, ayceEditDishVal); if (e.key === 'Escape') setAyceEditDishId(null) }}
+                                          className="h-6 w-12 text-center text-xs px-1"
+                                          placeholder="∞"
+                                          autoFocus
+                                        />
+                                        <Button size="sm" className="h-6 px-2 text-[10px] bg-amber-500 hover:bg-amber-400 text-zinc-950" onClick={() => handleUpdateDishAyceLimit(dish, ayceEditDishVal)}>OK</Button>
+                                        <Button size="sm" variant="ghost" className="h-6 px-1 text-[10px] text-zinc-500" onClick={() => setAyceEditDishId(null)}>✕</Button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => { setAyceEditDishId(dish.id); setAyceEditDishVal(dish.ayce_max_orders_per_person?.toString() || '') }}
+                                        className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-amber-400 transition-colors"
+                                      >
+                                        <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 font-mono">
+                                          {dish.ayce_max_orders_per_person ? `${dish.ayce_max_orders_per_person}x max` : '∞ illimitato'}
+                                        </span>
+                                        <PencilSimple size={9} />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                              <span className="shrink-0 text-amber-400 font-bold text-xs">€{dish.price.toFixed(2)}</span>
+                              <span className="shrink-0 text-amber-400 font-bold text-xs mt-0.5">€{dish.price.toFixed(2)}</span>
                               <div className="shrink-0 flex items-center gap-0.5">
                                 <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full text-zinc-500 hover:text-amber-400 hover:bg-amber-500/10" onClick={() => handleEditDish(dish)}><PencilSimple size={14} /></Button>
                                 <Button size="icon" variant="ghost" className={`h-7 w-7 rounded-full ${dish.is_active ? 'text-zinc-500 hover:text-amber-400' : 'text-zinc-600'} hover:bg-amber-500/10`} onClick={() => handleToggleDish(dish.id)}>{dish.is_active ? <Eye size={14} /> : <EyeSlash size={14} />}</Button>
@@ -4350,7 +4514,29 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Categoria</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>Categoria</Label>
+                      <button
+                        type="button"
+                        onClick={() => { setShowInlineCatEdit(v => !v); setInlineCatName('') }}
+                        className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                      >
+                        <Plus size={11} weight="bold" /> Nuova
+                      </button>
+                    </div>
+                    {showInlineCatEdit && (
+                      <div className="flex gap-2">
+                        <Input
+                          value={inlineCatName}
+                          onChange={e => setInlineCatName(e.target.value)}
+                          placeholder="Nome categoria..."
+                          className="h-8 text-sm"
+                          onKeyDown={e => { if (e.key === 'Enter') handleCreateCategoryInline(true) }}
+                          autoFocus
+                        />
+                        <Button size="sm" className="h-8 shrink-0 px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950" onClick={() => handleCreateCategoryInline(true)}>Crea</Button>
+                      </div>
+                    )}
                     <Select
                       value={editDishData.categoryId}
                       onValueChange={(value) => setEditDishData({ ...editDishData, categoryId: value })}
@@ -4384,13 +4570,37 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     placeholder="Glutine, Lattosio, etc."
                   />
                 </div>
-                <div className="flex items-center space-x-2 pt-4">
-                  <Switch
-                    id="edit_is_ayce"
-                    checked={editDishData.is_ayce}
-                    onCheckedChange={(checked) => setEditDishData({ ...editDishData, is_ayce: checked })}
-                  />
-                  <Label htmlFor="edit_is_ayce">Incluso in All You Can Eat</Label>
+                <div className="space-y-3 pt-4 border-t border-zinc-800">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="edit_is_ayce"
+                      checked={editDishData.is_ayce}
+                      onCheckedChange={(checked) => setEditDishData({ ...editDishData, is_ayce: checked, ayce_max_orders_per_person: checked ? editDishData.ayce_max_orders_per_person : null })}
+                    />
+                    <Label htmlFor="edit_is_ayce">Incluso in All You Can Eat</Label>
+                  </div>
+                  {editDishData.is_ayce && (
+                    <div className="flex items-center gap-3 pl-1">
+                      <Switch
+                        id="edit_ayce_limit"
+                        checked={!!editDishData.ayce_max_orders_per_person}
+                        onCheckedChange={(checked) => setEditDishData({ ...editDishData, ayce_max_orders_per_person: checked ? 2 : null })}
+                      />
+                      <div>
+                        <Label htmlFor="edit_ayce_limit" className="text-sm">Limite ordini per persona</Label>
+                        <p className="text-[11px] text-zinc-500">Quante volte può essere ordinato per persona</p>
+                      </div>
+                      {!!editDishData.ayce_max_orders_per_person && (
+                        <Input
+                          type="number"
+                          min="1"
+                          value={editDishData.ayce_max_orders_per_person || ''}
+                          onChange={e => setEditDishData({ ...editDishData, ayce_max_orders_per_person: parseInt(e.target.value) || 1 })}
+                          className="w-16 h-8 text-center ml-auto"
+                        />
+                      )}
+                    </div>
+                  )}
                 </div>
                 <Button onClick={handleSaveDish} className="w-full bg-amber-600 hover:bg-amber-700 text-white">Salva Modifiche</Button>
               </div>

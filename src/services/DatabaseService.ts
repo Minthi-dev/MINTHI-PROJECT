@@ -494,8 +494,9 @@ export const DatabaseService = {
     },
 
     async createCategory(category: Partial<Category>) {
-        const { error } = await supabase.from('categories').insert(category)
+        const { data, error } = await supabase.from('categories').insert(category).select().single()
         if (error) throw error
+        return data as Category
     },
 
     async updateCategory(category: Partial<Category>) {

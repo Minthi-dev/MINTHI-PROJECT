@@ -1038,6 +1038,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   // const [activeSession, setSession] = useState<TableSession | null>(null) // Removed
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedDish, setSelectedDish] = useState<Dish | null>(null)
+  // AYCE per-dish limit exceeded confirmation
+  const [ayceOverLimitDish, setAyceOverLimitDish] = useState<{ dish: Dish, quantity: number, notes: string } | null>(null)
 
   // New state for course splitting modal
   const [showCourseSelectionModal, setShowCourseSelectionModal] = useState(false)
@@ -1432,6 +1434,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }, [])
 
   const handleAddClick = (dish: Dish, quantity: number, notes: string) => {
+    // Check AYCE per-dish per-person limit
+    if (activeSession?.ayce_enabled && dish.ayce_max_orders_per_person) {
+      const alreadyOrdered = getDishOrderedCount(dish.id)
+      if (alreadyOrdered >= dish.ayce_max_orders_per_person) {
+        setSelectedDish(null)
+        setAyceOverLimitDish({ dish, quantity, notes })
+        return
+      }
+    }
     // New UX: Always add to cart first, default to Course 1
     addToCart(dish, quantity, notes, 1)
   }
@@ -1748,6 +1759,24 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
+
+  // Per-dish ordered count (for AYCE per-person limits)
+  const perDishOrderedCount = useMemo(() => {
+    const counts: Record<string, number> = {}
+    previousOrders.forEach(order => {
+      order.items?.forEach((item: any) => {
+        if (item.status === 'CANCELLED') return
+        counts[item.dish_id] = (counts[item.dish_id] || 0) + (item.quantity || 1)
+      })
+    })
+    // Also count items in current cart (not yet ordered)
+    cart.forEach(item => {
+      counts[item.dish_id] = (counts[item.dish_id] || 0) + item.quantity
+    })
+    return counts
+  }, [previousOrders, cart])
+
+  const getDishOrderedCount = (dishId: string) => perDishOrderedCount[dishId] || 0
 
   // Helper: get all payable items (not PAID, not CANCELLED)
   const payableItems = useMemo(() => {
@@ -2330,6 +2359,20 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   <div>
                     <h2 className="text-2xl font-light leading-tight pr-4 tracking-wide" style={{ fontFamily: theme.headerFont }}>{selectedDish.name}</h2>
                     <p className="font-bold mt-2 text-xl" style={{ color: theme.primary }}>€{selectedDish.price.toFixed(2)}</p>
+                    {/* AYCE per-dish limit badge */}
+                    {activeSession?.ayce_enabled && selectedDish.ayce_max_orders_per_person && (
+                      (() => {
+                        const ordered = getDishOrderedCount(selectedDish.id)
+                        const max = selectedDish.ayce_max_orders_per_person!
+                        const isOver = ordered >= max
+                        return (
+                          <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${isOver ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}`}>
+                            <span>{isOver ? '⚠️' : '🔢'}</span>
+                            {isOver ? `Limite raggiunto (${max}x)` : `Max ${max} per persona · ordinato ${ordered}x`}
+                          </div>
+                        )
+                      })()
+                    )}
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => setSelectedDish(null)} className="-mt-2 -mr-2 rounded-full h-10 w-10" style={{ color: theme.textSecondary }}>
                     <X className="w-6 h-6" />
@@ -2380,6 +2423,44 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 )}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* AYCE Per-Dish Limit Exceeded Dialog */}
+        <Dialog open={!!ayceOverLimitDish} onOpenChange={(open) => { if (!open) setAyceOverLimitDish(null) }}>
+          <DialogContent className="sm:max-w-sm p-6 rounded-2xl" style={{ backgroundColor: theme.dialogBg, borderColor: 'rgba(239,68,68,0.3)', color: theme.textPrimary }}>
+            <DialogHeader>
+              <DialogTitle className="text-red-400 flex items-center gap-2">
+                ⚠️ Limite per persona superato
+              </DialogTitle>
+              <DialogDescription style={{ color: theme.textSecondary }}>
+                Hai già ordinato <strong style={{ color: theme.textPrimary }}>{ayceOverLimitDish?.dish.name}</strong> il massimo di <strong style={{ color: '#f87171' }}>{ayceOverLimitDish?.dish.ayce_max_orders_per_person}x</strong> volte incluse nel prezzo All You Can Eat.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl p-4 mt-2 text-sm" style={{ backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: theme.textSecondary }}>
+              Questo piatto non è più gratuito. Puoi aggiungerlo al tuo ordine ma <strong style={{ color: theme.textPrimary }}>sarà addebitato separatamente</strong> al prezzo di <strong style={{ color: theme.primary }}>€{ayceOverLimitDish?.dish.price.toFixed(2)}</strong> a porzione.
+            </div>
+            <div className="flex gap-3 mt-4">
+              <Button
+                variant="outline"
+                className="flex-1"
+                style={{ borderColor: theme.cardBorder, color: theme.textSecondary }}
+                onClick={() => setAyceOverLimitDish(null)}
+              >
+                Annulla
+              </Button>
+              <Button
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold"
+                onClick={() => {
+                  if (ayceOverLimitDish) {
+                    addToCart(ayceOverLimitDish.dish, ayceOverLimitDish.quantity, ayceOverLimitDish.notes, 1)
+                    setAyceOverLimitDish(null)
+                  }
+                }}
+              >
+                Aggiungi a pagamento
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
 

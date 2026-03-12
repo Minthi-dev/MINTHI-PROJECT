@@ -164,6 +164,7 @@ export interface Dish {
     exclude_from_all_you_can_eat?: boolean
     is_ayce?: boolean
     allergens?: string[]
+    ayce_max_orders_per_person?: number | null
 }
 
 export interface Table {
