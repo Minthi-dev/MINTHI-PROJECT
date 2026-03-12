@@ -144,7 +144,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     title: 'Benvenuto nella Dashboard',
     description: 'Questa \u00e8 la tua dashboard Minthi. Da qui gestisci tutto il tuo ristorante: ordini, tavoli, menu, prenotazioni, analitiche e impostazioni. Usa il menu laterale a sinistra per navigare tra le sezioni. Ogni sezione \u00e8 in tempo reale: le modifiche si aggiornano istantaneamente su tutti i dispositivi.',
     tip: 'Naviga liberamente tra le sezioni cliccando sul menu laterale!',
-    highlightSelector: 'nav',
   },
   {
     id: 'orders-overview',
