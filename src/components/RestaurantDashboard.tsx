@@ -134,8 +134,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
   const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
-  const [bookings, , refreshBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
-  const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
+  const [bookings, , refreshBookings, setBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
+  const [sessions, , refreshSessions, setSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
   const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
 
   // Ref so stopDemo can call fetchOrders
