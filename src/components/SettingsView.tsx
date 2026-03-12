@@ -421,6 +421,7 @@ export function SettingsView({
                 <TabsList className="w-full justify-start h-auto bg-transparent border-b border-white/10 p-0 pb-0 mb-8 gap-6 overflow-x-auto [overflow:visible]">
                     <TabsTrigger
                         value="general"
+                        data-settings-tab="general"
                         className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
                     >
                         <Storefront size={20} />
@@ -428,6 +429,7 @@ export function SettingsView({
                     </TabsTrigger>
                     <TabsTrigger
                         value="costs"
+                        data-settings-tab="costs"
                         className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
                     >
                         <Coins size={20} />
@@ -435,6 +437,7 @@ export function SettingsView({
                     </TabsTrigger>
                     <TabsTrigger
                         value="staff"
+                        data-settings-tab="staff"
                         className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
                     >
                         <Users size={20} />
@@ -442,6 +445,7 @@ export function SettingsView({
                     </TabsTrigger>
                     <TabsTrigger
                         value="reservations"
+                        data-settings-tab="reservations"
                         className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
                     >
                         <CalendarCheck size={20} />
@@ -449,6 +453,7 @@ export function SettingsView({
                     </TabsTrigger>
                     <TabsTrigger
                         value="subscription"
+                        data-settings-tab="subscription"
                         className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-emerald-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
                     >
                         <CreditCard size={20} />
@@ -574,7 +579,18 @@ export function SettingsView({
                             </div>
                         </div>
 
-                        {/* Guida Interattiva - REMOVED (moved to top) */}
+                        {/* Assistenza */}
+                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <h3 className="text-base font-semibold text-white mb-1">Assistenza</h3>
+                            <p className="text-zinc-400 text-sm mb-3">Hai bisogno di aiuto con la configurazione?</p>
+                            <p className="text-sm text-zinc-300">
+                                Contattaci al{' '}
+                                <a href="tel:+393517570155" className="text-amber-400 font-medium hover:text-amber-300 transition-colors">
+                                    +39 351 757 0155
+                                </a>
+                            </p>
+                            <p className="text-xs text-zinc-600 mt-1">Disponibili lun-ven 9:00-18:00</p>
+                        </div>
 
                     </motion.div>
                 </TabsContent>

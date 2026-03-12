@@ -372,6 +372,14 @@ export default function LoginPage({ onLogin }: Props) {
         >
           Secured by MINTHI Systems
         </motion.p>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="text-center text-[10px] text-zinc-700 mt-2"
+        >
+          Assistenza: <a href="tel:+393517570155" className="text-amber-500/50 hover:text-amber-400 transition-colors">+39 351 757 0155</a>
+        </motion.p>
       </motion.div>
     </div>
   )

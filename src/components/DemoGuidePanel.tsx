@@ -1,13 +1,15 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, ArrowLeft, X, CaretUp, CaretDown, Eye } from '@phosphor-icons/react'
+import { ArrowRight, ArrowLeft, X, CaretUp, CaretDown, Eye, Lightbulb } from '@phosphor-icons/react'
 import { DEMO_TOUR_STEPS } from './demoData'
+import SpotlightOverlay from './SpotlightOverlay'
 
 interface DemoGuidePanelProps {
   currentStep: number
   setCurrentStep: (step: number) => void
   setActiveTab: (tab: string) => void
   onExit: () => void
+  setSettingsSubTab?: (tab: string) => void
 }
 
 export default function DemoGuidePanel({
@@ -15,26 +17,28 @@ export default function DemoGuidePanel({
   setCurrentStep,
   setActiveTab,
   onExit,
+  setSettingsSubTab,
 }: DemoGuidePanelProps) {
   const [collapsed, setCollapsed] = useState(false)
-  const step = DEMO_TOUR_STEPS[currentStep]
+  const steps = DEMO_TOUR_STEPS
+  const step = steps[currentStep] || steps[0]
   const isFirst = currentStep === 0
-  const isLast = currentStep === DEMO_TOUR_STEPS.length - 1
+  const isLast = currentStep === steps.length - 1
 
-  const goTo = (idx: number) => {
-    const s = DEMO_TOUR_STEPS[idx]
-    if (s) {
-      setCurrentStep(idx)
-      setActiveTab(s.tab)
+  const goTo = useCallback((idx: number) => {
+    const s = steps[idx]
+    if (!s) return
+    setCurrentStep(idx)
+    setActiveTab(s.tab)
+    // Navigate to settings sub-tab if specified
+    if (s.subTab && setSettingsSubTab) {
+      setTimeout(() => setSettingsSubTab(s.subTab!), 150)
     }
-  }
+  }, [steps, setCurrentStep, setActiveTab, setSettingsSubTab])
 
   const handleNext = () => {
-    if (isLast) {
-      onExit()
-    } else {
-      goTo(currentStep + 1)
-    }
+    if (isLast) onExit()
+    else goTo(currentStep + 1)
   }
 
   const handlePrev = () => {
@@ -43,12 +47,18 @@ export default function DemoGuidePanel({
 
   return (
     <>
+      {/* Spotlight overlay on highlighted element */}
+      <SpotlightOverlay
+        targetSelector={step.highlightSelector}
+        active={!collapsed && !!step.highlightSelector}
+      />
+
       {/* Top banner */}
       <div className="sticky top-0 left-0 right-0 z-[9998] bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 text-black px-4 py-3 flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-2 text-base font-bold">
           <Eye size={18} weight="bold" />
-          <span>MODALITÀ DEMO</span>
-          <span className="font-normal opacity-80 hidden sm:inline">— Stai navigando con dati di esempio</span>
+          <span>MODALIT\u00c0 DEMO</span>
+          <span className="font-normal opacity-80 hidden sm:inline">\u2014 Stai navigando con dati di esempio</span>
         </div>
         <button
           onClick={onExit}
@@ -92,22 +102,26 @@ export default function DemoGuidePanel({
                   >
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-amber-500 font-bold text-[10px] tracking-widest uppercase">
+                            Passo {currentStep + 1} di {steps.length}
+                          </span>
+                        </div>
                         <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
                           {step.title}
                         </h3>
-                        <p className="text-zinc-400 text-xs sm:text-sm mt-1 leading-relaxed">
-                          {step.description}
-                        </p>
                       </div>
-                      <span className="text-xs text-zinc-600 font-medium whitespace-nowrap mt-1">
-                        {currentStep + 1} / {DEMO_TOUR_STEPS.length}
-                      </span>
                     </div>
+
+                    <p className="text-zinc-300 text-xs sm:text-sm leading-relaxed mb-2 max-h-32 overflow-y-auto pr-2">
+                      {step.description}
+                    </p>
 
                     {step.tip && (
                       <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-3">
-                        <p className="text-amber-400 text-xs font-medium">
-                          💡 {step.tip}
+                        <p className="text-amber-400 text-xs font-medium flex items-start gap-1.5">
+                          <Lightbulb size={14} weight="fill" className="mt-0.5 shrink-0" />
+                          {step.tip}
                         </p>
                       </div>
                     )}
@@ -117,14 +131,14 @@ export default function DemoGuidePanel({
                 {/* Navigation */}
                 <div className="flex items-center justify-between gap-3">
                   {/* Dots */}
-                  <div className="flex items-center gap-1.5">
-                    {DEMO_TOUR_STEPS.map((_, i) => (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {steps.map((_, i) => (
                       <button
                         key={i}
                         onClick={() => goTo(i)}
                         className={`rounded-full transition-all duration-300 ${
                           i === currentStep
-                            ? 'w-5 h-2 bg-amber-500'
+                            ? 'w-4 h-2 bg-amber-500'
                             : i < currentStep
                               ? 'w-2 h-2 bg-amber-500/40'
                               : 'w-2 h-2 bg-zinc-700 hover:bg-zinc-500'
@@ -170,7 +184,7 @@ export default function DemoGuidePanel({
               >
                 <CaretUp size={14} className="text-amber-500" />
                 <span className="text-sm font-bold text-white">{step.title}</span>
-                <span className="text-xs text-zinc-500">{currentStep + 1}/{DEMO_TOUR_STEPS.length}</span>
+                <span className="text-xs text-zinc-500">{currentStep + 1}/{steps.length}</span>
               </button>
             </motion.div>
           )}

@@ -1585,6 +1585,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             </Button>
                           </div>
                           <p className="text-[11px] text-zinc-600">Se esiste già un link con gli stessi parametri, viene riutilizzato.</p>
+                          <p className="text-[11px] text-zinc-600 mt-1">Assistenza: <a href="tel:+393517570155" className="text-amber-400/60 hover:text-amber-400">+39 351 757 0155</a></p>
                         </div>
                       ) : (
                         <Button

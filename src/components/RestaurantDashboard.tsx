@@ -138,6 +138,83 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [sessions, , refreshSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
   const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
 
+  // Ref so stopDemo can call fetchOrders
+  const fetchOrdersRef = useRef<(() => void) | null>(null)
+
+  // Saved real data for restoring after demo
+  const realDataRef = useRef<{
+    dishes: Dish[], tables: Table[], categories: Category[], rooms: Room[],
+    orders: Order[], pastOrders: Order[], bookings: Booking[], sessions: TableSession[]
+  } | null>(null)
+
+  const startDemo = useCallback(() => {
+    // Save real data before injecting demo data
+    realDataRef.current = {
+      dishes: dishes || [], tables: tables || [], categories: categories || [],
+      rooms: rooms || [], orders, pastOrders, bookings: bookings || [], sessions: sessions || [],
+    }
+    demoModeRef.current = true
+    setDemoMode(true)
+    setDemoStep(0)
+    // Inject fake data — map restaurant_id to real ID so filters work (e.g. ReservationsManager)
+    const rid = restaurantId
+    const mapRid = <T extends { restaurant_id: string }>(arr: T[]): T[] => arr.map(x => ({ ...x, restaurant_id: rid }))
+    setDishes(mapRid(DEMO_DISHES))
+    setTables(mapRid(DEMO_TABLES))
+    setCategories(mapRid(DEMO_CATEGORIES))
+    setRooms(mapRid(DEMO_ROOMS))
+    setOrders(mapRid(DEMO_ORDERS))
+    setPastOrders(mapRid(DEMO_PAST_ORDERS))
+    setBookings(mapRid(DEMO_BOOKINGS))
+    setSessions(mapRid(DEMO_SESSIONS))
+    setActiveTab('orders')
+  }, [restaurantId, dishes, tables, categories, rooms, orders, pastOrders, bookings, sessions, setDishes, setTables, setCategories, setRooms, setBookings, setSessions])
+
+  const stopDemo = useCallback(() => {
+    demoModeRef.current = false
+    setDemoMode(false)
+    setDemoStep(0)
+    // Restore real data
+    if (realDataRef.current) {
+      setDishes(realDataRef.current.dishes)
+      setTables(realDataRef.current.tables)
+      setCategories(realDataRef.current.categories)
+      setRooms(realDataRef.current.rooms)
+      setOrders(realDataRef.current.orders)
+      setPastOrders(realDataRef.current.pastOrders)
+      setBookings(realDataRef.current.bookings)
+      setSessions(realDataRef.current.sessions)
+      realDataRef.current = null
+    }
+    // Also refresh from DB to get latest
+    refreshDishes(); refreshTables(); refreshCategories(); refreshRooms()
+    refreshBookings(); refreshSessions(); fetchOrdersRef.current?.()
+  }, [setDishes, setTables, setCategories, setRooms, setBookings, setSessions, refreshDishes, refreshTables, refreshCategories, refreshRooms, refreshBookings, refreshSessions])
+
+  // First login: auto-start demo
+  const firstLoginChecked = useRef(false)
+  useEffect(() => {
+    if (firstLoginChecked.current) return
+    if (!restaurantId) return
+    firstLoginChecked.current = true
+    if (!localStorage.getItem(tourKey)) {
+      // Small delay to let dashboard render
+      setTimeout(() => startDemo(), 500)
+    }
+  }, [restaurantId, tourKey, startDemo])
+
+  const handleDemoExit = useCallback(() => {
+    // Check real data BEFORE stopDemo clears it
+    const real = realDataRef.current
+    const hasNoData = !real || (real.tables.length === 0 && real.dishes.length === 0 && real.categories.length === 0)
+    stopDemo()
+    // Mark tour as done
+    localStorage.setItem(tourKey, '1')
+    // Show setup wizard if no real data exists
+    if (hasNoData) {
+      setShowSetupWizard(true)
+    }
+  }, [stopDemo, tourKey])
   // Initialize selected categories when available
   const categoriesInitializedRef = useRef(false)
 
@@ -4536,6 +4613,32 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
         </div>
       </main>
+
+      {/* Demo Mode Guide */}
+      {demoMode && (
+        <DemoGuidePanel
+          currentStep={demoStep}
+          setCurrentStep={setDemoStep}
+          setActiveTab={setActiveTab}
+          onExit={handleDemoExit}
+          setSettingsSubTab={(tab) => {
+            // Programmatically click the settings sub-tab trigger
+            const trigger = document.querySelector(`[data-settings-tab="${tab}"]`) as HTMLElement
+            trigger?.click()
+          }}
+        />
+      )}
+
+      {/* Setup Wizard (after demo, for new restaurants) */}
+      {showSetupWizard && !demoMode && (
+        <SetupWizard
+          setActiveTab={setActiveTab}
+          onComplete={() => setShowSetupWizard(false)}
+          tablesCount={tables?.length || 0}
+          dishesCount={dishes?.length || 0}
+          categoriesCount={categories?.length || 0}
+        />
+      )}
 
       {/* HIDDEN PRINT VIEW FOR MENU EXPORT - ALL INLINE STYLES FOR PDF COMPATIBILITY */}
       <div id="menu-print-view" style={{

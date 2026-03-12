@@ -643,6 +643,7 @@ export default function RestaurantOnboarding() {
             {/* Footer */}
             <footer className="relative z-10 border-t border-white/5 px-6 py-8 text-center">
                 <p className="text-xs text-zinc-600">© 2026 MINTHI — Piattaforma per la ristorazione digitale</p>
+                <p className="text-xs text-zinc-600 mt-1">Assistenza: <a href="tel:+393517570155" className="text-amber-400/60 hover:text-amber-400 transition-colors">+39 351 757 0155</a></p>
             </footer>
         </div>
     )
