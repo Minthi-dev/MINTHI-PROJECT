@@ -52,19 +52,18 @@ export default function DemoGuidePanel({
         active={!collapsed && !!step.highlightSelector}
       />
 
-      {/* Top banner — compact floating pill */}
-      <div className="sticky top-0 left-0 right-0 z-[9998] flex justify-center py-2 pointer-events-none">
-        <div className="pointer-events-auto bg-amber-500/90 backdrop-blur-md text-black px-5 py-2 rounded-full flex items-center gap-3 shadow-lg shadow-amber-500/20">
-          <div className="flex items-center gap-2 text-sm font-bold">
-            <Eye size={16} weight="bold" />
+      {/* Top banner — compact floating pill, fixed so it doesn't push content */}
+      <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[9998] pointer-events-none">
+        <div className="pointer-events-auto bg-amber-500/90 backdrop-blur-md text-black px-4 py-1.5 rounded-full flex items-center gap-2.5 shadow-lg shadow-amber-500/20">
+          <div className="flex items-center gap-1.5 text-xs font-bold">
+            <Eye size={14} weight="bold" />
             <span>DEMO</span>
-            <span className="font-normal opacity-70 hidden sm:inline">{'\u2014'} Dati di esempio</span>
           </div>
           <button
             onClick={onExit}
-            className="flex items-center gap-1 text-xs font-bold bg-black/20 hover:bg-black/30 rounded-full px-3 py-1 transition-colors"
+            className="flex items-center gap-1 text-[11px] font-bold bg-black/20 hover:bg-black/30 rounded-full px-2.5 py-0.5 transition-colors"
           >
-            <X size={12} weight="bold" />
+            <X size={10} weight="bold" />
             Esci
           </button>
         </div>

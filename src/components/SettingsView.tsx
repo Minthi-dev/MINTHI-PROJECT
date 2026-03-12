@@ -410,7 +410,7 @@ export function SettingsView({
                 className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10"
             >
                 <div>
-                    <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Impostazioni</span></h2>
+                    <h2 data-tour="settings-header" className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Impostazioni</span></h2>
                     <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">
                         Configura ogni aspetto del tuo ristorante
                     </p>

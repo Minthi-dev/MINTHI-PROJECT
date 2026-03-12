@@ -622,7 +622,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       {/* All analytics content in a single view */}
       <div className="space-y-8" id="analytics-export-container">
         {/* Header - Matching standard pattern */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+        <div data-tour="analytics-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
           <div>
             <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Analitiche</span></h2>
             <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Visualizza statistiche e report</p>

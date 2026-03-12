@@ -13,15 +13,20 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
   const [rect, setRect] = useState<DOMRect | null>(null)
   const prevElRef = useRef<Element | null>(null)
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryCountRef = useRef(0)
 
   const findAndMeasure = useCallback(() => {
     if (!targetSelector) { setRect(null); return }
     const el = document.querySelector(targetSelector)
     if (!el) {
-      // Retry — element might not be rendered yet after tab switch
-      retryRef.current = setTimeout(findAndMeasure, 200)
+      // Retry up to 10 times — element might not be rendered yet after tab switch
+      if (retryCountRef.current < 10) {
+        retryCountRef.current++
+        retryRef.current = setTimeout(findAndMeasure, 200)
+      }
       return
     }
+    retryCountRef.current = 0
 
     // Elevate element
     if (prevElRef.current && prevElRef.current !== el) {
@@ -64,15 +69,8 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
 
   if (!active) return null
 
-  // If no target or not found yet, just show dark overlay
-  if (!rect) {
-    return (
-      <div
-        className="fixed inset-0 bg-black/60 transition-opacity duration-300"
-        style={{ zIndex: 9997, pointerEvents: 'none' }}
-      />
-    )
-  }
+  // If no target or not found yet, show nothing (avoids black screen bug)
+  if (!rect) return null
 
   const pad = 8 // padding around the element
 

@@ -2058,6 +2058,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   setActiveSection('settings')
                   setIsSidebarOpen(false)
                 }}
+                data-tour="nav-settings"
                 className={`w-full justify-start h-11 px-4 rounded-xl transition-all group relative overflow-hidden ${activeTab === 'settings'
                   ? 'bg-gradient-to-r from-amber-500/10 to-transparent text-amber-500 font-medium'
                   : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.03]'
@@ -2178,7 +2179,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8 animate-in fade-in-30 duration-500">
             {/* Orders Tab */}
             <TabsContent value="orders" className="space-y-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div data-tour="orders-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Ordini</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci gli ordini in tempo reale</p>
@@ -2359,7 +2360,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             {/* Tables Tab */}
             <TabsContent value="tables" className="space-y-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div data-tour="tables-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Tavoli</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci la sala e i tavoli</p>
@@ -2374,12 +2375,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       className="pl-9 h-10 w-[180px] lg:w-[230px] bg-background/50 backdrop-blur-sm"
                     />
                   </div>
-                  <Button onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
+                  <Button data-tour="add-table-btn" onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
                     <Plus size={16} className="mr-2" />
                     Nuovo Tavolo
                   </Button>
 
                   <Button
+                    data-tour="download-qr-btn"
                     variant="outline"
                     size="sm"
                     className="h-10 shadow-sm hover:shadow-md transition-shadow border-dashed border-zinc-700 hover:border-amber-500 hover:text-amber-500"
@@ -3303,7 +3305,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             {/* Timeline Tab */}
             <TabsContent value="timeline" className="space-y-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div data-tour="reservations-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Timeline <span className="font-bold text-amber-500">Prenotazioni</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci le prenotazioni su linea temporale</p>
@@ -3361,7 +3363,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             {/* Menu Tab */}
             <TabsContent value="menu" className="space-y-6">
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+              <div data-tour="menu-header" className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
                 <div>
                   <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Menu</span></h2>
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci piatti e categorie</p>
@@ -3547,7 +3549,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog open={isAddItemDialogOpen} onOpenChange={setIsAddItemDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button>
+                      <Button data-tour="add-dish-btn">
                         <Plus size={16} className="mr-2" />
                         Nuovo Piatto
                       </Button>

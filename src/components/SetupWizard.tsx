@@ -30,23 +30,18 @@ export default function SetupWizard({
     return s ? s.checkFn(ctx) : false
   }, [categoriesCount, dishesCount, tablesCount, steps])
 
-  // Auto-advance to next incomplete step when current is done
+  // Auto-advance to next incomplete step when current is done (without showing explanation again)
   useEffect(() => {
     const step = steps[currentStep]
     if (step && isStepDone(step.id)) {
       const nextIncomplete = steps.findIndex((s, i) => i > currentStep && !isStepDone(s.id))
       if (nextIncomplete >= 0) {
         setCurrentStep(nextIncomplete)
-        setShowExplanation(true)
+        setShowExplanation(false) // Don't re-show explanation on auto-advance
         setActiveTab(steps[nextIncomplete].tab)
       }
     }
   }, [categoriesCount, dishesCount, tablesCount, currentStep, isStepDone, steps, setActiveTab])
-
-  // Show explanation when step changes
-  useEffect(() => {
-    setShowExplanation(true)
-  }, [currentStep])
 
   const step = steps[currentStep]
   const completedCount = steps.filter(s => isStepDone(s.id)).length
@@ -222,18 +217,24 @@ export default function SetupWizard({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {/* Info button to re-read explanation */}
+                  <button
+                    onClick={() => setShowExplanation(true)}
+                    className="h-9 px-3 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 text-xs font-semibold transition-all"
+                  >
+                    ?
+                  </button>
                   {/* Next step button */}
                   {currentStep < steps.length - 1 ? (
                     <button
                       onClick={handleNext}
-                      disabled={!isStepDone(step.id)}
                       className={`h-9 px-5 rounded-lg font-bold text-sm transition-all flex items-center gap-1.5 ${
                         isStepDone(step.id)
                           ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]'
-                          : 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-60'
+                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
                       }`}
                     >
-                      Prossimo passo
+                      {isStepDone(step.id) ? 'Prossimo passo' : 'Salta'}
                       <ArrowRight size={14} />
                     </button>
                   ) : (
