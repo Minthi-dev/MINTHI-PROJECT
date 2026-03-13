@@ -7,7 +7,7 @@ interface SpotlightOverlayProps {
 
 /**
  * Full-screen dark overlay with a "spotlight" cutout on the target element.
- * The target gets a pulsing amber ring and elevated z-index.
+ * The target gets a subtle amber border. No pulsing ring or large shapes.
  */
 const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, active = true }) => {
   const [rect, setRect] = useState<DOMRect | null>(null)
@@ -15,14 +15,28 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryCountRef = useRef(0)
 
+  // Cleanup any leftover spotlight-target classes
+  const cleanupPrevTarget = useCallback(() => {
+    if (prevElRef.current) {
+      prevElRef.current.classList.remove('spotlight-target')
+      prevElRef.current = null
+    }
+    // Also cleanup any stale spotlight-target classes that might be left
+    document.querySelectorAll('.spotlight-target').forEach(el => {
+      el.classList.remove('spotlight-target')
+    })
+  }, [])
+
   const findAndMeasure = useCallback(() => {
-    if (!targetSelector) { setRect(null); return }
+    if (!targetSelector) { setRect(null); cleanupPrevTarget(); return }
     const el = document.querySelector(targetSelector)
     if (!el) {
-      // Retry up to 10 times — element might not be rendered yet after tab switch
       if (retryCountRef.current < 10) {
         retryCountRef.current++
         retryRef.current = setTimeout(findAndMeasure, 200)
+      } else {
+        // Give up - don't show anything
+        setRect(null)
       }
       return
     }
@@ -42,10 +56,14 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
     requestAnimationFrame(() => {
       setRect(el.getBoundingClientRect())
     })
-  }, [targetSelector])
+  }, [targetSelector, cleanupPrevTarget])
 
   useEffect(() => {
-    if (!active || !targetSelector) { setRect(null); return }
+    if (!active || !targetSelector) {
+      setRect(null)
+      cleanupPrevTarget()
+      return
+    }
 
     // Small delay for tab transitions
     const t = setTimeout(findAndMeasure, 150)
@@ -59,20 +77,14 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
       if (retryRef.current) clearTimeout(retryRef.current)
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('scroll', handleResize, true)
-      // Remove class from previous element
-      if (prevElRef.current) {
-        prevElRef.current.classList.remove('spotlight-target')
-        prevElRef.current = null
-      }
+      cleanupPrevTarget()
     }
-  }, [active, targetSelector, findAndMeasure])
+  }, [active, targetSelector, findAndMeasure, cleanupPrevTarget])
 
   if (!active) return null
-
-  // If no target or not found yet, show nothing (avoids black screen bug)
   if (!rect) return null
 
-  const pad = 8 // padding around the element
+  const pad = 8
 
   return (
     <>
@@ -89,21 +101,20 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
             left: rect.left - pad,
             width: rect.width + pad * 2,
             height: rect.height + pad * 2,
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.70)',
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.60)',
             transition: 'all 0.3s ease-in-out',
           }}
         />
 
-        {/* Pulsing amber ring */}
+        {/* Subtle amber border — thin, no pulsing, no glow */}
         <div
-          className="absolute rounded-xl animate-pulse"
+          className="absolute rounded-xl"
           style={{
-            top: rect.top - pad - 2,
-            left: rect.left - pad - 2,
-            width: rect.width + pad * 2 + 4,
-            height: rect.height + pad * 2 + 4,
-            border: '2px solid rgba(245, 158, 11, 0.6)',
-            boxShadow: '0 0 20px rgba(245, 158, 11, 0.3), inset 0 0 20px rgba(245, 158, 11, 0.1)',
+            top: rect.top - pad - 1,
+            left: rect.left - pad - 1,
+            width: rect.width + pad * 2 + 2,
+            height: rect.height + pad * 2 + 2,
+            border: '2px solid rgba(245, 158, 11, 0.5)',
             transition: 'all 0.3s ease-in-out',
           }}
         />
@@ -113,7 +124,7 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
       <style>{`
         .spotlight-target {
           position: relative !important;
-          z-index: 9999 !important;
+          z-index: 9998 !important;
         }
       `}</style>
     </>

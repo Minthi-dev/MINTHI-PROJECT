@@ -239,16 +239,20 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
   // Aliases: when demo is active (either first-access or manual restart), use demo data
+  // Map restaurant_id so components that filter by restaurantId still work
   const isDemoActive = showDemoGuide || demoMode
-  const restaurantCategories = isDemoActive ? DEMO_CATEGORIES : (categories || [])
-  const restaurantDishes = isDemoActive ? DEMO_DISHES : (dishes || [])
-  const restaurantTables = isDemoActive ? DEMO_TABLES : (tables || [])
-  const restaurantRooms = isDemoActive ? DEMO_ROOMS : (rooms || [])
+  const mapRid = useCallback(<T extends { restaurant_id: string }>(arr: T[]): T[] =>
+    arr.map(x => ({ ...x, restaurant_id: restaurantId || x.restaurant_id }))
+  , [restaurantId])
+  const restaurantCategories = isDemoActive ? mapRid(DEMO_CATEGORIES) : (categories || [])
+  const restaurantDishes = isDemoActive ? mapRid(DEMO_DISHES) : (dishes || [])
+  const restaurantTables = isDemoActive ? mapRid(DEMO_TABLES) : (tables || [])
+  const restaurantRooms = isDemoActive ? mapRid(DEMO_ROOMS) : (rooms || [])
 
-  const activeSessions = isDemoActive ? DEMO_SESSIONS : (sessions || [])
-  const restaurantOrders = isDemoActive ? DEMO_ORDERS : (orders || [])
-  const restaurantPastOrders = isDemoActive ? DEMO_PAST_ORDERS : (pastOrders || [])
-  const restaurantBookings = isDemoActive ? DEMO_BOOKINGS : (bookings || [])
+  const activeSessions = isDemoActive ? mapRid(DEMO_SESSIONS) : (sessions || [])
+  const restaurantOrders = isDemoActive ? mapRid(DEMO_ORDERS) : (orders || [])
+  const restaurantPastOrders = isDemoActive ? mapRid(DEMO_PAST_ORDERS) : (pastOrders || [])
+  const restaurantBookings = isDemoActive ? mapRid(DEMO_BOOKINGS) : (bookings || [])
 
   const restaurantTablesRef = useRef<Table[]>(restaurantTables)
   const sessionsRef = useRef<TableSession[]>(activeSessions)
@@ -3778,7 +3782,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </div>
 
                       {/* Dish Grid - Responsive */}
-                      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {categoryDishes.map(dish => (
                           dish.image_url?.trim() ? (
                             /* === CARD WITH IMAGE === */
@@ -3819,7 +3823,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                 </div>
                               </div>
                               <div className="px-3 py-2">
-                                <h4 className="font-medium text-sm text-zinc-100 leading-snug line-clamp-1 group-hover:text-amber-400 transition-colors">{dish.name}</h4>
+                                <h4 className="font-medium text-sm text-zinc-100 leading-snug line-clamp-2 group-hover:text-amber-400 transition-colors">{dish.name}</h4>
                                 {dish.description && <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{dish.description}</p>}
                                 {/* AYCE per-person limit quick editor */}
                                 {ayceEnabled && dish.is_ayce && (
@@ -3869,7 +3873,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             >
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <h4 className="font-medium text-sm text-zinc-100 leading-tight truncate group-hover:text-amber-400 transition-colors">{dish.name}</h4>
+                                  <h4 className="font-medium text-sm text-zinc-100 leading-tight group-hover:text-amber-400 transition-colors">{dish.name}</h4>
                                   {dish.is_ayce && <span className="shrink-0 px-1.5 py-0.5 bg-amber-500 text-zinc-950 font-bold text-[9px] rounded-full uppercase">AYCE</span>}
                                 </div>
                                 {dish.description && <p className="text-xs text-zinc-500 truncate mt-0.5">{dish.description}</p>}

@@ -52,12 +52,14 @@ export default function DemoGuidePanel({
         active={!collapsed && !!step.highlightSelector}
       />
 
-      {/* Top banner — compact floating pill, fixed so it doesn't push content */}
-      <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[9998] pointer-events-none">
-        <div className="pointer-events-auto bg-amber-500/90 backdrop-blur-md text-black px-4 py-1.5 rounded-full flex items-center gap-2.5 shadow-lg shadow-amber-500/20">
+      {/* Top banner — compact floating pill */}
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[9998] pointer-events-none">
+        <div className="pointer-events-auto bg-amber-500 text-black px-4 py-1.5 rounded-full flex items-center gap-3 shadow-lg">
           <div className="flex items-center gap-1.5 text-xs font-bold">
             <Eye size={14} weight="bold" />
             <span>DEMO</span>
+            <span className="text-black/50">—</span>
+            <span className="font-medium text-black/70">{currentStep + 1}/{steps.length}</span>
           </div>
           <button
             onClick={onExit}
@@ -69,29 +71,29 @@ export default function DemoGuidePanel({
         </div>
       </div>
 
-      {/* Bottom guide panel */}
+      {/* Bottom guide panel — compact */}
       <div className="fixed bottom-0 left-0 right-0 z-[9998]">
         <AnimatePresence mode="wait">
           {!collapsed ? (
             <motion.div
               key="panel-open"
-              initial={{ y: 100, opacity: 0 }}
+              initial={{ y: 80, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 100, opacity: 0 }}
+              exit={{ y: 80, opacity: 0 }}
               transition={{ duration: 0.25 }}
-              className="bg-zinc-950 border-t border-amber-500/30 backdrop-blur-xl shadow-[0_-20px_60px_-10px_rgba(0,0,0,0.9)]"
+              className="bg-zinc-950/95 border-t border-amber-500/20 backdrop-blur-xl"
             >
               {/* Collapse button */}
               <button
                 onClick={() => setCollapsed(true)}
-                className="absolute -top-9 right-4 bg-zinc-900 border border-zinc-700 rounded-t-lg px-3 py-1.5 text-zinc-500 hover:text-white transition-colors text-xs flex items-center gap-1"
+                className="absolute -top-8 right-4 bg-zinc-900 border border-zinc-700 rounded-t-lg px-3 py-1 text-zinc-500 hover:text-white transition-colors text-xs flex items-center gap-1"
               >
                 <CaretDown size={12} />
                 Nascondi
               </button>
 
-              <div className="max-w-3xl mx-auto px-5 sm:px-8 py-5 sm:py-6">
-                {/* Step content */}
+              <div className="max-w-2xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
+                {/* Step content — compact */}
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
@@ -100,25 +102,18 @@ export default function DemoGuidePanel({
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <div>
-                        <span className="text-amber-500 font-bold text-xs tracking-widest uppercase">
-                          Passo {currentStep + 1} di {steps.length}
-                        </span>
-                        <h3 className="text-xl sm:text-2xl font-bold text-white leading-tight mt-1">
-                          {step.title}
-                        </h3>
-                      </div>
-                    </div>
+                    <h3 className="text-lg font-bold text-white leading-tight mb-1.5">
+                      {step.title}
+                    </h3>
 
-                    <p className="text-zinc-300 text-sm sm:text-base leading-relaxed mb-3 max-h-36 overflow-y-auto pr-2">
+                    <p className="text-zinc-300 text-sm leading-relaxed mb-2 max-h-24 overflow-y-auto pr-2">
                       {step.description}
                     </p>
 
                     {step.tip && (
-                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5 mb-4">
-                        <p className="text-amber-400 text-sm font-medium flex items-start gap-2">
-                          <Lightbulb size={16} weight="fill" className="mt-0.5 shrink-0" />
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-2">
+                        <p className="text-amber-400 text-xs font-medium flex items-start gap-2">
+                          <Lightbulb size={14} weight="fill" className="mt-0.5 shrink-0" />
                           {step.tip}
                         </p>
                       </div>
@@ -126,42 +121,42 @@ export default function DemoGuidePanel({
                   </motion.div>
                 </AnimatePresence>
 
-                {/* Navigation */}
+                {/* Navigation — compact */}
                 <div className="flex items-center justify-between gap-3 pt-1">
                   {/* Dots */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1 flex-wrap">
                     {steps.map((_, i) => (
                       <button
                         key={i}
                         onClick={() => goTo(i)}
                         className={`rounded-full transition-all duration-300 ${
                           i === currentStep
-                            ? 'w-5 h-2.5 bg-amber-500'
+                            ? 'w-4 h-2 bg-amber-500'
                             : i < currentStep
-                              ? 'w-2.5 h-2.5 bg-amber-500/40'
-                              : 'w-2.5 h-2.5 bg-zinc-700 hover:bg-zinc-500'
+                              ? 'w-2 h-2 bg-amber-500/40'
+                              : 'w-2 h-2 bg-zinc-700 hover:bg-zinc-500'
                         }`}
                       />
                     ))}
                   </div>
 
                   {/* Buttons */}
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2">
                     {!isFirst && (
                       <button
                         onClick={handlePrev}
-                        className="h-10 px-5 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-all text-sm font-semibold flex items-center gap-2"
+                        className="h-8 px-4 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-all text-xs font-semibold flex items-center gap-1.5"
                       >
-                        <ArrowLeft size={15} />
-                        <span className="hidden sm:inline">Indietro</span>
+                        <ArrowLeft size={13} />
+                        Indietro
                       </button>
                     )}
                     <button
                       onClick={handleNext}
-                      className="h-10 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-all flex items-center gap-2 shadow-[0_4px_16px_-4px_rgba(245,158,11,0.5)]"
+                      className="h-8 px-5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition-all flex items-center gap-1.5"
                     >
                       {isLast ? 'Fine Demo' : 'Avanti'}
-                      {!isLast && <ArrowRight size={15} />}
+                      {!isLast && <ArrowRight size={13} />}
                     </button>
                   </div>
                 </div>
@@ -170,19 +165,19 @@ export default function DemoGuidePanel({
           ) : (
             <motion.div
               key="panel-collapsed"
-              initial={{ y: 50, opacity: 0 }}
+              initial={{ y: 40, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 50, opacity: 0 }}
+              exit={{ y: 40, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="flex justify-center pb-4"
+              className="flex justify-center pb-3"
             >
               <button
                 onClick={() => setCollapsed(false)}
-                className="bg-zinc-900/95 border border-amber-500/30 backdrop-blur-xl rounded-full px-6 py-3 shadow-lg flex items-center gap-2.5 hover:bg-zinc-800/95 transition-colors"
+                className="bg-zinc-900/95 border border-amber-500/30 backdrop-blur-xl rounded-full px-5 py-2 shadow-lg flex items-center gap-2 hover:bg-zinc-800/95 transition-colors"
               >
-                <CaretUp size={16} className="text-amber-500" />
-                <span className="text-base font-bold text-white">{step.title}</span>
-                <span className="text-sm text-zinc-500">{currentStep + 1}/{steps.length}</span>
+                <CaretUp size={14} className="text-amber-500" />
+                <span className="text-sm font-bold text-white">{step.title}</span>
+                <span className="text-xs text-zinc-500">{currentStep + 1}/{steps.length}</span>
               </button>
             </motion.div>
           )}
