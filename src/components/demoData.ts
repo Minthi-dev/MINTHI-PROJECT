@@ -120,10 +120,10 @@ const todayStr = (h: number, m: number) => {
 }
 
 export const DEMO_BOOKINGS: Booking[] = [
-  { id: 'demo-book-1', restaurant_id: RESTAURANT_ID, name: 'Famiglia Rossi', phone: '+39 333 1234567', date_time: todayStr(20, 0), guests: 4, status: 'confirmed', notes: 'Seggiolone per bambino', table_id: 'demo-table-2' },
-  { id: 'demo-book-2', restaurant_id: RESTAURANT_ID, name: 'Marco Bianchi', phone: '+39 339 7654321', date_time: todayStr(21, 0), guests: 2, status: 'pending', table_id: 'demo-table-4' },
-  { id: 'demo-book-3', restaurant_id: RESTAURANT_ID, name: 'Laura Verdi', email: 'laura.verdi@email.it', date_time: todayStr(20, 30), guests: 6, status: 'confirmed', notes: 'Compleanno \u2014 torta a sorpresa', table_id: 'demo-table-6' },
-  { id: 'demo-book-4', restaurant_id: RESTAURANT_ID, name: 'Giovanni Neri', phone: '+39 347 9876543', date_time: todayStr(21, 30), guests: 3, status: 'pending', table_id: 'demo-table-2' },
+  { id: 'demo-book-1', restaurant_id: RESTAURANT_ID, name: 'Famiglia Rossi', phone: '+39 333 1234567', date_time: todayStr(19, 30), guests: 4, status: 'confirmed', notes: 'Seggiolone per bambino', table_id: 'demo-table-4' },
+  { id: 'demo-book-2', restaurant_id: RESTAURANT_ID, name: 'Marco Bianchi', phone: '+39 339 7654321', date_time: todayStr(20, 30), guests: 2, status: 'pending', table_id: 'demo-table-2' },
+  { id: 'demo-book-3', restaurant_id: RESTAURANT_ID, name: 'Laura Verdi', email: 'laura.verdi@email.it', date_time: todayStr(21, 0), guests: 6, status: 'confirmed', notes: 'Compleanno — torta a sorpresa', table_id: 'demo-table-6' },
+  { id: 'demo-book-4', restaurant_id: RESTAURANT_ID, name: 'Giovanni Neri', phone: '+39 347 9876543', date_time: todayStr(21, 30), guests: 3, status: 'pending', table_id: 'demo-table-5' },
 ]
 
 // ── Guide Steps (expanded with highlighting) ─────────────────────────────────
@@ -133,7 +133,7 @@ export interface DemoGuideStep {
   title: string
   description: string
   tip?: string
-  highlightSelector?: string  // CSS selector for SpotlightOverlay
+  highlightSelector?: string  // CSS selector for SpotlightOverlay — omit to show page without darkening
   subTab?: string             // for settings sub-tabs
 }
 
@@ -141,69 +141,69 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
   {
     id: 'welcome',
     tab: 'orders',
-    title: '👋 Benvenuto in Minthi',
-    description: 'Questa è la tua dashboard. A sinistra trovi il menu per navigare tra le sezioni. Clicca "Avanti" per scoprirle una per una.',
+    title: 'Benvenuto in Minthi!',
+    description: 'Questa è una demo con dati di esempio. Nulla viene salvato. Dopo la demo potrai configurare il tuo ristorante.',
   },
   {
     id: 'orders-overview',
     tab: 'orders',
-    title: '📋 Ordini in Tempo Reale',
-    description: 'Qui vedi tutti gli ordini dei clienti, raggruppati per tavolo. I colori indicano lo stato: giallo = in attesa, blu = in preparazione, verde = pronto.',
-    tip: 'Clicca su un piatto per cambiarne lo stato.',
-    highlightSelector: '[data-tour="orders-header"]',
+    title: 'Gestione Ordini',
+    description: 'Qui vedi gli ordini dei clienti in tempo reale, divisi per tavolo. I colori mostrano lo stato: giallo = in attesa, blu = in preparazione, verde = pronto.',
+    tip: 'Quando un cliente ordina dal QR, l\'ordine appare qui automaticamente.',
   },
   {
     id: 'tables-overview',
     tab: 'tables',
-    title: '🪑 I Tuoi Tavoli',
-    description: 'Qui gestisci i tavoli. Verde = libero, ambra = occupato. Clicca su un tavolo per attivarlo o vedere il conto.',
-    tip: 'Usa "+" per aggiungere un nuovo tavolo.',
-    highlightSelector: '[data-tour="add-table-btn"]',
+    title: 'Tavoli e QR Code',
+    description: 'Ogni tavolo ha un QR Code. Il cliente lo scansiona, vede il menu e ordina dal telefono. Verde = libero, ambra = occupato.',
+    tip: 'Clicca "Scarica QR" per stampare tutti i codici dei tavoli.',
+    highlightSelector: '[data-tour="download-qr-btn"]',
   },
   {
-    id: 'tables-qr',
+    id: 'customer-menu',
     tab: 'tables',
-    title: '📱 QR Code per i Tavoli',
-    description: 'Ogni tavolo ha un QR Code. Il cliente lo scansiona col telefono, vede il menu e ordina. Scarica i QR e stampali sui tavoli.',
-    tip: 'Clicca "Scarica QR" per scaricare tutti i codici.',
-    highlightSelector: '[data-tour="download-qr-btn"]',
+    title: 'Menu Cliente (QR)',
+    description: 'Quando il cliente scansiona il QR Code, vede il tuo menu sul telefono: foto dei piatti, prezzi, allergeni, e può ordinare direttamente. L\'ordine arriva subito nella Gestione Ordini.',
+    tip: 'Puoi provare il menu cliente scansionando un QR Code dalla sezione tavoli.',
   },
   {
     id: 'menu-overview',
     tab: 'menu',
-    title: '🍕 Il Tuo Menu',
-    description: 'Qui crei il menu che vedono i clienti. Organizza i piatti in categorie (Antipasti, Primi, ecc.) e aggiungi foto, prezzo e allergeni.',
-    tip: 'Usa "+" per aggiungere un piatto o una categoria.',
-    highlightSelector: '[data-tour="menu-header"]',
+    title: 'Il Tuo Menu',
+    description: 'Crea categorie (Antipasti, Primi, ecc.) e aggiungi piatti con foto, prezzo e allergeni. Questo è il menu che i clienti vedono quando scansionano il QR.',
+    tip: 'Trascina le categorie per riordinarle. L\'ordine qui = ordine nel menu cliente.',
   },
   {
     id: 'reservations',
     tab: 'reservations',
-    title: '📅 Prenotazioni',
-    description: 'Vedi le prenotazioni del giorno sulla timeline. Puoi confermare, rifiutare o spostare le prenotazioni trascinandole.',
-    highlightSelector: '[data-tour="reservations-header"]',
+    title: 'Prenotazioni',
+    description: 'Vedi tutte le prenotazioni del giorno sulla timeline. Puoi confermare, rifiutare o modificarle. I clienti possono prenotare online dal tuo link.',
   },
   {
     id: 'analytics',
     tab: 'analytics',
-    title: '📊 Analitiche',
-    description: 'Grafici su incassi, piatti più ordinati e ore di punta. Filtra per giorno, settimana o mese.',
-    highlightSelector: '[data-tour="analytics-header"]',
+    title: 'Analitiche',
+    description: 'Incassi, piatti più ordinati e ore di punta. Filtra per giorno, settimana o mese per capire come va il ristorante.',
+  },
+  {
+    id: 'waiter-dashboard',
+    tab: 'analytics',
+    title: 'Dashboard Cameriere',
+    description: 'Puoi attivare la Modalità Cameriere nelle impostazioni. I camerieri accedono con un PIN e vedono una dashboard semplificata: possono prendere ordini, segnare piatti pronti e gestire i pagamenti al tavolo.',
+    tip: 'Attivala in Impostazioni > Generale > Modalità Cameriere.',
   },
   {
     id: 'settings-general',
     tab: 'settings',
-    title: '⚙️ Impostazioni',
-    description: 'Configura il ristorante: nome, suoni, modalità cameriere, coperto, All You Can Eat, pagamenti e abbonamento.',
-    highlightSelector: '[data-tour="settings-header"]',
+    title: 'Impostazioni',
+    description: 'Configura tutto: nome ristorante, coperto, All You Can Eat, modalità cameriere, prenotazioni online, pagamenti Stripe e abbonamento.',
     subTab: 'general',
   },
   {
     id: 'end',
     tab: 'settings',
-    title: '🎉 Demo Completata!',
-    description: 'Hai visto tutte le funzioni di Minthi. Esci dalla demo per iniziare a configurare il tuo ristorante con la Configurazione Guidata.',
-    tip: 'Clicca "Fine Demo" per uscire e iniziare.',
+    title: 'Demo Completata!',
+    description: 'Hai visto tutte le funzioni. Clicca "Fine Demo" per uscire e iniziare a configurare il tuo ristorante con la Configurazione Guidata.',
   },
 ]
 // ── Setup Steps ──────────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ export const SETUP_STEPS: SetupStep[] = [
     tab: 'menu',
     title: 'Crea le Categorie del Menu',
     shortDescription: 'Crea almeno una categoria per organizzare i piatti del tuo menu.',
-    fullExplanation: 'Le categorie sono le sezioni del tuo menu digitale (es. Antipasti, Primi Piatti, Secondi, Contorni, Dolci, Bevande). I clienti vedranno i piatti organizzati per categoria quando scansionano il QR Code.\n\nPuoi creare quante categorie vuoi e riordinarle trascinandole. L\'ordine che imposti qui \u00e8 esattamente quello che vedranno i clienti.\n\nEsempi di categorie comuni: Antipasti, Primi, Secondi, Contorni, Dolci, Bevande, Pizze, Panini, Men\u00f9 Bambini.',
+    fullExplanation: 'Le categorie sono le sezioni del tuo menu digitale (es. Antipasti, Primi Piatti, Secondi, Contorni, Dolci, Bevande). I clienti vedranno i piatti organizzati per categoria quando scansionano il QR Code.\n\nPuoi creare quante categorie vuoi e riordinarle trascinandole. L\'ordine che imposti qui è esattamente quello che vedranno i clienti.\n\nEsempi di categorie comuni: Antipasti, Primi, Secondi, Contorni, Dolci, Bevande, Pizze, Panini, Menù Bambini.',
     highlightSelector: '[data-tour="menu-header"]',
     checkFn: ({ categoriesCount }) => categoriesCount > 0,
   },
@@ -232,7 +232,7 @@ export const SETUP_STEPS: SetupStep[] = [
     tab: 'menu',
     title: 'Aggiungi i Tuoi Piatti',
     shortDescription: 'Aggiungi almeno un piatto al menu con prezzo e descrizione.',
-    fullExplanation: 'Per ogni piatto puoi inserire:\n\n\u2022 Nome \u2014 il nome visibile ai clienti\n\u2022 Prezzo \u2014 in euro, con centesimi\n\u2022 Descrizione \u2014 ingredienti, preparazione, note\n\u2022 Categoria \u2014 in quale sezione del menu appare (puoi crearne una nuova direttamente dal form)\n\u2022 Foto \u2014 carica un\'immagine del piatto\n\u2022 Allergeni \u2014 seleziona tra i 14 allergeni EU (glutine, latte, uova, pesce, crostacei, arachidi, soia, frutta a guscio, sedano, senape, sesamo, lupini, molluschi, anidride solforosa)\n\u2022 Attivo/Inattivo \u2014 disattiva un piatto senza eliminarlo (utile per piatti stagionali)\n\u2022 All You Can Eat \u2014 segna se il piatto \u00e8 incluso nel men\u00f9 AYCE e imposta un limite ordini per persona',
+    fullExplanation: 'Per ogni piatto puoi inserire:\n\n• Nome — il nome visibile ai clienti\n• Prezzo — in euro, con centesimi\n• Descrizione — ingredienti, preparazione, note\n• Categoria — in quale sezione del menu appare (puoi crearne una nuova direttamente dal form)\n• Foto — carica un\'immagine del piatto\n• Allergeni — seleziona tra i 14 allergeni EU (glutine, latte, uova, pesce, crostacei, arachidi, soia, frutta a guscio, sedano, senape, sesamo, lupini, molluschi, anidride solforosa)\n• Attivo/Inattivo — disattiva un piatto senza eliminarlo (utile per piatti stagionali)\n• All You Can Eat — segna se il piatto è incluso nel menù AYCE e imposta un limite ordini per persona',
     highlightSelector: '[data-tour="add-dish-btn"]',
     checkFn: ({ dishesCount }) => dishesCount > 0,
   },
@@ -241,7 +241,7 @@ export const SETUP_STEPS: SetupStep[] = [
     tab: 'tables',
     title: 'Crea i Tavoli del Ristorante',
     shortDescription: 'Aggiungi i tavoli della tua sala per generare i QR Code.',
-    fullExplanation: 'Ogni tavolo che crei ottiene automaticamente un QR Code univoco. Stampa i QR e posizionali sui tavoli: i clienti li scansionano per accedere al menu e ordinare.\n\nPer ogni tavolo imposti:\n\u2022 Numero/Nome \u2014 come identifichi il tavolo (es. 1, 2, 3 oppure "Terrazza 1")\n\u2022 Posti \u2014 quante persone pu\u00f2 ospitare\n\u2022 Sala \u2014 in quale sala si trova (se hai pi\u00f9 sale)\n\nDopo aver creato i tavoli, usa il pulsante "Scarica QR" per generare un PDF con tutti i codici QR pronti da stampare. Ogni QR \u00e8 personalizzato con il nome del tuo ristorante.',
+    fullExplanation: 'Ogni tavolo che crei ottiene automaticamente un QR Code univoco. Stampa i QR e posizionali sui tavoli: i clienti li scansionano per accedere al menu e ordinare.\n\nPer ogni tavolo imposti:\n• Numero/Nome — come identifichi il tavolo (es. 1, 2, 3 oppure "Terrazza 1")\n• Posti — quante persone può ospitare\n• Sala — in quale sala si trova (se hai più sale)\n\nDopo aver creato i tavoli, usa il pulsante "Scarica QR" per generare un PDF con tutti i codici QR pronti da stampare. Ogni QR è personalizzato con il nome del tuo ristorante.',
     highlightSelector: '[data-tour="add-table-btn"]',
     checkFn: ({ tablesCount }) => tablesCount > 0,
   },
@@ -250,7 +250,7 @@ export const SETUP_STEPS: SetupStep[] = [
     tab: 'settings',
     title: 'Configura le Impostazioni',
     shortDescription: 'Personalizza coperto, orari, pagamenti e attiva l\'abbonamento.',
-    fullExplanation: 'Le impostazioni ti permettono di personalizzare ogni aspetto:\n\n\u2022 Generale \u2014 Nome ristorante, suoni notifica, modalit\u00e0 cameriere, menu sola lettura\n\u2022 Costi \u2014 Coperto (importo per persona, configurabile per giorno/fascia oraria), All You Can Eat (prezzo fisso, piatti inclusi)\n\u2022 Staff \u2014 Aggiungi camerieri con PIN personale per la dashboard cameriere\n\u2022 Prenotazioni \u2014 Attiva prenotazioni online, imposta durata e orari disponibili\n\u2022 Pagamenti \u2014 Stripe Connect per ricevere pagamenti online, dati fiscali (P.IVA, ragione sociale)\n\u2022 Abbonamento \u2014 Attiva il piano Minthi, gestisci fatturazione e metodo di pagamento\n\nPuoi sempre modificare queste impostazioni in seguito.',
+    fullExplanation: 'Le impostazioni ti permettono di personalizzare ogni aspetto:\n\n• Generale — Nome ristorante, suoni notifica, modalità cameriere, menu sola lettura\n• Costi — Coperto (importo per persona, configurabile per giorno/fascia oraria), All You Can Eat (prezzo fisso, piatti inclusi)\n• Staff — Aggiungi camerieri con PIN personale per la dashboard cameriere\n• Prenotazioni — Attiva prenotazioni online, imposta durata e orari disponibili\n• Pagamenti — Stripe Connect per ricevere pagamenti online, dati fiscali (P.IVA, ragione sociale)\n• Abbonamento — Attiva il piano Minthi, gestisci fatturazione e metodo di pagamento\n\nPuoi sempre modificare queste impostazioni in seguito.',
     highlightSelector: '[data-tour="nav-settings"]',
     checkFn: () => false, // Never auto-complete — user decides when done
   },

@@ -24,6 +24,11 @@ export default function SetupWizard({
 
   const steps = SETUP_STEPS
 
+  // Navigate to the first step's tab on mount
+  useEffect(() => {
+    setActiveTab(steps[0].tab)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const isStepDone = useCallback((id: string) => {
     const ctx = { categoriesCount, dishesCount, tablesCount }
     const s = steps.find(st => st.id === id)

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowRight, ArrowLeft, X, CaretUp, CaretDown, Eye, Lightbulb } from '@phosphor-icons/react'
+import { ArrowRight, ArrowLeft, X, CaretUp, CaretDown, Lightbulb } from '@phosphor-icons/react'
 import { DEMO_TOUR_STEPS } from './demoData'
 import SpotlightOverlay from './SpotlightOverlay'
 
@@ -44,35 +44,37 @@ export default function DemoGuidePanel({
     if (!isFirst) goTo(currentStep - 1)
   }
 
+  // Only show spotlight when step has a specific element to highlight
+  const hasSpotlight = !!step.highlightSelector
+
   return (
     <>
-      {/* Spotlight overlay on highlighted element */}
-      <SpotlightOverlay
-        targetSelector={step.highlightSelector}
-        active={!collapsed && !!step.highlightSelector}
-      />
+      {/* Spotlight overlay — only when step targets a specific element */}
+      {hasSpotlight && (
+        <SpotlightOverlay
+          targetSelector={step.highlightSelector}
+          active={!collapsed}
+        />
+      )}
 
-      {/* Top banner — compact floating pill */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[9998] pointer-events-none">
-        <div className="pointer-events-auto bg-amber-500 text-black px-4 py-1.5 rounded-full flex items-center gap-3 shadow-lg">
-          <div className="flex items-center gap-1.5 text-xs font-bold">
-            <Eye size={14} weight="bold" />
-            <span>DEMO</span>
-            <span className="text-black/50">—</span>
-            <span className="font-medium text-black/70">{currentStep + 1}/{steps.length}</span>
-          </div>
+      {/* Top banner — always visible */}
+      <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none">
+        <div className="pointer-events-auto bg-amber-500 text-black px-4 py-2 flex items-center justify-center gap-4 shadow-lg text-sm font-medium">
+          <span>
+            <strong>DEMO</strong> — Dati di esempio. Il tuo ristorante si configurerà dopo.
+          </span>
           <button
             onClick={onExit}
-            className="flex items-center gap-1 text-[11px] font-bold bg-black/20 hover:bg-black/30 rounded-full px-2.5 py-0.5 transition-colors"
+            className="flex items-center gap-1 text-xs font-bold bg-black/20 hover:bg-black/30 rounded-full px-3 py-1 transition-colors"
           >
             <X size={10} weight="bold" />
-            Esci
+            Esci dalla Demo
           </button>
         </div>
       </div>
 
-      {/* Bottom guide panel — compact */}
-      <div className="fixed bottom-0 left-0 right-0 z-[9998]">
+      {/* Bottom guide panel */}
+      <div className="fixed bottom-0 left-0 right-0 z-[9999]">
         <AnimatePresence mode="wait">
           {!collapsed ? (
             <motion.div
@@ -93,7 +95,7 @@ export default function DemoGuidePanel({
               </button>
 
               <div className="max-w-2xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
-                {/* Step content — compact */}
+                {/* Step content */}
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
@@ -102,11 +104,16 @@ export default function DemoGuidePanel({
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.2 }}
                   >
-                    <h3 className="text-lg font-bold text-white leading-tight mb-1.5">
-                      {step.title}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[11px] font-bold text-amber-500/70 uppercase tracking-wider">
+                        {currentStep + 1}/{steps.length}
+                      </span>
+                      <h3 className="text-lg font-bold text-white leading-tight">
+                        {step.title}
+                      </h3>
+                    </div>
 
-                    <p className="text-zinc-300 text-sm leading-relaxed mb-2 max-h-24 overflow-y-auto pr-2">
+                    <p className="text-zinc-300 text-sm leading-relaxed mb-2">
                       {step.description}
                     </p>
 
@@ -121,7 +128,7 @@ export default function DemoGuidePanel({
                   </motion.div>
                 </AnimatePresence>
 
-                {/* Navigation — compact */}
+                {/* Navigation */}
                 <div className="flex items-center justify-between gap-3 pt-1">
                   {/* Dots */}
                   <div className="flex items-center gap-1 flex-wrap">

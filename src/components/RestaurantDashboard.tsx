@@ -241,6 +241,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   // Aliases: when demo is active (either first-access or manual restart), use demo data
   // Map restaurant_id so components that filter by restaurantId still work
   const isDemoActive = showDemoGuide || demoMode
+  // Guard: block DB writes during demo mode
+  const demoGuard = useCallback(() => {
+    if (isDemoActive) {
+      toast.info('Questa è una demo — le modifiche non vengono salvate. Esci dalla demo per iniziare a configurare il tuo ristorante.')
+      return true
+    }
+    return false
+  }, [isDemoActive])
   const mapRid = useCallback(<T extends { restaurant_id: string }>(arr: T[]): T[] =>
     arr.map(x => ({ ...x, restaurant_id: restaurantId || x.restaurant_id }))
   , [restaurantId])
@@ -951,6 +959,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }, [currentRestaurant])
 
   const updateEnableReservationRoomSelection = async (enabled: boolean) => {
+    if (demoGuard()) return
     setEnableReservationRoomSelection(enabled)
     if (restaurantId) {
       await DatabaseService.updateRestaurant({
@@ -961,6 +970,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const updateEnablePublicReservations = async (enabled: boolean) => {
+    if (demoGuard()) return
     setEnablePublicReservations(enabled)
     if (restaurantId) {
       await DatabaseService.updateRestaurant({
@@ -972,6 +982,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   // Handlers for updating settings
   const saveRestaurantName = async () => {
+    if (demoGuard()) return
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, name: restaurantName })
     toast.success('Nome ristorante aggiornato')
@@ -984,6 +995,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   // Auto-save handlers for waiter settings - save immediately on change
   const updateWaiterModeEnabled = async (enabled: boolean) => {
+    if (demoGuard()) return
     if (!restaurantId) return
     setWaiterModeEnabled(enabled)
     await DatabaseService.updateRestaurant({
@@ -1001,6 +1013,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const saveWaiterPassword = async (password: string) => {
+    if (demoGuard()) return
     if (!restaurantId || !password.trim()) return
     const hashedPw = await hashPassword(password)
     // Update local state with original password for display
@@ -1015,6 +1028,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const updateAllowWaiterPayments = async (enabled: boolean) => {
+    if (demoGuard()) return
     if (!restaurantId) return
     setAllowWaiterPayments(enabled)
     await DatabaseService.updateRestaurant({
@@ -1027,6 +1041,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   // Specific handlers for direct toggles
   const updateAyceEnabled = async (enabled: boolean) => {
+    if (demoGuard()) return
     if (!restaurantId) return
     setAyceEnabled(enabled)
     const price = typeof aycePrice === 'string' ? parseFloat(aycePrice) : aycePrice
@@ -1043,6 +1058,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const updateCopertoEnabled = async (enabled: boolean) => {
+    if (demoGuard()) return
     if (!restaurantId) return
     setCopertoEnabled(enabled)
 
@@ -1076,6 +1092,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const updateCopertoPrice = async (price: number | string) => {
+    if (demoGuard()) return
     const val = parseFloat(price.toString()) || 0
     setCopertoPrice(val)
     if (!restaurantId) return
@@ -1100,6 +1117,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const viewOnlyMenuEnabled = optimisticViewOnly ?? currentRestaurant?.view_only_menu_enabled ?? false
 
   const updateViewOnlyMenuEnabled = async (enabled: boolean) => {
+    if (demoGuard()) return
     setOptimisticViewOnly(enabled)
     if (!restaurantId) return
     try {
@@ -1120,6 +1138,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const showCookingTimes = optimisticShowCookingTimes ?? (currentRestaurant as any)?.show_cooking_times ?? false
 
   const updateShowCookingTimes = async (enabled: boolean) => {
+    if (demoGuard()) return
     setOptimisticShowCookingTimes(enabled)
     if (!restaurantId) return
     try {
@@ -1138,6 +1157,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   // --- Handlers ---
   const updateRestaurantName = async (name: string) => {
+    if (demoGuard()) return
     setRestaurantName(name)
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, name })
@@ -1145,6 +1165,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const updateLunchStart = async (time: string) => {
+    if (demoGuard()) return
     setLunchTimeStart(time)
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, lunch_time_start: time })
@@ -1152,18 +1173,21 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
 
   const updateDinnerStart = async (time: string) => {
+    if (demoGuard()) return
     setDinnerTimeStart(time)
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, dinner_time_start: time })
   }
 
   const updateCourseSplitting = async (enabled: boolean) => {
+    if (demoGuard()) return
     setCourseSplittingEnabled(enabled)
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, enable_course_splitting: enabled })
   }
 
   const updateReservationDuration = async (minutes: number) => {
+    if (demoGuard()) return
     setReservationDuration(minutes)
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, reservation_duration: minutes })
@@ -1226,6 +1250,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleCreateTable = () => {
+    if (demoGuard()) return
     if (!newTableName.trim()) {
       toast.error('Inserisci un nome per il tavolo')
       return
@@ -1267,6 +1292,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleCloseTable = async (tableId: string, markPaid: boolean) => {
+    if (demoGuard()) return
     const openSession = getOpenSessionForTable(tableId)
     if (openSession) {
       // Check for undelivered items before closing
@@ -1311,6 +1337,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleToggleTable = async (tableId: string) => {
+    if (demoGuard()) return
     const openSession = getOpenSessionForTable(tableId)
     if (openSession) {
       handleCloseTable(tableId, true)
@@ -1340,6 +1367,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleActivateTable = async (tableId: string, customerCount: number) => {
+    if (demoGuard()) return
     if (!customerCount || customerCount <= 0) {
       toast.error('Inserisci un numero valido di clienti')
       return
@@ -1413,6 +1441,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleDeleteTable = (tableId: string) => {
+    if (demoGuard()) return
     if (!confirm('Sei sicuro di voler eliminare questo tavolo?')) return
 
     setTables(prev => prev.filter(t => t.id !== tableId))
@@ -1427,6 +1456,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const saveAyceSettings = async () => {
+    if (isDemoActive) return
     if (!restaurantId || !settingsInitialized) return
 
     const price = typeof aycePrice === 'string' ? parseFloat(aycePrice) : aycePrice
@@ -1462,6 +1492,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const saveCopertoSettings = async () => {
+    if (isDemoActive) return
     if (!restaurantId || !settingsInitialized) return
 
     const price = typeof copertoPrice === 'string' ? parseFloat(copertoPrice) : copertoPrice
@@ -1514,6 +1545,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleCreateDish = async () => {
+    if (demoGuard()) return
     if (!newDish.name.trim() || !newDish.price || !newDish.categoryId) {
       toast.error('Compila tutti i campi obbligatori')
       return
@@ -1558,6 +1590,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleToggleDish = (dishId: string) => {
+    if (demoGuard()) return
     const item = dishes?.find(i => i.id === dishId)
     if (item) {
       const previousStatus = item.is_active ?? true
@@ -1575,6 +1608,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleDeleteDish = (dishId: string) => {
+    if (demoGuard()) return
     const dish = dishes?.find(d => d.id === dishId)
     if (!confirm(`Eliminare "${dish?.name || 'questo piatto'}" dal menu?`)) return
 
@@ -1606,6 +1640,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleSaveDish = async () => {
+    if (demoGuard()) return
     if (!editingDish || !editDishData.name.trim() || !editDishData.price || !editDishData.categoryId) {
       toast.error('Compila tutti i campi obbligatori')
       return
@@ -1656,6 +1691,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
 
   const handleCompleteOrder = async (orderId: string) => {
+    if (demoGuard()) return
     const targetOrder = orders?.find(o => o.id === orderId)
 
     if (targetOrder?.items?.length) {
@@ -1669,6 +1705,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleCompleteDish = async (orderId: string, itemId: string, showToast = true) => {
+    if (demoGuard()) return
     // FIX: Set status to 'READY' (uppercase) so it is recognized as done by KitchenView
     await updateOrderItemStatus(orderId, itemId, 'READY')
 
@@ -1689,6 +1726,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleDeliverDish = async (orderId: string, itemId: string) => {
+    if (demoGuard()) return
     await updateOrderItemStatus(orderId, itemId, 'SERVED')
     setOrders(prevOrders => prevOrders.map(order => {
       if (order.id === orderId) {
@@ -1706,6 +1744,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
 
   const handleCreateCategoryInline = async (isEditDialog: boolean) => {
+    if (demoGuard()) return
     if (!inlineCatName.trim()) return
     try {
       const cat = await DatabaseService.createCategory({
@@ -1728,6 +1767,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleUpdateDishAyceLimit = (dish: Dish, limitStr: string) => {
+    if (demoGuard()) return
     const limit = limitStr.trim() === '' ? null : parseInt(limitStr, 10)
     if (limit !== null && (isNaN(limit) || limit < 1)) return
     const updated = { ...dish, ayce_max_orders_per_person: limit }
@@ -1742,6 +1782,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleCreateCategory = () => {
+    if (demoGuard()) return
     if (!newCategory.trim()) {
       toast.error('Inserisci un nome per la categoria')
       return
@@ -1768,6 +1809,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleDeleteCategory = (categoryId: string) => {
+    if (demoGuard()) return
     DatabaseService.deleteCategory(categoryId)
       .then(() => toast.success('Categoria eliminata'))
   }
@@ -1778,6 +1820,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleSaveCategory = () => {
+    if (demoGuard()) return
     if (!editingCategory || !editCategoryName.trim()) return
 
     const nameExists = categories?.some(cat =>
@@ -1815,6 +1858,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   const handleDrop = async (targetCategory: Category) => {
+    if (demoGuard()) return
     if (!draggedCategory || draggedCategory.id === targetCategory.id) return
 
     const updatedCategories = [...restaurantCategories]
@@ -2820,6 +2864,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   variant="ghost"
                                   className="h-8 w-8 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
                                   onClick={async () => {
+                                    if (demoGuard()) return
                                     if (!editingRoom.name.trim()) return
                                     try {
                                       await DatabaseService.updateRoom(room.id, { name: editingRoom.name.trim() })
@@ -2860,6 +2905,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                     variant="ghost"
                                     className="h-8 w-8 text-zinc-500 hover:text-red-500 hover:bg-red-500/10"
                                     onClick={async () => {
+                                      if (demoGuard()) return
                                       if (!confirm('Eliminare questa sala?')) return;
                                       try {
                                         await DatabaseService.deleteRoom(room.id)
@@ -4059,6 +4105,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 setAyceEnabled={updateAyceEnabled}
                 aycePrice={aycePrice}
                 setAycePrice={(p) => {
+                  if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setAycePrice(p)
                   const val = typeof p === 'string' ? parseFloat(p) : p
                   if (restaurantId) DatabaseService.updateRestaurant({
@@ -4072,6 +4119,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 }}
                 ayceMaxOrders={ayceMaxOrders}
                 setAyceMaxOrders={(o) => {
+                  if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setAyceMaxOrders(o)
                   const val = typeof o === 'string' ? parseInt(o) : o
                   if (restaurantId) DatabaseService.updateRestaurant({
@@ -4107,6 +4155,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 setDinnerTimeStart={updateDinnerStart}
                 courseSplittingEnabled={courseSplittingEnabled}
                 setCourseSplittingEnabled={(enabled) => {
+                  if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setCourseSplittingEnabled(enabled)
                   if (restaurantId) DatabaseService.updateRestaurant({
                     id: restaurantId,
@@ -4122,6 +4171,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                 weeklyCoperto={weeklyCoperto}
                 setWeeklyCoperto={(schedule) => {
+                  if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setWeeklyCoperto(schedule)
                   if (restaurantId) {
                     DatabaseService.updateRestaurant({ id: restaurantId, weekly_coperto: schedule })
@@ -4129,6 +4179,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 }}
                 weeklyAyce={weeklyAyce}
                 setWeeklyAyce={(schedule) => {
+                  if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setWeeklyAyce(schedule)
                   if (restaurantId) {
                     DatabaseService.updateRestaurant({ id: restaurantId, weekly_ayce: schedule })
@@ -4136,6 +4187,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 }}
                 weeklyServiceHours={weeklyServiceHours}
                 setWeeklyServiceHours={(schedule) => {
+                  if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setWeeklyServiceHours(schedule)
                   if (restaurantId) {
                     DatabaseService.updateRestaurant({ id: restaurantId, weekly_service_hours: schedule })
@@ -4374,11 +4426,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   />
                 </div>
                 <Button onClick={() => {
+                  if (demoGuard()) return
                   if (editingTable && editTableName.trim()) {
                     const seats = typeof editTableSeats === 'string' ? parseInt(editTableSeats) || 4 : editTableSeats
                     const room_id = editTableRoomId !== 'all' ? editTableRoomId : null
-                    // We use 'any' cast or explicit property if type is not fully updated in TS yet, but Room is added.
-                    // However updateTable takes Partial<Table>, and Table has room_id.
                     DatabaseService.updateTable(editingTable.id, { number: editTableName, seats, room_id, is_active: editTableIsActive } as any)
                       .then(() => {
                         setTables(prev => prev.map(t => t.id === editingTable.id ? { ...t, number: editTableName, seats, room_id: room_id || undefined, is_active: editTableIsActive } : t))
@@ -5014,14 +5065,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           onExit={() => {
             setShowDemoGuide(false)
             setDemoMode(false)
+            setActiveTab('orders')
             // Mark guide as done
             if (restaurantId) {
               localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
               localStorage.setItem(tourKey, '1')
             }
-            // Auto-start setup wizard if no real data exists
-            const hasNoData = (!tables || tables.length === 0) && (!dishes || dishes.length === 0) && (!categories || categories.length === 0)
-            if (hasNoData) {
+            // Always start setup wizard after first demo — user needs to configure
+            const setupDone = restaurantId ? localStorage.getItem(`minthi_setup_done_${restaurantId}`) : null
+            if (!setupDone) {
               setShowSetupWizard(true)
             }
           }}
