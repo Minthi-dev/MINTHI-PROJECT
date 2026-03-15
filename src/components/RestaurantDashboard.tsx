@@ -2040,6 +2040,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               ].map((item) => (
                 <Button
                   key={item.id}
+                  data-tour={`nav-${item.id}`}
                   variant="ghost"
                   className={`w-full justify-start h-12 px-4 rounded-xl transition-all duration-300 group relative overflow-hidden ${activeTab === item.id
                     // Active State: Minimal & Elegant

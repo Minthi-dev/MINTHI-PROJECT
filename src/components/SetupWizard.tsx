@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, Circle, ArrowRight, X, Sparkle, Phone } from '@phosphor-icons/react'
+import { CheckCircle, Circle, ArrowRight, X, Sparkle, Info, Phone } from '@phosphor-icons/react'
 import { SETUP_STEPS } from './demoData'
-import SpotlightOverlay from './SpotlightOverlay'
 
 interface SetupWizardProps {
   setActiveTab: (tab: string) => void
@@ -20,7 +19,7 @@ export default function SetupWizard({
   categoriesCount,
 }: SetupWizardProps) {
   const [currentStep, setCurrentStep] = useState(0)
-  const [showExplanation, setShowExplanation] = useState(true)
+  const [showDetail, setShowDetail] = useState(false)
 
   const steps = SETUP_STEPS
 
@@ -35,15 +34,16 @@ export default function SetupWizard({
     return s ? s.checkFn(ctx) : false
   }, [categoriesCount, dishesCount, tablesCount, steps])
 
-  // Auto-advance to next incomplete step when current is done (without showing explanation again)
+  // Auto-advance to next incomplete step when current is done
   useEffect(() => {
     const step = steps[currentStep]
     if (step && isStepDone(step.id)) {
       const nextIncomplete = steps.findIndex((s, i) => i > currentStep && !isStepDone(s.id))
       if (nextIncomplete >= 0) {
-        setCurrentStep(nextIncomplete)
-        setShowExplanation(false) // Don't re-show explanation on auto-advance
-        setActiveTab(steps[nextIncomplete].tab)
+        setTimeout(() => {
+          setCurrentStep(nextIncomplete)
+          setActiveTab(steps[nextIncomplete].tab)
+        }, 800) // Short delay so user sees the checkmark
       }
     }
   }, [categoriesCount, dishesCount, tablesCount, currentStep, isStepDone, steps, setActiveTab])
@@ -54,14 +54,14 @@ export default function SetupWizard({
   const handleStepClick = (i: number) => {
     setCurrentStep(i)
     setActiveTab(steps[i].tab)
-    setShowExplanation(true)
+    setShowDetail(false)
   }
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1)
       setActiveTab(steps[currentStep + 1].tab)
-      setShowExplanation(true)
+      setShowDetail(false)
     } else {
       onComplete()
     }
@@ -69,113 +69,86 @@ export default function SetupWizard({
 
   return (
     <>
-      {/* Spotlight overlay — only when explanation is dismissed */}
-      <SpotlightOverlay
-        targetSelector={step.highlightSelector}
-        active={!showExplanation && !isStepDone(step.id)}
-      />
-
-      {/* Central explanation overlay */}
+      {/* Detail popup — NOT blocking, positioned center but dismissible */}
       <AnimatePresence>
-        {showExplanation && (
+        {showDetail && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
             style={{ zIndex: 9999 }}
-            onClick={() => setShowExplanation(false)}
+            onClick={() => setShowDetail(false)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
               transition={{ type: 'spring', damping: 25 }}
-              className="bg-zinc-950 border border-emerald-500/20 rounded-2xl p-6 sm:p-8 max-w-lg w-full shadow-[0_20px_60px_-15px_rgba(16,185,129,0.2)]"
+              className="bg-zinc-950 border border-emerald-500/20 rounded-2xl p-6 max-w-md w-full shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Step indicator */}
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-3">
                 <span className="bg-emerald-500/10 text-emerald-400 text-xs font-bold px-2.5 py-1 rounded-full">
-                  Passo {currentStep + 1} di {steps.length}
+                  Passo {currentStep + 1}/{steps.length}
                 </span>
-                {isStepDone(step.id) && (
-                  <span className="bg-emerald-500/10 text-emerald-400 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-                    <CheckCircle size={12} weight="fill" /> Completato
-                  </span>
-                )}
               </div>
-
-              {/* Title */}
-              <h2 className="text-xl sm:text-2xl font-bold text-white mb-4">{step.title}</h2>
-
-              {/* Full explanation — renders newlines properly */}
-              <div className="text-zinc-300 text-sm leading-relaxed space-y-3 max-h-[50vh] overflow-y-auto pr-2">
-                {step.fullExplanation.split('\n\n').map((para, i) => (
-                  <p key={i} className={para.startsWith('\u2022') ? 'pl-1' : ''}>
-                    {para.split('\n').map((line, j) => (
-                      <span key={j}>
-                        {j > 0 && <br />}
-                        {line}
-                      </span>
-                    ))}
-                  </p>
+              <h2 className="text-xl font-bold text-white mb-3">{step.title}</h2>
+              <div className="text-zinc-300 text-sm leading-relaxed space-y-2 max-h-[40vh] overflow-y-auto">
+                {step.fullExplanation.split('\n').map((line, i) => (
+                  <p key={i}>{line}</p>
                 ))}
               </div>
-
-              {/* Action button */}
-              <div className="mt-6 flex items-center justify-between">
-                <p className="text-zinc-600 text-xs flex items-center gap-1.5">
-                  <Phone size={12} />
-                  Aiuto: <a href="tel:+393517570155" className="text-amber-400/70 hover:text-amber-400">+39 351 757 0155</a>
-                </p>
-                <button
-                  onClick={() => setShowExplanation(false)}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm px-6 py-2.5 rounded-xl transition-all shadow-lg"
-                >
-                  Ho capito
-                </button>
-              </div>
+              <button
+                onClick={() => setShowDetail(false)}
+                className="mt-5 w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm px-6 py-2.5 rounded-xl transition-all"
+              >
+                Ho capito
+              </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Bottom panel */}
+      {/* Bottom panel — always visible, non-blocking */}
       <div className="fixed bottom-0 left-0 right-0 z-[9998]">
         <motion.div
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 100, opacity: 0 }}
           transition={{ duration: 0.3 }}
           className="bg-zinc-950/98 border-t border-emerald-500/20 backdrop-blur-xl shadow-[0_-20px_40px_-10px_rgba(0,0,0,0.8)]"
         >
           {/* Top bar */}
-          <div className="bg-gradient-to-r from-emerald-600/20 via-emerald-500/10 to-transparent border-b border-white/5 px-4 sm:px-6 py-2.5 flex items-center justify-between">
+          <div className="bg-gradient-to-r from-emerald-600/20 via-emerald-500/10 to-transparent border-b border-white/5 px-4 sm:px-6 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkle size={16} weight="fill" className="text-emerald-400" />
               <span className="text-sm font-bold text-emerald-400">Configurazione Guidata</span>
-              <span className="text-xs text-zinc-500 hidden sm:inline">{'\u2014'} {completedCount}/{steps.length} completati</span>
+              <span className="text-xs text-zinc-500">{completedCount}/{steps.length}</span>
             </div>
-            <button
-              onClick={onComplete}
-              className="text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1 text-xs"
-            >
-              <X size={14} />
-              <span className="hidden sm:inline">Chiudi</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <a href="tel:+393517570155" className="text-zinc-600 hover:text-amber-400 text-xs flex items-center gap-1 transition-colors">
+                <Phone size={12} />
+                Aiuto
+              </a>
+              <button
+                onClick={onComplete}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1 text-xs"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
 
           <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4">
-            {/* Progress bar */}
-            <div className="flex items-center gap-2 mb-4">
+            {/* Progress steps */}
+            <div className="flex items-center gap-1.5 mb-4">
               {steps.map((s, i) => (
                 <button
                   key={s.id}
                   onClick={() => handleStepClick(i)}
-                  className="flex items-center gap-1.5 flex-1"
+                  className="flex items-center gap-1 flex-1"
                 >
-                  <div className={`flex items-center justify-center w-6 h-6 rounded-full shrink-0 transition-all ${
+                  <div className={`flex items-center justify-center w-7 h-7 rounded-full shrink-0 transition-all ${
                     isStepDone(s.id)
                       ? 'bg-emerald-500 text-white'
                       : i === currentStep
@@ -183,21 +156,21 @@ export default function SetupWizard({
                         : 'bg-zinc-800 text-zinc-500'
                   }`}>
                     {isStepDone(s.id) ? (
-                      <CheckCircle size={16} weight="fill" />
+                      <CheckCircle size={18} weight="fill" />
                     ) : (
-                      <span className="text-xs font-bold">{i + 1}</span>
+                      <span className="text-sm font-bold">{i + 1}</span>
                     )}
                   </div>
-                  <div className={`h-1 flex-1 rounded-full ${
-                    i < steps.length - 1
-                      ? isStepDone(s.id) ? 'bg-emerald-500/40' : 'bg-zinc-800'
-                      : 'hidden'
-                  }`} />
+                  {i < steps.length - 1 && (
+                    <div className={`h-1 flex-1 rounded-full ${
+                      isStepDone(s.id) ? 'bg-emerald-500/40' : 'bg-zinc-800'
+                    }`} />
+                  )}
                 </button>
               ))}
             </div>
 
-            {/* Step content */}
+            {/* Current step content */}
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentStep}
@@ -205,60 +178,64 @@ export default function SetupWizard({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -15 }}
                 transition={{ duration: 0.2 }}
-                className="flex items-start justify-between gap-4"
               >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    {isStepDone(step.id) ? (
-                      <CheckCircle size={18} weight="fill" className="text-emerald-400" />
-                    ) : (
-                      <Circle size={18} className="text-zinc-600" />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    {/* Title */}
+                    <div className="flex items-center gap-2 mb-1">
+                      {isStepDone(step.id) ? (
+                        <CheckCircle size={20} weight="fill" className="text-emerald-400" />
+                      ) : (
+                        <Circle size={20} className="text-zinc-600" />
+                      )}
+                      <h3 className="text-lg font-bold text-white">{step.title}</h3>
+                    </div>
+                    {/* Short description */}
+                    <p className="text-zinc-400 text-sm pl-7 mb-1">
+                      {step.shortDescription}
+                    </p>
+                    {/* Action hint — clear instruction */}
+                    {!isStepDone(step.id) && (
+                      <p className="text-amber-400 text-sm font-semibold pl-7">
+                        {step.actionHint}
+                      </p>
                     )}
-                    <h3 className="text-base font-bold text-white">{step.title}</h3>
                   </div>
-                  <p className="text-zinc-400 text-sm leading-relaxed pl-[26px]">
-                    {step.shortDescription}
-                  </p>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {/* Info button to re-read explanation */}
-                  <button
-                    onClick={() => setShowExplanation(true)}
-                    className="h-9 px-3 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 text-xs font-semibold transition-all"
-                  >
-                    ?
-                  </button>
-                  {/* Next step button */}
-                  {currentStep < steps.length - 1 ? (
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0 pt-1">
                     <button
-                      onClick={handleNext}
-                      className={`h-9 px-5 rounded-lg font-bold text-sm transition-all flex items-center gap-1.5 ${
-                        isStepDone(step.id)
-                          ? 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_4px_12px_-4px_rgba(16,185,129,0.5)]'
-                          : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
-                      }`}
+                      onClick={() => setShowDetail(true)}
+                      className="h-9 w-9 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 text-xs font-semibold transition-all flex items-center justify-center"
+                      title="Maggiori informazioni"
                     >
-                      {isStepDone(step.id) ? 'Prossimo passo' : 'Salta'}
-                      <ArrowRight size={14} />
+                      <Info size={16} />
                     </button>
-                  ) : (
-                    <button
-                      onClick={onComplete}
-                      className="h-9 px-5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition-all flex items-center gap-1.5"
-                    >
-                      Completa
-                      <CheckCircle size={14} weight="fill" />
-                    </button>
-                  )}
+                    {currentStep < steps.length - 1 ? (
+                      <button
+                        onClick={handleNext}
+                        className={`h-9 px-5 rounded-lg font-bold text-sm transition-all flex items-center gap-1.5 ${
+                          isStepDone(step.id)
+                            ? 'bg-emerald-500 hover:bg-emerald-400 text-white'
+                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
+                        }`}
+                      >
+                        {isStepDone(step.id) ? 'Avanti' : 'Salta'}
+                        <ArrowRight size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={onComplete}
+                        className="h-9 px-5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition-all flex items-center gap-1.5"
+                      >
+                        Completa
+                        <CheckCircle size={14} weight="fill" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             </AnimatePresence>
-
-            {/* Phone help */}
-            <p className="text-zinc-600 text-[10px] text-center mt-3">
-              Hai bisogno di aiuto? <a href="tel:+393517570155" className="text-amber-400/60 hover:text-amber-400">+39 351 757 0155</a>
-            </p>
           </div>
         </motion.div>
       </div>

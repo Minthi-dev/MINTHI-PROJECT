@@ -18,22 +18,22 @@ export const DEMO_CATEGORIES: Category[] = [
   { id: 'demo-cat-4', name: 'Dolci', restaurant_id: RESTAURANT_ID, order: 4 },
 ]
 
-// ── Dishes ────────────────────────────────────────────────────────────────────
+// ── Dishes (with image_url for photo display) ───────────────────────────────
 export const DEMO_DISHES: Dish[] = [
   // Antipasti
-  { id: 'demo-dish-1', name: 'Bruschetta al Pomodoro', description: 'Pane tostato con pomodorini freschi e basilico', price: 6, vat_rate: 10, category_id: 'demo-cat-1', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine'] },
-  { id: 'demo-dish-2', name: 'Caprese', description: 'Mozzarella di bufala, pomodoro cuore di bue e basilico', price: 8, vat_rate: 10, category_id: 'demo-cat-1', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['latte'] },
-  { id: 'demo-dish-3', name: 'Prosciutto e Melone', description: 'Prosciutto crudo di Parma con melone fresco', price: 9, vat_rate: 10, category_id: 'demo-cat-1', restaurant_id: RESTAURANT_ID, is_active: true },
+  { id: 'demo-dish-1', name: 'Bruschetta al Pomodoro', description: 'Pane tostato con pomodorini freschi e basilico', price: 6, vat_rate: 10, category_id: 'demo-cat-1', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine'], image_url: 'https://images.unsplash.com/photo-1572695157366-5e585ab2b69f?w=400&h=300&fit=crop' },
+  { id: 'demo-dish-2', name: 'Caprese', description: 'Mozzarella di bufala, pomodoro cuore di bue e basilico', price: 8, vat_rate: 10, category_id: 'demo-cat-1', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['latte'], image_url: 'https://images.unsplash.com/photo-1608897013039-887f21d8c804?w=400&h=300&fit=crop' },
+  { id: 'demo-dish-3', name: 'Prosciutto e Melone', description: 'Prosciutto crudo di Parma con melone fresco', price: 9, vat_rate: 10, category_id: 'demo-cat-1', restaurant_id: RESTAURANT_ID, is_active: true, image_url: 'https://images.unsplash.com/photo-1432139555190-58524dae6a55?w=400&h=300&fit=crop' },
   // Primi
-  { id: 'demo-dish-4', name: 'Carbonara', description: 'Guanciale, pecorino, tuorlo d\'uovo e pepe nero', price: 12, vat_rate: 10, category_id: 'demo-cat-2', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine', 'uova', 'latte'] },
-  { id: 'demo-dish-5', name: 'Cacio e Pepe', description: 'Pecorino romano DOP e pepe nero macinato fresco', price: 11, vat_rate: 10, category_id: 'demo-cat-2', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine', 'latte'] },
-  { id: 'demo-dish-6', name: 'Risotto ai Funghi Porcini', description: 'Riso Carnaroli con porcini freschi e parmigiano', price: 14, vat_rate: 10, category_id: 'demo-cat-2', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['latte'] },
+  { id: 'demo-dish-4', name: 'Carbonara', description: 'Guanciale, pecorino, tuorlo d\'uovo e pepe nero', price: 12, vat_rate: 10, category_id: 'demo-cat-2', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine', 'uova', 'latte'], image_url: 'https://images.unsplash.com/photo-1612874742237-6526221588e3?w=400&h=300&fit=crop' },
+  { id: 'demo-dish-5', name: 'Cacio e Pepe', description: 'Pecorino romano DOP e pepe nero macinato fresco', price: 11, vat_rate: 10, category_id: 'demo-cat-2', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine', 'latte'], image_url: 'https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?w=400&h=300&fit=crop' },
+  { id: 'demo-dish-6', name: 'Risotto ai Funghi Porcini', description: 'Riso Carnaroli con porcini freschi e parmigiano', price: 14, vat_rate: 10, category_id: 'demo-cat-2', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['latte'], image_url: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=400&h=300&fit=crop' },
   // Secondi
-  { id: 'demo-dish-7', name: 'Bistecca alla Fiorentina', description: 'Tagliata di manzo al sangue con rucola e grana', price: 24, vat_rate: 10, category_id: 'demo-cat-3', restaurant_id: RESTAURANT_ID, is_active: true },
-  { id: 'demo-dish-8', name: 'Branzino al Forno', description: 'Branzino con patate, olive e pomodorini', price: 18, vat_rate: 10, category_id: 'demo-cat-3', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['pesce'] },
+  { id: 'demo-dish-7', name: 'Bistecca alla Fiorentina', description: 'Tagliata di manzo al sangue con rucola e grana', price: 24, vat_rate: 10, category_id: 'demo-cat-3', restaurant_id: RESTAURANT_ID, is_active: true, image_url: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=400&h=300&fit=crop' },
+  { id: 'demo-dish-8', name: 'Branzino al Forno', description: 'Branzino con patate, olive e pomodorini', price: 18, vat_rate: 10, category_id: 'demo-cat-3', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['pesce'], image_url: 'https://images.unsplash.com/photo-1534604973900-c43ab4c2e0ab?w=400&h=300&fit=crop' },
   // Dolci
-  { id: 'demo-dish-9', name: 'Tiramisù', description: 'Mascarpone, savoiardi, caffè e cacao amaro', price: 7, vat_rate: 10, category_id: 'demo-cat-4', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine', 'uova', 'latte'] },
-  { id: 'demo-dish-10', name: 'Panna Cotta', description: 'Con coulis di frutti di bosco', price: 6, vat_rate: 10, category_id: 'demo-cat-4', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['latte'] },
+  { id: 'demo-dish-9', name: 'Tiramisù', description: 'Mascarpone, savoiardi, caffè e cacao amaro', price: 7, vat_rate: 10, category_id: 'demo-cat-4', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['glutine', 'uova', 'latte'], image_url: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=400&h=300&fit=crop' },
+  { id: 'demo-dish-10', name: 'Panna Cotta', description: 'Con coulis di frutti di bosco', price: 6, vat_rate: 10, category_id: 'demo-cat-4', restaurant_id: RESTAURANT_ID, is_active: true, allergens: ['latte'], image_url: 'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=400&h=300&fit=crop' },
 ]
 
 // Helper to get dish by id
@@ -126,7 +126,25 @@ export const DEMO_BOOKINGS: Booking[] = [
   { id: 'demo-book-4', restaurant_id: RESTAURANT_ID, name: 'Giovanni Neri', phone: '+39 347 9876543', date_time: todayStr(21, 30), guests: 3, status: 'pending', table_id: 'demo-table-5' },
 ]
 
-// ── Guide Steps (expanded with highlighting) ─────────────────────────────────
+// ── Summary features for welcome page ────────────────────────────────────────
+export interface FeatureSummary {
+  icon: string
+  title: string
+  description: string
+}
+
+export const APP_FEATURES: FeatureSummary[] = [
+  { icon: '📋', title: 'Ordini in Tempo Reale', description: 'Ricevi gli ordini dai clienti automaticamente' },
+  { icon: '📱', title: 'Menu Digitale con QR', description: 'I clienti scansionano e ordinano dal telefono' },
+  { icon: '🪑', title: 'Gestione Tavoli', description: 'Controlla tavoli liberi e occupati' },
+  { icon: '📅', title: 'Prenotazioni Online', description: 'I clienti prenotano dal tuo link' },
+  { icon: '📊', title: 'Analitiche e Incassi', description: 'Grafici su vendite e piatti più ordinati' },
+  { icon: '👨‍🍳', title: 'Dashboard Cameriere', description: 'I camerieri gestiscono ordini con PIN' },
+  { icon: '💳', title: 'Pagamenti Online', description: 'Ricevi pagamenti con Stripe' },
+  { icon: '⚙️', title: 'Coperto e AYCE', description: 'Configura coperto e All You Can Eat' },
+]
+
+// ── Guide Steps ──────────────────────────────────────────────────────────────
 export interface DemoGuideStep {
   id: string
   tab: string
@@ -135,77 +153,104 @@ export interface DemoGuideStep {
   tip?: string
   highlightSelector?: string  // CSS selector for SpotlightOverlay — omit to show page without darkening
   subTab?: string             // for settings sub-tabs
+  isSummary?: boolean         // true for the welcome summary page (rendered differently)
 }
 
 export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
+  // Step 0: Welcome summary page (full-screen card with all features)
   {
     id: 'welcome',
     tab: 'orders',
     title: 'Benvenuto in Minthi!',
-    description: 'Questa è una demo con dati di esempio. Nulla viene salvato. Dopo la demo potrai configurare il tuo ristorante.',
+    description: 'Questa è una demo con dati di esempio. Nulla viene salvato. Dopo la demo configurerai il tuo ristorante.',
+    isSummary: true,
   },
+
+  // ORDINI
   {
-    id: 'orders-overview',
+    id: 'orders-nav',
     tab: 'orders',
     title: 'Gestione Ordini',
-    description: 'Qui vedi gli ordini dei clienti in tempo reale, divisi per tavolo. I colori mostrano lo stato: giallo = in attesa, blu = in preparazione, verde = pronto.',
-    tip: 'Quando un cliente ordina dal QR, l\'ordine appare qui automaticamente.',
+    description: 'Questa è la sezione Ordini. Ogni card è un tavolo con i suoi piatti ordinati. I colori indicano lo stato: giallo = in attesa, blu = in preparazione, verde = pronto, viola = consegnato.',
+    highlightSelector: '[data-tour="orders-header"]',
+  },
+
+  // TAVOLI
+  {
+    id: 'tables-nav',
+    tab: 'tables',
+    title: 'I Tuoi Tavoli',
+    description: 'Qui vedi tutti i tavoli. Verde = libero, ambra = occupato. Clicca su un tavolo per attivarlo, vedere il conto o liberarlo.',
+    highlightSelector: '[data-tour="tables-header"]',
   },
   {
-    id: 'tables-overview',
+    id: 'tables-add',
     tab: 'tables',
-    title: 'Tavoli e QR Code',
-    description: 'Ogni tavolo ha un QR Code. Il cliente lo scansiona, vede il menu e ordina dal telefono. Verde = libero, ambra = occupato.',
-    tip: 'Clicca "Scarica QR" per stampare tutti i codici dei tavoli.',
+    title: 'Aggiungi Tavoli',
+    description: 'Clicca "+" per creare un nuovo tavolo. Scegli numero, posti e sala.',
+    highlightSelector: '[data-tour="add-table-btn"]',
+  },
+  {
+    id: 'tables-qr',
+    tab: 'tables',
+    title: 'Scarica QR Code',
+    description: 'Ogni tavolo ha un QR Code. Clicca qui per scaricare tutti i QR in PDF, stampali e mettili sui tavoli. Il cliente scansiona il QR, vede il menu e ordina dal telefono.',
     highlightSelector: '[data-tour="download-qr-btn"]',
   },
+
+  // MENU
   {
-    id: 'customer-menu',
-    tab: 'tables',
-    title: 'Menu Cliente (QR)',
-    description: 'Quando il cliente scansiona il QR Code, vede il tuo menu sul telefono: foto dei piatti, prezzi, allergeni, e può ordinare direttamente. L\'ordine arriva subito nella Gestione Ordini.',
-    tip: 'Puoi provare il menu cliente scansionando un QR Code dalla sezione tavoli.',
-  },
-  {
-    id: 'menu-overview',
+    id: 'menu-nav',
     tab: 'menu',
     title: 'Il Tuo Menu',
-    description: 'Crea categorie (Antipasti, Primi, ecc.) e aggiungi piatti con foto, prezzo e allergeni. Questo è il menu che i clienti vedono quando scansionano il QR.',
-    tip: 'Trascina le categorie per riordinarle. L\'ordine qui = ordine nel menu cliente.',
+    description: 'Qui crei il menu che i clienti vedono quando scansionano il QR. Organizza i piatti in categorie, aggiungi foto, prezzo, descrizione e allergeni.',
+    highlightSelector: '[data-tour="menu-header"]',
   },
   {
-    id: 'reservations',
+    id: 'menu-add-dish',
+    tab: 'menu',
+    title: 'Aggiungi un Piatto',
+    description: 'Clicca "+" per aggiungere un nuovo piatto. Inserisci nome, prezzo, categoria, foto e allergeni.',
+    highlightSelector: '[data-tour="add-dish-btn"]',
+  },
+
+  // PRENOTAZIONI
+  {
+    id: 'reservations-nav',
     tab: 'reservations',
     title: 'Prenotazioni',
-    description: 'Vedi tutte le prenotazioni del giorno sulla timeline. Puoi confermare, rifiutare o modificarle. I clienti possono prenotare online dal tuo link.',
+    description: 'La timeline mostra le prenotazioni del giorno. Puoi confermare, rifiutare o modificarle. Attivando le prenotazioni online, i clienti prenotano dal tuo link.',
+    highlightSelector: '[data-tour="reservations-header"]',
   },
+
+  // ANALITICHE
   {
-    id: 'analytics',
+    id: 'analytics-nav',
     tab: 'analytics',
     title: 'Analitiche',
-    description: 'Incassi, piatti più ordinati e ore di punta. Filtra per giorno, settimana o mese per capire come va il ristorante.',
+    description: 'Grafici su incassi giornalieri, piatti più ordinati e ore di punta. Filtra per giorno, settimana o mese.',
+    highlightSelector: '[data-tour="analytics-header"]',
   },
+
+  // IMPOSTAZIONI
   {
-    id: 'waiter-dashboard',
-    tab: 'analytics',
-    title: 'Dashboard Cameriere',
-    description: 'Puoi attivare la Modalità Cameriere nelle impostazioni. I camerieri accedono con un PIN e vedono una dashboard semplificata: possono prendere ordini, segnare piatti pronti e gestire i pagamenti al tavolo.',
-    tip: 'Attivala in Impostazioni > Generale > Modalità Cameriere.',
-  },
-  {
-    id: 'settings-general',
+    id: 'settings-nav',
     tab: 'settings',
     title: 'Impostazioni',
-    description: 'Configura tutto: nome ristorante, coperto, All You Can Eat, modalità cameriere, prenotazioni online, pagamenti Stripe e abbonamento.',
+    description: 'Configura: nome ristorante, coperto, All You Can Eat, modalità cameriere, prenotazioni online, pagamenti Stripe e abbonamento.',
+    highlightSelector: '[data-tour="nav-settings"]',
     subTab: 'general',
   },
+
+  // FINE
   {
     id: 'end',
-    tab: 'settings',
+    tab: 'orders',
     title: 'Demo Completata!',
-    description: 'Hai visto tutte le funzioni. Clicca "Fine Demo" per uscire e iniziare a configurare il tuo ristorante con la Configurazione Guidata.',
+    description: 'Hai visto tutte le funzioni di Minthi. Clicca "Fine Demo" per uscire e iniziare a configurare il tuo ristorante.',
   },
 ]
+
 // ── Setup Steps ──────────────────────────────────────────────────────────────
 export interface SetupStep {
   id: string
@@ -214,6 +259,7 @@ export interface SetupStep {
   shortDescription: string
   fullExplanation: string
   highlightSelector: string
+  actionHint: string  // clear instruction on what button to press
   checkFn: (ctx: { tablesCount: number; dishesCount: number; categoriesCount: number }) => boolean
 }
 
@@ -221,27 +267,30 @@ export const SETUP_STEPS: SetupStep[] = [
   {
     id: 'create-categories',
     tab: 'menu',
-    title: 'Crea le Categorie del Menu',
-    shortDescription: 'Crea almeno una categoria per organizzare i piatti del tuo menu.',
-    fullExplanation: 'Le categorie sono le sezioni del tuo menu digitale (es. Antipasti, Primi Piatti, Secondi, Contorni, Dolci, Bevande). I clienti vedranno i piatti organizzati per categoria quando scansionano il QR Code.\n\nPuoi creare quante categorie vuoi e riordinarle trascinandole. L\'ordine che imposti qui è esattamente quello che vedranno i clienti.\n\nEsempi di categorie comuni: Antipasti, Primi, Secondi, Contorni, Dolci, Bevande, Pizze, Panini, Menù Bambini.',
+    title: 'Crea le Categorie',
+    shortDescription: 'Crea almeno una categoria per il menu (es. Antipasti, Primi, Dolci).',
+    actionHint: 'Clicca il pulsante "Categorie" in alto a destra, poi "Nuova Categoria".',
+    fullExplanation: 'Le categorie organizzano il tuo menu (es. Antipasti, Primi, Secondi, Dolci, Bevande). I clienti vedranno i piatti divisi per categoria.\n\nPuoi riordinarle trascinandole. L\'ordine qui = ordine nel menu cliente.',
     highlightSelector: '[data-tour="menu-header"]',
     checkFn: ({ categoriesCount }) => categoriesCount > 0,
   },
   {
     id: 'create-dishes',
     tab: 'menu',
-    title: 'Aggiungi i Tuoi Piatti',
-    shortDescription: 'Aggiungi almeno un piatto al menu con prezzo e descrizione.',
-    fullExplanation: 'Per ogni piatto puoi inserire:\n\n• Nome — il nome visibile ai clienti\n• Prezzo — in euro, con centesimi\n• Descrizione — ingredienti, preparazione, note\n• Categoria — in quale sezione del menu appare (puoi crearne una nuova direttamente dal form)\n• Foto — carica un\'immagine del piatto\n• Allergeni — seleziona tra i 14 allergeni EU (glutine, latte, uova, pesce, crostacei, arachidi, soia, frutta a guscio, sedano, senape, sesamo, lupini, molluschi, anidride solforosa)\n• Attivo/Inattivo — disattiva un piatto senza eliminarlo (utile per piatti stagionali)\n• All You Can Eat — segna se il piatto è incluso nel menù AYCE e imposta un limite ordini per persona',
+    title: 'Aggiungi i Piatti',
+    shortDescription: 'Aggiungi almeno un piatto con nome, prezzo e categoria.',
+    actionHint: 'Clicca il pulsante "+" arancione in alto per aggiungere un piatto.',
+    fullExplanation: 'Per ogni piatto inserisci: nome, prezzo, descrizione, categoria, foto e allergeni.\n\nPuoi disattivare un piatto senza eliminarlo (utile per piatti stagionali).',
     highlightSelector: '[data-tour="add-dish-btn"]',
     checkFn: ({ dishesCount }) => dishesCount > 0,
   },
   {
     id: 'create-tables',
     tab: 'tables',
-    title: 'Crea i Tavoli del Ristorante',
-    shortDescription: 'Aggiungi i tavoli della tua sala per generare i QR Code.',
-    fullExplanation: 'Ogni tavolo che crei ottiene automaticamente un QR Code univoco. Stampa i QR e posizionali sui tavoli: i clienti li scansionano per accedere al menu e ordinare.\n\nPer ogni tavolo imposti:\n• Numero/Nome — come identifichi il tavolo (es. 1, 2, 3 oppure "Terrazza 1")\n• Posti — quante persone può ospitare\n• Sala — in quale sala si trova (se hai più sale)\n\nDopo aver creato i tavoli, usa il pulsante "Scarica QR" per generare un PDF con tutti i codici QR pronti da stampare. Ogni QR è personalizzato con il nome del tuo ristorante.',
+    title: 'Crea i Tavoli',
+    shortDescription: 'Aggiungi i tavoli per generare i QR Code.',
+    actionHint: 'Clicca il pulsante "+" in alto a destra per aggiungere un tavolo.',
+    fullExplanation: 'Ogni tavolo ottiene un QR Code. Stampa i QR e mettili sui tavoli.\n\nI clienti scansionano il QR → vedono il menu → ordinano dal telefono → l\'ordine arriva nella Gestione Ordini.',
     highlightSelector: '[data-tour="add-table-btn"]',
     checkFn: ({ tablesCount }) => tablesCount > 0,
   },
@@ -249,9 +298,10 @@ export const SETUP_STEPS: SetupStep[] = [
     id: 'configure',
     tab: 'settings',
     title: 'Configura le Impostazioni',
-    shortDescription: 'Personalizza coperto, orari, pagamenti e attiva l\'abbonamento.',
-    fullExplanation: 'Le impostazioni ti permettono di personalizzare ogni aspetto:\n\n• Generale — Nome ristorante, suoni notifica, modalità cameriere, menu sola lettura\n• Costi — Coperto (importo per persona, configurabile per giorno/fascia oraria), All You Can Eat (prezzo fisso, piatti inclusi)\n• Staff — Aggiungi camerieri con PIN personale per la dashboard cameriere\n• Prenotazioni — Attiva prenotazioni online, imposta durata e orari disponibili\n• Pagamenti — Stripe Connect per ricevere pagamenti online, dati fiscali (P.IVA, ragione sociale)\n• Abbonamento — Attiva il piano Minthi, gestisci fatturazione e metodo di pagamento\n\nPuoi sempre modificare queste impostazioni in seguito.',
+    shortDescription: 'Personalizza coperto, orari e abbonamento.',
+    actionHint: 'Esplora le tab in alto: Generale, Costi, Staff, Prenotazioni, Pagamenti, Abbonamento.',
+    fullExplanation: '• Generale — Nome, suoni, modalità cameriere\n• Costi — Coperto e All You Can Eat\n• Staff — Camerieri con PIN\n• Prenotazioni — Prenotazioni online\n• Pagamenti — Stripe Connect\n• Abbonamento — Piano Minthi',
     highlightSelector: '[data-tour="nav-settings"]',
-    checkFn: () => false, // Never auto-complete — user decides when done
+    checkFn: () => false,
   },
 ]
