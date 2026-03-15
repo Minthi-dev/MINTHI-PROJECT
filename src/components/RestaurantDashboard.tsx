@@ -2208,7 +2208,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci gli ordini in tempo reale</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex bg-black/60 p-1.5 rounded-2xl mr-2 border border-white/5 shadow-2xl shadow-black/80 backdrop-blur-3xl">
+                  <div data-tour="orders-view-toggle" className="flex bg-black/60 p-1.5 rounded-2xl mr-2 border border-white/5 shadow-2xl shadow-black/80 backdrop-blur-3xl">
                     <Button
                       variant={kitchenViewMode === 'table' ? 'default' : 'ghost'}
                       size="sm"
@@ -2230,7 +2230,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   {/* Category Filter */}
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant={selectedKitchenCategories.length > 0 ? "default" : "outline"} size="sm" className="mr-2 h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300">
+                      <Button data-tour="orders-filter-btn" variant={selectedKitchenCategories.length > 0 ? "default" : "outline"} size="sm" className="mr-2 h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300">
                         <Funnel size={16} className={`mr-2 ${selectedKitchenCategories.length > 0 ? 'text-amber-500' : ''}`} />
                         Filtra
                         {selectedKitchenCategories.length > 0 && (
@@ -2272,7 +2272,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     </PopoverContent>
                   </Popover>
 
-                  <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl mr-2 border border-white/10 backdrop-blur-sm">
+                  <div data-tour="orders-zoom" className="flex items-center gap-1 bg-black/50 p-1 rounded-xl mr-2 border border-white/10 backdrop-blur-sm">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2294,7 +2294,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
 
 
-                  <Select value={orderSortMode} onValueChange={(value: 'oldest' | 'newest') => setOrderSortMode(value)}>
+                  <Select data-tour="orders-sort" value={orderSortMode} onValueChange={(value: 'oldest' | 'newest') => setOrderSortMode(value)}>
                     <SelectTrigger className="w-[140px] h-10 bg-black/60 border-white/5 text-zinc-300 shadow-2xl shadow-black/80 rounded-xl backdrop-blur-3xl focus:ring-0">
                       <SelectValue />
                     </SelectTrigger>
@@ -2305,6 +2305,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   </Select>
 
                   <Button
+                    data-tour="orders-history-btn"
                     variant={showOrderHistory ? "default" : "outline"}
                     size="sm"
                     onClick={() => setShowOrderHistory(!showOrderHistory)}
@@ -2389,7 +2390,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci la sala e i tavoli</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative">
+                  <div data-tour="tables-search" className="relative">
                     <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
                     <Input
                       placeholder="Cerca tavolo..."
@@ -2437,7 +2438,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow bg-muted/50 border-white/10 hover:border-amber-500/50 hover:text-amber-500">
+                      <Button data-tour="tables-view-sort" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow bg-muted/50 border-white/10 hover:border-amber-500/50 hover:text-amber-500">
                         <SlidersHorizontal size={16} className="mr-2" />
                         Vista & Ordine
                       </Button>
@@ -2505,7 +2506,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button type="button" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow relative">
+                      <Button data-tour="tables-history-btn" type="button" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow relative">
                         <ClockCounterClockwise size={16} className="mr-2" />
                         Storico
                         {(() => {
@@ -2825,7 +2826,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                 <Dialog open={showRoomDialog} onOpenChange={setShowRoomDialog}>
                   <DialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors">
+                    <Button data-tour="tables-room-mgmt" variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors">
                       <MapPin size={16} />
                       Gestisci Sale
                     </Button>
@@ -3396,7 +3397,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 <div className="flex gap-2">
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button variant="outline" className="border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-500 text-zinc-400">
+                      <Button data-tour="menu-custom-menus" variant="outline" className="border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-500 text-zinc-400">
                         <Sparkle size={16} className="mr-2 text-amber-500" />
                         Menu Personalizzati
                       </Button>
@@ -3454,7 +3455,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog open={showExportMenuDialog} onOpenChange={setShowExportMenuDialog}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" className="border-zinc-700 hover:border-amber-500 hover:text-amber-500">
+                      <Button data-tour="menu-export" variant="outline" className="border-zinc-700 hover:border-amber-500 hover:text-amber-500">
                         <DownloadSimple size={16} className="mr-2" />
                         Esporta Menu
                       </Button>
@@ -3724,6 +3725,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         <Button
                           className="w-full h-11 border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-500 text-zinc-400 font-bold"
                           variant="outline"
+                          data-tour="add-category-btn"
                           onClick={() => { setNewCategory(''); setShowNewCategoryPopup(true); }}
                         >
                           <Plus size={16} className="mr-2" />

@@ -168,6 +168,8 @@ export default function RestaurantOnboarding() {
                 couponId: tokenData.stripe_coupon_id || null,
             })
             toast.dismiss('stripe')
+            // Save username so the success page can poll for account readiness
+            sessionStorage.setItem('minthi_pending_username', form.username.trim())
             window.location.href = url
         } catch (err: any) {
             toast.dismiss('stripe')

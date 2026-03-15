@@ -1,99 +1,105 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 
 interface SpotlightOverlayProps {
-  targetSelector?: string  // CSS selector e.g. '[data-tour="add-table-btn"]'
+  targetSelector?: string
   active?: boolean
 }
 
-/**
- * Full-screen dark overlay with a "spotlight" cutout on the target element.
- * The target gets a subtle amber border. No pulsing ring or large shapes.
- */
 const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, active = true }) => {
   const [rect, setRect] = useState<DOMRect | null>(null)
   const prevElRef = useRef<Element | null>(null)
-  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const retryCountRef = useRef(0)
+  const rafRef = useRef<number>(0)
 
-  // Cleanup any leftover spotlight-target classes
-  const cleanupPrevTarget = useCallback(() => {
-    if (prevElRef.current) {
-      prevElRef.current.classList.remove('spotlight-target')
-      prevElRef.current = null
-    }
-    // Also cleanup any stale spotlight-target classes that might be left
+  const cleanup = useCallback(() => {
     document.querySelectorAll('.spotlight-target').forEach(el => {
       el.classList.remove('spotlight-target')
     })
+    prevElRef.current = null
   }, [])
 
-  const findAndMeasure = useCallback(() => {
-    if (!targetSelector) { setRect(null); cleanupPrevTarget(); return }
-    const el = document.querySelector(targetSelector)
-    if (!el) {
-      if (retryCountRef.current < 10) {
-        retryCountRef.current++
-        retryRef.current = setTimeout(findAndMeasure, 200)
-      } else {
-        // Give up - don't show anything
-        setRect(null)
-      }
+  const measure = useCallback(() => {
+    if (!targetSelector || !active) {
+      setRect(null)
+      cleanup()
       return
     }
-    retryCountRef.current = 0
 
-    // Elevate element
+    const el = document.querySelector(targetSelector)
+    if (!el) {
+      setRect(null)
+      return
+    }
+
+    // Add class for z-index elevation
     if (prevElRef.current && prevElRef.current !== el) {
       prevElRef.current.classList.remove('spotlight-target')
     }
     el.classList.add('spotlight-target')
     prevElRef.current = el
 
-    // Scroll into view if needed
-    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-
-    // Measure after scroll
-    requestAnimationFrame(() => {
-      setRect(el.getBoundingClientRect())
+    const r = el.getBoundingClientRect()
+    setRect(prev => {
+      if (!prev || Math.abs(prev.top - r.top) > 1 || Math.abs(prev.left - r.left) > 1 ||
+          Math.abs(prev.width - r.width) > 1 || Math.abs(prev.height - r.height) > 1) {
+        return r
+      }
+      return prev
     })
-  }, [targetSelector, cleanupPrevTarget])
+  }, [targetSelector, active, cleanup])
 
   useEffect(() => {
     if (!active || !targetSelector) {
       setRect(null)
-      cleanupPrevTarget()
+      cleanup()
       return
     }
 
-    // Small delay for tab transitions
-    const t = setTimeout(findAndMeasure, 150)
+    // Initial measure with delay for tab transitions
+    const t = setTimeout(() => {
+      measure()
+      // Scroll target into view
+      const el = document.querySelector(targetSelector)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 200)
 
-    const handleResize = () => findAndMeasure()
-    window.addEventListener('resize', handleResize)
-    window.addEventListener('scroll', handleResize, true)
+    // Continuous re-measurement via rAF for smooth tracking
+    let running = true
+    const tick = () => {
+      if (!running) return
+      measure()
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    // Start polling after initial delay
+    const pollTimer = setTimeout(() => { tick() }, 300)
+
+    // Also listen for resize/scroll
+    const handleChange = () => measure()
+    window.addEventListener('resize', handleChange)
+    window.addEventListener('scroll', handleChange, true)
 
     return () => {
+      running = false
       clearTimeout(t)
-      if (retryRef.current) clearTimeout(retryRef.current)
-      window.removeEventListener('resize', handleResize)
-      window.removeEventListener('scroll', handleResize, true)
-      cleanupPrevTarget()
+      clearTimeout(pollTimer)
+      cancelAnimationFrame(rafRef.current)
+      window.removeEventListener('resize', handleChange)
+      window.removeEventListener('scroll', handleChange, true)
+      cleanup()
     }
-  }, [active, targetSelector, findAndMeasure, cleanupPrevTarget])
+  }, [active, targetSelector, measure, cleanup])
 
-  if (!active) return null
-  if (!rect) return null
+  if (!active || !rect) return null
 
-  const pad = 8
+  const pad = 10
 
   return (
     <>
       {/* Dark overlay with cutout */}
       <div
-        className="fixed inset-0 transition-opacity duration-300"
+        className="fixed inset-0"
         style={{ zIndex: 9997, pointerEvents: 'none' }}
       >
-        {/* The spotlight cutout — uses box-shadow to darken everything except the target */}
+        {/* Box-shadow cutout */}
         <div
           className="absolute rounded-xl"
           style={{
@@ -101,26 +107,25 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
             left: rect.left - pad,
             width: rect.width + pad * 2,
             height: rect.height + pad * 2,
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.60)',
-            transition: 'all 0.3s ease-in-out',
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.55)',
+            transition: 'top 0.3s, left 0.3s, width 0.3s, height 0.3s',
           }}
         />
 
-        {/* Subtle amber border — thin, no pulsing, no glow */}
+        {/* Pulsing amber border */}
         <div
-          className="absolute rounded-xl"
+          className="absolute rounded-xl animate-pulse"
           style={{
-            top: rect.top - pad - 1,
-            left: rect.left - pad - 1,
-            width: rect.width + pad * 2 + 2,
-            height: rect.height + pad * 2 + 2,
-            border: '2px solid rgba(245, 158, 11, 0.5)',
-            transition: 'all 0.3s ease-in-out',
+            top: rect.top - pad - 2,
+            left: rect.left - pad - 2,
+            width: rect.width + pad * 2 + 4,
+            height: rect.height + pad * 2 + 4,
+            border: '2px solid rgba(245, 158, 11, 0.6)',
+            transition: 'top 0.3s, left 0.3s, width 0.3s, height 0.3s',
           }}
         />
       </div>
 
-      {/* Global CSS for spotlight target */}
       <style>{`
         .spotlight-target {
           position: relative !important;

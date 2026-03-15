@@ -487,6 +487,7 @@ export function SettingsView({
                                         </div>
                                     </div>
                                     <Button
+                                        data-tour="settings-demo-btn"
                                         onClick={onRestartTour}
                                         className="bg-amber-500 hover:bg-amber-400 text-black font-bold h-11 px-6 rounded-xl shadow-[0_0_20px_-4px_rgba(245,158,11,0.5)] hover:shadow-[0_0_25px_-4px_rgba(245,158,11,0.7)] transition-all shrink-0"
                                     >
@@ -536,7 +537,7 @@ export function SettingsView({
                                 Notifiche Sonore
                             </h3>
                             <div className="flex flex-col gap-6">
-                                <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
+                                <div data-tour="settings-sound-toggle" className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
                                     <div className="space-y-1">
                                         <Label className="text-base font-semibold">Suono Nuovi Ordini</Label>
                                         <p className="text-sm text-zinc-400">Riproduci un effetto sonoro quando arriva una comanda in cucina.</p>
@@ -626,7 +627,7 @@ export function SettingsView({
                     >
                         <div className="grid gap-6">
                             {/* All You Can Eat - Weekly Schedule */}
-                            <div className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
+                            <div data-tour="settings-ayce" className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
                                 <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
                                     <ForkKnife size={120} weight="fill" />
                                 </div>
@@ -651,7 +652,7 @@ export function SettingsView({
                             </div>
 
                             {/* Coperto - Weekly Schedule */}
-                            <div className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
+                            <div data-tour="settings-coperto" className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
                                 <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
                                     <Coins size={120} weight="fill" />
                                 </div>
@@ -675,7 +676,7 @@ export function SettingsView({
                             </div>
 
                             {/* Configurazione Portate */}
-                            <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <div data-tour="settings-course-split" className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <h3 className="text-2xl font-bold flex items-center gap-3">
@@ -698,7 +699,7 @@ export function SettingsView({
                             </div>
 
                             {/* Menu Solo Visualizzazione */}
-                            <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <div data-tour="settings-viewonly" className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <h3 className="text-2xl font-bold flex items-center gap-3">
@@ -762,6 +763,7 @@ export function SettingsView({
                                     </div>
                                 </div>
                                 <Switch
+                                    data-tour="settings-waiter-toggle"
                                     checked={waiterModeEnabled}
                                     onCheckedChange={setWaiterModeEnabled}
                                     className="data-[state=checked]:bg-amber-500"
@@ -789,6 +791,7 @@ export function SettingsView({
                                             <h4 className="text-xl font-bold text-zinc-200">Credenziali Camerieri</h4>
                                         </div>
                                         <Button
+                                            data-tour="settings-add-staff"
                                             onClick={() => {
                                                 setEditingStaff(null)
                                                 setStaffForm({ name: '', username: '', password: '', is_active: true })
@@ -943,6 +946,7 @@ export function SettingsView({
                                 </h3>
                                 <p className="text-sm text-zinc-400 mb-6">Durata standard prenotazione</p>
                                 <Select
+                                    data-tour="settings-turnover"
                                     value={reservationDuration.toString()}
                                     onValueChange={(val) => setReservationDuration(parseInt(val))}
                                 >
@@ -976,6 +980,7 @@ export function SettingsView({
                                             <p className="text-xs text-zinc-400 hidden sm:block">Se disattivato, il QR mostrerà un avviso di servizio sospeso al momento.</p>
                                         </div>
                                         <Switch
+                                            data-tour="settings-public-booking"
                                             checked={enablePublicReservations}
                                             onCheckedChange={setEnablePublicReservations}
                                             className="data-[state=checked]:bg-amber-500 scale-110 shrink-0"
@@ -1042,6 +1047,7 @@ export function SettingsView({
                                         </div>
                                     </div>
                                     <Switch
+                                        data-tour="settings-stripe-toggle"
                                         checked={stripePaymentsEnabled}
                                         onCheckedChange={async (checked) => {
                                             try {
@@ -1272,7 +1278,7 @@ export function SettingsView({
 
                         {/* 2. Abbonamento */}
                         {subscriptionInfo?.stripe_subscription_id ? (
-                            <div className="space-y-6">
+                            <div data-tour="settings-subscription" className="space-y-6">
                                 {/* Active Subscription Card */}
                                 <div className={`rounded-2xl border overflow-hidden ${subscriptionInfo.subscription_status === 'past_due'
                                     ? 'bg-zinc-900/50 border-red-500/20'
@@ -1413,7 +1419,7 @@ export function SettingsView({
                             </div>
                         ) : (
                             /* No subscription */
-                            <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                            <div data-tour="settings-subscription" className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
                                 <div className="p-6 sm:p-8 text-center">
                                     <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-5">
                                         <CreditCard className="text-emerald-500" weight="bold" size={32} />
