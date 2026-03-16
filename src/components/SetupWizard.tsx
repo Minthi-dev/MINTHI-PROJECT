@@ -34,20 +34,6 @@ export default function SetupWizard({
     return s ? s.checkFn(ctx) : false
   }, [categoriesCount, dishesCount, tablesCount, steps])
 
-  // Auto-advance to next incomplete step when current is done
-  useEffect(() => {
-    const step = steps[currentStep]
-    if (step && isStepDone(step.id)) {
-      const nextIncomplete = steps.findIndex((s, i) => i > currentStep && !isStepDone(s.id))
-      if (nextIncomplete >= 0) {
-        setTimeout(() => {
-          setCurrentStep(nextIncomplete)
-          setActiveTab(steps[nextIncomplete].tab)
-        }, 800) // Short delay so user sees the checkmark
-      }
-    }
-  }, [categoriesCount, dishesCount, tablesCount, currentStep, isStepDone, steps, setActiveTab])
-
   const step = steps[currentStep]
   const completedCount = steps.filter(s => isStepDone(s.id)).length
 

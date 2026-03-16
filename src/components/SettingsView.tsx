@@ -625,6 +625,15 @@ export function SettingsView({
                         className="space-y-6"
                     >
                         <div className="grid gap-6">
+                            {/* Spiegazione sezione */}
+                            <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4">
+                                <p className="text-sm text-amber-200/80 leading-relaxed">
+                                    <strong className="text-amber-400">Costi & Menu:</strong> Configura i costi aggiuntivi applicati automaticamente agli ordini.
+                                    L'<strong>All You Can Eat</strong> attiva una modalità a prezzo fisso dove il cliente può ordinare liberamente (puoi impostare limiti per piatto).
+                                    Il <strong>Coperto</strong> viene aggiunto automaticamente per ogni persona al tavolo. Entrambi supportano <strong>programmazione settimanale</strong> con prezzi diversi per giorno.
+                                </p>
+                            </div>
+
                             {/* All You Can Eat - Weekly Schedule */}
                             <div className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
                                 <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
@@ -770,6 +779,15 @@ export function SettingsView({
 
                             {waiterModeEnabled && (
                                 <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
+                                    {/* Guida accesso camerieri */}
+                                    <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4">
+                                        <p className="text-sm text-amber-200/80 leading-relaxed">
+                                            <strong className="text-amber-400">Come funziona:</strong> Crea un account per ogni cameriere con username e password.
+                                            Il cameriere accede dalla <strong>pagina di login</strong> usando le sue credenziali e vedrà solo i tavoli a lui assegnati, gli ordini in arrivo e potrà segnare i piatti come serviti.
+                                            Puoi assegnare i tavoli ai camerieri dalla sezione <strong>Tavoli</strong> nella dashboard principale.
+                                        </p>
+                                    </div>
+
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                         <div>
                                             <Label className="text-base text-amber-100">Permessi di Pagamento</Label>

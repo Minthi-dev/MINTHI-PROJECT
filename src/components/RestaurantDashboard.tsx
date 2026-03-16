@@ -1581,6 +1581,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setNewDish({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], ayce_max_orders_per_person: null })
         setAllergenInput('')
         setIsAddItemDialogOpen(false)
+        refreshDishes()
         toast.success('Piatto aggiunto al menu')
       })
       .catch((error) => {
@@ -1760,6 +1761,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setShowInlineCatCreate(false)
       }
       setInlineCatName('')
+      refreshCategories()
       toast.success('Categoria creata')
     } catch {
       toast.error('Errore creazione categoria')
@@ -1804,6 +1806,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     DatabaseService.createCategory(newCategoryObj)
       .then(() => {
         setNewCategory('')
+        refreshCategories()
         toast.success('Categoria aggiunta')
       })
   }
@@ -4079,7 +4082,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             <TabsContent value="settings" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
               <SettingsView
                 restaurantName={restaurantName}
-                setRestaurantName={setRestaurantName}
+                setRestaurantName={(name: string) => { setRestaurantName(name); setRestaurantNameDirty(true) }}
                 restaurantNameDirty={restaurantNameDirty}
                 saveRestaurantName={saveRestaurantName}
 
