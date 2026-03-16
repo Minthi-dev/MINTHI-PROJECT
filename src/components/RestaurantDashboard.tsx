@@ -135,6 +135,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [availableCustomMenus, setAvailableCustomMenus] = useState<any[]>([])
   const [selectedCustomMenuId, setSelectedCustomMenuId] = useState<string>('')
   const [isExportingMenu, setIsExportingMenu] = useState(false)
+  const [exportMenuTitle, setExportMenuTitle] = useState('')
   const [exportPreviewData, setExportPreviewData] = useState<{ title: string, subtitle?: string, sections: { id: string, title: string, dishes: Dish[] }[] } | null>(null)
   const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
@@ -205,14 +206,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }, [categories])
 
-  // Fetch custom menus when dialog opens
+  // Fetch custom menus and auto-select all categories when dialog opens
   useEffect(() => {
     if (showExportMenuDialog && restaurantId) {
       DatabaseService.getAllCustomMenus(restaurantId)
         .then(menus => setAvailableCustomMenus(menus || []))
         .catch(console.error)
+      // Auto-select all categories
+      setExportSelectedCategories(restaurantCategories.map(c => c.id))
+      setExportMenuTitle('')
     }
-  }, [showExportMenuDialog, restaurantId])
+  }, [showExportMenuDialog, restaurantId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
   const currentRestaurant = restaurants?.[0]
@@ -543,8 +547,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         }
 
         dataToExport = {
-          title: restaurantName,
-          subtitle: 'Menu alla Carta',
+          title: exportMenuTitle.trim() || restaurantName,
+          subtitle: exportMenuTitle.trim() ? restaurantName : 'Menu alla Carta',
           sections: selectedCats.map(c => ({
             id: c.id,
             title: c.name,
@@ -565,14 +569,24 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
+        // Group custom menu dishes by category
+        const customDishes = menuDetails.dishes.map((d: any) => d.dish).filter((d: any) => !!d)
+        const groupedByCategory = new Map<string, Dish[]>()
+        for (const dish of customDishes) {
+          const catId = dish.category_id || 'uncategorized'
+          if (!groupedByCategory.has(catId)) groupedByCategory.set(catId, [])
+          groupedByCategory.get(catId)!.push(dish)
+        }
+
+        const customSections = Array.from(groupedByCategory.entries()).map(([catId, catDishes]) => {
+          const cat = categories.find(c => c.id === catId)
+          return { id: catId, title: cat?.name || '', dishes: catDishes }
+        })
+
         dataToExport = {
-          title: menuDetails.name,
-          subtitle: 'Menu Speciale',
-          sections: [{
-            id: 'custom',
-            title: '',
-            dishes: menuDetails.dishes.map((d: any) => d.dish).filter((d: any) => !!d)
-          }]
+          title: exportMenuTitle.trim() || menuDetails.name,
+          subtitle: exportMenuTitle.trim() ? menuDetails.name : restaurantName,
+          sections: customSections
         }
       }
 
@@ -3472,6 +3486,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </DialogHeader>
 
                       <div className="space-y-6 py-4">
+                        {/* Nome menu per la stampa */}
+                        <div className="space-y-2">
+                          <Label className="text-zinc-300">Nome del Menu <span className="text-zinc-500 text-xs">(opzionale, appare in alto nel PDF)</span></Label>
+                          <Input
+                            value={exportMenuTitle}
+                            onChange={(e) => setExportMenuTitle(e.target.value)}
+                            placeholder={restaurantName}
+                            className="bg-black/20 border-zinc-800 focus:border-amber-500"
+                          />
+                        </div>
+
                         <RadioGroup value={exportMode} onValueChange={(v: 'full' | 'custom') => setExportMode(v)} className="grid grid-cols-2 gap-4">
                           <div>
                             <RadioGroupItem value="full" id="export-full" className="peer sr-only" />
@@ -4878,8 +4903,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         zIndex: -1,
         width: '210mm',
         minHeight: '297mm',
-        backgroundColor: '#09090b',
-        color: '#ffffff',
+        backgroundColor: '#ffffff',
+        color: '#18181b',
         padding: '40px 50px',
         fontFamily: 'Georgia, serif',
         boxSizing: 'border-box'
@@ -4895,7 +4920,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               <p style={{ color: '#d97706', fontSize: '18px', letterSpacing: '0.15em', fontWeight: 300, marginTop: '10px' }}>{exportPreviewData.subtitle}</p>
             )
           }
-          <p style={{ color: '#d97706', fontSize: '12px', fontStyle: 'italic', letterSpacing: '0.2em', fontWeight: 300, marginTop: '15px', opacity: 0.8 }}>Fine Dining Experience</p>
         </div>
 
         {/* Categories & Dishes */}
@@ -4903,9 +4927,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           {
             exportPreviewData ? (
               exportPreviewData.sections.map(section => (
-                <div key={section.id} style={{ marginBottom: '20px', pageBreakInside: 'avoid' }}>
+                <div key={section.id} style={{ marginBottom: '20px' }}>
                   {section.title && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                    <div className="break-inside-avoid" style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
                       <h2 style={{ fontSize: '22px', fontWeight: 300, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.15em', whiteSpace: 'nowrap' }}>{section.title}</h2>
                       <div style={{ height: '1px', flex: 1, background: 'linear-gradient(to right, rgba(217,119,6,0.4), transparent)' }}></div>
                     </div>
@@ -4913,7 +4937,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     {section.dishes.map(dish => (
-                      <div key={dish.id} style={{ display: 'flex', gap: '15px', alignItems: 'flex-start', pageBreakInside: 'avoid' }}>
+                      <div key={dish.id} className="break-inside-avoid" style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
                         {dish.image_url?.trim() && (
                           <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
                             <img src={dish.image_url} alt={dish.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

@@ -921,7 +921,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                           return (
                             <div
                               key={block.booking.id}
-                              className={`absolute top-2 bottom-2 rounded-md border border-white/20 px-2 flex flex-col justify-center overflow-hidden transition-all duration-300 hover:z-50 hover:scale-[1.03] hover:shadow-[0_20px_40px_rgba(0,0,0,0.8)] ${isCompleted ? 'opacity-40 grayscale scale-[0.98]' : 'shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] cursor-move'} ${draggedBookingId === block.booking.id ? 'opacity-20 border-dashed grayscale scale-95 z-0' : ''}`}
+                              className={`absolute top-2 bottom-2 rounded-md border border-white/20 px-2 flex flex-col justify-center overflow-hidden transition-all duration-300 hover:z-50 hover:scale-[1.03] hover:shadow-[0_20px_40px_rgba(0,0,0,0.8)] ${isCompleted ? 'opacity-40 grayscale scale-[0.98]' : 'shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] cursor-move'} ${draggedBookingId === block.booking.id ? 'opacity-20 grayscale scale-95 z-0' : ''}`}
                               style={{
                                 left: `${getBlockStyle(block.startMinutes, block.duration).left}`,
                                 width: `${getBlockStyle(block.startMinutes, block.duration).width}`,
