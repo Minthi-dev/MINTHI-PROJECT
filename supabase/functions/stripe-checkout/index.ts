@@ -47,7 +47,7 @@ serve(async (req) => {
         });
     } catch (error) {
         console.error("Errore Stripe Checkout:", error);
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: "Errore creazione sessione di pagamento" }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 500,
         });

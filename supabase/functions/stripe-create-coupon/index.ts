@@ -67,7 +67,7 @@ serve(async (req) => {
         });
     } catch (error) {
         console.error("Errore stripe-create-coupon:", error);
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: "Errore creazione coupon" }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 500,
         });

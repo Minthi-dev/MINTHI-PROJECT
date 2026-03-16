@@ -66,7 +66,7 @@ serve(async (req) => {
     } catch (error: any) {
         console.error("Errore Account Session:", error.message, error.stack);
         return new Response(
-            JSON.stringify({ error: error.message || "Errore interno" }),
+            JSON.stringify({ error: "Errore creazione sessione account" }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
         );
     }

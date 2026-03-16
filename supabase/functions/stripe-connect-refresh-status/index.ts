@@ -67,7 +67,7 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error("Errore Stripe Connect Refresh:", error.message, error.stack);
-    return new Response(JSON.stringify({ error: error.message || "Errore interno" }), {
+    return new Response(JSON.stringify({ error: "Errore aggiornamento stato Stripe Connect" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

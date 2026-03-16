@@ -60,18 +60,36 @@ serve(async (req) => {
             );
         }
 
-        // Crea le line items per Stripe, escludendo elementi con prezzo 0 (come piatti AYCE se costo è coperto in origine)
-        const lineItems = items
-            .filter((item: { name: string; price: number; quantity: number }) => item.price > 0)
-            .map((item: { name: string; price: number; quantity: number }) => ({
+        // Server-side price verification: fetch actual prices from DB instead of trusting client
+        const { data: orderItemsData, error: itemsError } = await supabase
+            .from("order_items")
+            .select("id, dish_name, price, quantity, order_id")
+            .in("order_id", orderIds);
+
+        if (itemsError) {
+            console.error("Error fetching order items:", itemsError);
+            return new Response(
+                JSON.stringify({ error: "Errore nel recupero degli ordini" }),
+                { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+        }
+
+        // Build line items from verified DB data
+        const verifiedItems = paidOrderItemIds && paidOrderItemIds.length > 0
+            ? (orderItemsData || []).filter((oi: any) => paidOrderItemIds.includes(oi.id))
+            : (orderItemsData || []);
+
+        const lineItems = verifiedItems
+            .filter((oi: any) => oi.price > 0)
+            .map((oi: any) => ({
                 price_data: {
                     currency: "eur",
                     product_data: {
-                        name: item.name,
+                        name: oi.dish_name || "Articolo",
                     },
-                    unit_amount: Math.round(item.price * 100), // Stripe usa centesimi
+                    unit_amount: Math.round(oi.price * 100),
                 },
-                quantity: item.quantity,
+                quantity: oi.quantity || 1,
             }));
 
         if (lineItems.length === 0) {
@@ -119,7 +137,7 @@ serve(async (req) => {
     } catch (error) {
         console.error("Errore Stripe Customer Payment:", error);
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({ error: "Errore nel processamento del pagamento" }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
         );
     }

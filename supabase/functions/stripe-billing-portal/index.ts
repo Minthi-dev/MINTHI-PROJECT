@@ -53,7 +53,7 @@ serve(async (req) => {
         });
     } catch (error) {
         console.error("Errore Billing Portal:", error);
-        return new Response(JSON.stringify({ error: error.message }), {
+        return new Response(JSON.stringify({ error: "Errore accesso portale di fatturazione" }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 500,
         });
