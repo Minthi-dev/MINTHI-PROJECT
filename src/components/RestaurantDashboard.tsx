@@ -2127,7 +2127,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
+      <main className={`flex-1 flex flex-col min-w-0 overflow-hidden relative z-10 ${isDemoActive ? 'pt-10' : ''}`}>
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 scroll-smooth scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
           {/* Inline sidebar toggle — never overlaps content */}
           <AnimatePresence>
@@ -3796,9 +3796,27 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary cursor-grab">
                                   <DotsSixVertical size={16} weight="bold" />
                                 </div>
-                                <span className="font-medium">{cat.name}</span>
+                                <span className={`font-medium ${cat.is_active === false ? 'text-zinc-600 line-through' : ''}`}>{cat.name}</span>
+                                {cat.is_active === false && <span className="text-[10px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded ml-1">OFF</span>}
                               </div>
                               <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`h-8 w-8 ${cat.is_active === false ? 'text-zinc-600' : 'text-emerald-500'}`}
+                                  title={cat.is_active === false ? 'Categoria disattivata — clicca per riattivare' : 'Categoria attiva — clicca per disattivare'}
+                                  onClick={async () => {
+                                    if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
+                                    const newActive = cat.is_active === false ? true : false
+                                    try {
+                                      await DatabaseService.updateCategory({ id: cat.id, is_active: newActive })
+                                      refreshCategories()
+                                      toast.success(newActive ? 'Categoria riattivata' : 'Categoria disattivata')
+                                    } catch { toast.error('Errore aggiornamento categoria') }
+                                  }}
+                                >
+                                  {cat.is_active === false ? <EyeSlash size={16} /> : <Eye size={16} />}
+                                </Button>
                                 <Button
                                   variant="secondary"
                                   size="icon"

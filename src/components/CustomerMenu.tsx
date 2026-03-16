@@ -1242,7 +1242,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       // But let's re-fetch strictly by restaurant_id to be safe and consistent.
       const { data: tableData } = await supabase.from('tables').select('restaurant_id, number').eq('id', tableId).single()
       const { data: restData } = await supabase.from('restaurants').select('id, name, enable_course_splitting, all_you_can_eat, ayce_price, ayce_max_orders, cover_charge_per_person, menu_style, menu_primary_color, view_only_menu_enabled, is_active, logo_url, weekly_coperto, weekly_ayce, weekly_service_hours').eq('id', restaurantId).single()
-      const { data: catsData } = await supabase.from('categories').select('id, name, restaurant_id, "order", created_at').eq('restaurant_id', restaurantId).order('order', { ascending: true })
+      const { data: catsData } = await supabase.from('categories').select('id, name, restaurant_id, "order", is_active, created_at').eq('restaurant_id', restaurantId).neq('is_active', false).order('order', { ascending: true })
       const { data: dishesData } = await supabase.from('dishes').select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, is_available, short_code, exclude_from_all_you_can_eat, is_ayce, allergens').eq('restaurant_id', restaurantId).eq('is_active', true)
       if (tableData) setTableName(tableData.number || '')
       if (restData) {

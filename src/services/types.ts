@@ -143,6 +143,7 @@ export interface Category {
     name: string
     restaurant_id: string
     order: number
+    is_active?: boolean
     created_at?: string
 }
 
