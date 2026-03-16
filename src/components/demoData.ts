@@ -157,7 +157,7 @@ export interface DemoGuideStep {
 }
 
 export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
-  // Step 0: Welcome summary page (full-screen card with all features)
+  // Step 0: Welcome
   {
     id: 'welcome',
     tab: 'orders',
@@ -168,86 +168,144 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
 
   // ORDINI
   {
-    id: 'orders-nav',
+    id: 'orders-overview',
     tab: 'orders',
-    title: 'Gestione Ordini',
-    description: 'Questa è la sezione Ordini. Ogni card è un tavolo con i suoi piatti ordinati. I colori indicano lo stato: giallo = in attesa, blu = in preparazione, verde = pronto, viola = consegnato.',
+    title: '📋 Gestione Ordini',
+    description: 'Questa è la schermata principale. Ogni card rappresenta un tavolo con i piatti ordinati dai clienti. I colori indicano lo stato: giallo = in attesa, blu = in preparazione, verde = pronto da servire, viola = consegnato al tavolo.',
+    tip: 'Clicca su un piatto per cambiare il suo stato. Quando tutti i piatti sono pronti, puoi completare l\'ordine.',
     highlightSelector: '[data-tour="orders-header"]',
   },
 
   // TAVOLI
   {
-    id: 'tables-nav',
+    id: 'tables-overview',
     tab: 'tables',
-    title: 'I Tuoi Tavoli',
-    description: 'Qui vedi tutti i tavoli. Verde = libero, ambra = occupato. Clicca su un tavolo per attivarlo, vedere il conto o liberarlo.',
+    title: '🪑 I Tuoi Tavoli',
+    description: 'La griglia mostra tutti i tavoli del ristorante. Verde = libero, ambra = occupato con clienti. Clicca su un tavolo libero per attivarlo (far sedere clienti), o su uno occupato per vedere il conto e gestire la sessione.',
+    tip: 'Puoi organizzare i tavoli in Sale (es. Sala Interna, Esterno, Terrazza) per una gestione più ordinata.',
     highlightSelector: '[data-tour="tables-header"]',
   },
   {
     id: 'tables-add',
     tab: 'tables',
-    title: 'Aggiungi Tavoli',
-    description: 'Clicca "+" per creare un nuovo tavolo. Scegli numero, posti e sala.',
+    title: '➕ Aggiungi Tavoli',
+    description: 'Clicca qui per creare un nuovo tavolo. Inserisci numero, posti a sedere e assegnalo a una sala. Puoi anche creare nuove sale direttamente dal popup.',
     highlightSelector: '[data-tour="add-table-btn"]',
   },
   {
     id: 'tables-qr',
     tab: 'tables',
-    title: 'Scarica QR Code',
-    description: 'Ogni tavolo ha un QR Code. Clicca qui per scaricare tutti i QR in PDF, stampali e mettili sui tavoli. Il cliente scansiona il QR, vede il menu e ordina dal telefono.',
+    title: '📱 QR Code Tavoli',
+    description: 'Ogni tavolo ha un QR Code unico. Scarica tutti i QR in PDF, stampali e mettili sui tavoli. Ecco come funziona: il cliente scansiona il QR → vede il tuo menu digitale sul telefono → sceglie i piatti e ordina → l\'ordine arriva automaticamente nella sezione Ordini.',
+    tip: 'Questo è il cuore di Minthi: i clienti ordinano dal telefono, tu ricevi gli ordini in tempo reale!',
     highlightSelector: '[data-tour="download-qr-btn"]',
+  },
+  {
+    id: 'tables-rooms',
+    tab: 'tables',
+    title: '🏠 Gestione Sale',
+    description: 'Organizza i tavoli in aree diverse: Sala Interna, Esterno, Terrazza, Privé. Le sale ti aiutano a gestire meglio i camerieri (ogni cameriere può servire una sala specifica) e le prenotazioni (i clienti possono scegliere la sala quando prenotano).',
+    highlightSelector: '[data-tour="rooms-btn"]',
   },
 
   // MENU
   {
-    id: 'menu-nav',
+    id: 'menu-overview',
     tab: 'menu',
-    title: 'Il Tuo Menu',
-    description: 'Qui crei il menu che i clienti vedono quando scansionano il QR. Organizza i piatti in categorie, aggiungi foto, prezzo, descrizione e allergeni.',
+    title: '🍽️ Il Tuo Menu',
+    description: 'Qui crei il menu che i clienti vedranno quando scansionano il QR del tavolo. Il menu è organizzato in categorie (Antipasti, Primi, Secondi...) e ogni piatto ha nome, prezzo, foto, descrizione e allergeni.',
     highlightSelector: '[data-tour="menu-header"]',
+  },
+  {
+    id: 'menu-categories',
+    tab: 'menu',
+    title: '📂 Gestione Categorie',
+    description: 'Le categorie organizzano il tuo menu: Antipasti, Primi Piatti, Secondi, Dolci, Bevande, ecc. Puoi creare quante categorie vuoi e riordinarle trascinando. L\'ordine delle categorie qui = ordine visibile ai clienti.',
+    highlightSelector: '[data-tour="categories-btn"]',
   },
   {
     id: 'menu-add-dish',
     tab: 'menu',
-    title: 'Aggiungi un Piatto',
-    description: 'Clicca "+" per aggiungere un nuovo piatto. Inserisci nome, prezzo, categoria, foto e allergeni.',
+    title: '🍕 Aggiungi Piatti',
+    description: 'Per ogni piatto puoi inserire: nome, prezzo, descrizione, foto, allergeni (glutine, lattosio, ecc.) e categoria. Puoi anche disattivare un piatto senza eliminarlo — utile per piatti stagionali o esauriti.',
     highlightSelector: '[data-tour="add-dish-btn"]',
+  },
+  {
+    id: 'menu-export',
+    tab: 'menu',
+    title: '📄 Esporta Menu PDF',
+    description: 'Scarica il tuo menu in formato PDF per stamparlo o condividerlo. Puoi scegliere quali categorie includere, dare un nome personalizzato al menu, e anche esportare i menu personalizzati (es. Menu Pranzo, Menu Degustazione).',
+    highlightSelector: '[data-tour="export-menu-btn"]',
   },
 
   // PRENOTAZIONI
   {
-    id: 'reservations-nav',
+    id: 'reservations-overview',
     tab: 'reservations',
-    title: 'Prenotazioni',
-    description: 'La timeline mostra le prenotazioni del giorno. Puoi confermare, rifiutare o modificarle. Attivando le prenotazioni online, i clienti prenotano dal tuo link.',
+    title: '📅 Prenotazioni',
+    description: 'La timeline mostra le prenotazioni del giorno. Puoi creare, confermare, rifiutare o modificare prenotazioni. Trascina una prenotazione per spostarla su un altro tavolo o orario.',
+    tip: 'Attivando le prenotazioni online (nelle Impostazioni), i clienti potranno prenotare direttamente dal tuo link o QR code!',
     highlightSelector: '[data-tour="reservations-header"]',
   },
 
   // ANALITICHE
   {
-    id: 'analytics-nav',
+    id: 'analytics-overview',
     tab: 'analytics',
-    title: 'Analitiche',
-    description: 'Grafici su incassi giornalieri, piatti più ordinati e ore di punta. Filtra per giorno, settimana o mese.',
+    title: '📊 Analitiche',
+    description: 'Grafici dettagliati su: incassi giornalieri/settimanali/mensili, piatti più venduti, ore di punta e numero di coperti. Puoi filtrare per periodo e scaricare il report in PDF.',
     highlightSelector: '[data-tour="analytics-header"]',
   },
 
-  // IMPOSTAZIONI
+  // IMPOSTAZIONI - ogni tab
   {
-    id: 'settings-nav',
+    id: 'settings-general',
     tab: 'settings',
-    title: 'Impostazioni',
-    description: 'Configura: nome ristorante, coperto, All You Can Eat, modalità cameriere, prenotazioni online, pagamenti Stripe e abbonamento.',
-    highlightSelector: '[data-tour="nav-settings"]',
     subTab: 'general',
+    title: '⚙️ Impostazioni Generali',
+    description: 'Configura il nome del ristorante, attiva i suoni di notifica per i nuovi ordini (4 toni diversi), abilita il "Menu Sola Lettura" (clienti vedono il menu ma non possono ordinare), e mostra i tempi medi di cottura calcolati automaticamente.',
+    highlightSelector: '[data-tour="nav-settings"]',
+  },
+  {
+    id: 'settings-costs',
+    tab: 'settings',
+    subTab: 'costs',
+    title: '💰 Costi & Menu',
+    description: 'Configura il Coperto (prezzo fisso per persona, es. €2), l\'All You Can Eat (prezzo fisso, con limite ordini per piatto), e la Suddivisione in Portate (i clienti scelgono l\'ordine delle portate: antipasto → primo → secondo). Ogni opzione ha una programmazione settimanale.',
+    highlightSelector: '[data-settings-tab="costs"]',
+  },
+  {
+    id: 'settings-staff',
+    tab: 'settings',
+    subTab: 'staff',
+    title: '👨‍🍳 Gestione Camerieri',
+    description: 'Crea username e password per ogni cameriere. Il cameriere accede dalla pagina di login del sito con le sue credenziali → vede SOLO i tavoli della sua area → può segnare i piatti come serviti e gestire i pagamenti (se abilitato). Puoi anche disattivare temporaneamente un cameriere.',
+    tip: 'I camerieri accedono dalla stessa pagina di login, usando le credenziali che crei qui.',
+    highlightSelector: '[data-settings-tab="staff"]',
+  },
+  {
+    id: 'settings-reservations',
+    tab: 'settings',
+    subTab: 'reservations',
+    title: '🗓️ Prenotazioni Online',
+    description: 'Attiva le prenotazioni via link/QR pubblico: i clienti prenotano dal telefono scegliendo data, ora e numero di persone. Configura la durata dei turni (1h-4h) e gli orari di servizio pranzo/cena. Puoi anche abilitare la scelta della sala durante la prenotazione.',
+    highlightSelector: '[data-settings-tab="reservations"]',
+  },
+  {
+    id: 'settings-payments',
+    tab: 'settings',
+    subTab: 'subscription',
+    title: '💳 Pagamenti e Abbonamento',
+    description: 'Due sezioni: 1) Pagamenti Clienti — Collega il tuo conto Stripe con Stripe Connect, i clienti potranno pagare online direttamente dal tavolo. I soldi vanno sul tuo conto bancario. 2) Abbonamento Minthi — Gestisci il tuo piano, scarica fatture, cambia metodo di pagamento.',
+    highlightSelector: '[data-settings-tab="subscription"]',
   },
 
   // FINE
   {
     id: 'end',
     tab: 'orders',
-    title: 'Demo Completata!',
-    description: 'Hai visto tutte le funzioni di Minthi. Clicca "Fine Demo" per uscire e iniziare a configurare il tuo ristorante.',
+    title: '🎉 Demo Completata!',
+    description: 'Hai visto tutte le funzioni di Minthi! Ora puoi uscire dalla demo e iniziare a configurare il tuo ristorante con la Configurazione Guidata.',
   },
 ]
 
@@ -255,6 +313,7 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
 export interface SetupStep {
   id: string
   tab: string
+  subTab?: string
   title: string
   shortDescription: string
   fullExplanation: string
@@ -268,19 +327,19 @@ export const SETUP_STEPS: SetupStep[] = [
     id: 'create-categories',
     tab: 'menu',
     title: 'Crea le Categorie',
-    shortDescription: 'Crea almeno una categoria per il menu (es. Antipasti, Primi, Dolci).',
-    actionHint: 'Clicca il pulsante "Categorie" in alto a destra, poi "Nuova Categoria".',
-    fullExplanation: 'Le categorie organizzano il tuo menu (es. Antipasti, Primi, Secondi, Dolci, Bevande). I clienti vedranno i piatti divisi per categoria.\n\nPuoi riordinarle trascinandole. L\'ordine qui = ordine nel menu cliente.',
-    highlightSelector: '[data-tour="menu-header"]',
+    shortDescription: 'Organizza il menu in categorie (es. Antipasti, Primi, Dolci, Bevande).',
+    actionHint: 'Clicca "Categorie" in alto a destra, poi "Nuova Categoria".',
+    fullExplanation: 'Le categorie organizzano il tuo menu. I clienti vedranno i piatti divisi per categoria sul loro telefono.\n\nEsempi: Antipasti, Primi Piatti, Secondi, Contorni, Dolci, Bevande, Caffetteria.\n\nPuoi riordinarle trascinandole — l\'ordine qui è l\'ordine che vedono i clienti.',
+    highlightSelector: '[data-tour="categories-btn"]',
     checkFn: ({ categoriesCount }) => categoriesCount > 0,
   },
   {
     id: 'create-dishes',
     tab: 'menu',
     title: 'Aggiungi i Piatti',
-    shortDescription: 'Aggiungi almeno un piatto con nome, prezzo e categoria.',
-    actionHint: 'Clicca il pulsante "+" arancione in alto per aggiungere un piatto.',
-    fullExplanation: 'Per ogni piatto inserisci: nome, prezzo, descrizione, categoria, foto e allergeni.\n\nPuoi disattivare un piatto senza eliminarlo (utile per piatti stagionali).',
+    shortDescription: 'Inserisci i piatti con nome, prezzo, descrizione e foto.',
+    actionHint: 'Clicca il pulsante "+" arancione per aggiungere un piatto.',
+    fullExplanation: 'Per ogni piatto puoi inserire:\n• Nome e prezzo\n• Descrizione (opzionale)\n• Foto (opzionale, consigliata!)\n• Allergeni (glutine, lattosio, ecc.)\n• Categoria\n\nPuoi disattivare un piatto senza eliminarlo — utile per piatti stagionali.',
     highlightSelector: '[data-tour="add-dish-btn"]',
     checkFn: ({ dishesCount }) => dishesCount > 0,
   },
@@ -288,20 +347,64 @@ export const SETUP_STEPS: SetupStep[] = [
     id: 'create-tables',
     tab: 'tables',
     title: 'Crea i Tavoli',
-    shortDescription: 'Aggiungi i tavoli per generare i QR Code.',
-    actionHint: 'Clicca il pulsante "+" in alto a destra per aggiungere un tavolo.',
-    fullExplanation: 'Ogni tavolo ottiene un QR Code. Stampa i QR e mettili sui tavoli.\n\nI clienti scansionano il QR → vedono il menu → ordinano dal telefono → l\'ordine arriva nella Gestione Ordini.',
+    shortDescription: 'Aggiungi i tavoli del ristorante con numero e posti.',
+    actionHint: 'Clicca "+" in alto a destra per creare un tavolo.',
+    fullExplanation: 'Ogni tavolo ottiene un QR Code unico. Stampa i QR e mettili sui tavoli.\n\nI clienti scansionano il QR → vedono il menu → ordinano dal telefono → l\'ordine arriva nella Gestione Ordini.\n\nPuoi organizzare i tavoli in Sale (Sala Interna, Esterno, ecc.).',
     highlightSelector: '[data-tour="add-table-btn"]',
     checkFn: ({ tablesCount }) => tablesCount > 0,
   },
   {
-    id: 'configure',
+    id: 'download-qr',
+    tab: 'tables',
+    title: 'Scarica i QR Code',
+    shortDescription: 'Scarica e stampa i QR Code per i tavoli.',
+    actionHint: 'Clicca il pulsante "Scarica QR" per generare il PDF con tutti i QR.',
+    fullExplanation: 'Scarica un PDF con tutti i QR Code dei tavoli (4 per pagina A4). Stampali e posizionali sui tavoli.\n\nQuando il cliente scansiona il QR:\n1. Vede il tuo menu digitale\n2. Sceglie i piatti\n3. Conferma l\'ordine\n4. Tu ricevi l\'ordine in tempo reale!',
+    highlightSelector: '[data-tour="download-qr-btn"]',
+    checkFn: () => false,
+  },
+  {
+    id: 'setup-hours',
     tab: 'settings',
-    title: 'Configura le Impostazioni',
-    shortDescription: 'Personalizza coperto, orari, camerieri e abbonamento.',
-    actionHint: 'Esplora le tab in alto: Generale, Costi & Menu, Staff, Prenotazioni, Abbonamento & Pagamenti.',
-    fullExplanation: '• Generale — Nome ristorante, suoni notifica ordini, menu sola lettura, tempi di cottura\n• Costi & Menu — Coperto (prezzo per persona) e All You Can Eat (prezzo fisso, limiti per piatto). Entrambi con programmazione settimanale.\n• Staff — Crea credenziali per i camerieri. Ogni cameriere accede dalla pagina di login con username e password, e vede solo i tavoli assegnati.\n• Prenotazioni — Attiva prenotazioni online via QR Code, imposta durata turni\n• Abbonamento & Pagamenti — Gestisci il tuo piano Minthi e attiva Stripe Connect per ricevere pagamenti digitali dai clienti',
-    highlightSelector: '[data-tour="nav-settings"]',
+    subTab: 'reservations',
+    title: 'Orari di Servizio',
+    shortDescription: 'Configura gli orari di apertura pranzo e cena.',
+    actionHint: 'Imposta gli orari nella sezione "Orari Settimanali" qui sotto.',
+    fullExplanation: 'Configura per ogni giorno:\n• Pranzo: orario apertura e chiusura\n• Cena: orario apertura e chiusura\n\nGli orari servono per:\n• Le prenotazioni online (mostra solo slot disponibili)\n• L\'applicazione automatica dei menu personalizzati\n• Il calcolo della durata dei turni',
+    highlightSelector: '[data-settings-tab="reservations"]',
+    checkFn: () => false,
+  },
+  {
+    id: 'setup-staff',
+    tab: 'settings',
+    subTab: 'staff',
+    title: 'Configura Camerieri',
+    shortDescription: 'Crea credenziali per i camerieri (opzionale).',
+    actionHint: 'Attiva la "Modalità Cameriere" e poi clicca "Aggiungi Cameriere".',
+    fullExplanation: 'I camerieri accedono dalla pagina di login con username e password.\n\nOgni cameriere:\n• Vede solo i tavoli della sua area\n• Può segnare piatti come serviti\n• Può gestire i pagamenti (se abilitato)\n\nPuoi disattivare un cameriere senza eliminarlo.',
+    highlightSelector: '[data-settings-tab="staff"]',
+    checkFn: () => false,
+  },
+  {
+    id: 'setup-costs',
+    tab: 'settings',
+    subTab: 'costs',
+    title: 'Coperto e Prezzi',
+    shortDescription: 'Imposta coperto per persona e modalità AYCE (opzionale).',
+    actionHint: 'Configura il Coperto e/o l\'All You Can Eat qui sotto.',
+    fullExplanation: '• Coperto: prezzo fisso per persona (es. €2). Si applica automaticamente quando attivi un tavolo.\n• All You Can Eat: prezzo fisso, il cliente può ordinare i piatti AYCE senza limiti (o con limiti per piatto).\n• Suddivisione Portate: i clienti scelgono l\'ordine (antipasto → primo → secondo).\n\nTutto è programmabile per giorno della settimana.',
+    highlightSelector: '[data-settings-tab="costs"]',
+    checkFn: () => false,
+  },
+  {
+    id: 'setup-payments',
+    tab: 'settings',
+    subTab: 'subscription',
+    title: 'Pagamenti Online',
+    shortDescription: 'Collega Stripe per ricevere pagamenti digitali (opzionale).',
+    actionHint: 'Clicca "Collega Account Stripe" per iniziare la configurazione.',
+    fullExplanation: 'Con Stripe Connect i tuoi clienti possono pagare online direttamente dal tavolo.\n\nCome funziona:\n1. Colleghi il tuo conto Stripe\n2. Il cliente ordina dal QR\n3. Clicca "Paga Online"\n4. I soldi vanno direttamente sul tuo conto bancario\n\nMinthi non trattiene nulla — paghi solo le commissioni Stripe standard.',
+    highlightSelector: '[data-settings-tab="subscription"]',
     checkFn: () => false,
   },
 ]

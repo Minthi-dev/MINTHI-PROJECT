@@ -57,7 +57,9 @@ import {
   Sparkle,
   DotsSixVertical,
   Tag,
-  CreditCard
+  CreditCard,
+  Camera,
+  ImageSquare
 } from '@phosphor-icons/react'
 import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -2843,7 +2845,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                 <Dialog open={showRoomDialog} onOpenChange={setShowRoomDialog}>
                   <DialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors">
+                    <Button data-tour="rooms-btn" variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors">
                       <MapPin size={16} />
                       Gestisci Sale
                     </Button>
@@ -3472,7 +3474,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog open={showExportMenuDialog} onOpenChange={setShowExportMenuDialog}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" className="border-zinc-700 hover:border-amber-500 hover:text-amber-500">
+                      <Button data-tour="export-menu-btn" variant="outline" className="border-zinc-700 hover:border-amber-500 hover:text-amber-500">
                         <DownloadSimple size={16} className="mr-2" />
                         Esporta Menu
                       </Button>
@@ -3681,11 +3683,33 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         </div>
                         <div className="space-y-2">
                           <Label>Foto Piatto</Label>
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleImageChange(e)}
-                          />
+                          {newDish.image ? (
+                            <div className="relative group rounded-xl overflow-hidden border border-zinc-800 w-full h-32">
+                              <img src={newDish.image} alt="Preview" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                <label className="cursor-pointer bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors">
+                                  <Camera size={14} /> Cambia
+                                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e)} />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (newDish.image?.startsWith('blob:')) URL.revokeObjectURL(newDish.image)
+                                    setNewDish(prev => ({ ...prev, image: '', imageFile: undefined }))
+                                  }}
+                                  className="bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                                >
+                                  <Trash size={14} /> Elimina
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer flex flex-col items-center justify-center h-28 rounded-xl border-2 border-dashed border-zinc-700 hover:border-amber-500/50 bg-zinc-900/30 hover:bg-amber-500/5 transition-all">
+                              <ImageSquare size={28} className="text-zinc-600 mb-1" />
+                              <span className="text-xs text-zinc-500">Clicca per aggiungere foto</span>
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e)} />
+                            </label>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label>Allergeni (separati da virgola)</Label>
@@ -3737,7 +3761,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button variant="outline">
+                      <Button data-tour="categories-btn" variant="outline">
                         <List size={16} className="mr-2" />
                         Categorie
                       </Button>
@@ -4391,6 +4415,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       ))}
                     </SelectContent>
                   </Select>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCreateTableDialog(false); setShowAddRoomDialog(true) }}
+                    className="text-xs text-amber-500 hover:text-amber-400 font-medium flex items-center gap-1 transition-colors"
+                  >
+                    <Plus size={12} /> Crea Nuova Sala
+                  </button>
                 </div>
                 <Button onClick={handleCreateTable} className="w-full">Crea Tavolo</Button>
               </div>
@@ -4622,13 +4653,33 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </div>
                 <div className="space-y-2">
                   <Label>Foto Piatto</Label>
-                  <div className="space-y-2">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleImageChange(e, true)}
-                    />
-                  </div>
+                  {editDishData.image ? (
+                    <div className="relative group rounded-xl overflow-hidden border border-zinc-800 w-full h-32">
+                      <img src={editDishData.image} alt="Preview" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                        <label className="cursor-pointer bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors">
+                          <Camera size={14} /> Cambia
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e, true)} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editDishData.image?.startsWith('blob:')) URL.revokeObjectURL(editDishData.image)
+                            setEditDishData(prev => ({ ...prev, image: '', imageFile: undefined }))
+                          }}
+                          className="bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                        >
+                          <Trash size={14} /> Elimina
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer flex flex-col items-center justify-center h-28 rounded-xl border-2 border-dashed border-zinc-700 hover:border-amber-500/50 bg-zinc-900/30 hover:bg-amber-500/5 transition-all">
+                      <ImageSquare size={28} className="text-zinc-600 mb-1" />
+                      <span className="text-xs text-zinc-500">Clicca per aggiungere foto</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e, true)} />
+                    </label>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Allergeni (separati da virgola)</Label>
@@ -5125,6 +5176,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           tablesCount={restaurantTables.length}
           dishesCount={restaurantDishes.length}
           categoriesCount={restaurantCategories.length}
+          setSettingsSubTab={(tab) => {
+            const trigger = document.querySelector(`[data-settings-tab="${tab}"]`) as HTMLElement
+            trigger?.click()
+          }}
         />
       )}
     </div>
