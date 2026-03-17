@@ -644,15 +644,6 @@ export function SettingsView({
                         className="space-y-6"
                     >
                         <div className="grid gap-6">
-                            {/* Spiegazione sezione */}
-                            <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4">
-                                <p className="text-sm text-amber-200/80 leading-relaxed">
-                                    <strong className="text-amber-400">Costi & Menu:</strong> Configura i costi aggiuntivi applicati automaticamente agli ordini.
-                                    L'<strong>All You Can Eat</strong> attiva una modalità a prezzo fisso dove il cliente può ordinare liberamente (puoi impostare limiti per piatto).
-                                    Il <strong>Coperto</strong> viene aggiunto automaticamente per ogni persona al tavolo. Entrambi supportano <strong>programmazione settimanale</strong> con prezzi diversi per giorno.
-                                </p>
-                            </div>
-
                             {/* All You Can Eat - Weekly Schedule */}
                             <div className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
                                 <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">

@@ -2051,9 +2051,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto min-w-[272px]">
               {[
-                { id: 'orders', label: 'Ordini', icon: Clock },
                 { id: 'tables', label: 'Tavoli', icon: MapPin },
                 { id: 'menu', label: 'Menu', icon: BookOpen },
+                { id: 'orders', label: 'Ordini', icon: Clock },
                 { id: 'reservations', label: 'Prenotazioni', icon: Calendar },
                 { id: 'analytics', label: 'Analitiche', icon: ChartBar },
               ].map((item) => (

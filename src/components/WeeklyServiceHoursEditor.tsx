@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Sun, Moon, CalendarCheck, Check, X, Clock } from '@phosphor-icons/react'
+import { Sun, Moon, CalendarCheck, Check, X, Clock, Info } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { WeeklyServiceSchedule } from '@/services/types'
 
@@ -39,6 +39,7 @@ export default function WeeklyServiceHoursEditor({
     defaultDinnerEnd = '23:00'
 }: WeeklyServiceHoursEditorProps) {
     const [showAdvanced, setShowAdvanced] = useState(schedule?.useWeeklySchedule || false)
+    const [showInfo, setShowInfo] = useState(false)
 
     const updateUseWeeklySchedule = (use: boolean) => {
         setShowAdvanced(use)
@@ -108,7 +109,12 @@ export default function WeeklyServiceHoursEditor({
                         <CalendarCheck size={24} weight="duotone" />
                     </div>
                     <div>
-                        <h3 className="text-lg font-bold text-white">Orari di Servizio</h3>
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            Orari di Servizio
+                            <button onClick={() => setShowInfo(prev => !prev)}>
+                                <Info size={18} className={`transition-colors ${showInfo ? 'text-amber-500' : 'text-zinc-500 hover:text-amber-500'}`} weight="fill" />
+                            </button>
+                        </h3>
                         <p className="text-sm text-zinc-400">
                             Gestisci i giorni di apertura e gli orari di coprifuoco ordini
                         </p>
@@ -123,6 +129,12 @@ export default function WeeklyServiceHoursEditor({
                     />
                 </div>
             </motion.div>
+
+            {showInfo && (
+                <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4 text-sm text-zinc-400 leading-relaxed">
+                    <strong className="text-amber-400">Orari di Servizio</strong> — Configura gli orari di apertura per pranzo e cena. Questi orari determinano quando i clienti possono ordinare dal QR code e quando i tavoli sono disponibili per le prenotazioni online. Con la modalità "Settimanale" puoi impostare orari diversi per ogni giorno (es. chiuso il lunedì, solo cena il martedì). Se un servizio è disattivato per un giorno, il QR code non accetterà ordini in quella fascia oraria.
+                </div>
+            )}
 
             {/* Weekly Schedule Grid */}
             <AnimatePresence>

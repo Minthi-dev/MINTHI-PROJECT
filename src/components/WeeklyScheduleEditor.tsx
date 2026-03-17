@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Sun, Moon, CalendarBlank, CurrencyEur, Check, X, Timer } from '@phosphor-icons/react'
+import { Sun, Moon, CalendarBlank, CurrencyEur, Check, X, Timer, Info } from '@phosphor-icons/react'
 import type { WeeklyCopertoSchedule, WeeklyAyceSchedule, DaySchedule, DayMealConfig } from '@/services/types'
 
 const DAYS = [
@@ -126,8 +126,13 @@ export default function WeeklyScheduleEditor({
         onChange({ ...schedule, schedule: newSchedule })
     }
 
+    const [showInfo, setShowInfo] = useState(false)
     const title = type === 'coperto' ? 'Coperto' : 'All You Can Eat'
     const icon = type === 'coperto' ? <CurrencyEur size={20} weight="duotone" /> : <CalendarBlank size={20} weight="duotone" />
+
+    const infoText = type === 'ayce'
+        ? "L'All You Can Eat attiva una modalità a prezzo fisso dove il cliente può ordinare liberamente dal menu digitale. Puoi impostare un limite massimo di ordini per tavolo e un intervallo minimo tra un ordine e l'altro. Supporta programmazione settimanale con prezzi diversi per giorno e per servizio (pranzo/cena)."
+        : "Il Coperto viene aggiunto automaticamente al conto per ogni persona al tavolo. Puoi impostare un prezzo base e, attivando la programmazione settimanale, differenziare il prezzo per giorno e servizio (pranzo/cena)."
 
     return (
         <div className="space-y-4">
@@ -141,7 +146,12 @@ export default function WeeklyScheduleEditor({
                         {icon}
                     </div>
                     <div>
-                        <h3 className="font-semibold text-white">{title}</h3>
+                        <h3 className="font-semibold text-white flex items-center gap-2">
+                            {title}
+                            <button onClick={() => setShowInfo(prev => !prev)}>
+                                <Info size={18} className={`transition-colors ${showInfo ? 'text-amber-500' : 'text-zinc-500 hover:text-amber-500'}`} weight="fill" />
+                            </button>
+                        </h3>
                         <p className="text-xs text-zinc-500">
                             {schedule.enabled ? 'Attivo' : 'Disattivato'}
                         </p>
@@ -152,6 +162,12 @@ export default function WeeklyScheduleEditor({
                     onCheckedChange={updateEnabled}
                 />
             </div>
+
+            {showInfo && (
+                <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4 text-sm text-zinc-400 leading-relaxed">
+                    <strong className="text-amber-400">{title}</strong> — {infoText}
+                </div>
+            )}
 
             {schedule.enabled && (
                 <>

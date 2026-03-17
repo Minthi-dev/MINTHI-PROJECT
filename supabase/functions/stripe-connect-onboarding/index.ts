@@ -88,10 +88,14 @@ serve(async (req) => {
 
         // Crea nuovo account Express
         try {
+            // Validate email before passing to Stripe
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const validEmail = restaurant.email && emailRegex.test(restaurant.email) ? restaurant.email : undefined;
+
             const account = await stripe.accounts.create({
                 type: "express",
                 country: "IT",
-                email: restaurant.email || undefined,
+                email: validEmail,
                 business_type: "company",
                 capabilities: {
                     card_payments: { requested: true },
