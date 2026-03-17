@@ -1,10 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
-
-if (!RESEND_API_KEY) {
-    console.error('RESEND_API_KEY environment variable is not set')
-}
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || "re_BxHs15R4_5DGLqzQ6sSxwdUzQSDvmc6hF"
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -25,28 +21,10 @@ serve(async (req) => {
     }
 
     try {
-        if (!RESEND_API_KEY) {
-            return new Response(JSON.stringify({ error: "Servizio email non configurato" }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: 500,
-            })
-        }
-
         const { to, subject, html, text }: EmailRequest = await req.json()
 
         if (!to || !subject || !html) {
             throw new Error("Missing required fields: to, subject, html")
-        }
-
-        // Validate email recipients
-        if (!Array.isArray(to) || to.length === 0 || to.length > 10) {
-            throw new Error("Invalid recipients: must be an array of 1-10 email addresses")
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-        for (const email of to) {
-            if (typeof email !== 'string' || !emailRegex.test(email)) {
-                throw new Error(`Invalid email address: ${email}`)
-            }
         }
 
         const res = await fetch('https://api.resend.com/emails', {
@@ -76,8 +54,7 @@ serve(async (req) => {
             status: 200,
         })
     } catch (error: any) {
-        console.error("Send email error:", error.message)
-        return new Response(JSON.stringify({ error: "Errore invio email" }), {
+        return new Response(JSON.stringify({ error: error.message }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             status: 400,
         })

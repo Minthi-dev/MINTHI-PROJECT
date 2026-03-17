@@ -131,7 +131,7 @@ serve(async (req) => {
         });
     } catch (error) {
         console.error("Errore stripe-manage-price:", error);
-        return new Response(JSON.stringify({ error: "Errore gestione prezzo" }), {
+        return new Response(JSON.stringify({ error: error.message }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 500,
         });
