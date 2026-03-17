@@ -159,7 +159,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             )
                         `)
                         .eq('restaurant_id', rId)
-                        .in('status', ['OPEN', 'PAID', 'CANCELLED'])
+                        .eq('status', 'OPEN')
                 ])
                 setTables(tbs)
                 setRooms(rms)
@@ -209,7 +209,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 )
             `)
             .eq('restaurant_id', restaurantId)
-            .in('status', ['OPEN', 'PAID', 'CANCELLED'])
+            .eq('status', 'OPEN')
         if (ords) setActiveOrders(ords as unknown as Order[])
     }
 
@@ -1518,43 +1518,94 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                         ) : (
                                             <div className="space-y-3">
                                                 <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Ordini attivi</h4>
-                                                {tableOrders.map(order => (
+                                                {tableOrders.map(order => {
+                                                    const items = order.items || []
+                                                    const readyCount = items.filter(i => i.status?.toUpperCase() === 'READY').length
+                                                    const servedCount = items.filter(i => i.status?.toUpperCase() === 'SERVED' || i.status?.toUpperCase() === 'DELIVERED').length
+                                                    const allReady = items.length > 0 && items.every(i => ['READY', 'SERVED', 'DELIVERED'].includes(i.status?.toUpperCase() || ''))
+                                                    const allServed = items.length > 0 && items.every(i => ['SERVED', 'DELIVERED'].includes(i.status?.toUpperCase() || ''))
+                                                    const pendingCount = items.length - servedCount
+
+                                                    return (
                                                     <div key={order.id} className="bg-zinc-900/80 border border-white/5 rounded-xl p-4">
                                                         <div className="flex justify-between items-center mb-3">
-                                                            <Badge variant="outline" className={`text-[10px] ${order.status?.toLowerCase() === 'ready' ? 'text-amber-400 border-amber-500/30' :
-                                                                order.status === 'served' ? 'text-emerald-400 border-emerald-500/30' :
+                                                            <Badge variant="outline" className={`text-[10px] ${
+                                                                allServed ? 'text-emerald-400 border-emerald-500/30' :
+                                                                readyCount > 0 ? 'text-amber-400 border-amber-500/30' :
                                                                     'text-blue-400 border-blue-500/30'
                                                                 }`}>
-                                                                {order.status?.toLowerCase() === 'ready' ? 'Pronto' :
-                                                                    order.status === 'served' ? 'Servito' :
-                                                                        order.status === 'preparing' ? 'In Preparazione' : 'In Attesa'}
+                                                                {allServed ? 'Consegnato' :
+                                                                    readyCount > 0 ? `${readyCount} Pronti` :
+                                                                        'In Preparazione'}
                                                             </Badge>
                                                             <span className="text-xs text-zinc-500">
                                                                 {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                             </span>
                                                         </div>
                                                         <div className="space-y-2">
-                                                            {order.items?.map(item => (
-                                                                <div key={item.id} className="flex justify-between items-center text-sm">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-amber-500 font-bold">{item.quantity}x</span>
-                                                                        <span className={item.status === 'served' ? 'text-zinc-500 line-through' : 'text-white'}>
+                                                            {items.map(item => {
+                                                                const isServed = ['SERVED', 'DELIVERED'].includes(item.status?.toUpperCase() || '')
+                                                                const isReady = item.status?.toUpperCase() === 'READY'
+                                                                return (
+                                                                <div key={item.id} className="flex justify-between items-center text-sm gap-2">
+                                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                        <span className={`font-bold shrink-0 ${isServed ? 'text-zinc-600' : 'text-amber-500'}`}>{item.quantity}x</span>
+                                                                        <span className={isServed ? 'text-zinc-500 line-through' : 'text-white'}>
                                                                             {item.dish?.name || 'Piatto'}
                                                                         </span>
-                                                                        {item.status?.toLowerCase() === 'ready' && (
-                                                                            <Badge className="bg-amber-500 text-black text-[8px] px-1">PRONTO</Badge>
+                                                                        {isReady && (
+                                                                            <Badge className="bg-amber-500 text-black text-[8px] px-1 shrink-0">PRONTO</Badge>
+                                                                        )}
+                                                                        {isServed && (
+                                                                            <Badge className="bg-emerald-500/15 text-emerald-400 text-[8px] px-1 shrink-0">CONSEGNATO</Badge>
                                                                         )}
                                                                     </div>
-                                                                    <span className="text-zinc-400">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
+                                                                    <div className="flex items-center gap-2 shrink-0">
+                                                                        <span className="text-zinc-400">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
+                                                                        {isReady && !isServed && (
+                                                                            <Button
+                                                                                size="sm"
+                                                                                className="h-7 w-7 p-0 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg"
+                                                                                onClick={() => handleMarkAsDelivered(order.id, item.id)}
+                                                                            >
+                                                                                <Check size={14} weight="bold" />
+                                                                            </Button>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
-                                                            ))}
+                                                                )
+                                                            })}
                                                         </div>
-                                                        <div className="mt-3 pt-3 border-t border-white/5 flex justify-between">
+                                                        <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
                                                             <span className="text-xs text-zinc-500">Subtotale</span>
                                                             <span className="text-sm font-bold text-white">€{(order.total_amount || 0).toFixed(2)}</span>
                                                         </div>
+                                                        {/* Mark all as delivered button — only show when items are READY */}
+                                                        {readyCount > 0 && (
+                                                            <Button
+                                                                size="sm"
+                                                                className="w-full mt-3 h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20"
+                                                                onClick={async () => {
+                                                                    const readyItems = items.filter(i => i.status?.toUpperCase() === 'READY')
+                                                                    const readyIds = readyItems.map(i => i.id)
+                                                                    await supabase.from('order_items').update({ status: 'SERVED' }).in('id', readyIds)
+                                                                    setActiveOrders(prev => prev.map(o => {
+                                                                        if (o.id === order.id) {
+                                                                            return { ...o, items: o.items?.map(i => readyIds.includes(i.id) ? { ...i, status: 'SERVED' } : i) }
+                                                                        }
+                                                                        return o
+                                                                    }))
+                                                                    readyIds.forEach(id => setJustDeliveredIds(prev => new Set([...prev, id])))
+                                                                    toast.success(`${readyCount} piatti segnati come consegnati`)
+                                                                }}
+                                                            >
+                                                                <Check size={16} weight="bold" className="mr-2" />
+                                                                Segna tutti come Consegnati ({readyCount})
+                                                            </Button>
+                                                        )}
                                                     </div>
-                                                ))}
+                                                    )
+                                                })}
                                             </div>
                                         )}
                                     </div>
