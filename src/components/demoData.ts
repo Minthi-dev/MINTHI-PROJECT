@@ -245,7 +245,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     title: '📅 Prenotazioni',
     description: 'La timeline mostra le prenotazioni del giorno. Puoi creare, confermare, rifiutare o modificare prenotazioni. Trascina una prenotazione per spostarla su un altro tavolo o orario.',
     tip: 'Attivando le prenotazioni online (nelle Impostazioni), i clienti potranno prenotare direttamente dal tuo link o QR code!',
-    highlightSelector: '[data-tour="reservations-header"]',
   },
 
   // ANALITICHE
@@ -254,7 +253,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     tab: 'analytics',
     title: '📊 Analitiche',
     description: 'Grafici dettagliati su: incassi giornalieri/settimanali/mensili, piatti più venduti, ore di punta e numero di coperti. Puoi filtrare per periodo e scaricare il report in PDF.',
-    highlightSelector: '[data-tour="analytics-header"]',
   },
 
   // IMPOSTAZIONI - ogni tab
@@ -264,7 +262,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     subTab: 'general',
     title: '⚙️ Impostazioni Generali',
     description: 'Configura il nome del ristorante, attiva i suoni di notifica per i nuovi ordini (4 toni diversi), abilita il "Menu Sola Lettura" (clienti vedono il menu ma non possono ordinare), e mostra i tempi medi di cottura calcolati automaticamente.',
-    highlightSelector: '[data-tour="nav-settings"]',
   },
   {
     id: 'settings-costs',
@@ -272,7 +269,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     subTab: 'costs',
     title: '💰 Costi & Menu',
     description: 'Configura il Coperto (prezzo fisso per persona, es. €2), l\'All You Can Eat (prezzo fisso, con limite ordini per piatto), e la Suddivisione in Portate (i clienti scelgono l\'ordine delle portate: antipasto → primo → secondo). Ogni opzione ha una programmazione settimanale.',
-    highlightSelector: '[data-settings-tab="costs"]',
   },
   {
     id: 'settings-staff',
@@ -281,7 +277,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     title: '👨‍🍳 Gestione Camerieri',
     description: 'Crea username e password per ogni cameriere. Il cameriere accede dalla pagina di login del sito con le sue credenziali → vede SOLO i tavoli della sua area → può segnare i piatti come serviti e gestire i pagamenti (se abilitato). Puoi anche disattivare temporaneamente un cameriere.',
     tip: 'I camerieri accedono dalla stessa pagina di login, usando le credenziali che crei qui.',
-    highlightSelector: '[data-settings-tab="staff"]',
   },
   {
     id: 'settings-reservations',
@@ -289,7 +284,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     subTab: 'reservations',
     title: '🗓️ Prenotazioni Online',
     description: 'Attiva le prenotazioni via link/QR pubblico: i clienti prenotano dal telefono scegliendo data, ora e numero di persone. Configura la durata dei turni (1h-4h) e gli orari di servizio pranzo/cena. Puoi anche abilitare la scelta della sala durante la prenotazione.',
-    highlightSelector: '[data-settings-tab="reservations"]',
   },
   {
     id: 'settings-payments',
@@ -297,7 +291,6 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     subTab: 'subscription',
     title: '💳 Pagamenti e Abbonamento',
     description: 'Due sezioni: 1) Pagamenti Clienti — Collega il tuo conto Stripe con Stripe Connect, i clienti potranno pagare online direttamente dal tavolo. I soldi vanno sul tuo conto bancario. 2) Abbonamento Minthi — Gestisci il tuo piano, scarica fatture, cambia metodo di pagamento.',
-    highlightSelector: '[data-settings-tab="subscription"]',
   },
 
   // FINE

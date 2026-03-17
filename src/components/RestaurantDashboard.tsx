@@ -3359,26 +3359,47 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
               <div className="bg-zinc-950/50 backdrop-blur-md rounded-2xl border border-white/[0.05] p-6">
                 {(() => {
+                  // Check if service hours are configured
+                  const hasConfiguredHours = weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule && Object.values(weeklyServiceHours.schedule).some((day: any) => day?.lunch?.enabled || day?.dinner?.enabled);
+
+                  if (!hasConfiguredHours) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <Clock size={48} className="text-zinc-600 mb-4" />
+                        <h3 className="text-xl font-semibold text-zinc-300 mb-2">
+                          Orari di servizio non configurati
+                        </h3>
+                        <p className="text-zinc-500 mb-6 max-w-md">
+                          Per utilizzare le prenotazioni, configura prima gli orari di servizio (pranzo e/o cena) nella sezione Impostazioni → Prenotazioni.
+                        </p>
+                        <button
+                          onClick={() => setActiveTab('settings')}
+                          className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-6 py-2.5 rounded-xl transition-colors"
+                        >
+                          Vai alle Impostazioni
+                        </button>
+                      </div>
+                    );
+                  }
+
                   const serviceSegments: { label: string; start: string; end: string }[] = [];
 
-                  if (weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule) {
-                    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                    const dayName = days[selectedDate.getDay()];
-                    const daySchedule = weeklyServiceHours.schedule[dayName];
+                  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                  const dayName = days[selectedDate.getDay()];
+                  const daySchedule = weeklyServiceHours.schedule[dayName];
 
-                    if (daySchedule) {
-                      const lunch = daySchedule.lunch;
-                      const dinner = daySchedule.dinner;
-                      if (lunch?.enabled) {
-                        serviceSegments.push({ label: 'Pranzo', start: lunch.start || lunchTimeStart || '12:00', end: lunch.end || '15:00' });
-                      }
-                      if (dinner?.enabled) {
-                        serviceSegments.push({ label: 'Cena', start: dinner.start || dinnerTimeStart || '19:00', end: dinner.end || '23:00' });
-                      }
+                  if (daySchedule) {
+                    const lunch = daySchedule.lunch;
+                    const dinner = daySchedule.dinner;
+                    if (lunch?.enabled) {
+                      serviceSegments.push({ label: 'Pranzo', start: lunch.start || lunchTimeStart || '12:00', end: lunch.end || '15:00' });
+                    }
+                    if (dinner?.enabled) {
+                      serviceSegments.push({ label: 'Cena', start: dinner.start || dinnerTimeStart || '19:00', end: dinner.end || '23:00' });
                     }
                   }
 
-                  // Fallback: single continuous range
+                  // Fallback for days without specific schedule
                   if (serviceSegments.length === 0) {
                     serviceSegments.push({ label: 'Servizio', start: lunchTimeStart || '12:00', end: '23:00' });
                   }

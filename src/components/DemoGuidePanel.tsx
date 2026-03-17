@@ -59,12 +59,11 @@ export default function DemoGuidePanel({
   // Calculate floating card position near the highlighted element
   const getCardPosition = (): React.CSSProperties => {
     if (!targetRect || !hasSpotlight) {
-      // Center the card if no target
+      // Position bottom-right so page content stays visible
       return {
         position: 'fixed',
         bottom: '24px',
-        left: '50%',
-        transform: 'translateX(-50%)',
+        right: '24px',
       }
     }
 
