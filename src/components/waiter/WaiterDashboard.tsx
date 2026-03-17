@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { motion, AnimatePresence } from 'framer-motion'
 import TableBillDialog from '../TableBillDialog'
+import { getCurrentAyceSettings } from '../../utils/pricingUtils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu' // Restored
 import { soundManager } from '../../utils/SoundManager'
 
@@ -609,7 +610,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         setTableToActivate(table)
         setActivateCustomerCount(String(table.seats || 2))
         // Derive AYCE/coperto defaults from restaurant settings
-        const ayceDefault = !!(restaurant?.all_you_can_eat?.enabled || (restaurant as any)?.ayce_enabled)
+        const ayceDefault = restaurant ? getCurrentAyceSettings(restaurant).enabled : false
         const copertoDefault = !!((restaurant?.cover_charge_per_person && restaurant.cover_charge_per_person > 0) || (restaurant as any)?.coperto_enabled)
         setActivateAyceEnabled(ayceDefault)
         setActivateCopertoEnabled(copertoDefault)
@@ -1699,7 +1700,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                 className="bg-zinc-900 border-zinc-800 h-12 text-lg text-center"
                             />
                         </div>
-                        {(restaurant?.all_you_can_eat?.enabled || (restaurant as any)?.ayce_enabled) && (
+                        {restaurant && getCurrentAyceSettings(restaurant).enabled && (
                             <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/50 border border-white/5">
                                 <div>
                                     <p className="font-medium">AYCE (All You Can Eat)</p>

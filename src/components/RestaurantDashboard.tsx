@@ -4274,7 +4274,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setWeeklyAyce(schedule)
                   if (restaurantId) {
-                    DatabaseService.updateRestaurant({ id: restaurantId, weekly_ayce: schedule })
+                    DatabaseService.updateRestaurant({
+                      id: restaurantId,
+                      weekly_ayce: schedule,
+                      all_you_can_eat: {
+                        enabled: schedule.enabled,
+                        pricePerPerson: schedule.defaultPrice || 0,
+                        maxOrders: schedule.defaultMaxOrders || 0
+                      }
+                    })
                   }
                 }}
                 weeklyServiceHours={weeklyServiceHours}
