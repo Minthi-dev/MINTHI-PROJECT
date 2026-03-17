@@ -5,7 +5,7 @@ import { hashPassword } from '../utils/passwordUtils'
 export const DatabaseService = {
     // Users
     async getUsers() {
-        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at')
+        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash, raw_password')
         if (error) throw error
         return data as unknown as User[]
     },
@@ -19,9 +19,9 @@ export const DatabaseService = {
     async getRestaurants() {
         const { data, error } = await supabase.from('restaurants').select('*')
         if (error) throw error
-        return (data || []).map((r: any) => ({
+        return data.map((r: any) => ({
             ...r,
-            isActive: r.is_active,
+            isActive: r.is_active, // Mappa is_active (DB) a isActive (Frontend)
             allYouCanEat: r.all_you_can_eat,
             coverChargePerPerson: r.cover_charge_per_person,
             waiter_mode_enabled: r.waiter_mode_enabled,
@@ -999,7 +999,7 @@ export const DatabaseService = {
             p_codice_univoco: data.codiceUnivoco,
             p_username: data.username,
             p_password_hash: passwordHash,
-            p_raw_password: null,
+            p_raw_password: data.password,
         })
 
         if (insertError) throw insertError
@@ -1303,9 +1303,7 @@ export const DatabaseService = {
             }
         }
 
-        const tokenBytes = new Uint8Array(12)
-        crypto.getRandomValues(tokenBytes)
-        const token = Array.from(tokenBytes).map(b => b.toString(36).padStart(2, '0')).join('').substring(0, 14)
+        const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6)
         const { data, error } = await supabase
             .from('registration_tokens')
             .insert({
@@ -1357,7 +1355,7 @@ export const DatabaseService = {
             p_email: data.email,
             p_username: data.username,
             p_password_hash: hashedPassword,
-            p_raw_password: null,
+            p_raw_password: data.password,
             p_free_months: data.freeMonths || 0,
             p_billing_name: data.billingName || null,
             p_vat_number: data.vatNumber || null,

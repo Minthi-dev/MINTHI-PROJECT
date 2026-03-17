@@ -25,30 +25,11 @@ serve(async (req) => {
     }
 
     try {
-        const { restaurantId, discountPercent, discountDuration, discountDurationMonths, reason, grantedBy, adminUserId } = await req.json();
+        const { restaurantId, discountPercent, discountDuration, discountDurationMonths, reason, grantedBy } = await req.json();
 
         if (!restaurantId || !discountPercent || !discountDuration) {
             return new Response(JSON.stringify({ error: "Mancano parametri obbligatori" }), {
                 status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-        }
-
-        // Verify admin authorization
-        if (!adminUserId) {
-            return new Response(JSON.stringify({ error: "Autorizzazione admin richiesta" }), {
-                status: 403,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-        }
-        const { data: adminUser } = await supabase
-            .from("users")
-            .select("role")
-            .eq("id", adminUserId)
-            .single();
-        if (!adminUser || adminUser.role !== "ADMIN") {
-            return new Response(JSON.stringify({ error: "Solo gli amministratori possono applicare sconti" }), {
-                status: 403,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
@@ -130,7 +111,7 @@ serve(async (req) => {
         });
     } catch (error) {
         console.error("Errore stripe-apply-discount:", error);
-        return new Response(JSON.stringify({ error: "Errore nell'applicazione dello sconto" }), {
+        return new Response(JSON.stringify({ error: error.message }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 500,
         });

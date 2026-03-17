@@ -398,6 +398,6 @@ serve(async (req) => {
         return new Response(JSON.stringify({ received: true }), { status: 200 });
     } catch (error) {
         console.error("[WEBHOOK] Errore generico:", error);
-        return new Response(JSON.stringify({ error: "Errore interno webhook" }), { status: 500 });
+        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
     }
 });

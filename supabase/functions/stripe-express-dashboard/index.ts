@@ -53,7 +53,7 @@ serve(async (req) => {
     } catch (error: any) {
         console.error("Error creating Express login link:", error);
         return new Response(
-            JSON.stringify({ error: "Errore creazione link dashboard" }),
+            JSON.stringify({ error: error.message || "Errore creazione link dashboard" }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
         );
     }

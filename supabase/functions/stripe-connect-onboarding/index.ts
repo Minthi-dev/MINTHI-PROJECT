@@ -135,7 +135,7 @@ serve(async (req) => {
         });
     } catch (error: any) {
         console.error("Errore Stripe Connect generico:", error.message, error.stack);
-        return new Response(JSON.stringify({ error: "Errore nella configurazione Stripe Connect" }), {
+        return new Response(JSON.stringify({ error: error.message || "Errore interno" }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 500,
         });
