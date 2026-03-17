@@ -71,6 +71,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [fatturazioneDateTo, setFatturazioneDateTo] = useState('')
   const [fatturazioneSortField, setFatturazioneSortField] = useState<'date' | 'amount' | 'restaurant'>('date')
   const [fatturazioneSortDir, setFatturazioneSortDir] = useState<'asc' | 'desc'>('desc')
+  const [fatturazionePeriod, setFatturazionePeriod] = useState<'7d' | '1w' | '2w' | '1m' | '3m' | 'custom'>('1m')
 
   // Registration Link Generator
   const [showInviteDialog, setShowInviteDialog] = useState(false)
@@ -227,6 +228,89 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     return result
   }, [restaurants, salesByRestaurant, searchQuery, sortOption])
 
+  // Period preset date range helper
+  const getPeriodDateRange = (period: typeof fatturazionePeriod): { from: Date | null; to: Date | null } => {
+    const now = new Date()
+    const to = new Date(now)
+    to.setHours(23, 59, 59, 999)
+    let from: Date | null = null
+
+    switch (period) {
+      case '7d': {
+        from = new Date(now)
+        from.setDate(from.getDate() - 7)
+        from.setHours(0, 0, 0, 0)
+        break
+      }
+      case '1w': {
+        // Last Monday to last Sunday
+        const dayOfWeek = now.getDay()
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+        from = new Date(now)
+        from.setDate(from.getDate() - diffToMonday - 7)
+        from.setHours(0, 0, 0, 0)
+        const toDate = new Date(from)
+        toDate.setDate(toDate.getDate() + 6)
+        toDate.setHours(23, 59, 59, 999)
+        return { from, to: toDate }
+      }
+      case '2w': {
+        from = new Date(now)
+        from.setDate(from.getDate() - 14)
+        from.setHours(0, 0, 0, 0)
+        break
+      }
+      case '1m': {
+        from = new Date(now)
+        from.setMonth(from.getMonth() - 1)
+        from.setHours(0, 0, 0, 0)
+        break
+      }
+      case '3m': {
+        from = new Date(now)
+        from.setMonth(from.getMonth() - 3)
+        from.setHours(0, 0, 0, 0)
+        break
+      }
+      case 'custom':
+        return { from: null, to: null }
+    }
+    return { from, to }
+  }
+
+  // Upcoming payments for active subscribers
+  const upcomingPayments = useMemo(() => {
+    const activeRestaurants = (restaurants || []).filter(r => r.stripe_subscription_id && r.isActive)
+    const upcoming = activeRestaurants.map(r => {
+      const rPayments = (subscriptionPayments || []).filter(p => p.restaurant_id === r.id && p.status === 'paid')
+      // Sort by created_at desc to get last payment
+      rPayments.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
+      const lastPayment = rPayments[0]
+      let nextDate: Date
+      if (lastPayment?.period_end) {
+        nextDate = new Date(lastPayment.period_end)
+      } else if (lastPayment?.created_at) {
+        nextDate = new Date(lastPayment.created_at)
+        nextDate.setMonth(nextDate.getMonth() + 1)
+      } else {
+        // No payment history; estimate from now
+        nextDate = new Date()
+        nextDate.setMonth(nextDate.getMonth() + 1)
+      }
+      const now = new Date()
+      const daysUntil = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      return {
+        restaurant: r,
+        nextDate,
+        daysUntil,
+        amount: lastPayment?.amount || 0
+      }
+    })
+    // Sort by closest date first
+    upcoming.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime())
+    return upcoming
+  }, [restaurants, subscriptionPayments])
+
   // Fatturazione: filtered and sorted subscription payments
   const filteredFatturazionePayments = useMemo(() => {
     let result = [...(subscriptionPayments || [])]
@@ -247,16 +331,26 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       })
     }
 
-    // Filter by date range
-    if (fatturazioneDateFrom) {
-      const from = new Date(fatturazioneDateFrom)
-      from.setHours(0, 0, 0, 0)
-      result = result.filter(p => p.created_at && new Date(p.created_at) >= from)
-    }
-    if (fatturazioneDateTo) {
-      const to = new Date(fatturazioneDateTo)
-      to.setHours(23, 59, 59, 999)
-      result = result.filter(p => p.created_at && new Date(p.created_at) <= to)
+    // Filter by date range (preset or custom)
+    if (fatturazionePeriod !== 'custom') {
+      const range = getPeriodDateRange(fatturazionePeriod)
+      if (range.from) {
+        result = result.filter(p => p.created_at && new Date(p.created_at) >= range.from!)
+      }
+      if (range.to) {
+        result = result.filter(p => p.created_at && new Date(p.created_at) <= range.to!)
+      }
+    } else {
+      if (fatturazioneDateFrom) {
+        const from = new Date(fatturazioneDateFrom)
+        from.setHours(0, 0, 0, 0)
+        result = result.filter(p => p.created_at && new Date(p.created_at) >= from)
+      }
+      if (fatturazioneDateTo) {
+        const to = new Date(fatturazioneDateTo)
+        to.setHours(23, 59, 59, 999)
+        result = result.filter(p => p.created_at && new Date(p.created_at) <= to)
+      }
     }
 
     // Sort
@@ -275,7 +369,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     })
 
     return result
-  }, [subscriptionPayments, restaurants, fatturazioneSearch, fatturazioneStatus, fatturazioneDateFrom, fatturazioneDateTo, fatturazioneSortField, fatturazioneSortDir])
+  }, [subscriptionPayments, restaurants, fatturazioneSearch, fatturazioneStatus, fatturazioneDateFrom, fatturazioneDateTo, fatturazioneSortField, fatturazioneSortDir, fatturazionePeriod])
 
   // Fatturazione summary stats
   const fatturazioneStats = useMemo(() => {
@@ -665,47 +759,113 @@ export default function AdminDashboard({ user, onLogout }: Props) {
 
             {/* ==================== FATTURAZIONE TAB ==================== */}
             {adminSubTab === 'fatturazione' && (
-              <div className="space-y-5">
-                {/* Summary Stats */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-emerald-500/10">
-                    <div className="flex items-center gap-2 mb-1">
-                      <CheckCircle size={14} className="text-emerald-500/70" weight="fill" />
-                      <p className="text-[11px] text-emerald-500/70 font-medium uppercase tracking-wider">Totale Incassato</p>
+              <div className="space-y-6">
+                {/* Summary Stats - Enhanced */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="relative p-5 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-zinc-900/80 border border-emerald-500/15 overflow-hidden group hover:border-emerald-500/25 transition-all duration-300">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full -translate-y-8 translate-x-8 group-hover:scale-150 transition-transform duration-500" />
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                        <CheckCircle size={16} className="text-emerald-400" weight="fill" />
+                      </div>
+                      <p className="text-[11px] text-emerald-400/70 font-semibold uppercase tracking-wider">Totale Incassato</p>
                     </div>
-                    <p className="text-2xl font-bold text-emerald-400">{'\u20AC'}{fatturazioneStats.totaleIncassato.toFixed(2)}</p>
+                    <p className="text-3xl font-bold text-emerald-400 tracking-tight">{'\u20AC'}{fatturazioneStats.totaleIncassato.toFixed(2)}</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/10">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Clock size={14} className="text-amber-500/70" weight="fill" />
-                      <p className="text-[11px] text-amber-500/70 font-medium uppercase tracking-wider">Pagamenti in sospeso</p>
+                  <div className="relative p-5 rounded-2xl bg-gradient-to-br from-amber-950/30 to-zinc-900/80 border border-amber-500/15 overflow-hidden group hover:border-amber-500/25 transition-all duration-300">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full -translate-y-8 translate-x-8 group-hover:scale-150 transition-transform duration-500" />
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                        <Clock size={16} className="text-amber-400" weight="fill" />
+                      </div>
+                      <p className="text-[11px] text-amber-400/70 font-semibold uppercase tracking-wider">In Sospeso</p>
                     </div>
-                    <p className="text-2xl font-bold text-amber-400">{fatturazioneStats.pagamentiInSospeso}</p>
+                    <p className="text-3xl font-bold text-amber-400 tracking-tight">{fatturazioneStats.pagamentiInSospeso}</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Receipt size={14} className="text-zinc-400" weight="fill" />
-                      <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Fatture Emesse</p>
+                  <div className="relative p-5 rounded-2xl bg-gradient-to-br from-zinc-800/40 to-zinc-900/80 border border-white/8 overflow-hidden group hover:border-white/15 transition-all duration-300">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/[0.02] rounded-full -translate-y-8 translate-x-8 group-hover:scale-150 transition-transform duration-500" />
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center">
+                        <Receipt size={16} className="text-zinc-300" weight="fill" />
+                      </div>
+                      <p className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider">Fatture Emesse</p>
                     </div>
-                    <p className="text-2xl font-bold text-white">{fatturazioneStats.fattureEmesse}</p>
+                    <p className="text-3xl font-bold text-white tracking-tight">{fatturazioneStats.fattureEmesse}</p>
                   </div>
                 </div>
 
-                {/* Filters Bar */}
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-4 rounded-xl bg-zinc-900/50 border border-white/5">
+                {/* Period Filter Presets */}
+                <div className="flex flex-col gap-3 p-4 rounded-2xl bg-zinc-900/50 border border-white/5">
+                  <div className="flex items-center gap-2">
+                    <CalendarBlank size={16} className="text-amber-400/70" weight="duotone" />
+                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Periodo</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {([
+                      { value: '7d' as const, label: 'Ultimi 7 giorni' },
+                      { value: '1w' as const, label: 'Ultima settimana' },
+                      { value: '2w' as const, label: 'Ultime 2 settimane' },
+                      { value: '1m' as const, label: 'Ultimo mese' },
+                      { value: '3m' as const, label: 'Ultimi 3 mesi' },
+                      { value: 'custom' as const, label: 'Personalizzato' },
+                    ]).map(period => (
+                      <button
+                        key={period.value}
+                        onClick={() => {
+                          setFatturazionePeriod(period.value)
+                          if (period.value !== 'custom') {
+                            setFatturazioneDateFrom('')
+                            setFatturazioneDateTo('')
+                          }
+                        }}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                          fatturazionePeriod === period.value
+                            ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20 scale-[1.02]'
+                            : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-700/60 border border-white/5'
+                        }`}
+                      >
+                        {period.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Custom date pickers - only in custom mode */}
+                  {fatturazionePeriod === 'custom' && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <CalendarBlank size={14} className="text-zinc-500 shrink-0" />
+                      <input
+                        type="date"
+                        value={fatturazioneDateFrom}
+                        onChange={(e) => setFatturazioneDateFrom(e.target.value)}
+                        className="h-9 px-3 rounded-xl bg-black/40 border border-white/8 text-sm text-zinc-300 outline-none focus:border-amber-500/40 transition-colors"
+                        title="Data da"
+                      />
+                      <ArrowRight size={14} className="text-zinc-600 shrink-0" />
+                      <input
+                        type="date"
+                        value={fatturazioneDateTo}
+                        onChange={(e) => setFatturazioneDateTo(e.target.value)}
+                        className="h-9 px-3 rounded-xl bg-black/40 border border-white/8 text-sm text-zinc-300 outline-none focus:border-amber-500/40 transition-colors"
+                        title="Data a"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Filters Bar - Search & Status */}
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-4 rounded-2xl bg-zinc-900/50 border border-white/5">
                   <div className="flex items-center gap-2 shrink-0">
                     <Funnel size={16} className="text-zinc-500" />
                     <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Filtri</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 flex-1">
                     {/* Search */}
-                    <div className="relative w-full md:w-52">
-                      <MagnifyingGlass className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                    <div className="relative w-full md:w-56">
+                      <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
                       <Input
-                        placeholder="Cerca ristorante..."
+                        placeholder="Cerca ristorante o fattura..."
                         value={fatturazioneSearch}
                         onChange={(e) => setFatturazioneSearch(e.target.value)}
-                        className="h-9 pl-8 bg-black/40 border-white/5 text-sm"
+                        className="h-9 pl-9 bg-black/40 border-white/5 text-sm rounded-xl"
                       />
                     </div>
                     {/* Status filter */}
@@ -714,11 +874,11 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         <button
                           key={status}
                           onClick={() => setFatturazioneStatus(status)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
                             fatturazioneStatus === status
-                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                              : status === 'failed' ? 'bg-red-500/15 text-red-400 border border-red-500/20'
-                              : 'bg-white text-black'
+                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 shadow-sm shadow-emerald-500/10'
+                              : status === 'failed' ? 'bg-red-500/15 text-red-400 border border-red-500/25 shadow-sm shadow-red-500/10'
+                              : 'bg-white text-black shadow-sm'
                               : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent'
                           }`}
                         >
@@ -728,38 +888,20 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         </button>
                       ))}
                     </div>
-                    {/* Date range */}
-                    <div className="flex items-center gap-1.5">
-                      <CalendarBlank size={14} className="text-zinc-500 shrink-0" />
-                      <input
-                        type="date"
-                        value={fatturazioneDateFrom}
-                        onChange={(e) => setFatturazioneDateFrom(e.target.value)}
-                        className="h-9 px-2.5 rounded-lg bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
-                        title="Data da"
-                      />
-                      <span className="text-zinc-600 text-xs">-</span>
-                      <input
-                        type="date"
-                        value={fatturazioneDateTo}
-                        onChange={(e) => setFatturazioneDateTo(e.target.value)}
-                        className="h-9 px-2.5 rounded-lg bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
-                        title="Data a"
-                      />
-                    </div>
                     {/* Clear filters */}
-                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
+                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazionePeriod !== '1m') && (
                       <button
                         onClick={() => {
                           setFatturazioneSearch('')
                           setFatturazioneStatus('all')
+                          setFatturazionePeriod('1m')
                           setFatturazioneDateFrom('')
                           setFatturazioneDateTo('')
                         }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-all"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs text-red-400 hover:bg-red-500/10 transition-all border border-red-500/10"
                       >
                         <XCircle size={14} />
-                        Cancella filtri
+                        Reset filtri
                       </button>
                     )}
                   </div>
@@ -769,16 +911,78 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-zinc-500">
                     {filteredFatturazionePayments.length} {filteredFatturazionePayments.length === 1 ? 'risultato' : 'risultati'}
-                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
+                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazionePeriod !== '1m') && (
                       <span> su {(subscriptionPayments || []).length} totali</span>
                     )}
                   </p>
                 </div>
 
-                {/* Payments Table */}
-                <div className="rounded-xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                {/* ==================== PROSSIMI PAGAMENTI ==================== */}
+                {upcomingPayments.length > 0 && (
+                  <div className="rounded-2xl bg-gradient-to-br from-blue-950/20 to-zinc-900/60 border border-blue-500/10 overflow-hidden">
+                    <div className="flex items-center gap-2.5 px-5 py-4 border-b border-blue-500/8">
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center">
+                        <CalendarBlank size={16} className="text-blue-400" weight="duotone" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Prossimi Pagamenti</h3>
+                        <p className="text-[11px] text-blue-400/60">Scadenze abbonamenti attivi</p>
+                      </div>
+                    </div>
+                    <div className="divide-y divide-blue-500/5">
+                      {upcomingPayments.map(up => (
+                        <div key={up.restaurant.id} className="flex items-center gap-3 px-5 py-3 hover:bg-white/[0.02] transition-colors">
+                          {/* Restaurant info */}
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            {up.restaurant.logo_url ? (
+                              <img src={up.restaurant.logo_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
+                                <Buildings size={14} className="text-zinc-600" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-white truncate">{up.restaurant.name}</p>
+                              <p className="text-[11px] text-zinc-500">
+                                {up.amount > 0 ? `€${up.amount.toFixed(2)}` : 'Importo da definire'}
+                              </p>
+                            </div>
+                          </div>
+                          {/* Date and urgency */}
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right">
+                              <p className="text-sm font-semibold text-zinc-300">
+                                {up.nextDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </p>
+                              <p className={`text-[11px] font-semibold ${
+                                up.daysUntil <= 0 ? 'text-red-400' :
+                                up.daysUntil <= 3 ? 'text-red-400' :
+                                up.daysUntil <= 7 ? 'text-amber-400' :
+                                'text-emerald-400/70'
+                              }`}>
+                                {up.daysUntil <= 0 ? 'Scaduto' :
+                                 up.daysUntil === 1 ? 'Domani' :
+                                 `Tra ${up.daysUntil} giorni`}
+                              </p>
+                            </div>
+                            {/* Urgency indicator */}
+                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                              up.daysUntil <= 0 ? 'bg-red-500 animate-pulse' :
+                              up.daysUntil <= 3 ? 'bg-red-500' :
+                              up.daysUntil <= 7 ? 'bg-amber-500' :
+                              'bg-emerald-500/60'
+                            }`} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Payments Table - Enhanced */}
+                <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
                   {/* Table Header */}
-                  <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-white/5 bg-black/30">
+                  <div className="grid grid-cols-12 gap-2 px-5 py-3.5 border-b border-white/5 bg-black/40">
                     <button
                       className="col-span-3 flex items-center gap-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-300 transition-colors"
                       onClick={() => { setFatturazioneSortField('restaurant'); setFatturazioneSortDir(prev => fatturazioneSortField === 'restaurant' ? (prev === 'asc' ? 'desc' : 'asc') : 'asc') }}
@@ -807,29 +1011,30 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   {/* Table Body */}
                   <div className="divide-y divide-white/[0.03]">
                     {filteredFatturazionePayments.length === 0 ? (
-                      <div className="text-center py-12 text-zinc-500 text-sm">
-                        <Receipt size={32} className="mx-auto mb-3 text-zinc-700" />
-                        Nessun pagamento trovato per i filtri selezionati.
+                      <div className="text-center py-16 text-zinc-500 text-sm">
+                        <Receipt size={36} className="mx-auto mb-3 text-zinc-700" />
+                        <p className="font-medium">Nessun pagamento trovato</p>
+                        <p className="text-xs text-zinc-600 mt-1">Prova a modificare i filtri selezionati</p>
                       </div>
                     ) : (
                       filteredFatturazionePayments.map(payment => {
                         const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
                         return (
-                          <div key={payment.id} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-white/[0.02] transition-colors items-center">
+                          <div key={payment.id} className="grid grid-cols-12 gap-2 px-5 py-3.5 hover:bg-white/[0.03] transition-all duration-200 items-center">
                             {/* Restaurant */}
-                            <div className="col-span-3 flex items-center gap-2 min-w-0">
+                            <div className="col-span-3 flex items-center gap-2.5 min-w-0">
                               {restaurant?.logo_url ? (
-                                <img src={restaurant.logo_url} alt="" className="w-7 h-7 rounded-md object-cover border border-white/10 shrink-0" />
+                                <img src={restaurant.logo_url} alt="" className="w-8 h-8 rounded-lg object-cover border border-white/10 shrink-0" />
                               ) : (
-                                <div className="w-7 h-7 rounded-md bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
-                                  <Buildings size={12} className="text-zinc-600" />
+                                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
+                                  <Buildings size={13} className="text-zinc-600" />
                                 </div>
                               )}
                               <span className="text-sm font-medium text-white truncate">{restaurant?.name || 'Sconosciuto'}</span>
                             </div>
                             {/* Amount */}
                             <div className="col-span-2">
-                              <span className={`text-sm font-semibold ${payment.status === 'paid' ? 'text-emerald-400' : payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'}`}>
+                              <span className={`text-sm font-bold ${payment.status === 'paid' ? 'text-emerald-400' : payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'}`}>
                                 {'\u20AC'}{payment.amount.toFixed(2)}
                               </span>
                             </div>
@@ -841,23 +1046,26 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             </div>
                             {/* Status */}
                             <div className="col-span-2">
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] font-semibold border px-2 py-0.5 ${
-                                  payment.status === 'paid'
-                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                                    : payment.status === 'failed'
-                                    ? 'border-red-500/20 bg-red-500/10 text-red-400'
-                                    : payment.status === 'pending'
-                                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
-                                    : 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400'
-                                }`}
-                              >
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                                payment.status === 'paid'
+                                  ? 'bg-emerald-500/12 text-emerald-400 border border-emerald-500/15'
+                                  : payment.status === 'failed'
+                                  ? 'bg-red-500/12 text-red-400 border border-red-500/15'
+                                  : payment.status === 'pending'
+                                  ? 'bg-amber-500/12 text-amber-400 border border-amber-500/15'
+                                  : 'bg-zinc-500/12 text-zinc-400 border border-zinc-500/15'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  payment.status === 'paid' ? 'bg-emerald-400' :
+                                  payment.status === 'failed' ? 'bg-red-400' :
+                                  payment.status === 'pending' ? 'bg-amber-400' :
+                                  'bg-zinc-400'
+                                }`} />
                                 {payment.status === 'paid' && 'Pagato'}
                                 {payment.status === 'failed' && 'Fallito'}
                                 {payment.status === 'pending' && 'In sospeso'}
                                 {payment.status === 'refunded' && 'Rimborsato'}
-                              </Badge>
+                              </span>
                             </div>
                             {/* Invoice Number */}
                             <div className="col-span-3">
@@ -873,22 +1081,28 @@ export default function AdminDashboard({ user, onLogout }: Props) {
 
                   {/* Table Footer - Totals for filtered results */}
                   {filteredFatturazionePayments.length > 0 && (
-                    <div className="grid grid-cols-12 gap-2 px-4 py-3 border-t border-white/5 bg-black/30">
-                      <div className="col-span-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center">
+                    <div className="grid grid-cols-12 gap-2 px-5 py-4 border-t border-white/8 bg-gradient-to-r from-zinc-900/80 to-black/40">
+                      <div className="col-span-3 text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center">
                         Totale filtrato
                       </div>
                       <div className="col-span-2">
-                        <span className="text-sm font-bold text-white">
+                        <span className="text-sm font-bold text-emerald-400">
                           {'\u20AC'}{filteredFatturazionePayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
                         </span>
                       </div>
-                      <div className="col-span-2 text-xs text-zinc-500 flex items-center">
+                      <div className="col-span-2 text-xs text-zinc-500 flex items-center font-medium">
                         {filteredFatturazionePayments.length} pagamenti
                       </div>
                       <div className="col-span-2 flex items-center gap-2">
-                        <span className="text-[10px] text-emerald-400">{filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati</span>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          {filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati
+                        </span>
                         {filteredFatturazionePayments.filter(p => p.status === 'failed').length > 0 && (
-                          <span className="text-[10px] text-red-400">{filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti</span>
+                          <span className="inline-flex items-center gap-1 text-[10px] text-red-400 font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                            {filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti
+                          </span>
                         )}
                       </div>
                       <div className="col-span-3" />
