@@ -572,23 +572,24 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         // Logic: Empty Table (markAsPaid=false) sets everything to COMPLETED/CANCELLED?
 
         try {
-            // Update orders if marking as paid
-            const sessionOrders = activeOrders.filter(o => o.table_session_id === session.id)
-            if (sessionOrders.length > 0) {
-                // If closing, we update all UNPAID orders/items
-                // Actually, handleCloseTable is "Close Session". 
-                // Using DatabaseService logic.
+            // Close ALL open orders for this session directly in DB (not just local state)
+            await supabase
+                .from('orders')
+                .update({ status: 'PAID', closed_at: new Date().toISOString() })
+                .eq('table_session_id', session.id)
+                .neq('status', 'PAID')
 
+            // Mark all order items as SERVED
+            const { data: sessionOrderIds } = await supabase
+                .from('orders')
+                .select('id')
+                .eq('table_session_id', session.id)
+            if (sessionOrderIds && sessionOrderIds.length > 0) {
                 await supabase
-                    .from('orders')
-                    .update({ status: 'PAID' })
-                    .in('id', sessionOrders.map(o => o.id))
-
-                // Also ensure items are marked if we track them individually?
-                const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
-                if (allItemIds.length > 0) {
-                    await supabase.from('order_items').update({ status: markAsPaid ? 'PAID' : 'SERVED' }).in('id', allItemIds)
-                }
+                    .from('order_items')
+                    .update({ status: 'SERVED' })
+                    .in('order_id', sessionOrderIds.map(o => o.id))
+                    .neq('status', 'SERVED')
             }
 
             // Close session
@@ -629,6 +630,21 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!restaurantId || !tableToActivate) return
         setActivatingTable(true)
         try {
+            // Find any old open sessions for this table and close their orders too
+            const { data: oldSessions } = await supabase
+                .from('table_sessions')
+                .select('id')
+                .eq('table_id', tableToActivate.id)
+                .eq('status', 'OPEN')
+            if (oldSessions && oldSessions.length > 0) {
+                const oldSessionIds = oldSessions.map(s => s.id)
+                // Close all orders from old sessions
+                await supabase
+                    .from('orders')
+                    .update({ status: 'PAID', closed_at: new Date().toISOString() })
+                    .in('table_session_id', oldSessionIds)
+                    .neq('status', 'PAID')
+            }
             await DatabaseService.closeAllOpenSessionsForTable(tableToActivate.id)
 
             const pin = Math.floor(1000 + Math.random() * 9000).toString()
@@ -1660,16 +1676,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                             onClick={async () => {
                                                 if (!confirm(`Vuoi svuotare il tavolo ${selectedTable.number}? Gli ordini attivi verranno chiusi.`)) return
                                                 try {
-                                                    const sessionOrders = activeOrders.filter(o => o.table_session_id === session.id)
-                                                    if (sessionOrders.length > 0) {
-                                                        await supabase
-                                                            .from('orders')
-                                                            .update({ status: 'PAID' })
-                                                            .in('id', sessionOrders.map(o => o.id))
-                                                        const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
-                                                        if (allItemIds.length > 0) {
-                                                            await supabase.from('order_items').update({ status: 'SERVED' }).in('id', allItemIds)
-                                                        }
+                                                    // Close all orders for this session directly in DB
+                                                    await supabase
+                                                        .from('orders')
+                                                        .update({ status: 'PAID', closed_at: new Date().toISOString() })
+                                                        .eq('table_session_id', session.id)
+                                                        .neq('status', 'PAID')
+                                                    // Mark all items as SERVED
+                                                    const { data: sOrdIds } = await supabase.from('orders').select('id').eq('table_session_id', session.id)
+                                                    if (sOrdIds && sOrdIds.length > 0) {
+                                                        await supabase.from('order_items').update({ status: 'SERVED' }).in('order_id', sOrdIds.map(o => o.id)).neq('status', 'SERVED')
                                                     }
                                                     await DatabaseService.updateSession({
                                                         ...session,
