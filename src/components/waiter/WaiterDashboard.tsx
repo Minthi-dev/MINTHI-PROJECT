@@ -174,7 +174,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             )
                         `)
                         .eq('restaurant_id', rId)
-                        .in('status', ['OPEN', 'pending', 'preparing', 'ready', 'served', 'completed', 'CANCELLED']),
+                        .in('status', ['OPEN', 'PAID', 'CANCELLED']),
                     DatabaseService.getBookings(rId).catch(() => [] as Booking[])
                 ])
                 setTables(tbs)
@@ -226,7 +226,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 )
             `)
             .eq('restaurant_id', restaurantId)
-            .in('status', ['OPEN', 'pending', 'preparing', 'ready', 'served', 'completed', 'CANCELLED'])
+            .in('status', ['OPEN', 'PAID', 'CANCELLED'])
         if (ords) setActiveOrders(ords as unknown as Order[])
     }
 
@@ -591,7 +591,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
                 await supabase
                     .from('orders')
-                    .update({ status: markAsPaid ? 'PAID' : 'completed' })
+                    .update({ status: 'PAID' })
                     .in('id', sessionOrders.map(o => o.id))
 
                 // Also ensure items are marked if we track them individually?
@@ -1720,7 +1720,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                     if (sessionOrders.length > 0) {
                                                         await supabase
                                                             .from('orders')
-                                                            .update({ status: 'completed' })
+                                                            .update({ status: 'PAID' })
                                                             .in('id', sessionOrders.map(o => o.id))
                                                         const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
                                                         if (allItemIds.length > 0) {

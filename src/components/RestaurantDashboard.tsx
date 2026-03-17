@@ -266,7 +266,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const sessionsRef = useRef<TableSession[]>(activeSessions)
   useEffect(() => { restaurantTablesRef.current = restaurantTables }, [restaurantTables])
   useEffect(() => { sessionsRef.current = activeSessions }, [activeSessions])
-  const restaurantCompletedOrders = useMemo(() => restaurantPastOrders?.filter(o => o.status === 'completed') || [], [restaurantPastOrders])
+  const restaurantCompletedOrders = useMemo(() => restaurantPastOrders?.filter(o => o.status === 'PAID') || [], [restaurantPastOrders])
 
   // Mappa piatti per categoria — evita O(categories × dishes) per render
   const dishesByCategory = useMemo(() => {
@@ -1704,7 +1704,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       )
     }
 
-    await updateOrderStatus(orderId, 'completed')
+    await updateOrderStatus(orderId, 'PAID')
     toast.success('Ordine completato e spostato nello storico')
   }
 

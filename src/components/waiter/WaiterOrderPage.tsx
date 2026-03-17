@@ -316,7 +316,7 @@ const WaiterOrderPage = () => {
                 // Determine Statuses
                 // Standard: Order=OPEN, Items=PENDING
                 // Delivered: Order=COMPLETED, Items=SERVED
-                const orderStatus = isDelivered ? 'completed' : 'OPEN'
+                const orderStatus = isDelivered ? 'PAID' : 'OPEN'
                 const itemStatus = isDelivered ? 'SERVED' : 'PENDING'
 
                 // Create Order
