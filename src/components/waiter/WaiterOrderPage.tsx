@@ -253,6 +253,8 @@ const WaiterOrderPage = () => {
                     coperto: copertoInfo.price,
                     customer_count: table.seats || 2,
                     status: 'OPEN',
+                    opened_at: new Date().toISOString(),
+                    session_pin: String(Math.floor(1000 + Math.random() * 9000)),
                     coperto_enabled: true,
                     ayce_enabled: false
                 })
@@ -342,6 +344,12 @@ const WaiterOrderPage = () => {
         }
     }
 
+    // Compute max course used in cart (for dynamic course buttons)
+    const maxUsedCourse = useMemo(() => {
+        return orderItems.reduce((max, i) => Math.max(max, i.courseNumber), 1)
+    }, [orderItems])
+    const displayCourses = Math.min(maxUsedCourse + 1, 5) // Show used + 1, max 5
+
     // Totals
     const activeItems = orderItems.filter(i => !i.delivered)
     const deliveredItemsList = orderItems.filter(i => i.delivered)
@@ -384,22 +392,15 @@ const WaiterOrderPage = () => {
                     }`}
                 onClick={() => handleAddClick(dish)}
             >
-                {/* Image */}
-                {dish.image_url?.trim() && (
-                    <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-zinc-900">
-                        <img src={dish.image_url} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                    </div>
-                )}
-
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start gap-2">
-                        <span className="font-medium text-zinc-100 text-sm leading-tight line-clamp-1">{dish.name}</span>
+                        <span className="font-medium text-zinc-100 text-sm leading-tight line-clamp-2">{dish.name}</span>
                         <span className="text-amber-500 font-bold text-sm shrink-0">€{dish.price.toFixed(2)}</span>
                     </div>
                     {dish.description && <p className="text-zinc-600 text-xs line-clamp-1 mt-0.5">{dish.description}</p>}
                     {(restaurant as any)?.show_cooking_times && cookingTimesMap[dish.id] > 0 && (
-                        <span className="text-zinc-600 text-[10px]">⏱ ~{cookingTimesMap[dish.id]}min</span>
+                        <span className="text-zinc-500 text-[11px] mt-0.5 inline-flex items-center gap-0.5">~{cookingTimesMap[dish.id]}min</span>
                     )}
                 </div>
 
@@ -564,7 +565,7 @@ const WaiterOrderPage = () => {
                                     ) : (
                                         <div className="space-y-4 pb-32">
                                             {/* Active items by course */}
-                                            {[1, 2, 3, 4, 5].map(courseNum => {
+                                            {Array.from({ length: displayCourses }, (_, i) => i + 1).map(courseNum => {
                                                 const items = activeItems.filter(i => i.courseNumber === courseNum)
                                                 if (items.length === 0) return null
                                                 return (
@@ -604,7 +605,7 @@ const WaiterOrderPage = () => {
                                                                             {/* Course buttons */}
                                                                             {restaurant?.enable_course_splitting && (
                                                                                 <div className="flex items-center gap-0.5 bg-zinc-800/50 rounded-lg p-0.5">
-                                                                                    {[1, 2, 3, 4, 5].map(cn => (
+                                                                                    {Array.from({ length: displayCourses }, (_, i) => i + 1).map(cn => (
                                                                                         <button
                                                                                             key={cn}
                                                                                             onClick={() => moveToCourse(realIndex, cn)}
