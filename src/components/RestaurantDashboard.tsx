@@ -2051,9 +2051,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto min-w-[272px]">
               {[
-                { id: 'orders', label: 'Ordini', icon: Clock },
                 { id: 'tables', label: 'Tavoli', icon: MapPin },
                 { id: 'menu', label: 'Menu', icon: BookOpen },
+                { id: 'orders', label: 'Ordini', icon: Clock },
                 { id: 'reservations', label: 'Prenotazioni', icon: Calendar },
                 { id: 'analytics', label: 'Analitiche', icon: ChartBar },
               ].map((item) => (
@@ -4253,7 +4253,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setWeeklyAyce(schedule)
                   if (restaurantId) {
-                    DatabaseService.updateRestaurant({ id: restaurantId, weekly_ayce: schedule })
+                    DatabaseService.updateRestaurant({
+                      id: restaurantId,
+                      weekly_ayce: schedule,
+                      all_you_can_eat: {
+                        enabled: schedule.enabled,
+                        pricePerPerson: schedule.defaultPrice || 0,
+                        maxOrders: schedule.defaultMaxOrders || 0
+                      }
+                    })
                   }
                 }}
                 weeklyServiceHours={weeklyServiceHours}

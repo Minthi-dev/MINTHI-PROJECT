@@ -1,22 +1,20 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { DatabaseService } from '../../services/DatabaseService'
 import { Table, Dish, Category, Restaurant } from '../../services/types'
 import { toast } from 'sonner'
-import { ArrowLeft, MagnifyingGlass, Plus, Minus, Trash, ShoppingCart, Info, CaretDown, CaretUp, CheckCircle, Warning, PencilSimple, PaperPlaneRight, Check } from '@phosphor-icons/react'
+import { ArrowLeft, MagnifyingGlass, Plus, Minus, ShoppingCart, CaretDown, CheckCircle, PencilSimple, PaperPlaneRight, ArrowCounterClockwise, X } from '@phosphor-icons/react'
 import { Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from "@/components/ui/sheet"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog"
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel } from "@/components/ui/dropdown-menu"
 import { motion, AnimatePresence } from 'framer-motion'
 import { getCurrentCopertoPrice } from '../../utils/pricingUtils'
 
@@ -26,6 +24,7 @@ interface OrderItem {
     notes: string
     courseNumber: number
     dish?: Dish
+    delivered?: boolean // NEW: track delivered state
 }
 
 const WaiterOrderPage = () => {
@@ -39,7 +38,7 @@ const WaiterOrderPage = () => {
     const [selectedCategory, setSelectedCategory] = useState<string>('all')
     const [searchQuery, setSearchQuery] = useState('')
 
-    // Order State — persisted to sessionStorage so refresh doesn't lose the cart
+    // Order State — persisted to sessionStorage
     const [orderItems, setOrderItems] = useState<OrderItem[]>(() => {
         if (!tableId) return []
         try {
@@ -49,34 +48,34 @@ const WaiterOrderPage = () => {
             return []
         }
     })
-    const [activeCourse, setActiveCourse] = useState(1) // Legacy fallback
     const [isCartOpen, setIsCartOpen] = useState(false)
     const [submitting, setSubmitting] = useState(false)
 
-    // Course Selection Modal State
-    const [showCourseSelectionModal, setShowCourseSelectionModal] = useState(false)
-    const [pendingDishToAdd, setPendingDishToAdd] = useState<{ dish: Dish, quantity: number, notes: string, isFromDetail: boolean } | null>(null)
+    // Course Selection Modal
+    const [showCourseModal, setShowCourseModal] = useState(false)
+    const [pendingDish, setPendingDish] = useState<{ dish: Dish, quantity: number, notes: string, fromDetail: boolean } | null>(null)
     const [maxCourse, setMaxCourse] = useState(2)
 
-    // Confirmation Dialog State
+    // Confirmation Dialog
     const [showConfirmDialog, setShowConfirmDialog] = useState(false)
     const [confirmActionType, setConfirmActionType] = useState<'standard' | 'delivered'>('standard')
-    const [itemToMarkDelivered, setItemToMarkDelivered] = useState<number | null>(null)
+
+    // Dish Detail
+    const [selectedDishForDetail, setSelectedDishForDetail] = useState<Dish | null>(null)
+    const [detailQuantity, setDetailQuantity] = useState(1)
+    const [detailNotes, setDetailNotes] = useState('')
 
     // Cooking times
     const [cookingTimesMap, setCookingTimesMap] = useState<Record<string, number>>({})
 
-    // Refs for scrolling
     const categoryScrollRef = useRef<HTMLDivElement>(null)
 
-    // Fetch Initial Data
+    // Fetch data
     useEffect(() => {
         const init = async () => {
             if (!tableId) return
             try {
                 setLoading(true)
-
-                // Fetch Table & Restaurant
                 const { data: tableData } = await supabase
                     .from('tables')
                     .select('*, restaurants(*)')
@@ -86,23 +85,17 @@ const WaiterOrderPage = () => {
                 if (!tableData) throw new Error('Tavolo non trovato')
 
                 setTable(tableData)
-                // Fix: Handle potentially array or single object for joined resource
                 const rest = Array.isArray(tableData.restaurants) ? tableData.restaurants[0] : tableData.restaurants
                 setRestaurant(rest)
 
                 const restaurantId = tableData.restaurant_id || rest?.id
-
                 if (restaurantId) {
-                    // Fetch Categories
                     const cats = await DatabaseService.getCategories(restaurantId)
-                    setCategories(cats)
+                    setCategories(cats.filter((c: Category) => c.is_active !== false))
 
-                    // Fetch Dishes
                     const allDishes = await DatabaseService.getDishes(restaurantId)
-                    // Relaxed filter: show providing is_available is not explicitly false
                     setDishes(allDishes.filter(d => d.is_available !== false))
 
-                    // Fetch cooking times if enabled
                     if ((rest as any)?.show_cooking_times) {
                         const { data: timesData } = await supabase.rpc('get_dish_avg_cooking_times', { p_restaurant_id: restaurantId })
                         if (timesData) {
@@ -114,7 +107,6 @@ const WaiterOrderPage = () => {
                         }
                     }
                 }
-
             } catch (error) {
                 console.error('Error init:', error)
                 toast.error('Errore caricamento dati')
@@ -126,7 +118,7 @@ const WaiterOrderPage = () => {
         init()
     }, [tableId, navigate])
 
-    // Filter Dishes
+    // Filter dishes
     const filteredDishes = useMemo(() => {
         return dishes.filter(dish => {
             const matchesSearch = dish.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -136,139 +128,108 @@ const WaiterOrderPage = () => {
         })
     }, [dishes, searchQuery, selectedCategory])
 
-    // Cart Logic
-    const handleAddClick = (dish: Dish, quantity: number = 1, notes: string = '', isFromDetail: boolean = false) => {
-        if (restaurant?.enable_course_splitting) {
-            setPendingDishToAdd({ dish, quantity, notes, isFromDetail })
-            if (maxCourse < 2) setMaxCourse(2)
-            setShowCourseSelectionModal(true)
-        } else {
-            performAddToOrder(dish, quantity, notes, 1, isFromDetail)
+    // Group dishes by category for display
+    const groupedDishes = useMemo(() => {
+        if (selectedCategory !== 'all') return null // No grouping when filtered
+        const groups: { category: Category; dishes: Dish[] }[] = []
+        for (const cat of categories) {
+            const catDishes = filteredDishes.filter(d => d.category_id === cat.id)
+            if (catDishes.length > 0) groups.push({ category: cat, dishes: catDishes })
         }
-    }
+        // Uncategorized
+        const uncategorized = filteredDishes.filter(d => !categories.find(c => c.id === d.category_id))
+        if (uncategorized.length > 0) groups.push({ category: { id: 'other', name: 'Altro', position: 999 } as Category, dishes: uncategorized })
+        return groups
+    }, [filteredDishes, categories, selectedCategory])
 
-    const performAddToOrder = (dish: Dish, quantity: number, notes: string, courseNum: number, isFromDetail: boolean) => {
+    // Add dish
+    const handleAddClick = useCallback((dish: Dish, quantity: number = 1, notes: string = '', fromDetail: boolean = false) => {
+        if (restaurant?.enable_course_splitting) {
+            setPendingDish({ dish, quantity, notes, fromDetail })
+            if (maxCourse < 2) setMaxCourse(2)
+            setShowCourseModal(true)
+        } else {
+            performAddToOrder(dish, quantity, notes, 1, fromDetail)
+        }
+    }, [restaurant, maxCourse])
+
+    const performAddToOrder = useCallback((dish: Dish, quantity: number, notes: string, courseNum: number, fromDetail: boolean) => {
         setOrderItems(prev => {
             if (notes) {
-                const exactMatch = prev.find(i => i.dishId === dish.id && i.courseNumber === courseNum && i.notes === notes)
-                if (exactMatch) {
-                    return prev.map(i => i === exactMatch ? { ...i, quantity: i.quantity + quantity } : i)
-                }
+                const match = prev.find(i => i.dishId === dish.id && i.courseNumber === courseNum && i.notes === notes && !i.delivered)
+                if (match) return prev.map(i => i === match ? { ...i, quantity: i.quantity + quantity } : i)
                 return [...prev, { dishId: dish.id, quantity, notes, courseNumber: courseNum, dish }]
             } else {
-                const existing = prev.find(i => i.dishId === dish.id && i.courseNumber === courseNum && !i.notes)
-                if (existing) {
-                    return prev.map(i => i === existing ? { ...i, quantity: i.quantity + quantity } : i)
-                }
+                const existing = prev.find(i => i.dishId === dish.id && i.courseNumber === courseNum && !i.notes && !i.delivered)
+                if (existing) return prev.map(i => i === existing ? { ...i, quantity: i.quantity + quantity } : i)
                 return [...prev, { dishId: dish.id, quantity, notes: '', courseNumber: courseNum, dish }]
             }
         })
 
-        toast.success(`Aggiunto: ${dish.name}${notes ? ' (con note)' : ''}`, { duration: 1500, position: 'top-center' })
+        toast.success(`+ ${dish.name}`, { duration: 1200, position: 'top-center' })
 
-        if (isFromDetail) {
-            setSelectedDishForDetail(null)
-        }
-        setShowCourseSelectionModal(false)
-        setPendingDishToAdd(null)
-    }
+        if (fromDetail) setSelectedDishForDetail(null)
+        setShowCourseModal(false)
+        setPendingDish(null)
+    }, [])
 
-    const updateQuantity = (index: number, delta: number) => {
+    const updateQuantity = useCallback((index: number, delta: number) => {
         setOrderItems(prev => {
             const newItems = [...prev]
             const item = newItems[index]
             const newQty = item.quantity + delta
-
-            if (newQty <= 0) {
-                return newItems.filter((_, i) => i !== index)
-            }
-
+            if (newQty <= 0) return newItems.filter((_, i) => i !== index)
             newItems[index] = { ...item, quantity: newQty }
             return newItems
         })
-    }
+    }, [])
 
-    const updateNote = (index: number, note: string) => {
+    const updateNote = useCallback((index: number, note: string) => {
         setOrderItems(prev => prev.map((item, i) => i === index ? { ...item, notes: note } : item))
-    }
+    }, [])
 
-    const moveToCourse = (index: number, courseNum: number) => {
+    const moveToCourse = useCallback((index: number, courseNum: number) => {
         setOrderItems(prev => prev.map((item, i) => i === index ? { ...item, courseNumber: courseNum } : item))
-    }
+    }, [])
 
-    // Persist cart to sessionStorage on every change
+    // Mark as delivered (keep in cart but transparent)
+    const markAsDelivered = useCallback((index: number) => {
+        setOrderItems(prev => prev.map((item, i) => i === index ? { ...item, delivered: true } : item))
+        toast.success('Segnato come consegnato', { duration: 1500 })
+    }, [])
+
+    // Undo delivered
+    const undoDelivered = useCallback((index: number) => {
+        setOrderItems(prev => prev.map((item, i) => i === index ? { ...item, delivered: false } : item))
+    }, [])
+
+    // Remove item completely
+    const removeItem = useCallback((index: number) => {
+        setOrderItems(prev => prev.filter((_, i) => i !== index))
+    }, [])
+
+    // Persist cart
     useEffect(() => {
         if (tableId) {
             sessionStorage.setItem(`waiter-cart-${tableId}`, JSON.stringify(orderItems))
         }
     }, [orderItems, tableId])
 
-    // Mark a single cart item as already delivered without sending the whole cart
-    const handleMarkSingleItemDelivered = async (index: number) => {
-        const item = orderItems[index]
-        if (!item || !table || !restaurant) return
-
-        try {
-            // Find or create session
-            const { data: sessionData } = await supabase
-                .from('table_sessions')
-                .select('id')
-                .eq('table_id', table.id)
-                .eq('status', 'OPEN')
-                .single()
-
-            let sessionId = sessionData?.id
-
-            if (!sessionId) {
-                const newSession = await DatabaseService.createSession({
-                    table_id: table.id,
-                    restaurant_id: restaurant.id,
-                    status: 'OPEN',
-                    customer_count: table.seats || 2,
-                })
-                sessionId = newSession.id
-            }
-
-            const { data: orderData, error: orderError } = await supabase
-                .from('orders')
-                .insert({
-                    table_session_id: sessionId,
-                    restaurant_id: restaurant.id,
-                    status: 'OPEN',
-                    total_amount: (item.dish?.price || 0) * item.quantity
-                })
-                .select()
-                .single()
-
-            if (orderError) throw orderError
-
-            await supabase.from('order_items').insert({
-                order_id: orderData.id,
-                dish_id: item.dishId,
-                quantity: item.quantity,
-                note: item.notes || null,
-                status: 'SERVED',
-                course_number: item.courseNumber,
-            })
-
-            // Remove from cart
-            updateQuantity(index, -item.quantity)
-            toast.success(`${item.dish?.name || 'Piatto'} segnato come già servito`)
-        } catch (error) {
-            console.error('Error marking item as delivered:', error)
-            toast.error('Errore nel segnare il piatto come servito')
-        }
-    }
-
-    // Submit Order Handling
+    // Submit
     const handlePreSubmit = (type: 'standard' | 'delivered') => {
-        if (orderItems.length === 0) return
+        const activeItems = orderItems.filter(i => !i.delivered)
+        if (activeItems.length === 0) {
+            toast.error('Nessun piatto da inviare')
+            return
+        }
         setConfirmActionType(type)
         setShowConfirmDialog(true)
     }
 
     const processOrderSubmission = async () => {
-        if (orderItems.length === 0) return
+        const activeItems = orderItems.filter(i => !i.delivered)
+        const deliveredItems = orderItems.filter(i => i.delivered)
+        if (activeItems.length === 0) return
         if (!table || !restaurant) return
 
         setShowConfirmDialog(false)
@@ -277,47 +238,38 @@ const WaiterOrderPage = () => {
         try {
             setSubmitting(true)
 
-            // Get or Create Session
             const activeSession = await DatabaseService.getActiveSession(table.id)
             let sessionId = activeSession?.id
 
             if (!sessionId) {
-                // Determine cover charge using utility to respect weekly schedule
                 const copertoInfo = getCurrentCopertoPrice(
                     restaurant,
                     restaurant.lunch_time_start || '12:00',
                     restaurant.dinner_time_start || '19:00'
                 )
-
-                // Create session with minimal required data AND correct flags
                 const newSession = await DatabaseService.createSession({
                     table_id: table.id,
                     restaurant_id: restaurant.id,
-                    coperto: copertoInfo.price, // Use calculated price
-                    customer_count: table.seats || 2, // Default if unknown
+                    coperto: copertoInfo.price,
+                    customer_count: table.seats || 2,
                     status: 'OPEN',
-                    coperto_enabled: true, // Default enabled for waiter sessions
-                    ayce_enabled: false // Default disabled for waiter sessions (can be changed in table detail usually)
+                    coperto_enabled: true,
+                    ayce_enabled: false
                 })
-
                 if (!newSession) throw new Error("Errore creazione sessione")
                 sessionId = newSession.id
             }
 
-            // Group by Course
-            const courses = [...new Set(orderItems.map(i => i.courseNumber))].sort((a, b) => a - b)
+            // Submit active (non-delivered) items grouped by course
+            const courses = [...new Set(activeItems.map(i => i.courseNumber))].sort((a, b) => a - b)
 
             for (const courseNum of courses) {
-                const itemsInCourse = orderItems.filter(i => i.courseNumber === courseNum)
+                const itemsInCourse = activeItems.filter(i => i.courseNumber === courseNum)
                 const totalAmount = itemsInCourse.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
 
-                // Determine Statuses
-                // Standard: Order=OPEN, Items=PENDING
-                // Delivered: Order=COMPLETED, Items=SERVED
                 const orderStatus = isDelivered ? 'completed' : 'OPEN'
                 const itemStatus = isDelivered ? 'SERVED' : 'PENDING'
 
-                // Create Order
                 const { data: orderData, error: orderError } = await supabase
                     .from('orders')
                     .insert({
@@ -331,7 +283,6 @@ const WaiterOrderPage = () => {
 
                 if (orderError) throw orderError
 
-                // Create Order Items
                 const dbItems = itemsInCourse.map(item => ({
                     order_id: orderData.id,
                     dish_id: item.dishId,
@@ -341,33 +292,62 @@ const WaiterOrderPage = () => {
                     course_number: courseNum,
                 }))
 
-                const { error: itemsError } = await supabase
-                    .from('order_items')
-                    .insert(dbItems)
-
+                const { error: itemsError } = await supabase.from('order_items').insert(dbItems)
                 if (itemsError) throw itemsError
+            }
+
+            // Also submit delivered items as SERVED
+            if (deliveredItems.length > 0) {
+                const deliveredCourses = [...new Set(deliveredItems.map(i => i.courseNumber))].sort((a, b) => a - b)
+                for (const courseNum of deliveredCourses) {
+                    const itemsInCourse = deliveredItems.filter(i => i.courseNumber === courseNum)
+                    const totalAmount = itemsInCourse.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
+
+                    const { data: orderData, error: orderError } = await supabase
+                        .from('orders')
+                        .insert({
+                            table_session_id: sessionId,
+                            restaurant_id: restaurant.id,
+                            status: 'completed',
+                            total_amount: totalAmount
+                        })
+                        .select()
+                        .single()
+
+                    if (orderError) throw orderError
+
+                    const dbItems = itemsInCourse.map(item => ({
+                        order_id: orderData.id,
+                        dish_id: item.dishId,
+                        quantity: item.quantity,
+                        note: item.notes || null,
+                        status: 'SERVED',
+                        course_number: courseNum,
+                    }))
+
+                    const { error: itemsError } = await supabase.from('order_items').insert(dbItems)
+                    if (itemsError) throw itemsError
+                }
             }
 
             toast.success(isDelivered ? 'Ordine segnato come consegnato!' : 'Ordine inviato in cucina!')
             if (tableId) sessionStorage.removeItem(`waiter-cart-${tableId}`)
-            navigate('/waiter') // Return to dashboard
+            navigate('/waiter')
 
         } catch (error) {
             console.error('Submit error:', error)
-            toast.error("Errore nell'invio dell'ordine: " + (error as any)?.message)
+            toast.error("Errore nell'invio: " + (error as any)?.message)
         } finally {
             setSubmitting(false)
         }
     }
 
     // Totals
-    const totalAmount = orderItems.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
-    const totalItems = orderItems.reduce((sum, item) => sum + item.quantity, 0)
-
-    // Dish Detail Dialog State
-    const [selectedDishForDetail, setSelectedDishForDetail] = useState<Dish | null>(null)
-    const [detailQuantity, setDetailQuantity] = useState(1)
-    const [detailNotes, setDetailNotes] = useState('')
+    const activeItems = orderItems.filter(i => !i.delivered)
+    const deliveredItemsList = orderItems.filter(i => i.delivered)
+    const totalAmount = activeItems.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
+    const totalItems = activeItems.reduce((sum, item) => sum + item.quantity, 0)
+    const totalDelivered = deliveredItemsList.reduce((sum, item) => sum + item.quantity, 0)
 
     const openDishDetail = (dish: Dish, e: React.MouseEvent) => {
         e.stopPropagation()
@@ -381,308 +361,339 @@ const WaiterOrderPage = () => {
         handleAddClick(selectedDishForDetail, detailQuantity, detailNotes, true)
     }
 
+    // Get qty in cart for a dish
+    const getCartQty = useCallback((dishId: string) => {
+        return orderItems.filter(i => i.dishId === dishId && !i.delivered).reduce((sum, i) => sum + i.quantity, 0)
+    }, [orderItems])
+
     if (loading) return (
-        <div className="min-h-[100dvh] bg-zinc-950 flex items-center justify-center text-amber-500">
-            <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-                <p className="text-xs uppercase tracking-widest font-medium">Caricamento Menù...</p>
-            </div>
+        <div className="min-h-[100dvh] bg-zinc-950 flex items-center justify-center">
+            <div className="w-7 h-7 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
         </div>
     )
 
-    return (
-        <div className="min-h-[100dvh] bg-zinc-950 text-foreground flex flex-col pb-24">
-            {/* 1. Header Fissa */}
-            <header className="fixed top-0 left-0 right-0 h-16 bg-zinc-950/90 backdrop-blur-md border-b border-white/5 z-40 flex items-center justify-between px-4">
-                <div className="flex items-center gap-3">
-                    <Button variant="ghost" size="icon" onClick={() => navigate('/waiter')} className="text-zinc-400 hover:text-white hover:bg-white/5 -ml-2">
-                        <ArrowLeft size={24} />
-                    </Button>
-                    <div>
-                        <h1 className="text-lg font-bold text-white leading-none">Tavolo {table?.number}</h1>
-                        <p className="text-xs text-zinc-500 font-medium">{restaurant?.name}</p>
+    // Render a dish card
+    const renderDishCard = (dish: Dish) => {
+        const qty = getCartQty(dish.id)
+        return (
+            <div
+                key={dish.id}
+                className={`flex items-center gap-3 p-2.5 rounded-xl border transition-colors touch-manipulation ${qty > 0
+                    ? 'bg-amber-500/5 border-amber-500/20'
+                    : 'bg-zinc-900/30 border-zinc-800/50 active:bg-zinc-800/50'
+                    }`}
+                onClick={() => handleAddClick(dish)}
+            >
+                {/* Image */}
+                {dish.image_url?.trim() && (
+                    <div className="shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-zinc-900">
+                        <img src={dish.image_url} alt="" className="w-full h-full object-cover" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                     </div>
+                )}
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start gap-2">
+                        <span className="font-medium text-zinc-100 text-sm leading-tight line-clamp-1">{dish.name}</span>
+                        <span className="text-amber-500 font-bold text-sm shrink-0">€{dish.price.toFixed(2)}</span>
+                    </div>
+                    {dish.description && <p className="text-zinc-600 text-xs line-clamp-1 mt-0.5">{dish.description}</p>}
+                    {(restaurant as any)?.show_cooking_times && cookingTimesMap[dish.id] > 0 && (
+                        <span className="text-zinc-600 text-[10px]">⏱ ~{cookingTimesMap[dish.id]}min</span>
+                    )}
                 </div>
 
-                {/* Search Toggle (Mobile) or Input (Desktop) */}
-                <div className="relative w-48 hidden md:block">
-                    <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" />
+                {/* Actions */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                    {qty > 0 && (
+                        <span className="w-6 h-6 rounded-full bg-amber-500 text-black text-xs font-bold flex items-center justify-center">{qty}</span>
+                    )}
+                    <button
+                        className="w-9 h-9 rounded-lg flex items-center justify-center text-zinc-500 hover:text-amber-400 active:scale-90 transition-all"
+                        onClick={(e) => openDishDetail(dish, e)}
+                    >
+                        <PencilSimple weight="bold" size={15} />
+                    </button>
+                    <button
+                        className="w-9 h-9 rounded-lg flex items-center justify-center bg-amber-500/10 text-amber-500 active:scale-90 active:bg-amber-500/20 transition-all"
+                        onClick={(e) => { e.stopPropagation(); handleAddClick(dish) }}
+                    >
+                        <Plus weight="bold" size={17} />
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <div className="min-h-[100dvh] bg-zinc-950 text-foreground flex flex-col">
+            {/* Header */}
+            <header className="fixed top-0 left-0 right-0 h-14 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/50 z-40 flex items-center justify-between px-3">
+                <div className="flex items-center gap-2">
+                    <button onClick={() => navigate('/waiter')} className="w-9 h-9 rounded-lg flex items-center justify-center text-zinc-400 hover:text-white active:scale-95">
+                        <ArrowLeft size={22} />
+                    </button>
+                    <div>
+                        <h1 className="text-base font-bold text-white leading-none">Tavolo {table?.number}</h1>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{restaurant?.name}</p>
+                    </div>
+                </div>
+                <div className="relative w-44 hidden md:block">
+                    <MagnifyingGlass className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 w-3.5 h-3.5" />
                     <Input
-                        placeholder="Cerca piatto..."
+                        placeholder="Cerca..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 h-9 bg-zinc-900 border-zinc-800 text-sm rounded-full focus:ring-amber-500/50"
+                        className="pl-8 h-8 bg-zinc-900 border-zinc-800 text-xs rounded-lg"
                     />
                 </div>
             </header>
 
-            {/* 2. Course & Category Sticky Navigation */}
-            <div className="fixed top-16 left-0 right-0 z-30 bg-zinc-950 border-b border-white/5 shadow-2xl shadow-black/50">
-
-                {/* Horizontal Category Scroll */}
-                <ScrollArea className="w-full whitespace-nowrap bg-zinc-950">
-                    <div className="flex p-2 px-4 gap-2" ref={categoryScrollRef}>
-                        <Button
-                            variant="ghost"
-                            size="sm"
+            {/* Category Bar */}
+            <div className="fixed top-14 left-0 right-0 z-30 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/50">
+                <ScrollArea className="w-full whitespace-nowrap">
+                    <div className="flex p-2 px-3 gap-1.5" ref={categoryScrollRef}>
+                        <button
                             onClick={() => setSelectedCategory('all')}
-                            className={`rounded-full border transition-all h-8 px-4 text-xs font-medium ${selectedCategory === 'all'
-                                ? 'bg-white text-black border-white'
-                                : 'bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600'
+                            className={`rounded-full h-7 px-3.5 text-xs font-medium transition-colors shrink-0 ${selectedCategory === 'all'
+                                ? 'bg-white text-black'
+                                : 'bg-zinc-900 text-zinc-400 active:bg-zinc-800'
                                 }`}
                         >
                             Tutti
-                        </Button>
+                        </button>
                         {categories.map(cat => (
-                            <Button
+                            <button
                                 key={cat.id}
-                                variant="ghost"
-                                size="sm"
                                 onClick={() => setSelectedCategory(cat.id)}
-                                className={`rounded-full border transition-all h-8 px-4 text-xs font-medium ${selectedCategory === cat.id
-                                    ? 'bg-amber-500 text-black border-amber-500'
-                                    : 'bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600'
+                                className={`rounded-full h-7 px-3.5 text-xs font-medium transition-colors shrink-0 ${selectedCategory === cat.id
+                                    ? 'bg-amber-500 text-black'
+                                    : 'bg-zinc-900 text-zinc-400 active:bg-zinc-800'
                                     }`}
                             >
                                 {cat.name}
-                            </Button>
+                            </button>
                         ))}
                     </div>
                     <ScrollBar orientation="horizontal" className="h-0" />
                 </ScrollArea>
 
-                {/* Mobile Search Bar (if filtered) */}
-                <div className="md:hidden px-4 pb-2">
+                {/* Mobile Search */}
+                <div className="md:hidden px-3 pb-2">
                     <div className="relative">
-                        <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" />
+                        <MagnifyingGlass className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 w-3.5 h-3.5" />
                         <Input
                             placeholder="Cerca piatto o codice..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 h-9 bg-zinc-900 border-zinc-800 text-sm rounded-xl focus:ring-amber-500/50"
+                            className="pl-8 h-8 bg-zinc-900 border-zinc-800 text-xs rounded-lg"
                         />
                     </div>
                 </div>
             </div>
 
-            {/* 3. Main Content - Dish List - Spaced for fixed headers */}
-            <main className="flex-1 pt-[230px] sm:pt-[260px] px-3 sm:px-4 space-y-2.5 max-w-2xl mx-auto w-full">
+            {/* Dish List */}
+            <main className={`flex-1 pt-[140px] md:pt-[120px] px-3 max-w-2xl mx-auto w-full ${totalItems > 0 ? 'pb-24' : 'pb-6'}`}>
                 {filteredDishes.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-zinc-600">
-                        <Info size={48} className="mb-4 opacity-20" />
-                        <p>Nessun piatto trovato</p>
+                        <MagnifyingGlass size={40} className="mb-3 opacity-20" />
+                        <p className="text-sm">Nessun piatto trovato</p>
+                    </div>
+                ) : groupedDishes ? (
+                    // Grouped by category
+                    <div className="space-y-4">
+                        {groupedDishes.map(group => (
+                            <div key={group.category.id}>
+                                <h2 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2 px-1">{group.category.name}</h2>
+                                <div className="space-y-1.5">
+                                    {group.dishes.map(dish => renderDishCard(dish))}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 ) : (
-                    filteredDishes.map(dish => {
-                        const qtyInCurrentCourse = orderItems.find(i => i.dishId === dish.id && i.courseNumber === activeCourse)?.quantity || 0
-                        return (
-                            <motion.div
-                                key={dish.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className={`relative flex items-center gap-4 p-3 rounded-2xl border transition-all active:scale-[0.99] touch-manipulation cursor-pointer ${qtyInCurrentCourse > 0
-                                    ? 'bg-amber-500/5 border-amber-500/30 shadow-lg shadow-amber-500/5'
-                                    : 'bg-zinc-900/40 border-white/5 hover:border-white/10'
-                                    }`}
-                                onClick={() => handleAddClick(dish)}
-                            >
-                                {/* Image */}
-                                {dish.image_url?.trim() && (
-                                <div className="shrink-0 w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden bg-zinc-900 border border-white/5 relative">
-                                    <img src={dish.image_url} alt={dish.name} className="w-full h-full object-cover" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
-                                </div>
-                                )}
-
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex justify-between items-start">
-                                        <h3 className="font-medium text-zinc-100 text-sm line-clamp-2 leading-tight pr-2">{dish.name}</h3>
-                                        <span className="text-amber-500 font-bold text-sm whitespace-nowrap">€{dish.price.toFixed(2)}</span>
-                                    </div>
-                                    <p className="text-zinc-500 text-xs line-clamp-1 mt-0.5">{dish.description}</p>
-                                    {(restaurant as any)?.show_cooking_times && cookingTimesMap[dish.id] != null && cookingTimesMap[dish.id] > 0 && (
-                                        <p className="text-zinc-500 text-xs mt-0.5 flex items-center gap-1">
-                                            <span>⏱</span>~{cookingTimesMap[dish.id]} min
-                                        </p>
-                                    )}
-                                    {dish.allergens && dish.allergens.length > 0 && (
-                                        <div className="flex gap-1 mt-1.5 overflow-hidden">
-                                            {dish.allergens.map(a => (
-                                                <span key={a} className="text-[9px] uppercase font-bold text-zinc-600 bg-zinc-900 px-1 rounded">{a.slice(0, 3)}</span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Add/Edit Buttons — larger for touch */}
-                                <div className="flex flex-col gap-1.5">
-                                    {/* Note/Edit Button */}
-                                    <div
-                                        className="w-10 h-10 rounded-full flex items-center justify-center border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-amber-500 hover:border-amber-500 active:scale-95 transition-all"
-                                        onClick={(e) => openDishDetail(dish, e)}
-                                    >
-                                        <PencilSimple weight="bold" size={16} />
-                                    </div>
-
-                                    <div
-                                        className="w-10 h-10 rounded-full flex items-center justify-center border transition-colors bg-amber-500/10 text-amber-500 border-amber-500/30 hover:bg-amber-500/20 active:scale-95"
-                                        onClick={(e) => {
-                                            e.stopPropagation()
-                                            handleAddClick(dish)
-                                        }}
-                                    >
-                                        <Plus weight="bold" size={18} />
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )
-                    })
+                    // Flat list when category is selected
+                    <div className="space-y-1.5">
+                        {filteredDishes.map(dish => renderDishCard(dish))}
+                    </div>
                 )}
             </main>
 
-            {/* 4. Formatting Cart Floating Bar */}
+            {/* Cart Floating Bar */}
             <AnimatePresence>
                 {totalItems > 0 && (
                     <motion.div
-                        initial={{ y: 100 }}
+                        initial={{ y: 80 }}
                         animate={{ y: 0 }}
-                        exit={{ y: 100 }}
-                        className="fixed bottom-0 left-0 right-0 p-4 z-50 bg-gradient-to-t from-black via-black/90 to-transparent pt-12"
+                        exit={{ y: 80 }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                        className="fixed bottom-0 left-0 right-0 p-3 z-50 bg-gradient-to-t from-black via-black/95 to-transparent pt-8"
                     >
                         <Sheet open={isCartOpen} onOpenChange={setIsCartOpen}>
                             <SheetTrigger asChild>
-                                <Button className="w-full h-14 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black shadow-xl shadow-amber-500/20 flex items-center justify-between px-6 text-lg font-bold">
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-black/20 px-3 py-1 rounded-lg text-sm flex items-center gap-2">
-                                            <ShoppingCart weight="bold" />
+                                <button className="w-full h-13 rounded-2xl bg-amber-500 text-black shadow-lg shadow-amber-500/20 flex items-center justify-between px-5 py-3 active:scale-[0.98] transition-transform">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="bg-black/15 px-2.5 py-1 rounded-lg text-sm font-bold flex items-center gap-1.5">
+                                            <ShoppingCart weight="bold" size={16} />
                                             {totalItems}
                                         </div>
                                         <span className="text-sm font-medium opacity-80">Vedi Ordine</span>
+                                        {totalDelivered > 0 && (
+                                            <span className="text-xs bg-green-600/30 text-green-900 px-2 py-0.5 rounded-full font-medium">+{totalDelivered} consegnati</span>
+                                        )}
                                     </div>
-                                    <span>€{totalAmount.toFixed(2)}</span>
-                                </Button>
+                                    <span className="text-lg font-bold">€{totalAmount.toFixed(2)}</span>
+                                </button>
                             </SheetTrigger>
-                            <SheetContent side="bottom" className="max-h-[90dvh] h-[90dvh] bg-zinc-950 border-t border-zinc-800 p-0 flex flex-col rounded-t-[2rem] overflow-hidden z-[100]">
-                                <SheetHeader className="p-6 pb-2 border-b border-white/5 bg-zinc-900/50 shrink-0">
-                                    <SheetTitle className="text-xl text-white flex items-center gap-2">
-                                        <ShoppingCart className="text-amber-500" weight="duotone" />
-                                        Riepilogo Ordine
+
+                            <SheetContent side="bottom" className="max-h-[90dvh] h-[90dvh] bg-zinc-950 border-t border-zinc-800 p-0 flex flex-col rounded-t-[1.5rem] overflow-hidden z-[100]">
+                                <SheetHeader className="p-5 pb-3 border-b border-zinc-800/50 shrink-0">
+                                    <SheetTitle className="text-lg text-white flex items-center gap-2">
+                                        <ShoppingCart className="text-amber-500" weight="bold" size={20} />
+                                        Ordine · Tavolo {table?.number}
                                     </SheetTitle>
                                 </SheetHeader>
 
-                                {/* Native scrolling for better mobile reliability */}
-                                <div className="flex-1 overflow-y-auto p-4">
+                                {/* Cart Items */}
+                                <div className="flex-1 overflow-y-auto p-3">
                                     {orderItems.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-                                            <ShoppingCart size={48} weight="duotone" className="mb-4 opacity-50" />
-                                            <p>Nessun piatto selezionato</p>
+                                        <div className="flex flex-col items-center justify-center py-20 text-zinc-600">
+                                            <ShoppingCart size={40} className="mb-3 opacity-30" />
+                                            <p className="text-sm">Carrello vuoto</p>
                                         </div>
                                     ) : (
-                                        <div className="space-y-6 pb-32 md:pb-24">
+                                        <div className="space-y-4 pb-32">
+                                            {/* Active items by course */}
                                             {[1, 2, 3, 4, 5].map(courseNum => {
-                                                const items = orderItems.filter(i => i.courseNumber === courseNum)
+                                                const items = activeItems.filter(i => i.courseNumber === courseNum)
                                                 if (items.length === 0) return null
                                                 return (
-                                                    <div key={courseNum} className="space-y-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-                                                            <Badge variant="outline" className="border-amber-500/30 text-amber-500 bg-amber-500/5">
-                                                                {courseNum === 0 ? 'Bevande / Altro' : `Portata ${courseNum}`}
-                                                            </Badge>
-                                                            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent" />
-                                                        </div>
-
-                                                        {items.map((item) => {
-                                                            const realIndex = orderItems.indexOf(item)
-                                                            const uniqueId = `${item.dishId}-${realIndex}`
-                                                            return (
-                                                                <div key={uniqueId} className="flex gap-3 bg-zinc-900/50 p-3 rounded-xl border border-white/5 relative group">
-                                                                    <div className="flex-1">
-                                                                        <div className="flex justify-between items-start">
-                                                                            <span className="font-bold text-zinc-200">{item.dish?.name}</span>
-                                                                            <span className="text-zinc-400 text-sm">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
+                                                    <div key={courseNum}>
+                                                        {restaurant?.enable_course_splitting && (
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <div className="h-px flex-1 bg-zinc-800" />
+                                                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Portata {courseNum}</span>
+                                                                <div className="h-px flex-1 bg-zinc-800" />
+                                                            </div>
+                                                        )}
+                                                        <div className="space-y-1.5">
+                                                            {items.map((item) => {
+                                                                const realIndex = orderItems.indexOf(item)
+                                                                return (
+                                                                    <div key={`${item.dishId}-${realIndex}`} className="bg-zinc-900/50 rounded-xl border border-zinc-800/50 p-3">
+                                                                        {/* Row 1: Name + Price + Qty */}
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="flex-1 font-medium text-sm text-zinc-100 truncate">{item.dish?.name}</span>
+                                                                            <span className="text-zinc-500 text-xs">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
                                                                         </div>
-                                                                        {item.notes && <p className="text-xs text-amber-500 italic mt-1">{item.notes}</p>}
+                                                                        {item.notes && <p className="text-xs text-amber-500/70 mt-1">{item.notes}</p>}
 
-                                                                        <div className="flex items-center gap-4 mt-3 flex-wrap">
-                                                                            {/* Quantity Controls */}
-                                                                            <div className="flex items-center gap-3 bg-black/40 rounded-lg p-1">
-                                                                                <button
-                                                                                    onClick={() => updateQuantity(realIndex, -1)}
-                                                                                    className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-md text-zinc-400 hover:text-white"
-                                                                                >
-                                                                                    <Minus size={14} weight="bold" />
+                                                                        {/* Row 2: Controls */}
+                                                                        <div className="flex items-center gap-2 mt-2.5">
+                                                                            {/* Quantity */}
+                                                                            <div className="flex items-center gap-0.5 bg-zinc-800/50 rounded-lg">
+                                                                                <button onClick={() => updateQuantity(realIndex, -1)} className="w-8 h-8 flex items-center justify-center text-zinc-400 active:text-white">
+                                                                                    <Minus size={13} weight="bold" />
                                                                                 </button>
-                                                                                <span className="font-mono font-bold w-6 text-center">{item.quantity}</span>
-                                                                                <button
-                                                                                    onClick={() => updateQuantity(realIndex, 1)}
-                                                                                    className="w-8 h-8 flex items-center justify-center bg-zinc-800 rounded-md text-zinc-400 hover:text-white"
-                                                                                >
-                                                                                    <Plus size={14} weight="bold" />
+                                                                                <span className="font-mono font-bold text-sm w-5 text-center text-zinc-200">{item.quantity}</span>
+                                                                                <button onClick={() => updateQuantity(realIndex, 1)} className="w-8 h-8 flex items-center justify-center text-zinc-400 active:text-white">
+                                                                                    <Plus size={13} weight="bold" />
                                                                                 </button>
                                                                             </div>
 
-                                                                            {/* Course Selection Buttons — larger for touch */}
-                                                                            <div className="flex items-center gap-1 bg-black/40 rounded-lg p-1">
-                                                                                <span className="text-[10px] text-zinc-500 px-1 uppercase">Port.</span>
-                                                                                {[1, 2, 3, 4, 5].map(cn => (
-                                                                                    <button
-                                                                                        key={cn}
-                                                                                        onClick={() => moveToCourse(realIndex, cn)}
-                                                                                        className={`w-8 h-8 flex items-center justify-center rounded-md text-xs font-bold transition-all ${item.courseNumber === cn
-                                                                                            ? 'bg-amber-500 text-black'
-                                                                                            : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'
-                                                                                            }`}
-                                                                                    >
-                                                                                        {cn}
-                                                                                    </button>
-                                                                                ))}
-                                                                            </div>
+                                                                            {/* Course buttons */}
+                                                                            {restaurant?.enable_course_splitting && (
+                                                                                <div className="flex items-center gap-0.5 bg-zinc-800/50 rounded-lg p-0.5">
+                                                                                    {[1, 2, 3, 4, 5].map(cn => (
+                                                                                        <button
+                                                                                            key={cn}
+                                                                                            onClick={() => moveToCourse(realIndex, cn)}
+                                                                                            className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-bold transition-colors ${item.courseNumber === cn
+                                                                                                ? 'bg-amber-500 text-black'
+                                                                                                : 'text-zinc-500 active:text-white'
+                                                                                                }`}
+                                                                                        >
+                                                                                            {cn}
+                                                                                        </button>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
 
-                                                                            <input
-                                                                                type="text"
-                                                                                placeholder="Note..."
-                                                                                value={item.notes || ''}
-                                                                                onChange={(e) => updateNote(realIndex, e.target.value)}
-                                                                                className="h-8 text-xs bg-black/20 border-transparent focus:border-zinc-700 rounded-lg flex-1 min-w-0 px-2 text-zinc-300"
-                                                                            />
+                                                                            <div className="flex-1" />
 
+                                                                            {/* Delivered button */}
                                                                             <button
-                                                                                onClick={() => setItemToMarkDelivered(realIndex)}
-                                                                                className="w-full h-10 flex items-center justify-center gap-2 bg-green-500/15 hover:bg-green-500/25 text-green-400 rounded-xl transition-all font-bold text-sm border border-green-500/20 active:scale-95 mt-1"
+                                                                                onClick={() => markAsDelivered(realIndex)}
+                                                                                className="h-8 px-2.5 flex items-center gap-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg text-xs font-medium active:scale-95 transition-transform"
                                                                             >
-                                                                                <CheckCircle size={18} weight="fill" />
-                                                                                Segna come Consegnato
+                                                                                <CheckCircle size={14} weight="fill" />
+                                                                                Consegnato
                                                                             </button>
                                                                         </div>
                                                                     </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+
+                                            {/* Delivered items section */}
+                                            {deliveredItemsList.length > 0 && (
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div className="h-px flex-1 bg-emerald-800/30" />
+                                                        <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                                                            <CheckCircle size={12} weight="fill" /> Consegnati
+                                                        </span>
+                                                        <div className="h-px flex-1 bg-emerald-800/30" />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        {deliveredItemsList.map((item) => {
+                                                            const realIndex = orderItems.indexOf(item)
+                                                            return (
+                                                                <div key={`del-${item.dishId}-${realIndex}`} className="flex items-center gap-2 p-2.5 rounded-lg bg-zinc-900/20 border border-zinc-800/30 opacity-50">
+                                                                    <CheckCircle size={16} weight="fill" className="text-emerald-500 shrink-0" />
+                                                                    <span className="flex-1 text-sm text-zinc-400 line-through truncate">{item.dish?.name}</span>
+                                                                    <span className="text-xs text-zinc-600">x{item.quantity}</span>
+                                                                    <button
+                                                                        onClick={() => undoDelivered(realIndex)}
+                                                                        className="w-7 h-7 flex items-center justify-center text-zinc-500 hover:text-amber-400 active:scale-90"
+                                                                        title="Annulla consegnato"
+                                                                    >
+                                                                        <ArrowCounterClockwise size={14} weight="bold" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => removeItem(realIndex)}
+                                                                        className="w-7 h-7 flex items-center justify-center text-zinc-600 hover:text-red-400 active:scale-90"
+                                                                        title="Rimuovi"
+                                                                    >
+                                                                        <X size={14} weight="bold" />
+                                                                    </button>
                                                                 </div>
                                                             )
                                                         })}
                                                     </div>
-                                                )
-                                            })}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Fixed Footer Actions */}
-                                <div className="p-4 bg-zinc-900 border-t border-white/5 space-y-3 pb-8 md:pb-6 z-20 relative">
-                                    <div className="flex justify-between items-center text-lg font-bold text-white">
-                                        <span>Totale</span>
-                                        <span className="text-amber-500 text-2xl">€{totalAmount.toFixed(2)}</span>
+                                {/* Footer */}
+                                <div className="p-3 bg-zinc-900/80 border-t border-zinc-800/50 space-y-2.5 pb-8 md:pb-4">
+                                    <div className="flex justify-between items-center px-1">
+                                        <span className="text-zinc-400 text-sm font-medium">Totale</span>
+                                        <span className="text-amber-500 text-xl font-bold">€{totalAmount.toFixed(2)}</span>
                                     </div>
-                                    <div className="grid grid-cols-1 gap-2">
-                                        <Button
-                                            className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl text-lg shadow-lg shadow-amber-500/20"
-                                            onClick={() => handlePreSubmit('standard')}
-                                            disabled={submitting}
-                                        >
-                                            <PaperPlaneRight size={20} weight="fill" className="mr-2" />
-                                            Invia in Cucina
-                                        </Button>
-                                    </div>
-                                    <div className="h-4 md:hidden" /> {/* Spacer for iOS Home Bar */}
+                                    <Button
+                                        className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl text-base active:scale-[0.98] transition-transform"
+                                        onClick={() => handlePreSubmit('standard')}
+                                        disabled={submitting || activeItems.length === 0}
+                                    >
+                                        <PaperPlaneRight size={18} weight="fill" className="mr-2" />
+                                        {submitting ? 'Invio...' : 'Invia in Cucina'}
+                                    </Button>
                                 </div>
                             </SheetContent>
                         </Sheet>
@@ -690,7 +701,7 @@ const WaiterOrderPage = () => {
                 )}
             </AnimatePresence>
 
-            {/* Confirmation Alert Dialog */}
+            {/* Confirm Dialog */}
             <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
                 <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white rounded-2xl w-[90vw] max-w-sm z-[200]">
                     <AlertDialogHeader>
@@ -698,53 +709,19 @@ const WaiterOrderPage = () => {
                             {confirmActionType === 'standard' ? 'Inviare ordine in cucina?' : 'Confermare ordine consegnato?'}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-zinc-400">
-                            {confirmActionType === 'standard'
-                                ? 'I piatti verranno stampati in cucina e appariranno nel monitor.'
-                                : 'L\'ordine verrà creato come "Completato" e non apparirà nel monitor cucina. Utile per cose già portate al tavolo.'
-                            }
+                            {activeItems.length} piatt{activeItems.length === 1 ? 'o' : 'i'} da inviare.
+                            {deliveredItemsList.length > 0 && ` ${deliveredItemsList.length} già consegnat${deliveredItemsList.length === 1 ? 'o' : 'i'}.`}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 hover:text-white text-zinc-300 rounded-lg">
+                        <AlertDialogCancel className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-zinc-300 rounded-lg">
                             Annulla
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={processOrderSubmission}
-                            className={`rounded-lg font-bold text-black ${confirmActionType === 'standard'
-                                ? 'bg-amber-500 hover:bg-amber-400'
-                                : 'bg-green-500 hover:bg-green-400'
-                                }`}
+                            className="rounded-lg font-bold text-black bg-amber-500 hover:bg-amber-400"
                         >
-                            {confirmActionType === 'standard' ? 'Invia Ordine' : 'Conferma Pronta Consegna'}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            {/* Mark as Delivered Confirmation Dialog */}
-            <AlertDialog open={itemToMarkDelivered !== null} onOpenChange={(open) => !open && setItemToMarkDelivered(null)}>
-                <AlertDialogContent className="bg-zinc-900 border-zinc-800 text-white rounded-2xl w-[90vw] max-w-sm z-[200]">
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Segna come già consegnato?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-zinc-400">
-                            <span className="font-bold text-white">{itemToMarkDelivered !== null ? orderItems[itemToMarkDelivered]?.dish?.name : ''}</span> verrà registrato come già servito e non apparirà in gestione ordini cucina.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-zinc-800 border-zinc-700 hover:bg-zinc-700 hover:text-white text-zinc-300 rounded-lg">
-                            Annulla
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={() => {
-                                if (itemToMarkDelivered !== null) {
-                                    handleMarkSingleItemDelivered(itemToMarkDelivered)
-                                }
-                                setItemToMarkDelivered(null)
-                            }}
-                            className="bg-green-600 hover:bg-green-500 text-white rounded-lg font-bold"
-                        >
-                            <CheckCircle weight="fill" className="mr-2" size={16} />
-                            Conferma
+                            Invia Ordine
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -752,61 +729,64 @@ const WaiterOrderPage = () => {
 
             {/* Dish Detail Dialog */}
             <Dialog open={!!selectedDishForDetail} onOpenChange={(open) => !open && setSelectedDishForDetail(null)}>
-                <DialogContent className="sm:max-w-md bg-zinc-950 border-zinc-800 text-zinc-100 p-0 overflow-hidden max-h-[90vh] flex flex-col">
+                <DialogContent className="sm:max-w-md bg-zinc-950 border-zinc-800 text-zinc-100 p-0 overflow-hidden max-h-[85vh] flex flex-col">
                     <VisuallyHidden>
-                        <DialogTitle>{selectedDishForDetail?.name || 'Dettaglio Piatto'}</DialogTitle>
-                        <DialogDescription>Aggiungi questo piatto al tuo ordine con quantità e note personalizzate.</DialogDescription>
+                        <DialogTitle>{selectedDishForDetail?.name || 'Dettaglio'}</DialogTitle>
+                        <DialogDescription>Dettaglio piatto</DialogDescription>
                     </VisuallyHidden>
                     {selectedDishForDetail && (
                         <>
-                            <div className={`${selectedDishForDetail.image_url?.trim() ? 'h-48' : 'h-16'} relative`}>
-                                {selectedDishForDetail.image_url?.trim() && (
-                                    <img src={selectedDishForDetail.image_url} alt={selectedDishForDetail.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }} />
-                                )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
-                                <div className="absolute bottom-4 left-4 right-4">
-                                    <h2 className="text-2xl font-bold text-white">{selectedDishForDetail.name}</h2>
+                            {selectedDishForDetail.image_url?.trim() && (
+                                <div className="h-40 relative">
+                                    <img src={selectedDishForDetail.image_url} alt="" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent" />
+                                </div>
+                            )}
+                            <div className="p-5 space-y-5">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">{selectedDishForDetail.name}</h2>
                                     <div className="flex items-center gap-2 mt-1">
                                         <span className="text-amber-500 font-bold text-lg">€{selectedDishForDetail.price.toFixed(2)}</span>
-                                        {selectedDishForDetail.allergens && (
+                                        {selectedDishForDetail.allergens && selectedDishForDetail.allergens.length > 0 && (
                                             <div className="flex gap-1">
                                                 {selectedDishForDetail.allergens.map(a => (
-                                                    <Badge key={a} variant="outline" className="border-white/10 bg-black/40 text-[10px] h-5">{a}</Badge>
+                                                    <Badge key={a} variant="outline" className="border-zinc-700 text-[10px] h-5">{a}</Badge>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
+                                    {selectedDishForDetail.description && (
+                                        <p className="text-zinc-500 text-sm mt-2">{selectedDishForDetail.description}</p>
+                                    )}
                                 </div>
-                            </div>
 
-                            <div className="p-6 space-y-6">
-                                <p className="text-zinc-400 text-sm">{selectedDishForDetail.description}</p>
-
-                                <div className="space-y-3">
-                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Quantità</label>
-                                    <div className="flex items-center gap-4 bg-zinc-900 p-2 rounded-xl border border-zinc-800 w-fit">
-                                        <Button variant="ghost" size="icon" onClick={() => setDetailQuantity(Math.max(1, detailQuantity - 1))} className="h-10 w-10 text-zinc-400 hover:text-white hover:bg-white/5">
-                                            <Minus weight="bold" />
-                                        </Button>
-                                        <span className="text-xl font-bold font-mono w-8 text-center">{detailQuantity}</span>
-                                        <Button variant="ghost" size="icon" onClick={() => setDetailQuantity(detailQuantity + 1)} className="h-10 w-10 text-zinc-400 hover:text-white hover:bg-white/5">
-                                            <Plus weight="bold" />
-                                        </Button>
+                                {/* Quantity */}
+                                <div>
+                                    <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Quantità</label>
+                                    <div className="flex items-center gap-3 bg-zinc-900 p-1.5 rounded-xl border border-zinc-800 w-fit mt-2">
+                                        <button onClick={() => setDetailQuantity(Math.max(1, detailQuantity - 1))} className="w-9 h-9 flex items-center justify-center text-zinc-400 active:text-white rounded-lg active:bg-zinc-800">
+                                            <Minus weight="bold" size={16} />
+                                        </button>
+                                        <span className="text-lg font-bold font-mono w-6 text-center">{detailQuantity}</span>
+                                        <button onClick={() => setDetailQuantity(detailQuantity + 1)} className="w-9 h-9 flex items-center justify-center text-zinc-400 active:text-white rounded-lg active:bg-zinc-800">
+                                            <Plus weight="bold" size={16} />
+                                        </button>
                                     </div>
                                 </div>
 
-                                <div className="space-y-3">
-                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Note e Richieste</label>
+                                {/* Notes */}
+                                <div>
+                                    <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Note</label>
                                     <Textarea
                                         placeholder="Es. Senza cipolla, ben cotto..."
                                         value={detailNotes}
                                         onChange={(e) => setDetailNotes(e.target.value)}
-                                        className="bg-zinc-900 border-zinc-800 focus:border-amber-500/50 min-h-[100px]"
+                                        className="bg-zinc-900 border-zinc-800 min-h-[80px] mt-2 text-sm"
                                     />
                                 </div>
 
-                                <Button className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold text-lg rounded-xl" onClick={addFromDetail}>
-                                    Aggiungi all'ordine - €{(selectedDishForDetail.price * detailQuantity).toFixed(2)}
+                                <Button className="w-full h-11 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl active:scale-[0.98]" onClick={addFromDetail}>
+                                    Aggiungi · €{(selectedDishForDetail.price * detailQuantity).toFixed(2)}
                                 </Button>
                             </div>
                         </>
@@ -815,47 +795,39 @@ const WaiterOrderPage = () => {
             </Dialog>
 
             {/* Course Selection Modal */}
-            <Dialog open={showCourseSelectionModal} onOpenChange={(open) => {
-                setShowCourseSelectionModal(open)
-                if (!open) setPendingDishToAdd(null)
+            <Dialog open={showCourseModal} onOpenChange={(open) => {
+                setShowCourseModal(open)
+                if (!open) setPendingDish(null)
             }}>
-                <DialogContent className="sm:max-w-xs bg-zinc-900 border-zinc-800 text-zinc-100 rounded-3xl p-6 shadow-2xl z-[250]">
+                <DialogContent className="sm:max-w-xs bg-zinc-900 border-zinc-800 text-zinc-100 rounded-2xl p-5 z-[250]">
                     <DialogHeader>
-                        <DialogTitle className="text-center text-xl text-amber-500">Scegli la Portata</DialogTitle>
-                        <DialogDescription className="text-center text-zinc-400 mt-1">
-                            Quando vuoi ricevere questo piatto?
+                        <DialogTitle className="text-center text-lg text-amber-500">Scegli Portata</DialogTitle>
+                        <DialogDescription className="text-center text-zinc-500 text-sm">
+                            {pendingDish?.dish.name}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex flex-col gap-3 mt-4">
+                    <div className="flex flex-col gap-2 mt-3">
                         {Array.from({ length: maxCourse }, (_, i) => i + 1).map((courseNum) => (
-                            <Button
+                            <button
                                 key={courseNum}
-                                variant="outline"
-                                className="h-14 rounded-xl font-bold transition-all text-lg border-zinc-700 bg-zinc-800 text-white hover:bg-zinc-700 hover:text-white"
+                                className="h-12 rounded-xl font-bold text-base border border-zinc-700 bg-zinc-800 text-white active:bg-zinc-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                                 onClick={() => {
-                                    if (pendingDishToAdd) {
-                                        performAddToOrder(
-                                            pendingDishToAdd.dish,
-                                            pendingDishToAdd.quantity,
-                                            pendingDishToAdd.notes,
-                                            courseNum,
-                                            pendingDishToAdd.isFromDetail
-                                        )
+                                    if (pendingDish) {
+                                        performAddToOrder(pendingDish.dish, pendingDish.quantity, pendingDish.notes, courseNum, pendingDish.fromDetail)
                                     }
                                 }}
                             >
-                                <Layers className="w-5 h-5 mr-3 text-amber-500" />
+                                <Layers className="w-4 h-4 text-amber-500" />
                                 Portata {courseNum}
-                            </Button>
+                            </button>
                         ))}
-                        <Button
-                            variant="ghost"
-                            className="h-14 rounded-xl font-medium mt-2 text-amber-500 hover:bg-amber-500/10 hover:text-amber-500 text-base"
+                        <button
+                            className="h-10 rounded-xl text-sm text-amber-500 active:bg-amber-500/10 transition-colors flex items-center justify-center gap-1.5"
                             onClick={() => setMaxCourse(prev => prev + 1)}
                         >
-                            <Plus className="w-5 h-5 mr-2" />
-                            Aggiungi nuova portata
-                        </Button>
+                            <Plus size={14} weight="bold" />
+                            Aggiungi portata
+                        </button>
                     </div>
                 </DialogContent>
             </Dialog>

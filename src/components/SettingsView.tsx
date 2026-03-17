@@ -196,6 +196,25 @@ export function SettingsView({
     const [loadingConnectOnboarding, setLoadingConnectOnboarding] = useState(false)
     const [activeDiscount, setActiveDiscount] = useState<any>(null)
     const [priceAmount, setPriceAmount] = useState<number>(0)
+    const [openInfo, setOpenInfo] = useState<string | null>(null)
+
+    const InfoTip = ({ id, text }: { id: string; text: string }) => (
+        <>
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setOpenInfo(openInfo === id ? null : id) }}
+                className={`inline-flex items-center justify-center w-6 h-6 rounded-full transition-all ${openInfo === id ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-zinc-500 hover:text-amber-400 hover:bg-amber-500/10'}`}
+                title="Info"
+            >
+                <Info size={14} weight="bold" />
+            </button>
+            {openInfo === id && (
+                <div className="mt-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-sm text-amber-200/80 leading-relaxed animate-in fade-in slide-in-from-top-1 duration-200">
+                    {text}
+                </div>
+            )}
+        </>
+    )
 
     const loadStaff = async () => {
         if (!restaurantId) return;
@@ -499,10 +518,13 @@ export function SettingsView({
 
                         {/* Nome Ristorante */}
                         <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                            <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                                <Storefront className="text-amber-500 w-8 h-8" weight="duotone" />
-                                Profilo Attività
-                            </h3>
+                            <div className="flex items-center gap-3 mb-6">
+                                <h3 className="text-2xl font-bold flex items-center gap-3">
+                                    <Storefront className="text-amber-500 w-8 h-8" weight="duotone" />
+                                    Profilo Attività
+                                </h3>
+                                <InfoTip id="profilo" text="Il nome del ristorante viene mostrato ai clienti nel menù digitale QR, nelle ricevute e nella pagina di prenotazione online." />
+                            </div>
                             <div className="grid gap-4 max-w-xl">
                                 <div className="space-y-2">
                                     <Label className="text-zinc-400">Nome del Ristorante</Label>
@@ -531,10 +553,13 @@ export function SettingsView({
 
                         {/* Suoni */}
                         <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                            <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                                <SpeakerHigh className="text-amber-500 w-8 h-8" weight="duotone" />
-                                Notifiche Sonore
-                            </h3>
+                            <div className="flex items-center gap-3 mb-6">
+                                <h3 className="text-2xl font-bold flex items-center gap-3">
+                                    <SpeakerHigh className="text-amber-500 w-8 h-8" weight="duotone" />
+                                    Notifiche Sonore
+                                </h3>
+                                <InfoTip id="suoni" text="Quando un cliente invia un ordine dal menù QR, il browser riproduce un suono di notifica. Tieni il volume del dispositivo attivo. Il suono funziona solo se la pagina è aperta e il browser ha il permesso audio." />
+                            </div>
                             <div className="flex flex-col gap-6">
                                 <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5">
                                     <div className="space-y-1">
@@ -625,21 +650,15 @@ export function SettingsView({
                         className="space-y-6"
                     >
                         <div className="grid gap-6">
-                            {/* Spiegazione sezione */}
-                            <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4">
-                                <p className="text-sm text-amber-200/80 leading-relaxed">
-                                    <strong className="text-amber-400">Costi & Menu:</strong> Configura i costi aggiuntivi applicati automaticamente agli ordini.
-                                    L'<strong>All You Can Eat</strong> attiva una modalità a prezzo fisso dove il cliente può ordinare liberamente (puoi impostare limiti per piatto).
-                                    Il <strong>Coperto</strong> viene aggiunto automaticamente per ogni persona al tavolo. Entrambi supportano <strong>programmazione settimanale</strong> con prezzi diversi per giorno.
-                                </p>
-                            </div>
-
                             {/* All You Can Eat - Weekly Schedule */}
                             <div className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
                                 <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
                                     <ForkKnife size={120} weight="fill" />
                                 </div>
                                 <div className="relative z-10">
+                                    <div className="mb-3">
+                                        <InfoTip id="ayce" text="L'All You Can Eat attiva una modalità a prezzo fisso: il cliente paga un importo unico e può ordinare liberamente dal menù. Puoi impostare un limite massimo di piatti per persona. Supporta programmazione settimanale con prezzi diversi per ogni giorno della settimana." />
+                                    </div>
                                     <WeeklyScheduleEditor
                                         type="ayce"
                                         schedule={weeklyAyce || {
@@ -665,6 +684,9 @@ export function SettingsView({
                                     <Coins size={120} weight="fill" />
                                 </div>
                                 <div className="relative z-10">
+                                    <div className="mb-3">
+                                        <InfoTip id="coperto" text="Il Coperto è un costo aggiuntivo applicato automaticamente per ogni persona al tavolo. Viene aggiunto al conto finale. Supporta programmazione settimanale con prezzi diversi per giorno." />
+                                    </div>
                                     <WeeklyScheduleEditor
                                         type="coperto"
                                         schedule={weeklyCoperto || {
@@ -687,10 +709,13 @@ export function SettingsView({
                             <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
-                                        <h3 className="text-2xl font-bold flex items-center gap-3">
-                                            <ForkKnife className="text-amber-500 w-8 h-8" weight="duotone" />
-                                            Suddivisione in Portate
-                                        </h3>
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-2xl font-bold flex items-center gap-3">
+                                                <ForkKnife className="text-amber-500 w-8 h-8" weight="duotone" />
+                                                Suddivisione in Portate
+                                            </h3>
+                                            <InfoTip id="portate" text="Quando attiva, il cliente sceglie per ogni piatto in quale portata vuole riceverlo (Primo, Secondo, ecc.). La cucina riceve gli ordini raggruppati per portata. In modalità cameriere, il cameriere assegna la portata al momento dell'ordine." />
+                                        </div>
                                         <p className="text-sm text-zinc-400 max-w-prose">
                                             Se attivo, i clienti potranno scegliere l'ordine di uscita (Antipasti, Primi, Secondi) direttamente dal menu digitale.
                                         </p>
@@ -710,12 +735,15 @@ export function SettingsView({
                             <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
-                                        <h3 className="text-2xl font-bold flex items-center gap-3">
-                                            <Eye className="text-amber-500 w-8 h-8" weight="duotone" />
-                                            Menu Solo Visualizzazione
-                                        </h3>
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-2xl font-bold flex items-center gap-3">
+                                                <Eye className="text-amber-500 w-8 h-8" weight="duotone" />
+                                                Menu Solo Visualizzazione
+                                            </h3>
+                                            <InfoTip id="viewonly" text="Utile se vuoi usare Minthi solo come menù digitale senza gestione ordini. I clienti scansionano il QR e vedono piatti e prezzi, ma non possono ordinare. I QR code mostreranno 'Scansiona per visualizzare il menù' invece di 'Scansiona per ordinare'." />
+                                        </div>
                                         <p className="text-sm text-zinc-400 max-w-prose">
-                                            Se attivo, i clienti potranno visualizzare il menù senza la possibilità di ordinare. I QR code mostreranno "Scansiona per visualizzare il menù".
+                                            Se attivo, i clienti potranno visualizzare il menù senza la possibilità di ordinare.
                                         </p>
                                     </div>
                                     <Switch
@@ -730,12 +758,15 @@ export function SettingsView({
                             <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
-                                        <h3 className="text-2xl font-bold flex items-center gap-3">
-                                            <Clock className="text-amber-500 w-8 h-8" weight="duotone" />
-                                            Tempo Medio di Cottura
-                                        </h3>
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-2xl font-bold flex items-center gap-3">
+                                                <Clock className="text-amber-500 w-8 h-8" weight="duotone" />
+                                                Tempo Medio di Cottura
+                                            </h3>
+                                            <InfoTip id="cooktime" text="Minthi calcola automaticamente il tempo medio di preparazione di ogni piatto basandosi sugli ordini degli ultimi 2 mesi (servono almeno 3 ordini per piatto). Il tempo viene mostrato sotto il nome del piatto nel menù cliente e nella dashboard cameriere." />
+                                        </div>
                                         <p className="text-sm text-zinc-400 max-w-prose">
-                                            Se attivo, mostra il tempo medio di preparazione sotto ogni piatto nel menù cliente e nella dashboard cameriere. Calcolato sugli ultimi 2 mesi (minimo 3 ordini).
+                                            Se attivo, mostra il tempo medio di preparazione sotto ogni piatto nel menù cliente e nella dashboard cameriere.
                                         </p>
                                     </div>
                                     <Switch
@@ -766,7 +797,10 @@ export function SettingsView({
                                         <Users size={32} weight="duotone" />
                                     </div>
                                     <div>
-                                        <h3 className="text-2xl font-bold text-white">Gestione Staff <span className="text-amber-500">(Camerieri)</span></h3>
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-2xl font-bold text-white">Gestione Staff <span className="text-amber-500">(Camerieri)</span></h3>
+                                            <InfoTip id="staff" text="Crea un account per ogni cameriere. Il cameriere accede dalla pagina di login con le sue credenziali e vede solo i tavoli a lui assegnati, gli ordini in arrivo e può segnare i piatti come serviti. Assegna i tavoli ai camerieri dalla sezione Tavoli nella dashboard." />
+                                        </div>
                                         <p className="text-zinc-400 text-sm mt-1">Crea e gestisci le credenziali dei camerieri</p>
                                     </div>
                                 </div>
@@ -779,15 +813,6 @@ export function SettingsView({
 
                             {waiterModeEnabled && (
                                 <div className="space-y-6 animate-in fade-in slide-in-from-top-4">
-                                    {/* Guida accesso camerieri */}
-                                    <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4">
-                                        <p className="text-sm text-amber-200/80 leading-relaxed">
-                                            <strong className="text-amber-400">Come funziona:</strong> Crea un account per ogni cameriere con username e password.
-                                            Il cameriere accede dalla <strong>pagina di login</strong> usando le sue credenziali e vedrà solo i tavoli a lui assegnati, gli ordini in arrivo e potrà segnare i piatti come serviti.
-                                            Puoi assegnare i tavoli ai camerieri dalla sezione <strong>Tavoli</strong> nella dashboard principale.
-                                        </p>
-                                    </div>
-
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                         <div>
                                             <Label className="text-base text-amber-100">Permessi di Pagamento</Label>
@@ -955,10 +980,13 @@ export function SettingsView({
                         <div className="grid md:grid-cols-2 gap-6 items-stretch">
                             {/* Turnazione Tavoli */}
                             <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm shadow-xl flex flex-col justify-center">
-                                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                                    <Clock className="text-amber-500 w-8 h-8" weight="duotone" />
-                                    Turnazione Tavoli
-                                </h3>
+                                <div className="flex items-center gap-3 mb-6">
+                                    <h3 className="text-2xl font-bold flex items-center gap-3">
+                                        <Clock className="text-amber-500 w-8 h-8" weight="duotone" />
+                                        Turnazione Tavoli
+                                    </h3>
+                                    <InfoTip id="turnazione" text="La durata della prenotazione determina per quanto tempo un tavolo resta occupato nel calendario prenotazioni. Dopo questo periodo il tavolo torna disponibile per nuove prenotazioni. Es. con 2 ore, una prenotazione alle 20:00 libera il tavolo alle 22:00." />
+                                </div>
                                 <p className="text-sm text-zinc-400 mb-6">Durata standard prenotazione</p>
                                 <Select
                                     value={reservationDuration.toString()}
@@ -981,10 +1009,13 @@ export function SettingsView({
 
                             {/* QR Code & Prenotazioni Pubbliche */}
                             <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm shadow-xl flex flex-col justify-center">
-                                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                                    <Storefront className="text-amber-500 w-8 h-8" weight="duotone" />
-                                    Prenotazioni via QR
-                                </h3>
+                                <div className="flex items-center gap-3 mb-6">
+                                    <h3 className="text-2xl font-bold flex items-center gap-3">
+                                        <Storefront className="text-amber-500 w-8 h-8" weight="duotone" />
+                                        Prenotazioni via QR
+                                    </h3>
+                                    <InfoTip id="qr-prenotazioni" text="I clienti possono prenotare scannerizzando un QR code dedicato (diverso da quello dei tavoli). Scelgono data, ora, numero persone e sala. Le prenotazioni appaiono nel calendario nella sezione Prenotazioni. Puoi disattivare temporaneamente se il ristorante è pieno." />
+                                </div>
                                 <p className="text-sm text-zinc-400 mb-6">Configura l'accesso pubblico per le prenotazioni via QR Code dei clienti.</p>
 
                                 <div className="space-y-6">
@@ -1055,7 +1086,10 @@ export function SettingsView({
                                             <CreditCard weight="duotone" size={32} />
                                         </div>
                                         <div>
-                                            <h3 className="text-2xl font-bold text-white">Pagamenti al Tavolo</h3>
+                                            <div className="flex items-center gap-3">
+                                                <h3 className="text-2xl font-bold text-white">Pagamenti al Tavolo</h3>
+                                                <InfoTip id="pagamenti" text="Attivando i pagamenti, i clienti possono pagare il conto con carta direttamente dal menù QR. Devi collegare un account Stripe per ricevere i pagamenti sul tuo conto bancario. I soldi arrivano automaticamente. Ricordati di emettere lo scontrino fiscale separatamente." />
+                                            </div>
                                             <p className="text-sm text-zinc-400 mt-1">I clienti pagano direttamente dal menu digitale con carta</p>
                                         </div>
                                     </div>
