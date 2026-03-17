@@ -665,89 +665,84 @@ export default function AdminDashboard({ user, onLogout }: Props) {
 
             {/* ==================== FATTURAZIONE TAB ==================== */}
             {adminSubTab === 'fatturazione' && (
-              <div className="space-y-5">
+              <div className="space-y-6">
                 {/* Summary Stats */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-emerald-500/10">
-                    <div className="flex items-center gap-2 mb-1">
-                      <CheckCircle size={14} className="text-emerald-500/70" weight="fill" />
-                      <p className="text-[11px] text-emerald-500/70 font-medium uppercase tracking-wider">Totale Incassato</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/10 shadow-lg shadow-emerald-500/[0.03]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle size={18} className="text-emerald-500" weight="fill" />
+                      <p className="text-xs text-emerald-500/80 font-semibold uppercase tracking-wider">Totale Incassato</p>
                     </div>
-                    <p className="text-2xl font-bold text-emerald-400">{'\u20AC'}{fatturazioneStats.totaleIncassato.toFixed(2)}</p>
+                    <p className="text-3xl font-bold text-emerald-400">{'\u20AC'}{fatturazioneStats.totaleIncassato.toFixed(2)}</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/10">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Clock size={14} className="text-amber-500/70" weight="fill" />
-                      <p className="text-[11px] text-amber-500/70 font-medium uppercase tracking-wider">Pagamenti in sospeso</p>
+                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-amber-500/10 shadow-lg shadow-amber-500/[0.03]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock size={18} className="text-amber-500" weight="fill" />
+                      <p className="text-xs text-amber-500/80 font-semibold uppercase tracking-wider">In Sospeso</p>
                     </div>
-                    <p className="text-2xl font-bold text-amber-400">{fatturazioneStats.pagamentiInSospeso}</p>
+                    <p className="text-3xl font-bold text-amber-400">{fatturazioneStats.pagamentiInSospeso}</p>
                   </div>
-                  <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Receipt size={14} className="text-zinc-400" weight="fill" />
-                      <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider">Fatture Emesse</p>
+                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Receipt size={18} className="text-zinc-400" weight="fill" />
+                      <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Fatture Emesse</p>
                     </div>
-                    <p className="text-2xl font-bold text-white">{fatturazioneStats.fattureEmesse}</p>
+                    <p className="text-3xl font-bold text-white">{fatturazioneStats.fattureEmesse}</p>
                   </div>
                 </div>
 
                 {/* Filters Bar */}
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-4 rounded-xl bg-zinc-900/50 border border-white/5">
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-white/5">
                   <div className="flex items-center gap-2 shrink-0">
                     <Funnel size={16} className="text-zinc-500" />
-                    <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Filtri</span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 flex-1">
-                    {/* Search */}
-                    <div className="relative w-full md:w-52">
-                      <MagnifyingGlass className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+                    <div className="relative w-full md:w-56">
+                      <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                       <Input
                         placeholder="Cerca ristorante..."
                         value={fatturazioneSearch}
                         onChange={(e) => setFatturazioneSearch(e.target.value)}
-                        className="h-9 pl-8 bg-black/40 border-white/5 text-sm"
+                        className="h-10 pl-9 bg-black/40 border-white/5 text-sm rounded-xl"
                       />
                     </div>
-                    {/* Status filter */}
                     <div className="flex items-center gap-1">
                       {(['all', 'paid', 'failed'] as const).map(status => (
                         <button
                           key={status}
                           onClick={() => setFatturazioneStatus(status)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                             fatturazioneStatus === status
-                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                              : status === 'failed' ? 'bg-red-500/15 text-red-400 border border-red-500/20'
-                              : 'bg-white text-black'
+                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-md shadow-emerald-500/5'
+                              : status === 'failed' ? 'bg-red-500/15 text-red-400 border border-red-500/20 shadow-md shadow-red-500/5'
+                              : 'bg-white text-black shadow-md'
                               : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent'
                           }`}
                         >
                           {status === 'all' && 'Tutti'}
-                          {status === 'paid' && 'Pagato'}
-                          {status === 'failed' && 'Fallito'}
+                          {status === 'paid' && 'Pagati'}
+                          {status === 'failed' && 'Falliti'}
                         </button>
                       ))}
                     </div>
-                    {/* Date range */}
-                    <div className="flex items-center gap-1.5">
-                      <CalendarBlank size={14} className="text-zinc-500 shrink-0" />
+                    <div className="flex items-center gap-2">
+                      <CalendarBlank size={16} className="text-zinc-500 shrink-0" />
                       <input
                         type="date"
                         value={fatturazioneDateFrom}
                         onChange={(e) => setFatturazioneDateFrom(e.target.value)}
-                        className="h-9 px-2.5 rounded-lg bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
+                        className="h-10 px-3 rounded-xl bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
                         title="Data da"
                       />
-                      <span className="text-zinc-600 text-xs">-</span>
+                      <span className="text-zinc-600">→</span>
                       <input
                         type="date"
                         value={fatturazioneDateTo}
                         onChange={(e) => setFatturazioneDateTo(e.target.value)}
-                        className="h-9 px-2.5 rounded-lg bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
+                        className="h-10 px-3 rounded-xl bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
                         title="Data a"
                       />
                     </div>
-                    {/* Clear filters */}
                     {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
                       <button
                         onClick={() => {
@@ -756,95 +751,95 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                           setFatturazioneDateFrom('')
                           setFatturazioneDateTo('')
                         }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-all"
+                        className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-all"
                       >
-                        <XCircle size={14} />
-                        Cancella filtri
+                        <XCircle size={16} />
+                        Cancella
                       </button>
                     )}
                   </div>
                 </div>
 
-                {/* Results count */}
+                {/* Results count + sort */}
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-sm text-zinc-500">
                     {filteredFatturazionePayments.length} {filteredFatturazionePayments.length === 1 ? 'risultato' : 'risultati'}
                     {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
                       <span> su {(subscriptionPayments || []).length} totali</span>
                     )}
                   </p>
+                  <div className="flex items-center gap-1">
+                    {(['date', 'amount', 'restaurant'] as const).map(field => (
+                      <button
+                        key={field}
+                        onClick={() => { setFatturazioneSortField(field); setFatturazioneSortDir(prev => fatturazioneSortField === field ? (prev === 'asc' ? 'desc' : 'asc') : field === 'restaurant' ? 'asc' : 'desc') }}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          fatturazioneSortField === field ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {field === 'date' && 'Data'}
+                        {field === 'amount' && 'Importo'}
+                        {field === 'restaurant' && 'Nome'}
+                        {fatturazioneSortField === field && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Payments Table */}
-                <div className="rounded-xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                  {/* Table Header */}
-                  <div className="grid grid-cols-12 gap-2 px-4 py-3 border-b border-white/5 bg-black/30">
-                    <button
-                      className="col-span-3 flex items-center gap-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-300 transition-colors"
-                      onClick={() => { setFatturazioneSortField('restaurant'); setFatturazioneSortDir(prev => fatturazioneSortField === 'restaurant' ? (prev === 'asc' ? 'desc' : 'asc') : 'asc') }}
-                    >
-                      Ristorante
-                      {fatturazioneSortField === 'restaurant' && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
-                    </button>
-                    <button
-                      className="col-span-2 flex items-center gap-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-300 transition-colors"
-                      onClick={() => { setFatturazioneSortField('amount'); setFatturazioneSortDir(prev => fatturazioneSortField === 'amount' ? (prev === 'asc' ? 'desc' : 'asc') : 'desc') }}
-                    >
-                      Importo
-                      {fatturazioneSortField === 'amount' && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
-                    </button>
-                    <button
-                      className="col-span-2 flex items-center gap-1 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-300 transition-colors"
-                      onClick={() => { setFatturazioneSortField('date'); setFatturazioneSortDir(prev => fatturazioneSortField === 'date' ? (prev === 'asc' ? 'desc' : 'asc') : 'desc') }}
-                    >
-                      Data
-                      {fatturazioneSortField === 'date' && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
-                    </button>
-                    <div className="col-span-2 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Stato</div>
-                    <div className="col-span-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">N. Fattura</div>
-                  </div>
-
-                  {/* Table Body */}
-                  <div className="divide-y divide-white/[0.03]">
-                    {filteredFatturazionePayments.length === 0 ? (
-                      <div className="text-center py-12 text-zinc-500 text-sm">
-                        <Receipt size={32} className="mx-auto mb-3 text-zinc-700" />
-                        Nessun pagamento trovato per i filtri selezionati.
-                      </div>
-                    ) : (
-                      filteredFatturazionePayments.map(payment => {
-                        const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
-                        return (
-                          <div key={payment.id} className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-white/[0.02] transition-colors items-center">
+                {/* Payments List (card-based) */}
+                <div className="space-y-2">
+                  {filteredFatturazionePayments.length === 0 ? (
+                    <div className="text-center py-16 rounded-2xl bg-zinc-900/30 border border-white/5">
+                      <Receipt size={40} className="mx-auto mb-4 text-zinc-700" />
+                      <p className="text-base text-zinc-500">Nessun pagamento trovato</p>
+                      <p className="text-sm text-zinc-600 mt-1">Prova a modificare i filtri</p>
+                    </div>
+                  ) : (
+                    filteredFatturazionePayments.map(payment => {
+                      const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
+                      const isCompleted = payment.admin_completed
+                      return (
+                        <div key={payment.id} className={`group p-4 rounded-2xl border transition-all hover:shadow-lg ${
+                          isCompleted ? 'bg-zinc-900/30 border-white/3 opacity-70'
+                          : payment.status === 'paid' ? 'bg-zinc-900/60 border-emerald-500/10 hover:border-emerald-500/20 hover:shadow-emerald-500/[0.03]'
+                          : payment.status === 'failed' ? 'bg-zinc-900/60 border-red-500/10 hover:border-red-500/20 hover:shadow-red-500/[0.03]'
+                          : 'bg-zinc-900/60 border-white/5 hover:border-white/10'
+                        }`}>
+                          <div className="flex items-center gap-4">
                             {/* Restaurant */}
-                            <div className="col-span-3 flex items-center gap-2 min-w-0">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
                               {restaurant?.logo_url ? (
-                                <img src={restaurant.logo_url} alt="" className="w-7 h-7 rounded-md object-cover border border-white/10 shrink-0" />
+                                <img src={restaurant.logo_url} alt="" className="w-10 h-10 rounded-xl object-cover border border-white/10 shrink-0" />
                               ) : (
-                                <div className="w-7 h-7 rounded-md bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
-                                  <Buildings size={12} className="text-zinc-600" />
+                                <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
+                                  <Buildings size={16} className="text-zinc-600" />
                                 </div>
                               )}
-                              <span className="text-sm font-medium text-white truncate">{restaurant?.name || 'Sconosciuto'}</span>
+                              <div className="min-w-0">
+                                <p className="text-base font-semibold text-white truncate">{restaurant?.name || 'Sconosciuto'}</p>
+                                <p className="text-sm text-zinc-500">
+                                  {payment.created_at ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                                </p>
+                              </div>
                             </div>
+
                             {/* Amount */}
-                            <div className="col-span-2">
-                              <span className={`text-sm font-semibold ${payment.status === 'paid' ? 'text-emerald-400' : payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'}`}>
+                            <div className="text-right shrink-0">
+                              <p className={`text-xl font-bold ${
+                                payment.status === 'paid' ? 'text-emerald-400' : payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'
+                              }`}>
                                 {'\u20AC'}{payment.amount.toFixed(2)}
-                              </span>
+                              </p>
                             </div>
-                            {/* Date */}
-                            <div className="col-span-2">
-                              <span className="text-sm text-zinc-400">
-                                {payment.created_at ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
-                              </span>
-                            </div>
+
                             {/* Status */}
-                            <div className="col-span-2">
+                            <div className="shrink-0">
                               <Badge
                                 variant="outline"
-                                className={`text-[10px] font-semibold border px-2 py-0.5 ${
-                                  payment.status === 'paid'
+                                className={`text-xs font-semibold border px-3 py-1 rounded-xl ${
+                                  isCompleted
+                                    ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                                    : payment.status === 'paid'
                                     ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
                                     : payment.status === 'failed'
                                     ? 'border-red-500/20 bg-red-500/10 text-red-400'
@@ -853,74 +848,104 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                                     : 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400'
                                 }`}
                               >
-                                {payment.status === 'paid' && 'Pagato'}
-                                {payment.status === 'failed' && 'Fallito'}
-                                {payment.status === 'pending' && 'In sospeso'}
-                                {payment.status === 'refunded' && 'Rimborsato'}
+                                {isCompleted ? 'Completata' : payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : payment.status === 'pending' ? 'In sospeso' : 'Rimborsato'}
                               </Badge>
                             </div>
-                            {/* Invoice Number */}
-                            <div className="col-span-3">
-                              <span className="text-xs font-mono text-zinc-500 truncate block">
-                                {payment.stripe_invoice_id || '-'}
-                              </span>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {payment.status === 'paid' && !isCompleted && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 rounded-xl text-xs font-medium"
+                                  onClick={async () => {
+                                    try {
+                                      await supabase.from('subscription_payments').update({ admin_completed: true }).eq('id', payment.id)
+                                      setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: true } : p))
+                                      toast.success('Fattura completata')
+                                    } catch { toast.error('Errore') }
+                                  }}
+                                  title="Segna come completata"
+                                >
+                                  <CheckCircle size={16} className="mr-1" /> Completa
+                                </Button>
+                              )}
+                              {isCompleted && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-9 px-3 text-zinc-500 hover:bg-zinc-800 rounded-xl text-xs"
+                                  onClick={async () => {
+                                    try {
+                                      await supabase.from('subscription_payments').update({ admin_completed: false }).eq('id', payment.id)
+                                      setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: false } : p))
+                                      toast.success('Fattura riaperta')
+                                    } catch { toast.error('Errore') }
+                                  }}
+                                >
+                                  Riapri
+                                </Button>
+                              )}
                             </div>
                           </div>
-                        )
-                      })
-                    )}
-                  </div>
 
-                  {/* Table Footer - Totals for filtered results */}
-                  {filteredFatturazionePayments.length > 0 && (
-                    <div className="grid grid-cols-12 gap-2 px-4 py-3 border-t border-white/5 bg-black/30">
-                      <div className="col-span-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center">
-                        Totale filtrato
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-sm font-bold text-white">
-                          {'\u20AC'}{filteredFatturazionePayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="col-span-2 text-xs text-zinc-500 flex items-center">
-                        {filteredFatturazionePayments.length} pagamenti
-                      </div>
-                      <div className="col-span-2 flex items-center gap-2">
-                        <span className="text-[10px] text-emerald-400">{filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati</span>
-                        {filteredFatturazionePayments.filter(p => p.status === 'failed').length > 0 && (
-                          <span className="text-[10px] text-red-400">{filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti</span>
-                        )}
-                      </div>
-                      <div className="col-span-3" />
-                    </div>
+                          {/* Invoice ID row */}
+                          {payment.stripe_invoice_id && (
+                            <p className="text-[11px] font-mono text-zinc-600 mt-2 ml-[52px] truncate">
+                              {payment.stripe_invoice_id}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
+
+                {/* Summary Footer */}
+                {filteredFatturazionePayments.length > 0 && (
+                  <div className="flex items-center justify-between p-5 rounded-2xl bg-zinc-900/50 border border-white/5">
+                    <div>
+                      <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1">Totale filtrato</p>
+                      <p className="text-2xl font-bold text-white">
+                        {'\u20AC'}{filteredFatturazionePayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-emerald-400 font-medium">{filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati</span>
+                      {filteredFatturazionePayments.filter(p => p.status === 'failed').length > 0 && (
+                        <span className="text-red-400 font-medium">{filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti</span>
+                      )}
+                      <span className="text-zinc-500">{filteredFatturazionePayments.length} totali</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* ==================== ABBONAMENTI TAB ==================== */}
             {adminSubTab === 'abbonamenti' && <>
             {/* Stats Overview */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
-                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider mb-1">Totale</p>
-                <p className="text-2xl font-bold text-white">{restaurants?.length || 0}</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
+                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-2">Totale</p>
+                <p className="text-3xl font-bold text-white">{restaurants?.length || 0}</p>
               </div>
-              <div className="p-4 rounded-xl bg-zinc-900/80 border border-emerald-500/10">
-                <p className="text-[11px] text-emerald-500/70 font-medium uppercase tracking-wider mb-1">Abbonati</p>
-                <p className="text-2xl font-bold text-emerald-400">{restaurants?.filter(r => r.stripe_subscription_id).length || 0}</p>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/10 shadow-lg shadow-emerald-500/[0.03]">
+                <p className="text-xs text-emerald-500/80 font-semibold uppercase tracking-wider mb-2">Abbonati</p>
+                <p className="text-3xl font-bold text-emerald-400">{restaurants?.filter(r => r.stripe_subscription_id).length || 0}</p>
               </div>
-              <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/10">
-                <p className="text-[11px] text-amber-500/70 font-medium uppercase tracking-wider mb-1">Non abbonati</p>
-                <p className="text-2xl font-bold text-amber-400">{restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0}</p>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-amber-500/10 shadow-lg shadow-amber-500/[0.03]">
+                <p className="text-xs text-amber-500/80 font-semibold uppercase tracking-wider mb-2">Non abbonati</p>
+                <p className="text-3xl font-bold text-amber-400">{restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0}</p>
               </div>
-              <div className="p-4 rounded-xl bg-zinc-900/80 border border-red-500/10">
-                <p className="text-[11px] text-red-500/70 font-medium uppercase tracking-wider mb-1">Sospesi</p>
-                <p className="text-2xl font-bold text-red-400">{restaurants?.filter(r => !r.isActive).length || 0}</p>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-red-500/10 shadow-lg shadow-red-500/[0.03]">
+                <p className="text-xs text-red-500/80 font-semibold uppercase tracking-wider mb-2">Sospesi</p>
+                <p className="text-3xl font-bold text-red-400">{restaurants?.filter(r => !r.isActive).length || 0}</p>
               </div>
-              <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5">
-                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wider mb-1">Incassato</p>
-                <p className="text-2xl font-bold text-white">€{subscriptionPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(0)}</p>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
+                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-2">Incassato</p>
+                <p className="text-3xl font-bold text-white">€{subscriptionPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(0)}</p>
               </div>
             </div>
 

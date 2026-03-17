@@ -26,6 +26,7 @@ interface OrderItem {
     notes: string
     courseNumber: number
     dish?: Dish
+    delivered?: boolean
 }
 
 const WaiterOrderPage = () => {
@@ -251,8 +252,8 @@ const WaiterOrderPage = () => {
                 course_number: item.courseNumber,
             })
 
-            // Remove from cart
-            updateQuantity(index, -item.quantity)
+            // Mark as delivered in cart (greyed out, not removed)
+            setOrderItems(prev => prev.map((it, i) => i === index ? { ...it, delivered: true } : it))
             toast.success(`${item.dish?.name || 'Piatto'} segnato come già servito`)
         } catch (error) {
             console.error('Error marking item as delivered:', error)
@@ -262,13 +263,14 @@ const WaiterOrderPage = () => {
 
     // Submit Order Handling
     const handlePreSubmit = (type: 'standard' | 'delivered') => {
-        if (orderItems.length === 0) return
+        if (orderItems.filter(i => !i.delivered).length === 0) return
         setConfirmActionType(type)
         setShowConfirmDialog(true)
     }
 
     const processOrderSubmission = async () => {
-        if (orderItems.length === 0) return
+        const itemsToSubmit = orderItems.filter(i => !i.delivered)
+        if (itemsToSubmit.length === 0) return
         if (!table || !restaurant) return
 
         setShowConfirmDialog(false)
@@ -305,10 +307,10 @@ const WaiterOrderPage = () => {
             }
 
             // Group by Course
-            const courses = [...new Set(orderItems.map(i => i.courseNumber))].sort((a, b) => a - b)
+            const courses = [...new Set(itemsToSubmit.map(i => i.courseNumber))].sort((a, b) => a - b)
 
             for (const courseNum of courses) {
-                const itemsInCourse = orderItems.filter(i => i.courseNumber === courseNum)
+                const itemsInCourse = itemsToSubmit.filter(i => i.courseNumber === courseNum)
                 const totalAmount = itemsInCourse.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
 
                 // Determine Statuses
@@ -360,9 +362,10 @@ const WaiterOrderPage = () => {
         }
     }
 
-    // Totals
-    const totalAmount = orderItems.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
-    const totalItems = orderItems.reduce((sum, item) => sum + item.quantity, 0)
+    // Totals — exclude delivered items
+    const pendingItems = orderItems.filter(i => !i.delivered)
+    const totalAmount = pendingItems.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
+    const totalItems = pendingItems.reduce((sum, item) => sum + item.quantity, 0)
 
     // Dish Detail Dialog State
     const [selectedDishForDetail, setSelectedDishForDetail] = useState<Dish | null>(null)
@@ -596,14 +599,26 @@ const WaiterOrderPage = () => {
                                                             const realIndex = orderItems.indexOf(item)
                                                             const uniqueId = `${item.dishId}-${realIndex}`
                                                             return (
-                                                                <div key={uniqueId} className="flex gap-3 bg-zinc-900/50 p-3 rounded-xl border border-white/5 relative group">
+                                                                <div key={uniqueId} className={`flex gap-3 p-3 rounded-xl border relative group transition-all ${item.delivered ? 'bg-zinc-900/30 border-zinc-800/50 opacity-60' : 'bg-zinc-900/50 border-white/5'}`}>
                                                                     <div className="flex-1">
                                                                         <div className="flex justify-between items-start">
-                                                                            <span className="font-bold text-zinc-200">{item.dish?.name}</span>
-                                                                            <span className="text-zinc-400 text-sm">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className={`font-bold ${item.delivered ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>{item.dish?.name}</span>
+                                                                                {item.delivered && (
+                                                                                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                                                                                        <Check size={10} weight="bold" className="mr-0.5" />
+                                                                                        Consegnato
+                                                                                    </Badge>
+                                                                                )}
+                                                                            </div>
+                                                                            <span className={`text-sm ${item.delivered ? 'text-zinc-600' : 'text-zinc-400'}`}>€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
                                                                         </div>
-                                                                        {item.notes && <p className="text-xs text-amber-500 italic mt-1">{item.notes}</p>}
+                                                                        {item.notes && <p className={`text-xs italic mt-1 ${item.delivered ? 'text-zinc-600' : 'text-amber-500'}`}>{item.notes}</p>}
+                                                                        {item.delivered && (
+                                                                            <p className="text-[10px] text-zinc-600 mt-1">×{item.quantity} — già servito al tavolo</p>
+                                                                        )}
 
+                                                                        {!item.delivered && (
                                                                         <div className="flex items-center gap-4 mt-3 flex-wrap">
                                                                             {/* Quantity Controls */}
                                                                             <div className="flex items-center gap-3 bg-black/40 rounded-lg p-1">
@@ -655,6 +670,7 @@ const WaiterOrderPage = () => {
                                                                                 Segna come Consegnato
                                                                             </button>
                                                                         </div>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             )
@@ -676,7 +692,7 @@ const WaiterOrderPage = () => {
                                         <Button
                                             className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl text-lg shadow-lg shadow-amber-500/20"
                                             onClick={() => handlePreSubmit('standard')}
-                                            disabled={submitting}
+                                            disabled={submitting || pendingItems.length === 0}
                                         >
                                             <PaperPlaneRight size={20} weight="fill" className="mr-2" />
                                             Invia in Cucina

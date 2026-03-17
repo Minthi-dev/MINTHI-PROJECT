@@ -1350,7 +1350,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const ayceMaxOrders = useMemo(() => {
     if (!activeSession?.ayce_enabled) return 0
     const weeklyAyce = (fullRestaurant as any)?.weekly_ayce
+    // If weekly schedule exists but AYCE is disabled there, don't show limit
+    if (weeklyAyce && !weeklyAyce.enabled) return 0
     const legacyAyce = (fullRestaurant as any)?.all_you_can_eat
+    if (!weeklyAyce && legacyAyce && !legacyAyce.enabled) return 0
     return weeklyAyce?.defaultMaxOrders || legacyAyce?.maxOrders || (fullRestaurant as any)?.ayce_max_orders || 0
   }, [fullRestaurant, activeSession])
   const remainingOrders = useMemo(() => {

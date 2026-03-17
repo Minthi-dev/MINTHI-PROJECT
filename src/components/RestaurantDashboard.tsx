@@ -923,9 +923,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       setAllowWaiterPayments(currentRestaurant.allow_waiter_payments || false)
       setWaiterPassword('')
 
-      setAyceEnabled(!!currentRestaurant.all_you_can_eat?.enabled)
-      setAycePrice(currentRestaurant.all_you_can_eat?.pricePerPerson || 0)
-      setAyceMaxOrders(currentRestaurant.all_you_can_eat?.maxOrders || 0)
+      // Weekly AYCE schedule is source of truth if it exists; fall back to legacy
+      const ayceOn = currentRestaurant.weekly_ayce
+        ? !!currentRestaurant.weekly_ayce.enabled
+        : !!currentRestaurant.all_you_can_eat?.enabled
+      setAyceEnabled(ayceOn)
+      setAycePrice(currentRestaurant.weekly_ayce?.defaultPrice ?? currentRestaurant.all_you_can_eat?.pricePerPerson ?? 0)
+      setAyceMaxOrders(currentRestaurant.weekly_ayce?.defaultMaxOrders ?? currentRestaurant.all_you_can_eat?.maxOrders ?? 0)
       // For now, let's stick to what we know exists or was added.
 
       // refreshRestaurants() // This was causing an infinite loop, removed.
@@ -4912,7 +4916,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     {section.dishes.map(dish => (
                       <div key={dish.id} style={{ display: 'flex', gap: '15px', alignItems: 'flex-start', pageBreakInside: 'avoid' }}>
-                        {dish.image_url?.trim() && (
+                        {dish.image_url?.trim() && dish.image_url.startsWith('http') && (
                           <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
                             <img src={dish.image_url} alt={dish.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           </div>

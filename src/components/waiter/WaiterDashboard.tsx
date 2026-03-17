@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { useNavigate } from 'react-router-dom' // Restored
 
 import { DatabaseService } from '../../services/DatabaseService' // Corrected path (../services -> ../../services)
-import { Table, Order, TableSession, Restaurant, Room, Dish, Category } from '../../services/types'
+import { Table, Order, TableSession, Restaurant, Room, Dish, Category, Booking } from '../../services/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card' // Restored
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel, ArrowsClockwise } from '@phosphor-icons/react' // Restored icons
+import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel, ArrowsClockwise, Eye, EyeSlash, CalendarCheck, Phone, Envelope, NotePencil } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase' // Corrected path (../../supabaseClient -> ../../lib/supabase usually, or just check file tree)
 import { cn } from '@/lib/utils'
@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { motion, AnimatePresence } from 'framer-motion'
 import TableBillDialog from '../TableBillDialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu' // Restored
+import { Switch } from '@/components/ui/switch'
 import { soundManager } from '../../utils/SoundManager'
 
 interface WaiterDashboardProps {
@@ -77,6 +78,21 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     // Activity Center State
     const [activityRoomFilter, setActivityRoomFilter] = useState<string>('all')
     const [justDeliveredIds, setJustDeliveredIds] = useState<Set<string>>(new Set())
+
+    // Management Dialog Tab
+    const [manageTab, setManageTab] = useState<'tables' | 'menu' | 'bookings'>('tables')
+    const [menuSearch, setMenuSearch] = useState('')
+    const [menuCategoryFilter, setMenuCategoryFilter] = useState<string>('all')
+
+    // Bookings State
+    const [bookings, setBookings] = useState<Booking[]>([])
+    const [newBookingName, setNewBookingName] = useState('')
+    const [newBookingPhone, setNewBookingPhone] = useState('')
+    const [newBookingGuests, setNewBookingGuests] = useState('2')
+    const [newBookingDate, setNewBookingDate] = useState(new Date().toISOString().split('T')[0])
+    const [newBookingTime, setNewBookingTime] = useState('20:00')
+    const [newBookingNotes, setNewBookingNotes] = useState('')
+    const [showAddBookingForm, setShowAddBookingForm] = useState(false)
 
     // Device ID for notification routing
     const deviceId = useMemo(() => {
@@ -144,7 +160,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 }
 
                 // Parallel fetch all data at once
-                const [tbs, rms, ds, cats, sessResult, ordsResult] = await Promise.all([
+                const [tbs, rms, ds, cats, sessResult, ordsResult, bks] = await Promise.all([
                     DatabaseService.getTables(rId),
                     DatabaseService.getRooms(rId),
                     DatabaseService.getDishes(rId),
@@ -158,7 +174,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             )
                         `)
                         .eq('restaurant_id', rId)
-                        .in('status', ['OPEN', 'pending', 'preparing', 'ready', 'served', 'completed', 'CANCELLED'])
+                        .in('status', ['OPEN', 'pending', 'preparing', 'ready', 'served', 'completed', 'CANCELLED']),
+                    DatabaseService.getBookings(rId).catch(() => [] as Booking[])
                 ])
                 setTables(tbs)
                 setRooms(rms)
@@ -166,6 +183,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 setCategories(cats)
                 if (sessResult.data) setSessions(sessResult.data)
                 if (ordsResult.data) setActiveOrders(ordsResult.data as unknown as Order[])
+                setBookings(bks)
 
             } catch (error) {
                 console.error('Error loading waiter dashboard:', error)
@@ -608,8 +626,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const activateTable = async (table: Table) => {
         setTableToActivate(table)
         setActivateCustomerCount(String(table.seats || 2))
-        // Derive AYCE/coperto defaults from restaurant settings
-        const ayceDefault = !!(restaurant?.all_you_can_eat?.enabled || (restaurant as any)?.ayce_enabled)
+        // Derive AYCE/coperto defaults from restaurant settings — weekly schedule is source of truth
+        const weeklyAyce = (restaurant as any)?.weekly_ayce
+        const ayceDefault = weeklyAyce ? !!weeklyAyce.enabled : !!(restaurant?.all_you_can_eat?.enabled)
         const copertoDefault = !!((restaurant?.cover_charge_per_person && restaurant.cover_charge_per_person > 0) || (restaurant as any)?.coperto_enabled)
         setActivateAyceEnabled(ayceDefault)
         setActivateCopertoEnabled(copertoDefault)
@@ -789,6 +808,102 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         setNewRoomName(room.name)
         setIsEditRoomDialogOpen(true)
     }
+
+    // MENU MANAGEMENT (waiter)
+    const handleToggleDishActive = async (dish: Dish) => {
+        try {
+            await DatabaseService.updateDish({ id: dish.id, is_active: !dish.is_active })
+            setDishes(prev => prev.map(d => d.id === dish.id ? { ...d, is_active: !d.is_active } : d))
+            toast.success(`${dish.name} ${dish.is_active ? 'nascosto' : 'visibile'}`)
+        } catch {
+            toast.error('Errore aggiornamento piatto')
+        }
+    }
+
+    const handleToggleDishAvailable = async (dish: Dish) => {
+        try {
+            const newVal = !(dish.is_available ?? true)
+            await DatabaseService.updateDish({ id: dish.id, is_available: newVal })
+            setDishes(prev => prev.map(d => d.id === dish.id ? { ...d, is_available: newVal } : d))
+            toast.success(`${dish.name} ${newVal ? 'disponibile' : 'esaurito'}`)
+        } catch {
+            toast.error('Errore aggiornamento piatto')
+        }
+    }
+
+    const handleQuickPriceEdit = async (dish: Dish, newPrice: number) => {
+        if (isNaN(newPrice) || newPrice < 0) return
+        try {
+            await DatabaseService.updateDish({ id: dish.id, price: newPrice })
+            setDishes(prev => prev.map(d => d.id === dish.id ? { ...d, price: newPrice } : d))
+            toast.success(`Prezzo aggiornato: €${newPrice.toFixed(2)}`)
+        } catch {
+            toast.error('Errore aggiornamento prezzo')
+        }
+    }
+
+    // BOOKINGS MANAGEMENT (waiter)
+    const handleUpdateBookingStatus = async (booking: Booking, status: 'confirmed' | 'cancelled' | 'pending') => {
+        try {
+            await DatabaseService.updateBooking({ ...booking, status })
+            setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status } : b))
+            toast.success(`Prenotazione ${status === 'confirmed' ? 'confermata' : status === 'cancelled' ? 'annullata' : 'in attesa'}`)
+        } catch {
+            toast.error('Errore aggiornamento prenotazione')
+        }
+    }
+
+    const handleAddBooking = async () => {
+        if (!restaurantId || !newBookingName.trim()) {
+            toast.error('Inserisci almeno il nome'); return
+        }
+        try {
+            const dateTime = `${newBookingDate}T${newBookingTime}:00`
+            const newBooking = await DatabaseService.createBooking({
+                restaurant_id: restaurantId,
+                name: newBookingName.trim(),
+                phone: newBookingPhone.trim() || undefined,
+                date_time: dateTime,
+                guests: parseInt(newBookingGuests) || 2,
+                notes: newBookingNotes.trim() || undefined,
+                status: 'confirmed'
+            })
+            setBookings(prev => [newBooking, ...prev])
+            setNewBookingName(''); setNewBookingPhone(''); setNewBookingGuests('2')
+            setNewBookingNotes(''); setShowAddBookingForm(false)
+            toast.success('Prenotazione aggiunta')
+        } catch {
+            toast.error('Errore creazione prenotazione')
+        }
+    }
+
+    // Filtered dishes for menu management
+    const filteredMenuDishes = useMemo(() => {
+        let filtered = dishes
+        if (menuCategoryFilter !== 'all') filtered = filtered.filter(d => d.category_id === menuCategoryFilter)
+        if (menuSearch.trim()) {
+            const q = menuSearch.toLowerCase()
+            filtered = filtered.filter(d => d.name.toLowerCase().includes(q))
+        }
+        return filtered
+    }, [dishes, menuCategoryFilter, menuSearch])
+
+    // Today's bookings
+    const todayBookings = useMemo(() => {
+        const today = new Date().toISOString().split('T')[0]
+        return bookings
+            .filter(b => b.date_time?.startsWith(today))
+            .sort((a, b) => a.date_time.localeCompare(b.date_time))
+    }, [bookings])
+
+    const upcomingBookings = useMemo(() => {
+        const now = new Date()
+        const todayStr = now.toISOString().split('T')[0]
+        return bookings
+            .filter(b => b.date_time > todayStr && !b.date_time.startsWith(todayStr))
+            .sort((a, b) => a.date_time.localeCompare(b.date_time))
+            .slice(0, 10)
+    }, [bookings])
 
     // Filtered tables based on room selection (memoizzata)
     const filteredTables = useMemo(() => selectedRoomFilter === 'all'
@@ -1699,7 +1814,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                 className="bg-zinc-900 border-zinc-800 h-12 text-lg text-center"
                             />
                         </div>
-                        {(restaurant?.all_you_can_eat?.enabled || (restaurant as any)?.ayce_enabled) && (
+                        {(() => { const wa = (restaurant as any)?.weekly_ayce; return wa ? !!wa.enabled : !!(restaurant?.all_you_can_eat?.enabled); })() && (
                             <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/50 border border-white/5">
                                 <div>
                                     <p className="font-medium">AYCE (All You Can Eat)</p>
@@ -1747,78 +1862,346 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 </DialogContent>
             </Dialog>
 
-            {/* Management Dialog - Main Menu */}
-            <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
-                <DialogContent className="sm:max-w-lg w-[95vw] bg-zinc-950 border-zinc-800 text-zinc-100 p-0 overflow-hidden max-h-[85vh] flex flex-col">
-                    <DialogHeader className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50 shrink-0">
-                        <DialogTitle className="text-xl font-bold flex items-center gap-3">
-                            <GearSix size={24} className="text-amber-500" />
-                            Gestione Tavoli e Sale
-                        </DialogTitle>
-                        <DialogDescription className="text-zinc-500">
-                            Aggiungi, modifica o elimina tavoli e sale
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <ScrollArea className="flex-1 max-h-[65vh] overflow-y-auto">
-                        <div className="p-4 space-y-6">
-                            {/* Tables Section */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Tavoli ({tables.length})</h3>
-                                    <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddTableDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
-                                        <Plus size={16} className="mr-1" /> Aggiungi
-                                    </Button>
-                                </div>
-                                <div className="space-y-2">
-                                    {tables.map(table => {
-                                        const room = rooms.find(r => r.id === table.room_id)
-                                        const session = sessions.find(s => s.table_id === table.id)
-                                        return (
-                                            <div key={table.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
-                                                <div>
-                                                    <span className="font-bold text-white">{table.number}</span>
-                                                    <span className="text-xs text-zinc-500 ml-2">{table.seats} posti</span>
-                                                    {room && <Badge variant="outline" className="ml-2 text-[10px] border-amber-500/30 text-amber-400">{room.name}</Badge>}
-                                                    {session && <Badge className="ml-2 text-[10px] bg-green-500/20 text-green-400 border-green-500/30">Attivo</Badge>}
-                                                </div>
-                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditTableDialog(table); }}>
-                                                    <Pencil size={16} />
-                                                </Button>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Rooms Section */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Sale ({rooms.length})</h3>
-                                    <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddRoomDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
-                                        <Plus size={16} className="mr-1" /> Aggiungi
-                                    </Button>
-                                </div>
-                                <div className="space-y-2">
-                                    {rooms.length === 0 ? (
-                                        <p className="text-sm text-zinc-600 text-center py-4">Nessuna sala configurata</p>
-                                    ) : rooms.map(room => {
-                                        const tablesInRoom = tables.filter(t => t.room_id === room.id).length
-                                        return (
-                                            <div key={room.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
-                                                <div>
-                                                    <span className="font-bold text-white">{room.name}</span>
-                                                    <span className="text-xs text-zinc-500 ml-2">{tablesInRoom} tavoli</span>
-                                                </div>
-                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditRoomDialog(room); }}>
-                                                    <Pencil size={16} />
-                                                </Button>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
+            {/* Management Dialog - Tabbed (Tables/Menu/Bookings) */}
+            <Dialog open={isManageDialogOpen} onOpenChange={(open) => { setIsManageDialogOpen(open); if (!open) { setMenuSearch(''); setMenuCategoryFilter('all'); setShowAddBookingForm(false); } }}>
+                <DialogContent className="sm:max-w-xl w-[95vw] bg-zinc-950 border-zinc-800 text-zinc-100 p-0 overflow-hidden max-h-[85vh] flex flex-col">
+                    {/* Header with tabs */}
+                    <div className="shrink-0 border-b border-white/5">
+                        <DialogHeader className="p-5 pb-3">
+                            <DialogTitle className="text-xl font-bold flex items-center gap-3">
+                                <GearSix size={24} className="text-amber-500" />
+                                Gestione
+                            </DialogTitle>
+                            <DialogDescription className="text-zinc-500 sr-only">Gestisci tavoli, menu e prenotazioni</DialogDescription>
+                        </DialogHeader>
+                        <div className="flex px-5 gap-1">
+                            {[
+                                { key: 'tables' as const, label: 'Sale & Tavoli', icon: <House size={16} /> },
+                                { key: 'menu' as const, label: 'Menu', icon: <ForkKnife size={16} /> },
+                                { key: 'bookings' as const, label: 'Prenotazioni', icon: <CalendarCheck size={16} /> },
+                            ].map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setManageTab(tab.key)}
+                                    className={cn(
+                                        'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors',
+                                        manageTab === tab.key
+                                            ? 'bg-zinc-900 text-amber-400 border-b-2 border-amber-500'
+                                            : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50'
+                                    )}
+                                >
+                                    {tab.icon} {tab.label}
+                                </button>
+                            ))}
                         </div>
+                    </div>
+
+                    <ScrollArea className="flex-1 max-h-[60vh] overflow-y-auto">
+                        <AnimatePresence mode="wait">
+                            {/* === TABLES & ROOMS TAB === */}
+                            {manageTab === 'tables' && (
+                                <motion.div key="tables" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-6">
+                                    {/* Tables */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Tavoli ({tables.length})</h3>
+                                            <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddTableDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
+                                                <Plus size={16} className="mr-1" /> Aggiungi
+                                            </Button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {tables.map(table => {
+                                                const room = rooms.find(r => r.id === table.room_id)
+                                                const session = sessions.find(s => s.table_id === table.id)
+                                                return (
+                                                    <div key={table.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-bold text-white">{table.number}</span>
+                                                            <span className="text-xs text-zinc-500">{table.seats} posti</span>
+                                                            {room && <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400">{room.name}</Badge>}
+                                                            {session && <Badge className="text-[10px] bg-green-500/20 text-green-400 border-green-500/30">Attivo</Badge>}
+                                                        </div>
+                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditTableDialog(table); }}>
+                                                            <Pencil size={16} />
+                                                        </Button>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                    {/* Rooms */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Sale ({rooms.length})</h3>
+                                            <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddRoomDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
+                                                <Plus size={16} className="mr-1" /> Aggiungi
+                                            </Button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {rooms.length === 0 ? (
+                                                <p className="text-sm text-zinc-600 text-center py-4">Nessuna sala configurata</p>
+                                            ) : rooms.map(room => {
+                                                const tablesInRoom = tables.filter(t => t.room_id === room.id).length
+                                                return (
+                                                    <div key={room.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
+                                                        <div>
+                                                            <span className="font-bold text-white">{room.name}</span>
+                                                            <span className="text-xs text-zinc-500 ml-2">{tablesInRoom} tavoli</span>
+                                                        </div>
+                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditRoomDialog(room); }}>
+                                                            <Pencil size={16} />
+                                                        </Button>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* === MENU TAB === */}
+                            {manageTab === 'menu' && (
+                                <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-4">
+                                    {/* Search + Filter */}
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                                            <Input
+                                                placeholder="Cerca piatto..."
+                                                value={menuSearch}
+                                                onChange={(e) => setMenuSearch(e.target.value)}
+                                                className="pl-9 bg-zinc-900/80 border-white/5 h-10"
+                                            />
+                                        </div>
+                                        <Select value={menuCategoryFilter} onValueChange={setMenuCategoryFilter}>
+                                            <SelectTrigger className="w-[140px] bg-zinc-900/80 border-white/5 h-10">
+                                                <SelectValue placeholder="Categoria" />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-zinc-950 border-zinc-800">
+                                                <SelectItem value="all">Tutte</SelectItem>
+                                                {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Dish List */}
+                                    <div className="space-y-1.5">
+                                        {filteredMenuDishes.length === 0 ? (
+                                            <p className="text-sm text-zinc-600 text-center py-8">Nessun piatto trovato</p>
+                                        ) : filteredMenuDishes.map(dish => {
+                                            const cat = categories.find(c => c.id === dish.category_id)
+                                            const isAvailable = dish.is_available !== false
+                                            return (
+                                                <div key={dish.id} className={cn(
+                                                    'flex items-center gap-3 p-3 rounded-xl border transition-colors',
+                                                    dish.is_active
+                                                        ? 'bg-zinc-900/80 border-white/5'
+                                                        : 'bg-zinc-900/30 border-white/3 opacity-50'
+                                                )}>
+                                                    {/* Dish image thumbnail */}
+                                                    {dish.image_url?.trim() && dish.image_url.startsWith('http') ? (
+                                                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-zinc-800">
+                                                            <img src={dish.image_url} alt="" className="w-full h-full object-cover" />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-lg shrink-0 bg-zinc-800/50 flex items-center justify-center">
+                                                            <ForkKnife size={16} className="text-zinc-600" />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Dish info */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={cn('font-medium truncate', dish.is_active ? 'text-white' : 'text-zinc-500')}>{dish.name}</span>
+                                                            {!isAvailable && <Badge className="text-[9px] bg-red-500/20 text-red-400 border-red-500/30 px-1.5">Esaurito</Badge>}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            {cat && <span className="text-[10px] text-zinc-600">{cat.name}</span>}
+                                                            <span className="text-xs text-amber-400 font-bold">€{dish.price.toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Controls */}
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        {/* Availability toggle (esaurito) */}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className={cn('h-8 w-8 p-0', isAvailable ? 'text-zinc-500 hover:text-red-400' : 'text-red-400 hover:text-green-400')}
+                                                            onClick={() => handleToggleDishAvailable(dish)}
+                                                            title={isAvailable ? 'Segna esaurito' : 'Segna disponibile'}
+                                                        >
+                                                            {isAvailable ? <CheckCircle size={16} /> : <X size={16} />}
+                                                        </Button>
+                                                        {/* Visibility toggle */}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className={cn('h-8 w-8 p-0', dish.is_active ? 'text-zinc-500 hover:text-amber-400' : 'text-amber-400/50 hover:text-amber-400')}
+                                                            onClick={() => handleToggleDishActive(dish)}
+                                                            title={dish.is_active ? 'Nascondi dal menu' : 'Mostra nel menu'}
+                                                        >
+                                                            {dish.is_active ? <Eye size={16} /> : <EyeSlash size={16} />}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    <p className="text-[11px] text-zinc-600 text-center pt-2">
+                                        {dishes.filter(d => d.is_active).length} piatti visibili · {dishes.filter(d => !d.is_active).length} nascosti
+                                    </p>
+                                </motion.div>
+                            )}
+
+                            {/* === BOOKINGS TAB === */}
+                            {manageTab === 'bookings' && (
+                                <motion.div key="bookings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-4">
+                                    {/* Add booking button */}
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">
+                                            Oggi ({todayBookings.length})
+                                        </h3>
+                                        <Button
+                                            size="sm"
+                                            onClick={() => setShowAddBookingForm(!showAddBookingForm)}
+                                            className={showAddBookingForm ? 'h-8 bg-zinc-800 text-zinc-300' : 'h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold'}
+                                        >
+                                            {showAddBookingForm ? <><X size={14} className="mr-1" /> Chiudi</> : <><Plus size={14} className="mr-1" /> Nuova</>}
+                                        </Button>
+                                    </div>
+
+                                    {/* Add booking form */}
+                                    <AnimatePresence>
+                                        {showAddBookingForm && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/20 space-y-3">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div className="col-span-2">
+                                                            <Label className="text-xs text-zinc-500">Nome *</Label>
+                                                            <Input value={newBookingName} onChange={(e) => setNewBookingName(e.target.value)} placeholder="Nome cliente" className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Telefono</Label>
+                                                            <Input value={newBookingPhone} onChange={(e) => setNewBookingPhone(e.target.value)} placeholder="333..." className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Persone</Label>
+                                                            <Input type="number" min="1" value={newBookingGuests} onChange={(e) => setNewBookingGuests(e.target.value)} className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Data</Label>
+                                                            <Input type="date" value={newBookingDate} onChange={(e) => setNewBookingDate(e.target.value)} className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Ora</Label>
+                                                            <Input type="time" value={newBookingTime} onChange={(e) => setNewBookingTime(e.target.value)} className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <Label className="text-xs text-zinc-500">Note</Label>
+                                                            <Input value={newBookingNotes} onChange={(e) => setNewBookingNotes(e.target.value)} placeholder="Note opzionali..." className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                    </div>
+                                                    <Button onClick={handleAddBooking} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-10">
+                                                        <Plus size={16} className="mr-1" /> Aggiungi Prenotazione
+                                                    </Button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    {/* Today's bookings */}
+                                    <div className="space-y-2">
+                                        {todayBookings.length === 0 ? (
+                                            <p className="text-sm text-zinc-600 text-center py-6">Nessuna prenotazione per oggi</p>
+                                        ) : todayBookings.map(booking => {
+                                            const time = new Date(booking.date_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                                            const statusColors = {
+                                                confirmed: 'bg-green-500/15 text-green-400 border-green-500/30',
+                                                pending: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+                                                cancelled: 'bg-red-500/15 text-red-400 border-red-500/30',
+                                            }
+                                            return (
+                                                <div key={booking.id} className={cn(
+                                                    'p-3 rounded-xl border transition-colors',
+                                                    booking.status === 'cancelled' ? 'bg-zinc-900/30 border-white/3 opacity-50' : 'bg-zinc-900/80 border-white/5'
+                                                )}>
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-white">{booking.name}</span>
+                                                                <Badge className={cn('text-[10px] px-1.5', statusColors[booking.status as keyof typeof statusColors] || statusColors.pending)}>
+                                                                    {booking.status === 'confirmed' ? 'Confermata' : booking.status === 'cancelled' ? 'Annullata' : 'In attesa'}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+                                                                <span className="flex items-center gap-1"><Clock size={12} /> {time}</span>
+                                                                <span className="flex items-center gap-1"><Users size={12} /> {booking.guests}</span>
+                                                                {booking.phone && <span className="flex items-center gap-1"><Phone size={12} /> {booking.phone}</span>}
+                                                            </div>
+                                                            {booking.notes && <p className="text-[11px] text-zinc-600 mt-1 truncate">{booking.notes}</p>}
+                                                        </div>
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            {booking.status !== 'confirmed' && (
+                                                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-400 hover:bg-green-500/20" onClick={() => handleUpdateBookingStatus(booking, 'confirmed')} title="Conferma">
+                                                                    <Check size={14} />
+                                                                </Button>
+                                                            )}
+                                                            {booking.status !== 'cancelled' && (
+                                                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/20" onClick={() => handleUpdateBookingStatus(booking, 'cancelled')} title="Annulla">
+                                                                    <X size={14} />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    {/* Upcoming bookings */}
+                                    {upcomingBookings.length > 0 && (
+                                        <div>
+                                            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 mb-3 mt-2">Prossime ({upcomingBookings.length})</h3>
+                                            <div className="space-y-2">
+                                                {upcomingBookings.map(booking => {
+                                                    const dt = new Date(booking.date_time)
+                                                    const dateStr = dt.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
+                                                    const timeStr = dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                                                    return (
+                                                        <div key={booking.id} className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-xl border border-white/3">
+                                                            <div>
+                                                                <span className="font-medium text-white text-sm">{booking.name}</span>
+                                                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-500">
+                                                                    <span>{dateStr} {timeStr}</span>
+                                                                    <span>· {booking.guests} pers.</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                {booking.status === 'pending' && (
+                                                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-400 hover:bg-green-500/20" onClick={() => handleUpdateBookingStatus(booking, 'confirmed')}>
+                                                                        <Check size={14} />
+                                                                    </Button>
+                                                                )}
+                                                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/20" onClick={() => handleUpdateBookingStatus(booking, 'cancelled')}>
+                                                                    <X size={14} />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </ScrollArea>
 
                     <DialogFooter className="p-4 border-t border-white/5 shrink-0">
