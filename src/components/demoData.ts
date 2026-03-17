@@ -94,7 +94,7 @@ export const DEMO_ORDERS: Order[] = [
 // Past orders for analytics (completed orders from "today")
 const makePastOrder = (id: string, total: number, hoursAgo: number): Order => ({
   id, restaurant_id: RESTAURANT_ID, table_session_id: `past-session-${id}`,
-  status: 'completed', total_amount: total,
+  status: 'PAID', total_amount: total,
   created_at: new Date(Date.now() - hoursAgo * 3600000).toISOString(),
   closed_at: new Date(Date.now() - (hoursAgo - 0.5) * 3600000).toISOString(),
   items: [
