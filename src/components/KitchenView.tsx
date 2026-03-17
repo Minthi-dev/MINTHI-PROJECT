@@ -59,7 +59,11 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
     const getDish = (dishId: string) => dishes.find(d => d.id === dishId)
 
     const isOrderComplete = (order: Order) => {
-        return order.items?.every(item => item.status === 'SERVED' || item.status === 'READY')
+        // Order disappears only when ALL items are SERVED (fully delivered)
+        return order.items?.every(item => {
+            const s = item.status?.toUpperCase?.() || ''
+            return s === 'SERVED' || s === 'DELIVERED'
+        })
     }
 
     const itemMatchesCategory = (item: OrderItem) => {
@@ -71,26 +75,7 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
     const activeOrders = useMemo(() => {
         return orders
             .filter(o => ['OPEN', 'pending', 'preparing', 'ready'].includes(o.status))
-            .filter(o => {
-                // If waiter mode is enabled, keep the order visible if it has items that are ready but not served (delivered)
-                // If NOT waiter mode, keep standard behavior (hide complete orders)
-                if (waiterModeEnabled) {
-                    // Check if any item is active OR ready (but not served/delivered which are final states for kitchen view usually, but 'ready' is intermediate here)
-                    // Actually, we want to KEEP it if there are items that are 'ready'.
-                    // Filter out only if ALL items are SERVED/DELIVERED/PAID.
-                    // The isOrderComplete check usually filters out ready items too?
-                    // Let's customize:
-                    const hasActiveOrReadyItems = o.items?.some(item => {
-                        const s = item.status?.toLowerCase()
-                        return s !== 'served' && s !== 'delivered' && s !== 'paid' && s !== 'cancelled'
-                        // Note: 'ready' is not in this list, so it returns true.
-                        // But we also need to check if we should hide it.
-                    })
-                    return hasActiveOrReadyItems
-                } else {
-                    return !isOrderComplete(o)
-                }
-            })
+            .filter(o => !isOrderComplete(o))
             .filter(o => {
                 if (!selectedCategoryIds || selectedCategoryIds.length === 0) return true
                 return o.items?.some(item => itemMatchesCategory(item))
@@ -196,9 +181,7 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                     const dish = getDish(item.dish_id)
                                                     const itemStatus = item.status?.toUpperCase?.() || item.status || ''
                                                     const isItemReady = itemStatus === 'READY'
-                                                    const isItemDone = ['SERVED'].includes(itemStatus) || (isItemReady && !waiterModeEnabled)
-                                                    // If waiter mode is ON, 'READY' is NOT considered 'Done' (it stays visible), but is 'Ready' state.
-                                                    // If waiter mode is OFF, 'READY' is considered 'Done' (fades out or disappears).
+                                                    const isItemDone = ['SERVED', 'DELIVERED'].includes(itemStatus)
 
                                                     const isDelivered = itemStatus === 'DELIVERED'
                                                     const dishName = dish?.name || `❓ Sconosciuto`
@@ -246,12 +229,12 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                             </div>
 
                                                             {/* Action button: Completa → Consegnato → Done */}
-                                                            {isItemReady && !isItemDone && onDeliverDish ? (
+                                                            {isItemReady && !isItemDone ? (
                                                                 <Button
                                                                     size="icon"
                                                                     variant="default"
                                                                     className="h-11 w-11 rounded-xl flex-shrink-0 ml-3 transition-all duration-500 bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_10px_20px_-10px_rgba(16,185,129,0.5)] active:scale-90"
-                                                                    onClick={() => onDeliverDish(item.orderId, item.id)}
+                                                                    onClick={() => onDeliverDish?.(item.orderId, item.id)}
                                                                     title="Segna come consegnato"
                                                                 >
                                                                     <Check weight="bold" className="h-5 w-5" />
@@ -313,12 +296,11 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                         })
                     })() : (
                         dishesViewData.map((data, idx) => {
-                            const allItemsDone = data.items.every(({ item }) => {
+                            const allItemsServed = data.items.every(({ item }) => {
                                 const s = item.status?.toUpperCase?.() || ''
-                                if (waiterModeEnabled) return s === 'SERVED' || s === 'DELIVERED'
-                                return s === 'SERVED' || s === 'READY'
+                                return s === 'SERVED' || s === 'DELIVERED'
                             })
-                            if (allItemsDone) return null
+                            if (allItemsServed) return null
 
                             return (
                                 <Card
@@ -345,9 +327,7 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                             const isItemReady = itemStatus === 'READY'
                                             // In waiter mode: READY = completato (step 1), SERVED = consegnato (step 2)
                                             // Without waiter mode: READY = done
-                                            const isItemDone = waiterModeEnabled
-                                                ? itemStatus === 'SERVED'
-                                                : ['SERVED', 'READY'].includes(itemStatus)
+                                            const isItemDone = ['SERVED', 'DELIVERED'].includes(itemStatus)
                                             const isDelivered = itemStatus === 'DELIVERED'
 
                                             return (
@@ -357,7 +337,7 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                         "flex items-center justify-between p-2 rounded-lg border transition-all",
                                                         isDelivered || isItemDone
                                                             ? "opacity-20 bg-black/20 border-transparent"
-                                                            : isItemReady && waiterModeEnabled
+                                                            : isItemReady
                                                                 ? "opacity-55 bg-zinc-900/60 border-emerald-500/20"
                                                                 : "bg-black/40 border-white/5 hover:border-amber-500/20"
                                                     )}
@@ -381,13 +361,13 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                         <div className="font-bold text-xl text-zinc-500 whitespace-nowrap">
                                                             {formatTime(timeDiff)}
                                                         </div>
-                                                        {/* Waiter mode: READY → show green Consegnato button */}
-                                                        {waiterModeEnabled && isItemReady && onDeliverDish ? (
+                                                        {/* READY → show green Consegnato button */}
+                                                        {isItemReady && !isItemDone ? (
                                                             <Button
                                                                 size="icon"
                                                                 variant="default"
                                                                 className="h-12 w-12 rounded-lg flex-shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_10px_20px_-10px_rgba(16,185,129,0.5)] active:scale-90"
-                                                                onClick={() => onDeliverDish(order.id, item.id)}
+                                                                onClick={() => onDeliverDish?.(order.id, item.id)}
                                                                 title="Segna come consegnato"
                                                             >
                                                                 <Check weight="bold" className="h-6 w-6" />

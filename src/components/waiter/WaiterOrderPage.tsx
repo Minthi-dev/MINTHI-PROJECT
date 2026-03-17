@@ -138,7 +138,7 @@ const WaiterOrderPage = () => {
         }
         // Uncategorized
         const uncategorized = filteredDishes.filter(d => !categories.find(c => c.id === d.category_id))
-        if (uncategorized.length > 0) groups.push({ category: { id: 'other', name: 'Altro', position: 999 } as Category, dishes: uncategorized })
+        if (uncategorized.length > 0) groups.push({ category: { id: 'other', name: 'Altro', restaurant_id: '', order: 999 } as Category, dishes: uncategorized })
         return groups
     }, [filteredDishes, categories, selectedCategory])
 

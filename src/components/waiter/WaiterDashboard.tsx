@@ -154,7 +154,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     supabase.from('orders')
                         .select(`
                             id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
-                            items:order_items(id, quantity, status, note, course_number, created_at, ready_at,
+                            items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at,
                                 dish:dishes(id, name, price, category_id)
                             )
                         `)
