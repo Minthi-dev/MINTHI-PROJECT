@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { useNavigate } from 'react-router-dom' // Restored
 
@@ -186,20 +186,26 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
     const refreshSessionsDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-    // Refresh solo sessioni — definito prima dell'useEffect che lo richiama
-    const refreshSessions = async () => {
-        if (!restaurantId) return
+    // Use refs for refresh functions to avoid stale closures in realtime handlers
+    const restaurantIdRef = useRef(restaurantId)
+    useEffect(() => { restaurantIdRef.current = restaurantId }, [restaurantId])
+
+    // Refresh solo sessioni
+    const refreshSessions = useCallback(async () => {
+        const rId = restaurantIdRef.current
+        if (!rId) return
         const { data: sess } = await supabase
             .from('table_sessions')
             .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
-            .eq('restaurant_id', restaurantId)
+            .eq('restaurant_id', rId)
             .eq('status', 'OPEN')
         if (sess) setSessions(sess as TableSession[])
-    }
+    }, [])
 
     // Refresh solo ordini (select specifico, no select *)
-    const refreshOrders = async () => {
-        if (!restaurantId) return
+    const refreshOrders = useCallback(async () => {
+        const rId = restaurantIdRef.current
+        if (!rId) return
         const { data: ords } = await supabase
             .from('orders')
             .select(`
@@ -208,17 +214,17 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     dish:dishes(id, name, price, category_id)
                 )
             `)
-            .eq('restaurant_id', restaurantId)
+            .eq('restaurant_id', rId)
             .eq('status', 'OPEN')
         if (ords) setActiveOrders(ords as unknown as Order[])
-    }
+    }, [])
 
     // refreshData completo — usato per refresh manuale
-    const refreshData = async () => {
+    const refreshData = useCallback(async () => {
         await Promise.all([refreshSessions(), refreshOrders()])
-    }
+    }, [refreshSessions, refreshOrders])
 
-    // Realtime Subscriptions — aggiornamenti chirurgici invece di rifare tutto
+    // Realtime Subscriptions — stable handlers via useCallback
     useEffect(() => {
         if (!restaurantId) return
 
@@ -239,7 +245,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 refreshDebounceRef.current = setTimeout(() => refreshOrders(), 300)
             })
             .on('postgres_changes', {
-                event: '*', schema: 'public', table: 'order_items'
+                event: '*', schema: 'public', table: 'order_items',
+                filter: `restaurant_id=eq.${restaurantId}`
             }, () => {
                 if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
                 refreshDebounceRef.current = setTimeout(() => refreshOrders(), 400)
@@ -262,7 +269,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             supabase.removeChannel(channel)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [restaurantId])
+    }, [restaurantId, refreshSessions, refreshOrders])
 
     // ... (getTableTotal, getSplitTotal, getDetailedTableStatus functions remain same) ...
 
