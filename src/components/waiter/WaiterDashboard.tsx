@@ -845,7 +845,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const sortedTables = useMemo(() => sortTables(filteredTables), [filteredTables, sortBy, sessions, activeOrders])
     const readyCount = readyItems.length
     const pendingCount = pendingItems.length
-    const totalActivityCount = readyCount + pendingCount + assistanceRequests.length
+    // Activity count shows only actionable items for waiters (ready to serve + assistance requests)
+    const totalActivityCount = readyCount + assistanceRequests.length
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
@@ -944,14 +945,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 )}
 
                 <CardContent className="p-0 flex flex-col h-full">
-                    <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-b border-white/5 relative z-10">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <span className={`text-2xl font-bold tracking-tight whitespace-nowrap ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
+                    <div className="p-3 flex flex-wrap items-center justify-between gap-1.5 border-b border-white/5 relative z-10">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-xl font-bold tracking-tight whitespace-nowrap ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
                                 {table.number}
                             </span>
-                            <div className="flex items-center gap-1.5 text-zinc-400 bg-white/5 px-3 py-1 rounded-full shrink-0">
-                                <User size={16} weight="bold" />
-                                <span className="text-sm font-bold">{table.seats || 4}</span>
+                            <div className="flex items-center gap-1 text-zinc-400 bg-white/5 px-2 py-0.5 rounded-full shrink-0">
+                                <User size={12} weight="bold" />
+                                <span className="text-xs font-bold">{table.seats || 4}</span>
                             </div>
                         </div>
                         <Badge
@@ -962,13 +963,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </Badge>
                     </div>
 
-                    <div className="flex-1 p-5 flex flex-col items-center justify-center gap-3 relative z-10">
+                    <div className="flex-1 p-3 flex flex-col items-center justify-center gap-2 relative z-10">
                         {isActive ? (
                             <>
                                 <div className="text-center">
                                     <p className="text-[9px] text-amber-500/70 mb-1 uppercase tracking-[0.2em] font-semibold">PIN</p>
-                                    <div className="bg-black/40 px-6 py-3 rounded-xl border border-amber-500/20 shadow-inner min-w-[120px]">
-                                        <span className="text-4xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
+                                    <div className="bg-black/40 px-4 py-2 rounded-xl border border-amber-500/20 shadow-inner">
+                                        <span className="text-3xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
                                             {session?.session_pin || '...'}
                                         </span>
                                     </div>
@@ -993,7 +994,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         )}
                     </div>
 
-                    <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2 relative z-10">
+                    <div className="p-2.5 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-1.5 relative z-10">
                         {isActive ? (
                             <div className={`grid gap-2 ${hasStripePaymentToConfirm ? 'grid-cols-1' : (restaurant?.allow_waiter_payments ? 'grid-cols-2' : 'grid-cols-1')}`}>
                                 {hasStripePaymentToConfirm ? (
@@ -1068,7 +1069,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-zinc-950 p-4 md:p-6 pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
+        <div className="min-h-[100dvh] bg-zinc-950 p-3 sm:p-4 md:p-6 pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
             {/* Background Ambience */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-zinc-950 to-zinc-950 pointer-events-none" />
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none brightness-100 contrast-150 mix-blend-overlay"></div>
@@ -1364,7 +1365,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                     </div>
                                 ) : (
                                     <AnimatePresence>
-                                        {displayReadyItemsByTable.map(tableGroup => (
+                                        {displayReadyItemsByTable.map(tableGroup => {
+                                            const undeliveredItems = tableGroup.items.filter(i => !i.isDelivered)
+                                            return (
                                             <motion.div
                                                 key={tableGroup.tableId}
                                                 initial={{ opacity: 1 }}
@@ -1373,7 +1376,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                 className={cn(
                                                     "rounded-2xl overflow-hidden border shadow-lg shadow-black/50 transition-all duration-300",
                                                     tableGroup.allDelivered
-                                                        ? "border-zinc-700/30 bg-zinc-900/30 opacity-50"
+                                                        ? "border-zinc-700/30 bg-zinc-900/30 opacity-40"
                                                         : "border-amber-500/20 bg-zinc-900"
                                                 )}
                                             >
@@ -1385,17 +1388,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                         : "border-amber-500/10 bg-amber-500/5"
                                                 )}>
                                                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                                        <div className={cn(
-                                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-inner shrink-0",
-                                                            tableGroup.allDelivered
-                                                                ? "bg-zinc-700/50 text-zinc-400"
-                                                                : "bg-amber-500 text-black"
-                                                        )}>
-                                                            <span className="truncate px-1 max-w-[2.25rem] text-center leading-none">
-                                                                {tableGroup.tableName}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                        <div className="flex flex-col min-w-0">
                                                             <p className={cn(
                                                                 "font-bold text-sm truncate",
                                                                 tableGroup.allDelivered ? "text-zinc-500" : "text-white"
@@ -1404,18 +1397,32 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                             </p>
                                                             {tableGroup.roomName && (
                                                                 <span className={cn(
-                                                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate max-w-[7rem] shrink-0",
-                                                                    tableGroup.allDelivered
-                                                                        ? "bg-zinc-800 text-zinc-500"
-                                                                        : "bg-zinc-800 text-zinc-400"
+                                                                    "text-xs font-medium truncate",
+                                                                    tableGroup.allDelivered ? "text-zinc-600" : "text-zinc-400"
                                                                 )}>
-                                                                    <House size={9} className="shrink-0" />
-                                                                    <span className="truncate">{tableGroup.roomName}</span>
+                                                                    {tableGroup.roomName}
                                                                 </span>
                                                             )}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2 shrink-0">
+                                                        {/* Mark all as delivered button */}
+                                                        {undeliveredItems.length > 1 && (
+                                                            <Button
+                                                                size="sm"
+                                                                className="h-8 px-3 text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-black rounded-lg"
+                                                                onClick={async () => {
+                                                                    const ids = undeliveredItems.map(i => i.id)
+                                                                    for (const item of undeliveredItems) {
+                                                                        await handleMarkAsDelivered(item.order_id, item.id)
+                                                                    }
+                                                                    toast.success(`${undeliveredItems.length} piatti segnati come consegnati`)
+                                                                }}
+                                                            >
+                                                                <Check size={12} weight="bold" className="mr-1" />
+                                                                Tutti
+                                                            </Button>
+                                                        )}
                                                         <Badge
                                                             variant="outline"
                                                             className={cn(
@@ -1425,19 +1432,21 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                                     : "border-amber-500/40 text-amber-400 bg-amber-500/5"
                                                             )}
                                                         >
-                                                            {tableGroup.items.filter(i => !i.isDelivered).length} da servire
+                                                            {undeliveredItems.length} da servire
                                                         </Badge>
                                                     </div>
                                                 </div>
 
                                                 {/* Dishes in this table group */}
                                                 <div className="divide-y divide-white/5">
-                                                    {tableGroup.items.map(item => (
+                                                    {tableGroup.items.map(item => {
+                                                        const minutesAgo = Math.max(0, Math.floor((Date.now() - new Date(item.created_at || Date.now()).getTime()) / 60000))
+                                                        return (
                                                         <div
                                                             key={item.id}
                                                             className={cn(
-                                                                "p-4 flex gap-4 transition-all duration-300",
-                                                                item.isDelivered && "opacity-40"
+                                                                "p-3 flex gap-3 transition-all duration-300",
+                                                                item.isDelivered && "opacity-30"
                                                             )}
                                                         >
                                                             {/* Left stripe */}
@@ -1449,41 +1458,43 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                             {/* Content */}
                                                             <div className="flex-1 min-w-0">
                                                                 <h4 className={cn(
-                                                                    "font-bold text-base leading-tight mb-0.5",
+                                                                    "font-bold text-sm leading-tight mb-0.5",
                                                                     item.isDelivered ? "line-through text-zinc-500" : "text-white"
                                                                 )}>
                                                                     {item.dish?.name || 'Piatto'}
                                                                 </h4>
-                                                                <p className="text-xs text-zinc-500 mb-1">
-                                                                    Quantità: <span className={item.isDelivered ? "text-zinc-600" : "text-white font-bold"}>{item.quantity}</span>
-                                                                    <span className="mx-2 text-zinc-700">·</span>
-                                                                    {new Date(item.created_at || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                <p className="text-xs text-zinc-500">
+                                                                    x{item.quantity}
+                                                                    <span className="mx-1.5 text-zinc-700">·</span>
+                                                                    <span className={minutesAgo > 5 ? "text-red-400" : "text-zinc-400"}>{minutesAgo}min fa</span>
                                                                 </p>
                                                                 {item.note && (
-                                                                    <p className="text-xs text-amber-500/70 italic">Note: {item.note}</p>
+                                                                    <p className="text-[11px] text-amber-500/70 italic mt-0.5">Note: {item.note}</p>
                                                                 )}
                                                             </div>
 
                                                             {/* Action button */}
                                                             <div className="flex flex-col justify-center shrink-0">
                                                                 {item.isDelivered ? (
-                                                                    <div className="h-11 w-11 rounded-full bg-zinc-700/40 flex items-center justify-center">
-                                                                        <Check size={20} weight="bold" className="text-zinc-500" />
+                                                                    <div className="h-9 w-9 rounded-full bg-zinc-700/40 flex items-center justify-center">
+                                                                        <Check size={16} weight="bold" className="text-zinc-500" />
                                                                     </div>
                                                                 ) : (
                                                                     <Button
-                                                                        className="h-11 w-11 rounded-full bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 p-0"
+                                                                        className="h-9 w-9 rounded-full bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 p-0"
                                                                         onClick={() => handleMarkAsDelivered(item.order_id, item.id)}
                                                                     >
-                                                                        <Check size={20} weight="bold" />
+                                                                        <Check size={16} weight="bold" />
                                                                     </Button>
                                                                 )}
                                                             </div>
                                                         </div>
-                                                    ))}
+                                                        )
+                                                    })}
                                                 </div>
                                             </motion.div>
-                                        ))}
+                                            )
+                                        })}
                                     </AnimatePresence>
                                 )}
                             </div>
