@@ -1266,7 +1266,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString()
 
   const generateQrCode = (tableId: string) => {
-    return `${window.location.origin}/client/table/${tableId}`
+    // Use VITE_APP_URL for Capacitor/native apps, fallback to window.location.origin for web
+    const envUrl = import.meta.env.VITE_APP_URL
+    const baseUrl = envUrl ? envUrl.replace(/\/$/, '') : window.location.origin
+    return `${baseUrl}/client/table/${tableId}`
   }
 
   const handleCreateTable = () => {

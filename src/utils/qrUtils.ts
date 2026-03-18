@@ -1,6 +1,12 @@
+export const getAppBaseUrl = () => {
+    // If VITE_APP_URL is set (required for Capacitor/native apps), use it
+    // Otherwise use window.location.origin (works on web/Vercel)
+    const envUrl = import.meta.env.VITE_APP_URL
+    if (envUrl) return envUrl.replace(/\/$/, '') // remove trailing slash
+    return typeof window !== 'undefined' ? window.location.origin : ''
+}
+
 export const generateQrCode = (tableId: string) => {
-    // Get the base URL (handling both dev and prod)
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-    // Modern format for customer menu
+    const baseUrl = getAppBaseUrl()
     return `${baseUrl}/client/table/${tableId}`
 }

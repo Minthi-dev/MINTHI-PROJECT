@@ -854,7 +854,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
             {/* Ambient Background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
+                <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full opacity-40" />
             </div>
 
             <motion.div
@@ -867,7 +867,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     initial={{ rotate: -20 }}
                     animate={{ rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
-                    className="w-24 h-24 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-[0_0_50px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md"
+                    className="w-24 h-24 rounded-full bg-zinc-900 border border-emerald-500/20 text-emerald-400 flex items-center justify-center"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="48" height="48" fill="currentColor">
                         <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
@@ -915,16 +915,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         const tableCardClasses = isTableMarkedInactive
             ? 'opacity-60 grayscale'
             : (() => {
-                if (hasStripePaymentToConfirm) return 'bg-purple-900/40 border-purple-500/70 shadow-[0_0_20px_-5px_rgba(168,85,247,0.5)] animate-pulse-slow' // Purple Stripe
-                if (!isActive) return 'bg-black/40 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.1)] hover:border-emerald-500/40' // Green (Free)
-                if (statusInfo.step === 'waiting') return 'bg-red-900/20 border-red-500/50 shadow-[0_0_15px_-5px_rgba(239,68,68,0.3)]' // Red (Waiting for food)
-                return 'bg-amber-900/20 border-amber-500/50 shadow-[0_0_15px_-5px_rgba(245,158,11,0.3)]' // Yellow (Eating)
+                if (hasStripePaymentToConfirm) return 'bg-purple-900/40 border-purple-500/70 animate-pulse-slow' // Purple Stripe
+                if (!isActive) return 'bg-black/40 border-emerald-500/20' // Green (Free)
+                if (statusInfo.step === 'waiting') return 'bg-red-900/20 border-red-500/50' // Red (Waiting for food)
+                return 'bg-amber-900/20 border-amber-500/50' // Yellow (Eating)
             })()
 
         return (
             <Card
                 key={table.id}
-                className={`relative overflow-hidden transition-all duration-300 group cursor-pointer ${tableCardClasses}`}
+                className={`relative overflow-hidden group cursor-pointer ${tableCardClasses}`}
                 onClick={() => {
                     if (isTableMarkedInactive) return
                     if (isActive) {
@@ -939,12 +939,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 -rotate-12 border-2 border-white/20 px-3 py-1 rounded">Disattivato</span>
                     </div>
                 )}
-                {isActive && (
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 blur-xl rounded-full -mr-8 -mt-8 pointer-events-none"></div>
-                )}
-                {!isActive && (
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 blur-xl rounded-full -mr-8 -mt-8 pointer-events-none"></div>
-                )}
+                {/* Removed blur decorations for iOS performance */}
 
                 <CardContent className="p-0 flex flex-col h-full">
                     <div className="p-3 flex flex-wrap items-center justify-between gap-1.5 border-b border-white/5 relative z-10">
@@ -989,7 +984,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                 )}
                             </>
                         ) : (
-                            <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-all duration-300">
+                            <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-colors">
                                 <ForkKnife size={32} className="mx-auto mb-1" weight="duotone" />
                                 <p className="text-xs font-medium">Clicca per Ordinare</p>
                             </div>
@@ -1072,11 +1067,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
     return (
         <div className="min-h-[100dvh] bg-zinc-950 px-2 pt-1 pb-20 text-zinc-100 font-sans selection:bg-amber-500/30">
-            {/* Background Ambience */}
-            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-zinc-950 to-zinc-950 pointer-events-none" />
+            {/* Background — solid for iOS performance */}
 
             {/* Header — compact, no rounded borders, flush to edges */}
-            <header className="sticky top-0 z-50 mb-2 bg-zinc-950/95 backdrop-blur-xl px-2 py-2 border-b border-white/5">
+            <header className="sticky top-0 z-50 mb-2 bg-zinc-950 px-2 py-2 border-b border-white/5">
                 {/* Single Row: Title + Activity + Sort + Room + Refresh */}
                 <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
                     {/* Title — compact */}
@@ -1160,7 +1154,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             </header>
 
             {/* Fixed bottom-left: Settings + Logout */}
-            <div className="fixed bottom-4 left-3 z-50 flex items-center gap-1 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl p-1 shadow-lg">
+            <div className="fixed bottom-4 left-3 z-50 flex items-center gap-1 bg-zinc-900 border border-white/10 rounded-xl p-1 shadow-lg">
                 <Button
                     variant="ghost"
                     size="icon"
@@ -1249,11 +1243,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         initial={{ opacity: 0, x: '100%' }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: '100%' }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        transition={{ duration: 0.2, ease: 'easeOut' }}
                         className="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
                     >
                         {/* Header */}
-                        <div className="px-3 py-3 border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0 space-y-2">
+                        <div className="px-3 py-3 border-b border-white/10 bg-zinc-900 shrink-0 space-y-2">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <Button
@@ -1365,7 +1359,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                                                 transition={{ duration: 0.4 }}
                                                 className={cn(
-                                                    "rounded-2xl overflow-hidden border shadow-lg shadow-black/50 transition-all duration-300",
+                                                    "rounded-2xl overflow-hidden border shadow-lg shadow-black/50 transition-colors",
                                                     tableGroup.allDelivered
                                                         ? "border-zinc-700/30 bg-zinc-900/30 opacity-40"
                                                         : "border-amber-500/20 bg-zinc-900"
@@ -1436,7 +1430,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                         <div
                                                             key={item.id}
                                                             className={cn(
-                                                                "p-3 flex gap-3 transition-all duration-300",
+                                                                "p-3 flex gap-3 transition-colors",
                                                                 item.isDelivered && "opacity-30"
                                                             )}
                                                         >
@@ -1591,7 +1585,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Table Management Modal */}
             <Dialog open={isTableModalOpen} onOpenChange={setIsTableModalOpen}>
-                <DialogContent className="sm:max-w-lg bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-0 overflow-hidden max-h-[85vh] rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
+                <DialogContent className="sm:max-w-lg bg-zinc-950 border-white/10 text-zinc-100 p-0 overflow-hidden max-h-[85vh] rounded-2xl shadow-2xl outline-none">
                     {selectedTable && (() => {
                         const session = sessions.find(s => s.table_id === selectedTable.id)
                         const tableOrders = session
@@ -2000,7 +1994,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Add Table Dialog */}
             <Dialog open={isAddTableDialogOpen} onOpenChange={setIsAddTableDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Nuovo Tavolo</DialogTitle>
                     </DialogHeader>
@@ -2035,7 +2029,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Edit Table Dialog */}
             <Dialog open={isEditTableDialogOpen} onOpenChange={setIsEditTableDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Modifica Tavolo</DialogTitle>
                     </DialogHeader>
@@ -2073,7 +2067,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Add Room Dialog */}
             <Dialog open={isAddRoomDialogOpen} onOpenChange={setIsAddRoomDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Nuova Sala</DialogTitle>
                     </DialogHeader>
@@ -2092,7 +2086,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Edit Room Dialog */}
             <Dialog open={isEditRoomDialogOpen} onOpenChange={setIsEditRoomDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Modifica Sala</DialogTitle>
                     </DialogHeader>
