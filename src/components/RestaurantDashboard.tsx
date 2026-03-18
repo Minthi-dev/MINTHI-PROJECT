@@ -234,14 +234,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }, [restaurantId])
 
   // First-access detection: show demo guide + setup wizard on first login
+  // First-access detection: show demo guide only if restaurant hasn't completed it (DB field)
   useEffect(() => {
-    if (!restaurantId) return
+    if (!restaurantId || !currentRestaurant) return
+    // Check DB field first (shared across all devices)
+    if (currentRestaurant.demo_completed) return
+    // Fallback: also check localStorage for backward compat
     const key = `minthi_guide_done_${restaurantId}`
-    if (!localStorage.getItem(key)) {
-      // First access: auto-start demo guide
-      setShowDemoGuide(true)
-    }
-  }, [restaurantId])
+    if (localStorage.getItem(key)) return
+    // First access: auto-start demo guide
+    setShowDemoGuide(true)
+  }, [restaurantId, currentRestaurant])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
   // Aliases: when demo is active (either first-access or manual restart), use demo data
@@ -5189,14 +5192,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             setShowDemoGuide(false)
             setDemoMode(false)
             setActiveTab('orders')
-            // Mark guide as done
+            // Mark guide as done — DB field (shared across devices) + localStorage fallback
             if (restaurantId) {
               localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
               localStorage.setItem(tourKey, '1')
+              supabase.from('restaurants').update({ demo_completed: true }).eq('id', restaurantId).then(() => {})
             }
             // Always start setup wizard after first demo — user needs to configure
             const setupDone = restaurantId ? localStorage.getItem(`minthi_setup_done_${restaurantId}`) : null
-            if (!setupDone) {
+            const setupDoneDb = currentRestaurant?.setup_completed
+            if (!setupDone && !setupDoneDb) {
               setShowSetupWizard(true)
             }
           }}
@@ -5215,6 +5220,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             setShowSetupWizard(false)
             if (restaurantId) {
               localStorage.setItem(`minthi_setup_done_${restaurantId}`, 'true')
+              supabase.from('restaurants').update({ setup_completed: true }).eq('id', restaurantId).then(() => {})
             }
           }}
           tablesCount={restaurantTables.length}
