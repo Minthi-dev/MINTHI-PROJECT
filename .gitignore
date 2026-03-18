@@ -32,3 +32,9 @@ pids
 .devcontainer/
 
 .spark-workbench-id
+
+# Capacitor iOS — keep project files but ignore build artifacts
+ios/App/Pods/
+ios/App/App/public/
+ios/App/build/
+ios/DerivedData/

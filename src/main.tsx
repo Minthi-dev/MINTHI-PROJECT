@@ -1,6 +1,9 @@
 import { createRoot } from 'react-dom/client'
 import { ErrorBoundary } from "react-error-boundary";
 import { BrowserRouter } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
+import { Keyboard } from '@capacitor/keyboard'
 
 // Polyfill per browser che non supportano crypto.randomUUID
 if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
@@ -18,6 +21,16 @@ import { ThemeProvider } from "./components/theme-provider.tsx"
 import "./main.css"
 import "./styles/theme.css"
 import "./index.css"
+
+// Initialize Capacitor plugins when running as native app
+if (Capacitor.isNativePlatform()) {
+  StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+  StatusBar.setBackgroundColor({ color: '#000000' }).catch(() => {})
+
+  // Handle keyboard on iOS
+  Keyboard.setAccessoryBarVisible({ isVisible: true }).catch(() => {})
+  Keyboard.setScroll({ isDisabled: false }).catch(() => {})
+}
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary FallbackComponent={ErrorFallback}>
