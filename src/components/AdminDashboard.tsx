@@ -12,7 +12,6 @@ import { toast } from 'sonner'
 import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
 import { supabase } from '../lib/supabase'
 import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info, Percent, X, Calendar } from '@phosphor-icons/react'
-import { AnimatePresence, motion } from 'framer-motion'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
@@ -78,8 +77,20 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [expandedRestaurantId, setExpandedRestaurantId] = useState<string | null>(null)
   // Abbonamenti: search within subscription list
   const [abbonamentiSearch, setAbbonamentiSearch] = useState('')
-  // Fatturazione: invoice confirmation & delete
-  const [confirmedInvoices, setConfirmedInvoices] = useState<Set<string>>(new Set())
+  // Fatturazione: invoice confirmation & delete (persisted to localStorage)
+  const [confirmedInvoices, setConfirmedInvoices] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('minthi_confirmed_invoices')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch { return new Set() }
+  })
+  const persistConfirmedInvoice = (id: string) => {
+    setConfirmedInvoices(prev => {
+      const next = new Set([...prev, id])
+      try { localStorage.setItem('minthi_confirmed_invoices', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
   const [confirmInvoiceId, setConfirmInvoiceId] = useState<string | null>(null)
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
@@ -787,10 +798,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   ) : (
                     <div className="space-y-3">
                       {upcomingPayments.map(up => (
-                        <motion.div
+                        <div
                           key={up.restaurant.id}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
                           className="flex items-center justify-between p-5 rounded-2xl bg-zinc-900/40 border border-white/5 shadow-lg shadow-black/20 hover:shadow-xl hover:border-white/10 transition-all duration-300"
                         >
                           <div className="flex items-center gap-4 min-w-0">
@@ -820,7 +829,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                                `Tra ${up.daysUntil}g`}
                             </span>
                           </div>
-                        </motion.div>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -924,10 +933,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
                         const isConfirmed = confirmedInvoices.has(payment.id)
                         return (
-                          <motion.div
+                          <div
                             key={payment.id}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
                             className={`flex items-center justify-between p-5 rounded-2xl border shadow-lg shadow-black/20 hover:shadow-xl transition-all duration-300 ${
                               payment.status === 'paid' ? 'bg-zinc-900/40 border-white/5 hover:border-emerald-500/15' :
                               payment.status === 'failed' ? 'bg-red-950/10 border-red-500/10 hover:border-red-500/20' :
@@ -992,7 +999,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                                 <X size={14} weight="bold" />
                               </button>
                             </div>
-                          </motion.div>
+                          </div>
                         )
                       })
                     )}
@@ -1083,7 +1090,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         className="flex-1 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
                         onClick={() => {
                           if (confirmInvoiceId) {
-                            setConfirmedInvoices(prev => new Set([...prev, confirmInvoiceId]))
+                            persistConfirmedInvoice(confirmInvoiceId)
                           }
                           setConfirmInvoiceId(null)
                           toast.success('Fattura confermata')
@@ -1243,11 +1250,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   const subscribedSince = firstPayment?.created_at ? new Date(firstPayment.created_at) : null
 
                   return (
-                    <motion.div
+                    <div
                       key={restaurant.id}
-                      layout
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
                       className={`rounded-2xl border shadow-lg shadow-black/20 overflow-hidden transition-all duration-300 ${
                         status === 'suspended' ? 'bg-red-950/5 border-red-500/8'
                         : status === 'active' ? 'bg-zinc-900/40 border-emerald-500/10'
@@ -1316,15 +1320,9 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                       </div>
 
                       {/* Expanded details */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3, ease: 'easeInOut' }}
-                            className="overflow-hidden"
-                          >
+                      <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+                        <div className="overflow-hidden">
+                          {isExpanded && (
                             <div className="px-5 pb-5 space-y-4 border-t border-white/5 pt-4">
                               {/* Info grid */}
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1402,10 +1400,10 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                                 <p className="text-xs text-zinc-600 font-mono truncate">Sub: {restaurant.stripe_subscription_id}</p>
                               )}
                             </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   )
                 })}
 
