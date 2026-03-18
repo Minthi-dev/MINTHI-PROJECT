@@ -377,8 +377,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             soundManager.play('kitchen-bell')
             setTimeout(() => soundManager.play('success'), 400)
             toast.success('Ci sono piatti pronti da servire!', {
+                id: 'ready-items-toast',
                 icon: '🔔',
-                duration: 6000,
+                duration: 4000,
                 style: { background: '#422006', border: '1px solid #f59e0b', color: '#fbbf24' }
             })
         }
@@ -397,8 +398,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             setTimeout(() => soundManager.play('alert'), 500)
             setTimeout(() => soundManager.play('alert'), 1000)
             toast.error('Nuova richiesta assistenza al tavolo!', {
+                id: 'assistance-toast',
                 icon: '🚨',
-                duration: 10000,
+                duration: 5000,
                 style: { background: '#450a0a', border: '1px solid #ef4444', color: '#fca5a5' }
             })
         }
