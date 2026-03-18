@@ -2000,7 +2000,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   return (
-    <div className="flex h-[100dvh] w-full bg-black text-amber-50 font-sans overflow-hidden selection:bg-amber-500/30 relative" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
+    <div className="flex h-[100dvh] w-full bg-black text-amber-50 font-sans overflow-hidden selection:bg-amber-500/30 relative" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       {/* Solid black background — no blur effects for iOS performance */}
 
       {/* Sidebar Toggle Button - Inline, does not overlap content */}
