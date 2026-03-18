@@ -178,7 +178,7 @@ const AppContent = () => {
 
           {/* WAITER DASHBOARD */}
           <Route
-            path="/waiter/*"
+            path="/waiter"
             element={
               <ProtectedRoute user={user} loading={loading}>
                 <WaiterDashboard user={user} onLogout={handleLogout} />

@@ -302,7 +302,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
 
         // 2. Attesa Cibo (Waiting) - Has orders that are NOT fully served
-        const pendingOrders = sessionOrders.filter(o => ['OPEN', 'pending', 'preparing', 'ready'].includes(o.status))
+        const pendingOrders = sessionOrders.filter(o => o.status === 'OPEN')
 
         if (pendingOrders.length > 0) {
             const oldestPending = pendingOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0]
@@ -343,7 +343,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (loading) return
 
         const currentReadyCount = activeOrders.reduce((acc, order) => {
-            return acc + (order.items?.filter(i => i.status?.toLowerCase() === 'ready').length || 0)
+            return acc + (order.items?.filter(i => i.status?.toUpperCase() === 'READY').length || 0)
         }, 0)
 
         const currentAssistanceCount = assistanceRequests.length
@@ -367,7 +367,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 const session = sessions.find(s => s.id === order.table_session_id)
                 const table = tables.find(t => t.id === session?.table_id)
                 if (!table || table.room_id !== activityRoomFilter) return acc
-                return acc + (order.items?.filter(i => i.status?.toLowerCase() === 'ready').length || 0)
+                return acc + (order.items?.filter(i => i.status?.toUpperCase() === 'READY').length || 0)
             }, 0)
 
         const prevFilteredReady = prevReadyCountRef.current
@@ -457,7 +457,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!table) return []
 
         return (o.items || [])
-            .filter(i => i.status?.toLowerCase() === 'ready')
+            .filter(i => i.status?.toUpperCase() === 'READY')
             .map(i => ({
                 ...i,
                 tableId: table.id,
@@ -465,6 +465,24 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 dish: i.dish || dishes.find(d => d.id === i.dish_id)
             }))
     }).sort((a, b) => new Date(a.created_at || Date.now()).getTime() - new Date(b.created_at || Date.now()).getTime()), [activeOrders, sessions, tables, dishes])
+
+    // Pending items (in kitchen, not ready yet) for activity center
+    const pendingItems = useMemo(() => activeOrders.flatMap(o => {
+        const session = sessions.find(s => s.id === o.table_session_id)
+        if (!session) return []
+        const table = tables.find(t => t.id === session.table_id)
+        if (!table) return []
+        return (o.items || [])
+            .filter(i => ['PENDING', 'IN_PREPARATION'].includes(i.status?.toUpperCase()))
+            .map(i => ({
+                ...i,
+                tableId: table.id,
+                tableName: table.number,
+                roomName: rooms.find(r => r.id === table.room_id)?.name || null,
+                order_id: o.id,
+                dish: i.dish || dishes.find(d => d.id === i.dish_id)
+            }))
+    }).sort((a, b) => new Date(a.created_at || Date.now()).getTime() - new Date(b.created_at || Date.now()).getTime()), [activeOrders, sessions, tables, rooms, dishes])
 
     // Grouped display: ready items (+ just-delivered greyed) grouped by table, filtered by room
     const displayReadyItemsByTable = useMemo(() => {
@@ -494,7 +512,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             const room = rooms.find(r => r.id === table.room_id)
 
             return (o.items || [])
-                .filter(i => i.status?.toLowerCase() === 'ready' || justDeliveredIds.has(i.id))
+                .filter(i => i.status?.toUpperCase() === 'READY' || justDeliveredIds.has(i.id))
                 .map(i => ({
                     id: i.id,
                     tableId: table.id,
@@ -824,6 +842,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     // Must be before early return to maintain consistent hook call order
     const sortedTables = useMemo(() => sortTables(filteredTables), [filteredTables, sortBy, sessions, activeOrders])
     const readyCount = readyItems.length
+    const pendingCount = pendingItems.length
+    const totalActivityCount = readyCount + pendingCount + assistanceRequests.length
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
@@ -1071,12 +1091,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 </div>
 
                 <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
-                    {/* Activity Button - Ready items + Assistance requests */}
+                    {/* Activity Button - Ready items + Pending items + Assistance requests */}
                     <Button
-                        variant={(readyCount + assistanceRequests.length) > 0 ? "default" : "outline"}
+                        variant={totalActivityCount > 0 ? "default" : "outline"}
                         size="sm"
-                        className={`md:mr-4 h-10 px-4 rounded-xl font-bold transition-all shadow-lg ${(readyCount + assistanceRequests.length) > 0
+                        className={`md:mr-4 h-10 px-4 rounded-xl font-bold transition-all shadow-lg ${assistanceRequests.length > 0
+                            ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse shadow-red-500/20'
+                            : readyCount > 0
                             ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
+                            : totalActivityCount > 0
+                            ? 'bg-blue-500 hover:bg-blue-400 text-white border-transparent shadow-blue-500/20'
                             : 'text-zinc-400 bg-zinc-900/50 border-white/5 hover:bg-zinc-800 hover:text-white'
                             }`}
                         onClick={() => setIsReadyDrawerOpen(true)}
@@ -1085,10 +1109,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             <BellSimple size={20} weight="fill" className="mr-2 animate-bounce text-yellow-400" />
                         ) : readyCount > 0 ? (
                             <BellRinging size={20} weight="fill" className="mr-2 animate-bounce" />
+                        ) : pendingCount > 0 ? (
+                            <Clock size={20} weight="fill" className="mr-2" />
                         ) : (
                             <CheckCircle size={20} className="mr-2" />
                         )}
-                        Attività: {readyCount + assistanceRequests.length}
+                        Attività: {totalActivityCount}
                     </Button>
 
                     <div className="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5">
@@ -1265,7 +1291,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                     </Select>
                                 )}
                                 <Badge variant="outline" className="border-amber-500/30 text-amber-500 shrink-0">
-                                    {readyItems.length + assistanceRequests.length} attivi
+                                    {totalActivityCount} attivi
                                 </Badge>
                             </div>
                         </div>
@@ -1456,6 +1482,75 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                     </AnimatePresence>
                                 )}
                             </div>
+
+                            {/* In Cucina Section — pending/in preparation items */}
+                            {(() => {
+                                const filteredPending = activityRoomFilter === 'all'
+                                    ? pendingItems
+                                    : pendingItems.filter(i => {
+                                        const table = tables.find(t => t.id === i.tableId)
+                                        return table?.room_id === activityRoomFilter
+                                    })
+
+                                // Group by table
+                                const grouped = new Map<string, typeof filteredPending>()
+                                filteredPending.forEach(item => {
+                                    const existing = grouped.get(item.tableId) || []
+                                    existing.push(item)
+                                    grouped.set(item.tableId, existing)
+                                })
+
+                                return filteredPending.length > 0 ? (
+                                    <div className="space-y-3">
+                                        <h3 className="text-xs font-bold uppercase tracking-widest text-blue-400 flex items-center gap-2">
+                                            <Clock size={16} weight="fill" />
+                                            In Cucina ({filteredPending.length} piatti)
+                                        </h3>
+                                        {Array.from(grouped.entries()).map(([tableId, items]) => (
+                                            <div key={tableId} className="rounded-xl border border-blue-500/15 bg-zinc-900/50 overflow-hidden">
+                                                <div className="px-4 py-2.5 flex items-center gap-2.5 border-b border-blue-500/10 bg-blue-500/5">
+                                                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-sm shrink-0">
+                                                        {items[0].tableName}
+                                                    </div>
+                                                    <p className="font-semibold text-sm text-blue-300">Tavolo {items[0].tableName}</p>
+                                                    {items[0].roomName && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500">{items[0].roomName}</span>
+                                                    )}
+                                                    <Badge variant="outline" className="ml-auto border-blue-500/30 text-blue-400 text-[10px]">
+                                                        {items.length} in preparazione
+                                                    </Badge>
+                                                </div>
+                                                <div className="divide-y divide-white/5">
+                                                    {items.map(item => (
+                                                        <div key={item.id} className="px-4 py-3 flex items-center gap-3">
+                                                            <div className="w-1 h-8 rounded-full bg-blue-500/40 shrink-0" />
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-medium text-sm text-zinc-300 truncate">{item.dish?.name || 'Piatto'}</p>
+                                                                <p className="text-[11px] text-zinc-600">
+                                                                    x{item.quantity} · {new Date(item.created_at || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                    {item.status?.toUpperCase() === 'IN_PREPARATION' && <span className="ml-2 text-blue-400">In preparazione</span>}
+                                                                    {item.status?.toUpperCase() === 'PENDING' && <span className="ml-2 text-zinc-500">In attesa</span>}
+                                                                </p>
+                                                                {item.note && <p className="text-[11px] text-amber-500/50 italic mt-0.5">Note: {item.note}</p>}
+                                                            </div>
+                                                            <Clock size={16} className="text-blue-500/40 shrink-0 animate-spin" style={{ animationDuration: '3s' }} />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null
+                            })()}
+
+                            {/* Empty state when no activity at all */}
+                            {readyCount === 0 && pendingCount === 0 && assistanceRequests.length === 0 && (
+                                <div className="py-16 flex flex-col items-center justify-center text-zinc-600">
+                                    <CheckCircle size={56} className="mb-4 opacity-20" />
+                                    <p className="text-lg font-medium text-zinc-500">Nessuna attività</p>
+                                    <p className="text-sm text-zinc-600 mt-1">Tutti i piatti sono stati serviti</p>
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}
