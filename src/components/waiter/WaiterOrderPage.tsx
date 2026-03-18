@@ -269,7 +269,7 @@ const WaiterOrderPage = () => {
                 const itemsInCourse = activeItems.filter(i => i.courseNumber === courseNum)
                 const totalAmount = itemsInCourse.reduce((sum, item) => sum + ((item.dish?.price || 0) * item.quantity), 0)
 
-                const orderStatus = isDelivered ? 'PAID' : 'OPEN'
+                const orderStatus = 'OPEN'
                 const itemStatus = isDelivered ? 'SERVED' : 'PENDING'
 
                 const { data: orderData, error: orderError } = await supabase
@@ -310,7 +310,7 @@ const WaiterOrderPage = () => {
                         .insert({
                             table_session_id: sessionId,
                             restaurant_id: restaurant.id,
-                            status: 'PAID',
+                            status: 'OPEN',
                             total_amount: totalAmount
                         })
                         .select()
