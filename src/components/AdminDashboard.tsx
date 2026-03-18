@@ -11,7 +11,7 @@ import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
 import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info, Percent, X } from '@phosphor-icons/react'
+import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info, Percent, X, Calendar } from '@phosphor-icons/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
@@ -80,6 +80,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [abbonamentiSearch, setAbbonamentiSearch] = useState('')
   // Fatturazione: invoice confirmation & delete
   const [confirmedInvoices, setConfirmedInvoices] = useState<Set<string>>(new Set())
+  const [confirmInvoiceId, setConfirmInvoiceId] = useState<string | null>(null)
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null)
   const [deletingPayment, setDeletingPayment] = useState(false)
   // Bulk actions: multi-select
@@ -325,9 +326,9 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         amount: lastPayment?.amount || 0
       }
     })
-    // Sort by closest date first
+    // Sort by closest date first, only include future payments (not expired)
     upcoming.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime())
-    return upcoming
+    return upcoming.filter(u => u.daysUntil > 0)
   }, [restaurants, subscriptionPayments])
 
   // Fatturazione: filtered and sorted subscription payments
@@ -837,58 +838,73 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     </div>
                   </div>
 
-                  {/* Filters row */}
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
-                    <div className="relative flex-1 min-w-[200px] max-w-xs">
+                  {/* Filters row - analytics style */}
+                  <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-900/40 p-4 rounded-2xl border border-white/5">
+                    <div className="relative flex-1 min-w-[180px] max-w-xs">
                       <MagnifyingGlass className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                       <Input
                         placeholder="Cerca ristorante..."
                         value={fatturazioneSearch}
                         onChange={(e) => setFatturazioneSearch(e.target.value)}
-                        className="h-11 pl-10 bg-zinc-900/50 border-white/5 text-sm rounded-xl"
+                        className="h-10 pl-10 bg-black/40 border-white/10 text-sm rounded-xl"
                       />
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      {(['all', 'paid', 'failed'] as const).map(status => (
-                        <button
-                          key={status}
-                          onClick={() => setFatturazioneStatus(status)}
-                          className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                            fatturazioneStatus === status
-                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 shadow-sm'
-                              : status === 'failed' ? 'bg-red-500/15 text-red-400 shadow-sm'
-                              : 'bg-white text-black shadow-sm'
-                              : 'text-zinc-500 hover:text-white hover:bg-white/5'
-                          }`}
-                        >
-                          {status === 'all' ? 'Tutti' : status === 'paid' ? 'Pagati' : 'Falliti'}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Period buttons */}
-                    <div className="flex items-center gap-1.5">
-                      {([
-                        { value: '7d' as const, label: '7g' },
-                        { value: '1m' as const, label: '1m' },
-                        { value: '3m' as const, label: '3m' },
-                      ]).map(period => (
-                        <button
-                          key={period.value}
-                          onClick={() => { setFatturazionePeriod(period.value); setFatturazioneDateFrom(''); setFatturazioneDateTo('') }}
-                          className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                            fatturazionePeriod === period.value
-                              ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
-                              : 'bg-zinc-800/60 text-zinc-500 hover:text-white'
-                          }`}
-                        >
-                          {period.label}
-                        </button>
-                      ))}
-                    </div>
+
+                    {/* Date filter - Select dropdown like analytics */}
+                    <Select value={fatturazionePeriod} onValueChange={(v) => {
+                      setFatturazionePeriod(v as typeof fatturazionePeriod)
+                      if (v !== 'custom') { setFatturazioneDateFrom(''); setFatturazioneDateTo('') }
+                    }}>
+                      <SelectTrigger className="h-10 w-auto min-w-[180px] border-white/10 bg-black/40 hover:bg-zinc-900/60 text-zinc-300 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="text-zinc-500" size={16} />
+                          <SelectValue />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-950 border-zinc-800">
+                        <SelectItem value="7d">Ultimi 7 giorni</SelectItem>
+                        <SelectItem value="1w">Ultima settimana</SelectItem>
+                        <SelectItem value="2w">Ultime 2 settimane</SelectItem>
+                        <SelectItem value="1m">Ultimo mese</SelectItem>
+                        <SelectItem value="3m">Ultimi 3 mesi</SelectItem>
+                        <SelectItem value="custom">Personalizzato</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {fatturazionePeriod === 'custom' && (
+                      <div className="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-white/5">
+                        <Input
+                          type="date"
+                          value={fatturazioneDateFrom}
+                          onChange={(e) => setFatturazioneDateFrom(e.target.value)}
+                          className="bg-transparent border-none text-white text-sm w-32 h-8 focus-visible:ring-0"
+                        />
+                        <div className="w-3 h-px bg-zinc-700" />
+                        <Input
+                          type="date"
+                          value={fatturazioneDateTo}
+                          onChange={(e) => setFatturazioneDateTo(e.target.value)}
+                          className="bg-transparent border-none text-white text-sm w-32 h-8 focus-visible:ring-0"
+                        />
+                      </div>
+                    )}
+
+                    {/* Status filter - Select dropdown */}
+                    <Select value={fatturazioneStatus} onValueChange={(v) => setFatturazioneStatus(v as typeof fatturazioneStatus)}>
+                      <SelectTrigger className="h-10 w-auto min-w-[130px] border-white/10 bg-black/40 hover:bg-zinc-900/60 text-zinc-300 rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-950 border-zinc-800">
+                        <SelectItem value="all">Tutti gli stati</SelectItem>
+                        <SelectItem value="paid">Pagati</SelectItem>
+                        <SelectItem value="failed">Falliti</SelectItem>
+                      </SelectContent>
+                    </Select>
+
                     {/* Sort */}
                     <button
                       onClick={() => setFatturazioneSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-zinc-500 hover:text-white hover:bg-white/5 transition-all"
+                      className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-zinc-500 hover:text-white hover:bg-white/5 transition-all border border-white/5"
                     >
                       {fatturazioneSortDir === 'desc' ? <CaretDown size={14} /> : <CaretUp size={14} />}
                       {fatturazioneSortDir === 'desc' ? 'Recenti' : 'Meno recenti'}
@@ -959,7 +975,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                               {/* Confirm button */}
                               {payment.status === 'paid' && !isConfirmed && (
                                 <button
-                                  onClick={() => setConfirmedInvoices(prev => new Set([...prev, payment.id]))}
+                                  onClick={() => setConfirmInvoiceId(payment.id)}
                                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
                                   title="Conferma emissione fattura"
                                 >
@@ -967,13 +983,13 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                                   Conferma
                                 </button>
                               )}
-                              {/* Delete button */}
+                              {/* Delete button - small X */}
                               <button
                                 onClick={() => setDeletePaymentId(payment.id)}
-                                className="p-2 rounded-xl text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                                className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
                                 title="Elimina"
                               >
-                                <Trash size={16} />
+                                <X size={14} weight="bold" />
                               </button>
                             </div>
                           </motion.div>
@@ -1038,6 +1054,42 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         }}
                       >
                         {deletingPayment ? 'Eliminazione...' : 'Elimina'}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Confirm invoice dialog */}
+                <Dialog open={!!confirmInvoiceId} onOpenChange={() => setConfirmInvoiceId(null)}>
+                  <DialogContent className="max-w-sm bg-zinc-950 border-white/10 text-white">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2 text-base">
+                        <CheckCircle size={20} className="text-emerald-400" weight="fill" />
+                        Conferma emissione fattura
+                      </DialogTitle>
+                      <DialogDescription className="text-zinc-400">
+                        Confermi che la fattura è stata emessa correttamente?
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex gap-3 pt-4">
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-11 rounded-xl border-white/10 text-zinc-400"
+                        onClick={() => setConfirmInvoiceId(null)}
+                      >
+                        Annulla
+                      </Button>
+                      <Button
+                        className="flex-1 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
+                        onClick={() => {
+                          if (confirmInvoiceId) {
+                            setConfirmedInvoices(prev => new Set([...prev, confirmInvoiceId]))
+                          }
+                          setConfirmInvoiceId(null)
+                          toast.success('Fattura confermata')
+                        }}
+                      >
+                        Conferma
                       </Button>
                     </div>
                   </DialogContent>

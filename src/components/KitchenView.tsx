@@ -59,12 +59,21 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
     const getDish = (dishId: string) => dishes.find(d => d.id === dishId)
 
     const isOrderComplete = (order: Order) => {
-        // Order disappears only when ALL items are SERVED (fully delivered)
+        // Without waiter mode: order disappears when ALL items are READY or SERVED
+        // With waiter mode: order disappears only when ALL items are SERVED/DELIVERED
         return order.items?.every(item => {
             const s = item.status?.toUpperCase?.() || ''
-            return s === 'SERVED' || s === 'DELIVERED'
+            if (waiterModeEnabled) {
+                return s === 'SERVED' || s === 'DELIVERED'
+            }
+            return s === 'READY' || s === 'SERVED' || s === 'DELIVERED'
         })
     }
+
+    // Get active session IDs to filter out orders from closed/old sessions
+    const activeSessionIds = useMemo(() => {
+        return new Set(sessions.filter(s => s.status === 'OPEN' || !s.closed_at).map(s => s.id))
+    }, [sessions])
 
     const itemMatchesCategory = (item: OrderItem) => {
         if (!selectedCategoryIds || selectedCategoryIds.length === 0) return true
@@ -76,12 +85,14 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
         return orders
             .filter(o => ['OPEN', 'pending', 'preparing', 'ready'].includes(o.status))
             .filter(o => !isOrderComplete(o))
+            // Only show orders from active (open) sessions — not from closed/old ones
+            .filter(o => !o.table_session_id || activeSessionIds.has(o.table_session_id))
             .filter(o => {
                 if (!selectedCategoryIds || selectedCategoryIds.length === 0) return true
                 return o.items?.some(item => itemMatchesCategory(item))
             })
             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    }, [orders, selectedCategoryIds, dishes, waiterModeEnabled])
+    }, [orders, selectedCategoryIds, dishes, waiterModeEnabled, activeSessionIds])
 
     const dishesViewData = useMemo(() => {
         const dishMap = new Map<string, { dish: Dish | undefined, items: { order: Order, item: OrderItem }[] }>()
