@@ -104,6 +104,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }, [])
 
     // Fetch initial data
+    // Debug: track mount/unmount
+    useEffect(() => {
+        console.log('[WaiterDash] MOUNTED')
+        return () => console.log('[WaiterDash] UNMOUNTED')
+    }, [])
+
     useEffect(() => {
         const initDashboard = async () => {
             try {
@@ -134,6 +140,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 }
 
                 setRestaurantId(rId)
+                restaurantIdRef.current = rId // Set ref immediately, don't wait for useEffect
 
                 const { data: restMeta } = await supabase
                     .from('restaurants')
