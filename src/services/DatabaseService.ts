@@ -1170,6 +1170,22 @@ export const DatabaseService = {
         return data
     },
 
+    async updateSubscriptionPayment(paymentId: string, updates: { invoice_confirmed?: boolean }) {
+        const { error } = await supabase
+            .from('subscription_payments')
+            .update(updates)
+            .eq('id', paymentId)
+        if (error) throw error
+    },
+
+    async deleteSubscriptionPayment(paymentId: string) {
+        const { error } = await supabase
+            .from('subscription_payments')
+            .delete()
+            .eq('id', paymentId)
+        if (error) throw error
+    },
+
     // Admin - Restaurant bonuses
     async getRestaurantBonuses(restaurantId?: string) {
         let query = supabase

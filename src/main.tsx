@@ -32,6 +32,41 @@ if (Capacitor.isNativePlatform()) {
   Keyboard.setScroll({ isDisabled: false }).catch(() => {})
 }
 
+// Global keyboard handler: scroll focused inputs into view on ALL platforms (especially iOS)
+// This ensures that when the keyboard opens, the input field is always visible above it
+document.addEventListener('focusin', (e) => {
+  const target = e.target as HTMLElement
+  if (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.isContentEditable
+  ) {
+    // Small delay to let the keyboard animate open
+    setTimeout(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    }, 300)
+  }
+})
+
+// On iOS, window.visualViewport resize can help detect keyboard open/close
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const activeEl = document.activeElement as HTMLElement | null
+    if (
+      activeEl &&
+      (activeEl.tagName === 'INPUT' ||
+       activeEl.tagName === 'TEXTAREA' ||
+       activeEl.tagName === 'SELECT' ||
+       activeEl.isContentEditable)
+    ) {
+      setTimeout(() => {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+      }, 100)
+    }
+  })
+}
+
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary FallbackComponent={ErrorFallback}>
     <ThemeProvider storageKey="minthi-theme">

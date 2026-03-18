@@ -1071,84 +1071,53 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-zinc-950 p-3 sm:p-4 md:p-6 pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
+        <div className="min-h-[100dvh] bg-zinc-950 px-2 pt-1 pb-20 text-zinc-100 font-sans selection:bg-amber-500/30">
             {/* Background Ambience */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-zinc-950 to-zinc-950 pointer-events-none" />
-            <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none brightness-100 contrast-150 mix-blend-overlay"></div>
 
-            {/* Header */}
-            <header className="sticky top-0 z-50 mb-4 sm:mb-8 bg-zinc-950/80 backdrop-blur-xl p-3 sm:p-4 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300">
-                {/* Top Row: Title + Settings/Logout */}
-                <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10 shrink-0">
-                            <User size={22} weight="duotone" />
+            {/* Header — compact, no rounded borders, flush to edges */}
+            <header className="sticky top-0 z-50 mb-2 bg-zinc-950/95 backdrop-blur-xl px-2 py-2 border-b border-white/5">
+                {/* Single Row: Title + Activity + Sort + Room + Refresh */}
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+                    {/* Title — compact */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shrink-0">
+                            <User size={16} weight="duotone" />
                         </div>
-                        <div className="min-w-0">
-                            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate">Gestione Sala</h1>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <span className="relative flex h-2 w-2 shrink-0">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                                </span>
-                                <p className="text-xs font-medium text-zinc-400">Attivo</p>
-                            </div>
-                        </div>
+                        <h1 className="text-sm font-bold text-white whitespace-nowrap">Sala</h1>
                     </div>
-                    {/* Settings + Logout — fixed top right */}
-                    <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10 h-9 w-9 rounded-xl"
-                            onClick={() => setIsManageDialogOpen(true)}
-                        >
-                            <GearSix size={18} />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 h-9 w-9 rounded-xl"
-                            onClick={onLogout}
-                        >
-                            <SignOut size={18} />
-                        </Button>
-                    </div>
-                </div>
 
-                {/* Bottom Row: Activity + Sort + Room Filter — scrollable */}
-                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
+                    <div className="w-px h-6 bg-white/10 shrink-0" />
+
                     {/* Activity Button */}
                     <Button
                         variant={totalActivityCount > 0 ? "default" : "outline"}
                         size="sm"
-                        className={`h-9 px-3 rounded-xl font-bold transition-all shadow-lg shrink-0 text-xs ${assistanceRequests.length > 0
-                            ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse shadow-red-500/20'
+                        className={`h-8 px-2.5 rounded-lg font-bold transition-all shrink-0 text-[11px] ${assistanceRequests.length > 0
+                            ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse'
                             : readyCount > 0
-                            ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
+                            ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse'
                             : totalActivityCount > 0
-                            ? 'bg-blue-500 hover:bg-blue-400 text-white border-transparent shadow-blue-500/20'
-                            : 'text-zinc-400 bg-zinc-900/50 border-white/5 hover:bg-zinc-800 hover:text-white'
+                            ? 'bg-blue-500 hover:bg-blue-400 text-white border-transparent'
+                            : 'text-zinc-400 bg-zinc-900/50 border-white/5'
                             }`}
                         onClick={() => setIsReadyDrawerOpen(true)}
                     >
                         {assistanceRequests.length > 0 ? (
-                            <BellSimple size={16} weight="fill" className="mr-1.5 animate-bounce text-yellow-400" />
+                            <BellSimple size={14} weight="fill" className="mr-1" />
                         ) : readyCount > 0 ? (
-                            <BellRinging size={16} weight="fill" className="mr-1.5 animate-bounce" />
-                        ) : pendingCount > 0 ? (
-                            <Clock size={16} weight="fill" className="mr-1.5" />
+                            <BellRinging size={14} weight="fill" className="mr-1" />
                         ) : (
-                            <CheckCircle size={16} className="mr-1.5" />
+                            <CheckCircle size={14} className="mr-1" />
                         )}
-                        Attività: {totalActivityCount}
+                        {totalActivityCount}
                     </Button>
 
                     {/* Sort Dropdown */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-9 px-3 rounded-xl bg-zinc-900/80 border-white/5 text-xs font-bold text-zinc-400 hover:text-white shrink-0">
-                                <Funnel size={14} className="mr-1.5 text-amber-500" />
+                            <Button variant="outline" size="sm" className="h-8 px-2.5 rounded-lg bg-zinc-900/80 border-white/5 text-[11px] font-bold text-zinc-400 shrink-0">
+                                <Funnel size={12} className="mr-1 text-amber-500" />
                                 {sortBy === 'status' ? 'Stato' : sortBy === 'alpha' ? 'A-Z' : 'Posti'}
                             </Button>
                         </DropdownMenuTrigger>
@@ -1164,8 +1133,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     {/* Room Filter */}
                     {rooms.length > 0 && (
                         <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                            <SelectTrigger className="w-[120px] h-9 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl shrink-0">
-                                <House size={14} className="mr-1 text-amber-500 shrink-0" />
+                            <SelectTrigger className="w-[100px] h-8 bg-zinc-900/80 border-white/5 text-[11px] font-bold rounded-lg shrink-0">
+                                <House size={12} className="mr-1 text-amber-500 shrink-0" />
                                 <SelectValue placeholder="Sale" />
                             </SelectTrigger>
                             <SelectContent className="bg-zinc-950 border-zinc-800">
@@ -1182,13 +1151,33 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 rounded-xl text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10 shrink-0"
+                        className="h-8 w-8 rounded-lg text-zinc-500 hover:text-amber-500 shrink-0"
                         onClick={() => refreshData()}
                     >
-                        <ArrowsClockwise size={16} />
+                        <ArrowsClockwise size={14} />
                     </Button>
                 </div>
             </header>
+
+            {/* Fixed bottom-left: Settings + Logout */}
+            <div className="fixed bottom-4 left-3 z-50 flex items-center gap-1 bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-xl p-1 shadow-lg">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-zinc-400 hover:text-amber-500 hover:bg-amber-500/10 h-9 w-9 rounded-lg"
+                    onClick={() => setIsManageDialogOpen(true)}
+                >
+                    <GearSix size={18} />
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-9 w-9 rounded-lg"
+                    onClick={onLogout}
+                >
+                    <SignOut size={18} />
+                </Button>
+            </div>
 
             {/* Tables grouped by Room */}
             <div className="relative z-10 space-y-8">
@@ -1652,20 +1641,18 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                 <p className="text-xs text-zinc-500">In attesa di ordinare</p>
                                             </div>
                                         ) : (
-                                            <div className="space-y-3">
-                                                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Ordini attivi</h4>
+                                            <div className="space-y-2">
+                                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Ordini attivi</h4>
                                                 {tableOrders.map(order => {
                                                     const items = order.items || []
                                                     const readyCount = items.filter(i => i.status?.toUpperCase() === 'READY').length
                                                     const servedCount = items.filter(i => i.status?.toUpperCase() === 'SERVED' || i.status?.toUpperCase() === 'DELIVERED').length
-                                                    const allReady = items.length > 0 && items.every(i => ['READY', 'SERVED', 'DELIVERED'].includes(i.status?.toUpperCase() || ''))
                                                     const allServed = items.length > 0 && items.every(i => ['SERVED', 'DELIVERED'].includes(i.status?.toUpperCase() || ''))
-                                                    const pendingCount = items.length - servedCount
 
                                                     return (
-                                                    <div key={order.id} className="bg-zinc-900/80 border border-white/5 rounded-xl p-4">
-                                                        <div className="flex justify-between items-center mb-3">
-                                                            <Badge variant="outline" className={`text-[10px] ${
+                                                    <div key={order.id} className="bg-zinc-900/80 border border-white/5 rounded-lg p-2.5">
+                                                        <div className="flex justify-between items-center mb-1.5">
+                                                            <Badge variant="outline" className={`text-[9px] h-5 ${
                                                                 allServed ? 'text-emerald-400 border-emerald-500/30' :
                                                                 readyCount > 0 ? 'text-amber-400 border-amber-500/30' :
                                                                     'text-blue-400 border-blue-500/30'
@@ -1674,37 +1661,34 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                                     readyCount > 0 ? `${readyCount} Pronti` :
                                                                         'In Preparazione'}
                                                             </Badge>
-                                                            <span className="text-xs text-zinc-500">
+                                                            <span className="text-[10px] text-zinc-500">
                                                                 {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                             </span>
                                                         </div>
-                                                        <div className="space-y-2">
+                                                        <div className="space-y-0.5">
                                                             {items.map(item => {
                                                                 const isServed = ['SERVED', 'DELIVERED'].includes(item.status?.toUpperCase() || '')
                                                                 const isReady = item.status?.toUpperCase() === 'READY'
                                                                 return (
-                                                                <div key={item.id} className="flex justify-between items-center text-sm gap-2">
-                                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                        <span className={`font-bold shrink-0 ${isServed ? 'text-zinc-600' : 'text-amber-500'}`}>{item.quantity}x</span>
-                                                                        <span className={isServed ? 'text-zinc-500 line-through' : 'text-white'}>
+                                                                <div key={item.id} className="flex justify-between items-center text-xs gap-1 py-0.5">
+                                                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                                                        <span className={`font-bold shrink-0 text-[11px] ${isServed ? 'text-zinc-600' : 'text-amber-500'}`}>{item.quantity}x</span>
+                                                                        <span className={`truncate text-[12px] ${isServed ? 'text-zinc-500 line-through' : 'text-white'}`}>
                                                                             {item.dish?.name || 'Piatto'}
                                                                         </span>
                                                                         {isReady && (
-                                                                            <Badge className="bg-amber-500 text-black text-[8px] px-1 shrink-0">PRONTO</Badge>
-                                                                        )}
-                                                                        {isServed && (
-                                                                            <Badge className="bg-emerald-500/15 text-emerald-400 text-[8px] px-1 shrink-0">CONSEGNATO</Badge>
+                                                                            <span className="text-[7px] font-bold bg-amber-500 text-black px-1 py-px rounded shrink-0">PRONTO</span>
                                                                         )}
                                                                     </div>
-                                                                    <div className="flex items-center gap-2 shrink-0">
-                                                                        <span className="text-zinc-400">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
+                                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                                        <span className="text-zinc-400 text-[11px]">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
                                                                         {isReady && !isServed && (
                                                                             <Button
                                                                                 size="sm"
-                                                                                className="h-7 w-7 p-0 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg"
+                                                                                className="h-6 w-6 p-0 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white"
                                                                                 onClick={() => handleMarkAsDelivered(order.id, item.id)}
                                                                             >
-                                                                                <Check size={14} weight="bold" />
+                                                                                <Check size={12} weight="bold" />
                                                                             </Button>
                                                                         )}
                                                                     </div>
@@ -1712,15 +1696,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                                 )
                                                             })}
                                                         </div>
-                                                        <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
-                                                            <span className="text-xs text-zinc-500">Subtotale</span>
-                                                            <span className="text-sm font-bold text-white">€{(order.total_amount || 0).toFixed(2)}</span>
+                                                        <div className="mt-1.5 pt-1.5 border-t border-white/5 flex justify-between items-center">
+                                                            <span className="text-[10px] text-zinc-500">Subtotale</span>
+                                                            <span className="text-xs font-bold text-white">€{(order.total_amount || 0).toFixed(2)}</span>
                                                         </div>
-                                                        {/* Mark all as delivered button — only show when items are READY */}
                                                         {readyCount > 0 && (
                                                             <Button
                                                                 size="sm"
-                                                                className="w-full mt-3 h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20"
+                                                                className="w-full mt-1.5 h-7 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg"
                                                                 onClick={async () => {
                                                                     const readyItems = items.filter(i => i.status?.toUpperCase() === 'READY')
                                                                     const readyIds = readyItems.map(i => i.id)
@@ -1732,11 +1715,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                                         return o
                                                                     }))
                                                                     readyIds.forEach(id => setJustDeliveredIds(prev => new Set([...prev, id])))
-                                                                    toast.success(`${readyCount} piatti segnati come consegnati`)
+                                                                    toast.success(`${readyCount} piatti consegnati`)
                                                                 }}
                                                             >
-                                                                <Check size={16} weight="bold" className="mr-2" />
-                                                                Segna tutti come Consegnati ({readyCount})
+                                                                <Check size={12} weight="bold" className="mr-1" />
+                                                                Segna tutti Consegnati ({readyCount})
                                                             </Button>
                                                         )}
                                                     </div>

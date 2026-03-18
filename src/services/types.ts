@@ -327,6 +327,7 @@ export interface SubscriptionPayment {
     period_start?: string
     period_end?: string
     created_at?: string
+    invoice_confirmed?: boolean
 }
 
 export interface RestaurantBonus {
