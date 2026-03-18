@@ -903,7 +903,7 @@ const CustomerMenuBase = () => {
   // LOGIN SCREEN (PIN) - Themed Design
   if (!isAuthenticated && !isViewOnly) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: theme.pageBgGradient, color: theme.textPrimary, fontFamily: theme.bodyFont, ...theme.cssVars }}>
+      <div className="fixed inset-0 flex flex-col items-center justify-center p-6 overflow-hidden" style={{ background: theme.pageBgGradient, color: theme.textPrimary, fontFamily: theme.bodyFont, ...theme.cssVars }}>
 
         <div className="w-full max-w-sm flex flex-col items-center gap-12">
 
