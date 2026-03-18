@@ -1067,11 +1067,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="h-[100dvh] bg-black text-zinc-100 font-sans selection:bg-amber-500/30 overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black text-zinc-100 font-sans selection:bg-amber-500/30 overflow-hidden flex flex-col">
 
-            {/* Header — flush, no grey band */}
-            <header className="shrink-0 z-50 bg-black px-3 py-2.5 border-b border-white/10" style={{ paddingTop: 'calc(10px + env(safe-area-inset-top, 0px))' }}>
-                <div className="flex items-center gap-2">
+            {/* Header — fixed top, covers notch area */}
+            <header className="shrink-0 z-50 bg-black border-b border-white/10" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
+                <div className="flex items-center gap-2 px-3 py-2.5 overflow-x-auto scrollbar-hide">
                     {/* Activity Button — big and clear */}
                     <Button
                         variant={totalActivityCount > 0 ? "default" : "outline"}
@@ -1130,7 +1130,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             </header>
 
             {/* Fixed bottom-left: Settings + Logout */}
-            <div className="fixed z-50 flex items-center gap-1 bg-zinc-900 border border-white/10 rounded-xl p-1 shadow-lg" style={{ bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', left: 'calc(12px + env(safe-area-inset-left, 0px))' }}>
+            <div className="fixed z-[60] flex items-center gap-1 bg-zinc-900/95 border border-white/10 rounded-xl p-1" style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 12px))', left: 'max(12px, env(safe-area-inset-left, 12px))' }}>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -1150,7 +1150,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto overscroll-none px-2 pt-2 pb-24" style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
+            <div className="flex-1 overflow-y-auto overscroll-none px-2 pt-2" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
             {/* Tables grouped by Room */}
             <div className="relative z-10 space-y-8">
                 {(() => {
