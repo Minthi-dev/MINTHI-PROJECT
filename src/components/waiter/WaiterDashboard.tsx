@@ -104,12 +104,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }, [])
 
     // Fetch initial data
-    // Debug: track mount/unmount
-    useEffect(() => {
-        console.log('[WaiterDash] MOUNTED')
-        return () => console.log('[WaiterDash] UNMOUNTED')
-    }, [])
-
     useEffect(() => {
         const initDashboard = async () => {
             try {
@@ -168,7 +162,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         .eq('restaurant_id', rId)
                         .eq('status', 'OPEN')
                 ])
-                console.log('[WaiterDash] initDashboard rId:', rId, 'tables:', tbs.length, 'sessions:', sessResult.data?.length, 'sessError:', sessResult.error, 'orders:', ordsResult.data?.length)
                 setTables(tbs)
                 setRooms(rms)
                 setDishes(ds)
@@ -202,13 +195,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     // Refresh solo sessioni
     const refreshSessions = useCallback(async () => {
         const rId = restaurantIdRef.current
-        if (!rId) { console.log('[WaiterDash] refreshSessions: no rId!'); return }
+        if (!rId) return
         const { data: sess, error: sessErr } = await supabase
             .from('table_sessions')
             .select('*')
             .eq('restaurant_id', rId)
             .eq('status', 'OPEN')
-        console.log('[WaiterDash] refreshSessions:', sess?.length, 'error:', sessErr)
         if (sess) setSessions(sess as TableSession[])
     }, [])
 
@@ -1082,30 +1074,52 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none brightness-100 contrast-150 mix-blend-overlay"></div>
 
             {/* Header */}
-            <header className="sticky top-0 z-50 flex flex-col md:flex-row items-center justify-between mb-4 sm:mb-8 gap-3 bg-zinc-950/80 backdrop-blur-xl p-3 sm:p-4 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300">
-                <div className="flex items-center gap-3 sm:gap-5 w-full md:w-auto">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10">
-                        <User size={22} weight="duotone" className="sm:hidden" />
-                        <User size={28} weight="duotone" className="hidden sm:block" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight">Gestione Sala</h1>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                            </span>
-                            <p className="text-xs sm:text-sm font-medium text-zinc-400">Sistema Attivo</p>
+            <header className="sticky top-0 z-50 mb-4 sm:mb-8 bg-zinc-950/80 backdrop-blur-xl p-3 sm:p-4 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300">
+                {/* Top Row: Title + Settings/Logout */}
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10 shrink-0">
+                            <User size={22} weight="duotone" />
                         </div>
+                        <div className="min-w-0">
+                            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate">Gestione Sala</h1>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className="relative flex h-2 w-2 shrink-0">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                </span>
+                                <p className="text-xs font-medium text-zinc-400">Attivo</p>
+                            </div>
+                        </div>
+                    </div>
+                    {/* Settings + Logout — fixed top right */}
+                    <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10 h-9 w-9 rounded-xl"
+                            onClick={() => setIsManageDialogOpen(true)}
+                        >
+                            <GearSix size={18} />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 h-9 w-9 rounded-xl"
+                            onClick={onLogout}
+                        >
+                            <SignOut size={18} />
+                        </Button>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                {/* Bottom Row: Activity + Sort + Room Filter — scrollable */}
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 pb-1">
                     {/* Activity Button */}
                     <Button
                         variant={totalActivityCount > 0 ? "default" : "outline"}
                         size="sm"
-                        className={`h-10 px-4 rounded-xl font-bold transition-all shadow-lg ${assistanceRequests.length > 0
+                        className={`h-9 px-3 rounded-xl font-bold transition-all shadow-lg shrink-0 text-xs ${assistanceRequests.length > 0
                             ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse shadow-red-500/20'
                             : readyCount > 0
                             ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
@@ -1116,22 +1130,22 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         onClick={() => setIsReadyDrawerOpen(true)}
                     >
                         {assistanceRequests.length > 0 ? (
-                            <BellSimple size={20} weight="fill" className="mr-2 animate-bounce text-yellow-400" />
+                            <BellSimple size={16} weight="fill" className="mr-1.5 animate-bounce text-yellow-400" />
                         ) : readyCount > 0 ? (
-                            <BellRinging size={20} weight="fill" className="mr-2 animate-bounce" />
+                            <BellRinging size={16} weight="fill" className="mr-1.5 animate-bounce" />
                         ) : pendingCount > 0 ? (
-                            <Clock size={20} weight="fill" className="mr-2" />
+                            <Clock size={16} weight="fill" className="mr-1.5" />
                         ) : (
-                            <CheckCircle size={20} className="mr-2" />
+                            <CheckCircle size={16} className="mr-1.5" />
                         )}
                         Attività: {totalActivityCount}
                     </Button>
 
-                    {/* Sort Dropdown — compact */}
+                    {/* Sort Dropdown */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-10 px-3 rounded-xl bg-zinc-900/80 border-white/5 text-xs font-bold text-zinc-400 hover:text-white">
-                                <Funnel size={16} className="mr-1.5 text-amber-500" />
+                            <Button variant="outline" size="sm" className="h-9 px-3 rounded-xl bg-zinc-900/80 border-white/5 text-xs font-bold text-zinc-400 hover:text-white shrink-0">
+                                <Funnel size={14} className="mr-1.5 text-amber-500" />
                                 {sortBy === 'status' ? 'Stato' : sortBy === 'alpha' ? 'A-Z' : 'Posti'}
                             </Button>
                         </DropdownMenuTrigger>
@@ -1145,36 +1159,30 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     </DropdownMenu>
 
                     {/* Room Filter */}
-                    <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                        <SelectTrigger className="w-[130px] h-10 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl">
-                            <House size={14} className="mr-1.5 text-amber-500" />
-                            <SelectValue placeholder="Tutte le S" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-zinc-950 border-zinc-800">
-                            <SelectItem value="all">Tutte le Sale</SelectItem>
-                            <SelectItem value="no-room">Senza Sala</SelectItem>
-                            {rooms.map(room => (
-                                <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    {rooms.length > 0 && (
+                        <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
+                            <SelectTrigger className="w-[120px] h-9 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl shrink-0">
+                                <House size={14} className="mr-1 text-amber-500 shrink-0" />
+                                <SelectValue placeholder="Sale" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-zinc-950 border-zinc-800">
+                                <SelectItem value="all">Tutte le Sale</SelectItem>
+                                <SelectItem value="no-room">Senza Sala</SelectItem>
+                                {rooms.map(room => (
+                                    <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
 
-                    {/* Settings + Logout — compact icons */}
+                    {/* Refresh button */}
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10 h-10 w-10 rounded-xl shrink-0"
-                        onClick={() => setIsManageDialogOpen(true)}
+                        className="h-9 w-9 rounded-xl text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10 shrink-0"
+                        onClick={() => refreshData()}
                     >
-                        <GearSix size={18} />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 h-10 w-10 rounded-xl shrink-0"
-                        onClick={onLogout}
-                    >
-                        <SignOut size={18} />
+                        <ArrowsClockwise size={16} />
                     </Button>
                 </div>
             </header>
@@ -1253,44 +1261,44 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         className="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
                     >
                         {/* Header */}
-                        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0 gap-3 flex-wrap">
-                            <div className="flex items-center gap-3">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => {
-                                        setIsReadyDrawerOpen(false)
-                                        setJustDeliveredIds(new Set())
-                                    }}
-                                    className="text-zinc-400 hover:text-white"
-                                >
-                                    <ArrowLeft size={24} />
-                                </Button>
-                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                                    <BellRinging className="text-amber-500" weight="fill" />
-                                    Centro Attività
-                                </h2>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {/* Room filter for activity center */}
-                                {rooms.length > 0 && (
-                                    <Select value={activityRoomFilter} onValueChange={setActivityRoomFilter}>
-                                        <SelectTrigger className="w-[160px] h-9 bg-zinc-900/80 border-white/10 text-xs font-bold rounded-xl">
-                                            <House size={14} className="mr-1.5 text-amber-500 shrink-0" />
-                                            <SelectValue placeholder="Tutte le Sale" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-zinc-950 border-zinc-800">
-                                            <SelectItem value="all">Tutte le Sale</SelectItem>
-                                            {rooms.map(room => (
-                                                <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                )}
-                                <Badge variant="outline" className="border-amber-500/30 text-amber-500 shrink-0">
-                                    {totalActivityCount} attivi
+                        <div className="px-3 py-3 border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => {
+                                            setIsReadyDrawerOpen(false)
+                                            setJustDeliveredIds(new Set())
+                                        }}
+                                        className="text-zinc-400 hover:text-white h-9 w-9 shrink-0"
+                                    >
+                                        <ArrowLeft size={20} />
+                                    </Button>
+                                    <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 truncate">
+                                        <BellRinging className="text-amber-500 shrink-0" weight="fill" size={20} />
+                                        <span className="truncate">Centro Attività</span>
+                                    </h2>
+                                </div>
+                                <Badge variant="outline" className="border-amber-500/30 text-amber-500 shrink-0 text-[10px]">
+                                    {totalActivityCount}
                                 </Badge>
                             </div>
+                            {/* Room filter for activity center */}
+                            {rooms.length > 0 && (
+                                <Select value={activityRoomFilter} onValueChange={setActivityRoomFilter}>
+                                    <SelectTrigger className="w-full h-8 bg-zinc-900/80 border-white/10 text-xs font-bold rounded-lg">
+                                        <House size={14} className="mr-1.5 text-amber-500 shrink-0" />
+                                        <SelectValue placeholder="Tutte le Sale" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-zinc-950 border-zinc-800">
+                                        <SelectItem value="all">Tutte le Sale</SelectItem>
+                                        {rooms.map(room => (
+                                            <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
 
                         {/* Content */}
