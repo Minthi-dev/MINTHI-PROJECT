@@ -1948,7 +1948,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
         {/* Ambient Background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
+          <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full opacity-40" />
         </div>
 
         <motion.div
@@ -1961,7 +1961,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             initial={{ rotate: -20 }}
             animate={{ rotate: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
-            className="w-24 h-24 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-[0_0_50px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md"
+            className="w-24 h-24 rounded-full bg-zinc-900 border border-emerald-500/20 text-emerald-400 flex items-center justify-center"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="48" height="48" fill="currentColor">
               <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
@@ -2000,11 +2000,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   return (
-    <div className="flex h-screen w-full bg-black text-amber-50 font-sans overflow-hidden selection:bg-amber-500/30 relative">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 bg-black">
-        <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-amber-500/[0.02] rounded-full blur-[150px]" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] bg-amber-500/[0.02] rounded-full blur-[150px]" />
-      </div>
+    <div className="flex h-[100dvh] w-full bg-black text-amber-50 font-sans overflow-hidden selection:bg-amber-500/30 relative" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
+      {/* Solid black background — no blur effects for iOS performance */}
 
       {/* Sidebar Toggle Button - Inline, does not overlap content */}
 
@@ -2012,11 +2009,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       <AnimatePresence mode="wait">
         {isSidebarOpen && (
           <motion.aside
-            initial={{ width: 0, opacity: 0, x: -50 }}
-            animate={{ width: 272, opacity: 1, x: 0 }}
-            exit={{ width: 0, opacity: 0, x: -50 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="h-full bg-zinc-950/80 backdrop-blur-3xl border-r border-white/[0.03] flex flex-col flex-shrink-0 z-40 relative shadow-[20px_0_50px_rgba(0,0,0,0.5)] overflow-hidden"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 272, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="h-full bg-zinc-950 border-r border-white/[0.03] flex flex-col flex-shrink-0 z-40 relative shadow-xl overflow-hidden"
           >
             <div className="p-6 border-b border-white/5 flex items-center justify-between gap-4 min-w-[272px]">
               {currentRestaurant?.logo_url ? (
@@ -2083,7 +2080,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   }}
                 >
                   {activeTab === item.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.8)]" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-none" />
                   )}
                   <item.icon
                     size={22}
@@ -2100,7 +2097,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               ))}
             </nav>
 
-            <div className="p-3 border-t border-white/5 bg-black/20 min-w-[272px] flex flex-col gap-1">
+            <div className="p-3 pb-4 border-t border-white/5 bg-black/20 min-w-[272px] flex flex-col gap-1 shrink-0">
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -2115,7 +2112,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   }`}
               >
                 {activeTab === 'settings' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.8)]" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-none" />
                 )}
                 <Gear size={20} weight={activeTab === 'settings' ? 'fill' : 'regular'} className={`mr-3 transition-colors flex-shrink-0 ${activeTab === 'settings' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-zinc-400'}`} />
                 <span className="text-sm tracking-wide">Impostazioni</span>
@@ -2167,7 +2164,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 transition={{ duration: 0.3 }}
                 className="mb-4"
               >
-                <div className="flex items-center gap-3 p-4 bg-amber-950/40 border border-amber-500/30 rounded-2xl backdrop-blur-sm shadow-lg shadow-amber-950/20">
+                <div className="flex items-center gap-3 p-4 bg-amber-950/40 border border-amber-500/30 rounded-2xl shadow-lg">
                   <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
                     <CreditCard className="text-amber-400" weight="duotone" size={20} />
                   </div>
@@ -2208,7 +2205,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 transition={{ duration: 0.3 }}
                 className="mb-4"
               >
-                <div className="flex items-center gap-3 p-4 bg-red-950/60 border border-red-500/40 rounded-2xl backdrop-blur-sm shadow-lg shadow-red-950/20">
+                <div className="flex items-center gap-3 p-4 bg-red-950/60 border border-red-500/40 rounded-2xl shadow-lg">
                   <WarningCircle className="text-red-400 shrink-0" weight="fill" size={24} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-red-300 text-sm">Pagamento abbonamento non andato a buon fine</p>
@@ -2235,7 +2232,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci gli ordini in tempo reale</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex bg-black/60 p-1.5 rounded-2xl mr-2 border border-white/5 shadow-2xl shadow-black/80 backdrop-blur-3xl">
+                  <div className="flex bg-black/60 p-1.5 rounded-2xl mr-2 border border-white/5 shadow-2xl shadow-black/80 ">
                     <Button
                       variant={kitchenViewMode === 'table' ? 'default' : 'ghost'}
                       size="sm"
@@ -2257,7 +2254,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   {/* Category Filter */}
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button variant={selectedKitchenCategories.length > 0 ? "default" : "outline"} size="sm" className="mr-2 h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300">
+                      <Button variant={selectedKitchenCategories.length > 0 ? "default" : "outline"} size="sm" className="mr-2 h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60  text-zinc-300">
                         <Funnel size={16} className={`mr-2 ${selectedKitchenCategories.length > 0 ? 'text-amber-500' : ''}`} />
                         Filtra
                         {selectedKitchenCategories.length > 0 && (
@@ -2299,7 +2296,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     </PopoverContent>
                   </Popover>
 
-                  <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl mr-2 border border-white/10 backdrop-blur-sm">
+                  <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl mr-2 border border-white/10 ">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2322,7 +2319,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
 
                   <Select value={orderSortMode} onValueChange={(value: 'oldest' | 'newest') => setOrderSortMode(value)}>
-                    <SelectTrigger className="w-[140px] h-10 bg-black/60 border-white/5 text-zinc-300 shadow-2xl shadow-black/80 rounded-xl backdrop-blur-3xl focus:ring-0">
+                    <SelectTrigger className="w-[140px] h-10 bg-black/60 border-white/5 text-zinc-300 shadow-2xl shadow-black/80 rounded-xl  focus:ring-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-zinc-950 border-zinc-900 text-zinc-100 rounded-xl">
@@ -2422,7 +2419,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       placeholder="Cerca tavolo..."
                       value={tableSearchTerm}
                       onChange={(e) => setTableSearchTerm(e.target.value)}
-                      className="pl-9 h-10 w-[180px] lg:w-[230px] bg-background/50 backdrop-blur-sm"
+                      className="pl-9 h-10 w-[180px] lg:w-[230px] bg-background/50 "
                     />
                   </div>
                   <Button data-tour="add-table-btn" onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
@@ -3338,7 +3335,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               )}
                             </div>
 
-                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-background/90 backdrop-blur-md p-1 rounded-lg border border-border/30 shadow-lg">
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-background/90  p-1 rounded-lg border border-border/30 shadow-lg">
                               <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-muted" onClick={(e) => { e.stopPropagation(); handleEditTable(table); }}>
                                 <PencilSimple size={12} />
                               </Button>
@@ -3364,7 +3361,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </div>
               </div>
 
-              <div className="bg-zinc-950/50 backdrop-blur-md rounded-2xl border border-white/[0.05] p-6">
+              <div className="bg-zinc-950/50  rounded-2xl border border-white/[0.05] p-6">
                 {(() => {
                   // Check if service hours are configured
                   const hasConfiguredHours = weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule && Object.values(weeklyServiceHours.schedule).some((day: any) => day?.lunch?.enabled || day?.dinner?.enabled);
@@ -3943,7 +3940,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0' }}
                                 />
                                 <div className="absolute top-2 right-2">
-                                  <span className="px-2 py-1 bg-zinc-950/90 backdrop-blur-sm rounded-full text-amber-400 font-bold text-xs shadow-lg">
+                                  <span className="px-2 py-1 bg-zinc-950/90  rounded-full text-amber-400 font-bold text-xs shadow-lg">
                                     €{dish.price.toFixed(2)}
                                   </span>
                                 </div>
@@ -4484,7 +4481,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
           {/* Edit Table Dialog */}
           <Dialog open={!!editingTable} onOpenChange={(open) => { if (!open) setEditingTable(null) }}>
-            <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
+            <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
               <DialogHeader>
                 <DialogTitle>Modifica Tavolo</DialogTitle>
                 <DialogDescription>
@@ -4558,7 +4555,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           </Dialog>
 
           <Dialog open={showQrDialog} onOpenChange={(open) => setShowQrDialog(open)}>
-            <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] flex flex-col items-center text-center outline-none">
+            <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl flex flex-col items-center text-center outline-none">
               <DialogHeader>
                 <DialogTitle>Tavolo Attivato!</DialogTitle>
                 <DialogDescription>
@@ -4781,7 +4778,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           </Dialog >
 
           <Dialog open={showTableQrDialog} onOpenChange={(open) => setShowTableQrDialog(open)}>
-            <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] flex flex-col items-center text-center outline-none">
+            <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl flex flex-col items-center text-center outline-none">
               <DialogHeader>
                 <DialogTitle>QR Code & PIN - {selectedTableForActions?.number}</DialogTitle>
                 <DialogDescription>

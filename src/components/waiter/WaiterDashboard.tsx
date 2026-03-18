@@ -1066,7 +1066,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-zinc-950 px-2 pt-1 pb-20 text-zinc-100 font-sans selection:bg-amber-500/30">
+        <div className="min-h-[100dvh] bg-zinc-950 px-2 pt-1 pb-20 text-zinc-100 font-sans selection:bg-amber-500/30" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'max(80px, env(safe-area-inset-bottom))', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
             {/* Background — solid for iOS performance */}
 
             {/* Header — compact, no rounded borders, flush to edges */}
@@ -1154,7 +1154,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             </header>
 
             {/* Fixed bottom-left: Settings + Logout */}
-            <div className="fixed bottom-4 left-3 z-50 flex items-center gap-1 bg-zinc-900 border border-white/10 rounded-xl p-1 shadow-lg">
+            <div className="fixed z-50 flex items-center gap-1 bg-zinc-900 border border-white/10 rounded-xl p-1 shadow-lg" style={{ bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', left: 'calc(12px + env(safe-area-inset-left, 0px))' }}>
                 <Button
                     variant="ghost"
                     size="icon"
