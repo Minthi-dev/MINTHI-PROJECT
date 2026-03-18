@@ -209,7 +209,7 @@ const AppContent = () => {
         </Routes>
       </Suspense>
 
-      <Toaster position="top-center" expand={false} richColors visibleToasts={3} toastOptions={{ style: { marginTop: 'env(safe-area-inset-top, 0px)' } }} />
+      <Toaster position="top-center" expand={false} richColors visibleToasts={2} duration={2500} toastOptions={{ style: { marginTop: 'env(safe-area-inset-top, 0px)' } }} />
     </>
   )
 }

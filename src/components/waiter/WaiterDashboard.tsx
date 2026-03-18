@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel, ArrowsClockwise } from '@phosphor-icons/react' // Restored icons
+import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase' // Corrected path (../../supabaseClient -> ../../lib/supabase usually, or just check file tree)
 import { cn } from '@/lib/utils'
@@ -376,10 +376,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (filteredReadyCount > prevFilteredReady || (activityRoomFilter === 'all' && currentReadyCount > prevFilteredReady)) {
             soundManager.play('kitchen-bell')
             setTimeout(() => soundManager.play('success'), 400)
-            toast.success('Ci sono piatti pronti da servire!', {
+            toast.success('Piatti pronti da servire!', {
                 id: 'ready-items-toast',
                 icon: '🔔',
-                duration: 4000,
+                duration: 2500,
+                dismissible: true,
                 style: { background: '#422006', border: '1px solid #f59e0b', color: '#fbbf24' }
             })
         }
@@ -1066,40 +1067,37 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="h-[100dvh] bg-zinc-950 text-zinc-100 font-sans selection:bg-amber-500/30 overflow-hidden flex flex-col">
+        <div className="h-[100dvh] bg-black text-zinc-100 font-sans selection:bg-amber-500/30 overflow-hidden flex flex-col">
 
             {/* Header — flush, no grey band */}
-            <header className="shrink-0 z-50 bg-zinc-950 px-3 py-2.5 border-b border-white/10" style={{ paddingTop: 'calc(8px + env(safe-area-inset-top, 0px))' }}>
-                <div className="flex items-center gap-2.5">
-                    {/* Activity Button */}
+            <header className="shrink-0 z-50 bg-black px-3 py-2.5 border-b border-white/10" style={{ paddingTop: 'calc(10px + env(safe-area-inset-top, 0px))' }}>
+                <div className="flex items-center gap-2">
+                    {/* Activity Button — big and clear */}
                     <Button
                         variant={totalActivityCount > 0 ? "default" : "outline"}
-                        size="sm"
-                        className={`h-10 px-3.5 rounded-xl font-bold transition-all shrink-0 text-sm ${assistanceRequests.length > 0
+                        className={`h-11 px-4 rounded-xl font-bold transition-all shrink-0 text-[15px] ${assistanceRequests.length > 0
                             ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse'
                             : readyCount > 0
-                            ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse'
-                            : totalActivityCount > 0
-                            ? 'bg-blue-500 hover:bg-blue-400 text-white border-transparent'
-                            : 'text-zinc-300 bg-zinc-800 border-white/10'
+                            ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent'
+                            : 'text-zinc-400 bg-zinc-900 border-white/10'
                             }`}
                         onClick={() => setIsReadyDrawerOpen(true)}
                     >
                         {assistanceRequests.length > 0 ? (
-                            <BellSimple size={18} weight="fill" className="mr-1.5" />
+                            <BellSimple size={20} weight="fill" className="mr-2" />
                         ) : readyCount > 0 ? (
-                            <BellRinging size={18} weight="fill" className="mr-1.5" />
+                            <BellRinging size={20} weight="fill" className="mr-2" />
                         ) : (
-                            <CheckCircle size={18} className="mr-1.5" />
+                            <CheckCircle size={20} className="mr-2" />
                         )}
                         Attività {totalActivityCount > 0 && `(${totalActivityCount})`}
                     </Button>
 
-                    {/* Sort Dropdown */}
+                    {/* Sort Dropdown — clearer */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-10 px-3.5 rounded-xl bg-zinc-800 border-white/10 text-sm font-bold text-zinc-300 shrink-0">
-                                <Funnel size={16} className="mr-1.5 text-amber-500" />
+                            <Button variant="outline" className="h-11 px-4 rounded-xl bg-zinc-900 border-white/10 text-[15px] font-bold text-zinc-300 shrink-0">
+                                <Funnel size={18} className="mr-2 text-amber-500" />
                                 {sortBy === 'status' ? 'Stato' : sortBy === 'alpha' ? 'A-Z' : 'Posti'}
                             </Button>
                         </DropdownMenuTrigger>
@@ -1112,15 +1110,15 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {/* Room Filter */}
+                    {/* Room Filter — clearer, no "Sala" label */}
                     {rooms.length > 0 && (
                         <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                            <SelectTrigger className="w-[120px] h-10 bg-zinc-800 border-white/10 text-sm font-bold rounded-xl shrink-0">
-                                <House size={16} className="mr-1.5 text-amber-500 shrink-0" />
-                                <SelectValue placeholder="Sale" />
+                            <SelectTrigger className="h-11 min-w-[130px] bg-zinc-900 border-white/10 text-[15px] font-bold rounded-xl shrink-0">
+                                <House size={18} className="mr-2 text-amber-500 shrink-0" />
+                                <SelectValue placeholder="Tutte" />
                             </SelectTrigger>
                             <SelectContent className="bg-zinc-950 border-zinc-800">
-                                <SelectItem value="all">Tutte le Sale</SelectItem>
+                                <SelectItem value="all">Tutte</SelectItem>
                                 <SelectItem value="no-room">Senza Sala</SelectItem>
                                 {rooms.map(room => (
                                     <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
@@ -1228,9 +1226,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         className="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
                     >
                         {/* Header */}
-                        <div className="px-3 py-3 border-b border-white/10 bg-zinc-900 shrink-0 space-y-2">
+                        <div className="px-4 py-3 border-b border-white/10 bg-black shrink-0 space-y-3" style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}>
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex items-center gap-3 min-w-0">
                                     <Button
                                         variant="ghost"
                                         size="icon"
@@ -1238,24 +1236,26 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                             setIsReadyDrawerOpen(false)
                                             setJustDeliveredIds(new Set())
                                         }}
-                                        className="text-zinc-400 hover:text-white h-9 w-9 shrink-0"
+                                        className="text-zinc-400 hover:text-white h-10 w-10 shrink-0"
                                     >
-                                        <ArrowLeft size={20} />
+                                        <ArrowLeft size={22} />
                                     </Button>
-                                    <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 truncate">
-                                        <BellRinging className="text-amber-500 shrink-0" weight="fill" size={20} />
+                                    <h2 className="text-xl font-bold text-white flex items-center gap-2.5 truncate">
+                                        <BellRinging className="text-amber-500 shrink-0" weight="fill" size={24} />
                                         <span className="truncate">Centro Attività</span>
                                     </h2>
                                 </div>
-                                <Badge variant="outline" className="border-amber-500/30 text-amber-500 shrink-0 text-[10px]">
-                                    {totalActivityCount}
-                                </Badge>
+                                {totalActivityCount > 0 && (
+                                    <div className="h-8 min-w-[32px] px-2.5 rounded-full bg-amber-500 text-black font-bold text-sm flex items-center justify-center shrink-0">
+                                        {totalActivityCount}
+                                    </div>
+                                )}
                             </div>
                             {/* Room filter for activity center */}
                             {rooms.length > 0 && (
                                 <Select value={activityRoomFilter} onValueChange={setActivityRoomFilter}>
-                                    <SelectTrigger className="w-full h-8 bg-zinc-900/80 border-white/10 text-xs font-bold rounded-lg">
-                                        <House size={14} className="mr-1.5 text-amber-500 shrink-0" />
+                                    <SelectTrigger className="w-full h-10 bg-zinc-900 border-white/10 text-sm font-bold rounded-xl">
+                                        <House size={18} className="mr-2 text-amber-500 shrink-0" />
                                         <SelectValue placeholder="Tutte le Sale" />
                                     </SelectTrigger>
                                     <SelectContent className="bg-zinc-950 border-zinc-800">
@@ -1269,7 +1269,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
+                        <div className="flex-1 overflow-y-auto overscroll-none p-4 space-y-6 pb-24">
                             {/* Assistance Requests Section — filtered by room */}
                             {(() => {
                                 const filteredAssistance = activityRoomFilter === 'all'
@@ -1277,32 +1277,30 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                     : assistanceRequests.filter(t => t.room_id === activityRoomFilter)
                                 return filteredAssistance.length > 0 ? (
                                     <div className="space-y-3">
-                                        <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 flex items-center gap-2">
-                                            <WarningCircle size={16} weight="fill" />
+                                        <h3 className="text-sm font-bold uppercase tracking-wider text-red-400 flex items-center gap-2">
+                                            <WarningCircle size={20} weight="fill" />
                                             Richieste Assistenza
                                         </h3>
                                         {filteredAssistance.map(t => {
                                             const room = rooms.find(r => r.id === t.room_id)
+                                            const minutesAgo = t.last_assistance_request ? Math.max(0, Math.floor((Date.now() - new Date(t.last_assistance_request).getTime()) / 60000)) : 0
                                             return (
-                                                <div key={t.id} className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-center justify-between animate-pulse-slow">
+                                                <div key={t.id} className="bg-red-950/60 border border-red-500/30 p-4 rounded-2xl flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-black font-bold text-lg shrink-0">
+                                                        <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-black font-bold text-xl shrink-0">
                                                             {t.number}
                                                         </div>
                                                         <div>
-                                                            <p className="font-bold text-red-400">Richiesta Cameriere</p>
-                                                            {room && <p className="text-xs text-red-300/40 font-medium">{room.name}</p>}
-                                                            <p className="text-xs text-red-300/60">
-                                                                {t.last_assistance_request ? new Date(t.last_assistance_request).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Adesso'}
-                                                            </p>
+                                                            <p className="font-bold text-base text-white">Tavolo {t.number}</p>
+                                                            {room && <p className="text-sm text-zinc-400 font-medium">{room.name}</p>}
+                                                            <p className="text-sm text-red-400 font-medium">{minutesAgo}min fa</p>
                                                         </div>
                                                     </div>
                                                     <Button
-                                                        size="sm"
-                                                        className="bg-red-500 hover:bg-red-400 text-black font-bold h-9 px-4 rounded-lg"
+                                                        className="bg-red-500 hover:bg-red-400 text-white font-bold h-11 px-5 rounded-xl text-sm"
                                                         onClick={() => handleResolveAssistance(t.id)}
                                                     >
-                                                        <CheckCircle size={18} className="mr-2" weight="fill" />
+                                                        <Check size={18} weight="bold" className="mr-2" />
                                                         Risolvi
                                                     </Button>
                                                 </div>
@@ -1314,8 +1312,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
                             {/* Ready Items Section — grouped by table */}
                             <div className="space-y-3">
-                                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
-                                    <ChefHat size={16} />
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                                    <ChefHat size={20} />
                                     Piatti Pronti da Servire
                                     {activityRoomFilter !== 'all' && (
                                         <span className="text-amber-500 normal-case font-normal">
@@ -1325,9 +1323,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                 </h3>
 
                                 {displayReadyItemsByTable.length === 0 ? (
-                                    <div className="py-12 flex flex-col items-center justify-center text-zinc-600 border border-dashed border-white/5 rounded-2xl bg-zinc-900/20">
-                                        <ForkKnife size={48} className="mb-4 opacity-20" />
-                                        <p>Nessun piatto pronto da servire</p>
+                                    <div className="py-16 flex flex-col items-center justify-center text-zinc-600 rounded-2xl">
+                                        <ForkKnife size={48} className="mb-4 opacity-30" />
+                                        <p className="text-base text-zinc-500">Nessun piatto pronto</p>
                                     </div>
                                 ) : (
                                     <AnimatePresence>
@@ -1340,30 +1338,30 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                                                 transition={{ duration: 0.4 }}
                                                 className={cn(
-                                                    "rounded-2xl overflow-hidden border shadow-lg shadow-black/50 transition-colors",
+                                                    "rounded-2xl overflow-hidden border transition-colors",
                                                     tableGroup.allDelivered
-                                                        ? "border-zinc-700/30 bg-zinc-900/30 opacity-40"
+                                                        ? "border-zinc-800 bg-zinc-900/30 opacity-40"
                                                         : "border-amber-500/20 bg-zinc-900"
                                                 )}
                                             >
                                                 {/* Table Group Header */}
                                                 <div className={cn(
-                                                    "px-4 py-3 flex items-center justify-between border-b",
+                                                    "px-4 py-3.5 flex items-center justify-between border-b",
                                                     tableGroup.allDelivered
-                                                        ? "border-zinc-700/20 bg-zinc-900/20"
-                                                        : "border-amber-500/10 bg-amber-500/5"
+                                                        ? "border-zinc-800 bg-zinc-900/20"
+                                                        : "border-amber-500/10 bg-amber-950/40"
                                                 )}>
-                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                    <div className="flex items-center gap-3 min-w-0 flex-1">
                                                         <div className="flex flex-col min-w-0">
                                                             <p className={cn(
-                                                                "font-bold text-sm truncate",
+                                                                "font-bold text-base truncate",
                                                                 tableGroup.allDelivered ? "text-zinc-500" : "text-white"
                                                             )}>
                                                                 Tavolo {tableGroup.tableName}
                                                             </p>
                                                             {tableGroup.roomName && (
                                                                 <span className={cn(
-                                                                    "text-xs font-medium truncate",
+                                                                    "text-sm font-medium truncate",
                                                                     tableGroup.allDelivered ? "text-zinc-600" : "text-zinc-400"
                                                                 )}>
                                                                     {tableGroup.roomName}
@@ -1375,31 +1373,26 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                         {/* Mark all as delivered button */}
                                                         {undeliveredItems.length > 1 && (
                                                             <Button
-                                                                size="sm"
-                                                                className="h-8 px-3 text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-black rounded-lg"
+                                                                className="h-9 px-4 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black rounded-xl"
                                                                 onClick={async () => {
-                                                                    const ids = undeliveredItems.map(i => i.id)
                                                                     for (const item of undeliveredItems) {
                                                                         await handleMarkAsDelivered(item.order_id, item.id)
                                                                     }
-                                                                    toast.success(`${undeliveredItems.length} piatti segnati come consegnati`)
+                                                                    toast.success(`${undeliveredItems.length} piatti consegnati`)
                                                                 }}
                                                             >
-                                                                <Check size={12} weight="bold" className="mr-1" />
+                                                                <Check size={14} weight="bold" className="mr-1.5" />
                                                                 Tutti
                                                             </Button>
                                                         )}
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={cn(
-                                                                "text-[10px] font-bold whitespace-nowrap",
-                                                                tableGroup.allDelivered
-                                                                    ? "border-zinc-600 text-zinc-500"
-                                                                    : "border-amber-500/40 text-amber-400 bg-amber-500/5"
-                                                            )}
-                                                        >
+                                                        <div className={cn(
+                                                            "h-8 px-3 rounded-full flex items-center text-xs font-bold",
+                                                            tableGroup.allDelivered
+                                                                ? "bg-zinc-800 text-zinc-500"
+                                                                : "bg-amber-500/15 text-amber-400"
+                                                        )}>
                                                             {undeliveredItems.length} da servire
-                                                        </Badge>
+                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -1411,46 +1404,46 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                         <div
                                                             key={item.id}
                                                             className={cn(
-                                                                "p-3 flex gap-3 transition-colors",
+                                                                "px-4 py-3 flex gap-3 items-center transition-colors",
                                                                 item.isDelivered && "opacity-30"
                                                             )}
                                                         >
                                                             {/* Left stripe */}
                                                             <div className={cn(
                                                                 "w-1 rounded-full shrink-0 self-stretch",
-                                                                item.isDelivered ? "bg-zinc-600" : "bg-amber-500"
+                                                                item.isDelivered ? "bg-zinc-700" : "bg-amber-500"
                                                             )} />
 
                                                             {/* Content */}
                                                             <div className="flex-1 min-w-0">
                                                                 <h4 className={cn(
-                                                                    "font-bold text-sm leading-tight mb-0.5",
+                                                                    "font-bold text-base leading-tight",
                                                                     item.isDelivered ? "line-through text-zinc-500" : "text-white"
                                                                 )}>
                                                                     {item.dish?.name || 'Piatto'}
                                                                 </h4>
-                                                                <p className="text-xs text-zinc-500">
+                                                                <p className="text-sm text-zinc-500 mt-0.5">
                                                                     x{item.quantity}
                                                                     <span className="mx-1.5 text-zinc-700">·</span>
-                                                                    <span className={minutesAgo > 5 ? "text-red-400" : "text-zinc-400"}>{minutesAgo}min fa</span>
+                                                                    <span className={minutesAgo > 5 ? "text-red-400 font-medium" : "text-zinc-400"}>{minutesAgo}min fa</span>
                                                                 </p>
                                                                 {item.note && (
-                                                                    <p className="text-[11px] text-amber-500/70 italic mt-0.5">Note: {item.note}</p>
+                                                                    <p className="text-sm text-amber-500/70 italic mt-1">"{item.note}"</p>
                                                                 )}
                                                             </div>
 
                                                             {/* Action button */}
                                                             <div className="flex flex-col justify-center shrink-0">
                                                                 {item.isDelivered ? (
-                                                                    <div className="h-9 w-9 rounded-full bg-zinc-700/40 flex items-center justify-center">
-                                                                        <Check size={16} weight="bold" className="text-zinc-500" />
+                                                                    <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center">
+                                                                        <Check size={18} weight="bold" className="text-zinc-500" />
                                                                     </div>
                                                                 ) : (
                                                                     <Button
-                                                                        className="h-9 w-9 rounded-full bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 p-0"
+                                                                        className="h-10 w-10 rounded-full bg-amber-500 hover:bg-amber-400 text-black p-0"
                                                                         onClick={() => handleMarkAsDelivered(item.order_id, item.id)}
                                                                     >
-                                                                        <Check size={16} weight="bold" />
+                                                                        <Check size={18} weight="bold" />
                                                                     </Button>
                                                                 )}
                                                             </div>
