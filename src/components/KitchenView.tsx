@@ -59,12 +59,21 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
     const getDish = (dishId: string) => dishes.find(d => d.id === dishId)
 
     const isOrderComplete = (order: Order) => {
-        // Order disappears only when ALL items are SERVED (fully delivered)
+        // Without waiter mode: order disappears when ALL items are READY or SERVED
+        // With waiter mode: order disappears only when ALL items are SERVED/DELIVERED
         return order.items?.every(item => {
             const s = item.status?.toUpperCase?.() || ''
-            return s === 'SERVED' || s === 'DELIVERED'
+            if (waiterModeEnabled) {
+                return s === 'SERVED' || s === 'DELIVERED'
+            }
+            return s === 'READY' || s === 'SERVED' || s === 'DELIVERED'
         })
     }
+
+    // Get active session IDs to filter out orders from closed/old sessions
+    const activeSessionIds = useMemo(() => {
+        return new Set(sessions.filter(s => s.status === 'OPEN' || !s.closed_at).map(s => s.id))
+    }, [sessions])
 
     const itemMatchesCategory = (item: OrderItem) => {
         if (!selectedCategoryIds || selectedCategoryIds.length === 0) return true
@@ -75,12 +84,15 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
     const activeOrders = useMemo(() => {
         return orders
             .filter(o => ['OPEN', 'pending', 'preparing', 'ready'].includes(o.status))
+            .filter(o => !isOrderComplete(o))
+            // Only show orders from active (open) sessions — not from closed/old ones
+            .filter(o => !o.table_session_id || activeSessionIds.has(o.table_session_id))
             .filter(o => {
                 if (!selectedCategoryIds || selectedCategoryIds.length === 0) return true
                 return o.items?.some(item => itemMatchesCategory(item))
             })
             .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    }, [orders, selectedCategoryIds, dishes, waiterModeEnabled])
+    }, [orders, selectedCategoryIds, dishes, waiterModeEnabled, activeSessionIds])
 
     const dishesViewData = useMemo(() => {
         const dishMap = new Map<string, { dish: Dish | undefined, items: { order: Order, item: OrderItem }[] }>()
@@ -142,10 +154,6 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                             )
                             const timeDiff = (now.getTime() - new Date(oldestOrder.created_at).getTime()) / 1000 / 60
                             const allItemsDone = allItems.every(item => item.status === 'SERVED' || item.status === 'READY')
-                            const allItemsDelivered = allItems.every(item => {
-                                const s = item.status?.toUpperCase?.() || ''
-                                return s === 'SERVED' || s === 'DELIVERED'
-                            })
 
                             // Group items by course_number
                             const itemsByCourse: { [key: number]: typeof allItems } = {}
@@ -160,12 +168,7 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                             return (
                                 <Card
                                     key={`table-${tableName}`}
-                                    className={cn(
-                                        "flex flex-col rounded-[2rem] border bg-zinc-900 transition-all duration-300 h-fit group/card overflow-hidden",
-                                        allItemsDelivered
-                                            ? "opacity-30 border-zinc-800 grayscale"
-                                            : "border-white/10 shadow-[0_20px_50px_-12px_rgba(0,0,0,1)] hover:border-amber-500/30 ring-1 ring-white/5"
-                                    )}
+                                    className="flex flex-col rounded-[2rem] border border-white/10 bg-zinc-900 shadow-[0_20px_50px_-12px_rgba(0,0,0,1)] transition-all duration-300 hover:border-amber-500/30 h-fit group/card overflow-hidden ring-1 ring-white/5"
                                 >
                                     <CardHeader className="pb-4 pt-6 px-6 border-b border-white/10 shrink-0 bg-zinc-900">
                                         <div className="flex justify-between items-center w-full">
