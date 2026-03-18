@@ -157,7 +157,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     DatabaseService.getRooms(rId),
                     DatabaseService.getDishes(rId),
                     DatabaseService.getCategories(rId),
-                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled').eq('restaurant_id', rId).eq('status', 'OPEN'),
+                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto, coperto_enabled, ayce_enabled').eq('restaurant_id', rId).eq('status', 'OPEN'),
                     supabase.from('orders')
                         .select(`
                             id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
@@ -205,7 +205,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!rId) { console.log('[WaiterDash] refreshSessions: no rId!'); return }
         const { data: sess, error: sessErr } = await supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto, coperto_enabled, ayce_enabled')
             .eq('restaurant_id', rId)
             .eq('status', 'OPEN')
         console.log('[WaiterDash] refreshSessions:', sess?.length, 'error:', sessErr)
