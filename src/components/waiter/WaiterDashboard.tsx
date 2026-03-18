@@ -1066,52 +1066,40 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-zinc-950 px-2 pt-1 pb-20 text-zinc-100 font-sans selection:bg-amber-500/30" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'max(80px, env(safe-area-inset-bottom))', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
-            {/* Background — solid for iOS performance */}
+        <div className="h-[100dvh] bg-zinc-950 text-zinc-100 font-sans selection:bg-amber-500/30 overflow-hidden flex flex-col">
 
-            {/* Header — compact, no rounded borders, flush to edges */}
-            <header className="sticky top-0 z-50 mb-2 bg-zinc-950 px-2 py-2 border-b border-white/5">
-                {/* Single Row: Title + Activity + Sort + Room + Refresh */}
-                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                    {/* Title — compact */}
-                    <div className="flex items-center gap-2 shrink-0">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shrink-0">
-                            <User size={16} weight="duotone" />
-                        </div>
-                        <h1 className="text-sm font-bold text-white whitespace-nowrap">Sala</h1>
-                    </div>
-
-                    <div className="w-px h-6 bg-white/10 shrink-0" />
-
+            {/* Header — flush, no grey band */}
+            <header className="shrink-0 z-50 bg-zinc-950 px-3 py-2.5 border-b border-white/10" style={{ paddingTop: 'calc(8px + env(safe-area-inset-top, 0px))' }}>
+                <div className="flex items-center gap-2.5">
                     {/* Activity Button */}
                     <Button
                         variant={totalActivityCount > 0 ? "default" : "outline"}
                         size="sm"
-                        className={`h-8 px-2.5 rounded-lg font-bold transition-all shrink-0 text-[11px] ${assistanceRequests.length > 0
+                        className={`h-10 px-3.5 rounded-xl font-bold transition-all shrink-0 text-sm ${assistanceRequests.length > 0
                             ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse'
                             : readyCount > 0
                             ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse'
                             : totalActivityCount > 0
                             ? 'bg-blue-500 hover:bg-blue-400 text-white border-transparent'
-                            : 'text-zinc-400 bg-zinc-900/50 border-white/5'
+                            : 'text-zinc-300 bg-zinc-800 border-white/10'
                             }`}
                         onClick={() => setIsReadyDrawerOpen(true)}
                     >
                         {assistanceRequests.length > 0 ? (
-                            <BellSimple size={14} weight="fill" className="mr-1" />
+                            <BellSimple size={18} weight="fill" className="mr-1.5" />
                         ) : readyCount > 0 ? (
-                            <BellRinging size={14} weight="fill" className="mr-1" />
+                            <BellRinging size={18} weight="fill" className="mr-1.5" />
                         ) : (
-                            <CheckCircle size={14} className="mr-1" />
+                            <CheckCircle size={18} className="mr-1.5" />
                         )}
-                        {totalActivityCount}
+                        Attività {totalActivityCount > 0 && `(${totalActivityCount})`}
                     </Button>
 
                     {/* Sort Dropdown */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="h-8 px-2.5 rounded-lg bg-zinc-900/80 border-white/5 text-[11px] font-bold text-zinc-400 shrink-0">
-                                <Funnel size={12} className="mr-1 text-amber-500" />
+                            <Button variant="outline" size="sm" className="h-10 px-3.5 rounded-xl bg-zinc-800 border-white/10 text-sm font-bold text-zinc-300 shrink-0">
+                                <Funnel size={16} className="mr-1.5 text-amber-500" />
                                 {sortBy === 'status' ? 'Stato' : sortBy === 'alpha' ? 'A-Z' : 'Posti'}
                             </Button>
                         </DropdownMenuTrigger>
@@ -1127,8 +1115,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     {/* Room Filter */}
                     {rooms.length > 0 && (
                         <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                            <SelectTrigger className="w-[100px] h-8 bg-zinc-900/80 border-white/5 text-[11px] font-bold rounded-lg shrink-0">
-                                <House size={12} className="mr-1 text-amber-500 shrink-0" />
+                            <SelectTrigger className="w-[120px] h-10 bg-zinc-800 border-white/10 text-sm font-bold rounded-xl shrink-0">
+                                <House size={16} className="mr-1.5 text-amber-500 shrink-0" />
                                 <SelectValue placeholder="Sale" />
                             </SelectTrigger>
                             <SelectContent className="bg-zinc-950 border-zinc-800">
@@ -1140,16 +1128,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             </SelectContent>
                         </Select>
                     )}
-
-                    {/* Refresh button */}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-lg text-zinc-500 hover:text-amber-500 shrink-0"
-                        onClick={() => refreshData()}
-                    >
-                        <ArrowsClockwise size={14} />
-                    </Button>
                 </div>
             </header>
 
@@ -1173,6 +1151,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 </Button>
             </div>
 
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto overscroll-none px-2 pt-2 pb-24" style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}>
             {/* Tables grouped by Room */}
             <div className="relative z-10 space-y-8">
                 {(() => {
@@ -1235,6 +1215,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     return roomSections
                 })()}
             </div>
+            </div>{/* end scrollable content */}
 
             {/* Activity Center View (Full Screen) */}
             <AnimatePresence>
