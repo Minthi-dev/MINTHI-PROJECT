@@ -161,12 +161,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         .eq('restaurant_id', rId)
                         .eq('status', 'OPEN')
                 ])
+                console.log('[WaiterDash] initDashboard rId:', rId, 'tables:', tbs.length, 'sessions:', sessResult.data?.length, 'sessError:', sessResult.error, 'orders:', ordsResult.data?.length)
                 setTables(tbs)
                 setRooms(rms)
                 setDishes(ds)
                 setCategories(cats)
-                if (sessResult.data) setSessions(sessResult.data)
-                if (ordsResult.data) setActiveOrders(ordsResult.data as unknown as Order[])
+                setSessions(sessResult.data || [])
+                setActiveOrders((ordsResult.data || []) as unknown as Order[])
 
             } catch (error) {
                 console.error('Error loading waiter dashboard:', error)
@@ -177,7 +178,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
 
         initDashboard()
-    }, [user])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
 
 
@@ -193,12 +195,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     // Refresh solo sessioni
     const refreshSessions = useCallback(async () => {
         const rId = restaurantIdRef.current
-        if (!rId) return
-        const { data: sess } = await supabase
+        if (!rId) { console.log('[WaiterDash] refreshSessions: no rId!'); return }
+        const { data: sess, error: sessErr } = await supabase
             .from('table_sessions')
             .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
             .eq('restaurant_id', rId)
             .eq('status', 'OPEN')
+        console.log('[WaiterDash] refreshSessions:', sess?.length, 'error:', sessErr)
         if (sess) setSessions(sess as TableSession[])
     }, [])
 
