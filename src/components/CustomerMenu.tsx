@@ -1007,6 +1007,7 @@ const CustomerMenuBase = () => {
         tableId={tableId}
         sessionId={sessionId!}
         activeSession={activeSession!}
+        setActiveSession={setActiveSession}
         isViewOnly={isViewOnly}
         isClosed={isClosed}
         isAuthenticated={isAuthenticated}
@@ -1020,7 +1021,7 @@ const CustomerMenuBase = () => {
 
 // Refactored Content Component to keep logic clean
 //  -- UPDATED INTERFACE to include auth and full restaurant --
-function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
+function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, setActiveSession, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, setActiveSession: (session: TableSession | null) => void, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
   // Using passed props instead of resolving them
   const isWaiterMode = false // Or pass as prop if needed
 
@@ -1346,11 +1347,14 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const historyTotal = useMemo(() => previousOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0), [previousOrders])
   const grandTotal = cartTotal + historyTotal
 
-  // AYCE order limit
+  // AYCE order limit — only show if AYCE is globally enabled AND session has AYCE AND limit > 0
   const ayceMaxOrders = useMemo(() => {
     if (!activeSession?.ayce_enabled) return 0
     const weeklyAyce = (fullRestaurant as any)?.weekly_ayce
     const legacyAyce = (fullRestaurant as any)?.all_you_can_eat
+    // Check if AYCE is enabled at restaurant level
+    if (weeklyAyce && !weeklyAyce.enabled) return 0
+    if (!weeklyAyce && legacyAyce && !legacyAyce.enabled) return 0
     return weeklyAyce?.defaultMaxOrders || legacyAyce?.maxOrders || (fullRestaurant as any)?.ayce_max_orders || 0
   }, [fullRestaurant, activeSession])
   const remainingOrders = useMemo(() => {
@@ -1359,11 +1363,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }, [ayceMaxOrders, previousOrders])
   const orderLimitReached = remainingOrders <= 0 && remainingOrders !== Infinity
 
-  // AYCE time-based order interval
+  // AYCE time-based order interval — only when AYCE is globally enabled
   const ayceOrderInterval = useMemo(() => {
     if (!activeSession?.ayce_enabled) return 0
     const weeklyAyce = (fullRestaurant as any)?.weekly_ayce
-    return weeklyAyce?.defaultOrderInterval || 0
+    const legacyAyce = (fullRestaurant as any)?.all_you_can_eat
+    // Check if AYCE is enabled at restaurant level
+    if (weeklyAyce && !weeklyAyce.enabled) return 0
+    if (!weeklyAyce && legacyAyce && !legacyAyce.enabled) return 0
+    return weeklyAyce?.defaultOrderInterval || legacyAyce?.orderInterval || 0
   }, [fullRestaurant, activeSession])
 
   const timeUntilNextOrder = useMemo(() => {
