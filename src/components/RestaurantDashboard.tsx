@@ -939,9 +939,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       setAllowWaiterPayments(currentRestaurant.allow_waiter_payments || false)
       setWaiterPassword('')
 
-      setAyceEnabled(!!currentRestaurant.all_you_can_eat?.enabled)
-      setAycePrice(currentRestaurant.all_you_can_eat?.pricePerPerson || 0)
-      setAyceMaxOrders(currentRestaurant.all_you_can_eat?.maxOrders || 0)
+      // Weekly AYCE schedule is source of truth if it exists; fall back to legacy
+      const ayceOn = currentRestaurant.weekly_ayce
+        ? !!currentRestaurant.weekly_ayce.enabled
+        : !!currentRestaurant.all_you_can_eat?.enabled
+      setAyceEnabled(ayceOn)
+      setAycePrice(currentRestaurant.weekly_ayce?.defaultPrice ?? currentRestaurant.all_you_can_eat?.pricePerPerson ?? 0)
+      setAyceMaxOrders(currentRestaurant.weekly_ayce?.defaultMaxOrders ?? currentRestaurant.all_you_can_eat?.maxOrders ?? 0)
       // For now, let's stick to what we know exists or was added.
 
       // refreshRestaurants() // This was causing an infinite loop, removed.

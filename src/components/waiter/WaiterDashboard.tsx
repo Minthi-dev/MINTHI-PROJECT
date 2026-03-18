@@ -1100,12 +1100,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
-                    {/* Activity Button - Ready items + Pending items + Assistance requests */}
+                <div className="flex items-center gap-2">
+                    {/* Activity Button */}
                     <Button
                         variant={totalActivityCount > 0 ? "default" : "outline"}
                         size="sm"
-                        className={`md:mr-4 h-10 px-4 rounded-xl font-bold transition-all shadow-lg ${assistanceRequests.length > 0
+                        className={`h-10 px-4 rounded-xl font-bold transition-all shadow-lg ${assistanceRequests.length > 0
                             ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse shadow-red-500/20'
                             : readyCount > 0
                             ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
@@ -1127,40 +1127,28 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         Attività: {totalActivityCount}
                     </Button>
 
-                    <div className="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSortBy('status')}
-                            className={`text-xs font-bold h-8 rounded-lg transition-all ${sortBy === 'status' ? 'bg-zinc-800 text-amber-500 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-                        >
-                            Stato
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSortBy('alpha')}
-                            className={`text-xs font-bold h-8 rounded-lg transition-all ${sortBy === 'alpha' ? 'bg-zinc-800 text-amber-500 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-                        >
-                            A-Z
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSortBy('seats')}
-                            className={`text-xs font-bold h-8 rounded-lg transition-all ${sortBy === 'seats' ? 'bg-zinc-800 text-amber-500 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
-                        >
-                            Posti
-                        </Button>
-                    </div>
-
-                    <div className="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
+                    {/* Sort Dropdown — compact */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-10 px-3 rounded-xl bg-zinc-900/80 border-white/5 text-xs font-bold text-zinc-400 hover:text-white">
+                                <Funnel size={16} className="mr-1.5 text-amber-500" />
+                                {sortBy === 'status' ? 'Stato' : sortBy === 'alpha' ? 'A-Z' : 'Posti'}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="bg-zinc-950 border-zinc-800">
+                            <DropdownMenuLabel className="text-xs text-zinc-500">Ordina per</DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-zinc-800" />
+                            <DropdownMenuItem onClick={() => setSortBy('status')} className={sortBy === 'status' ? 'text-amber-500' : ''}>Stato</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setSortBy('alpha')} className={sortBy === 'alpha' ? 'text-amber-500' : ''}>A-Z</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setSortBy('seats')} className={sortBy === 'seats' ? 'text-amber-500' : ''}>Posti</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
                     {/* Room Filter */}
                     <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                        <SelectTrigger className="w-[140px] h-10 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl">
-                            <House size={16} className="mr-2 text-amber-500" />
-                            <SelectValue placeholder="Sala" />
+                        <SelectTrigger className="w-[130px] h-10 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl">
+                            <House size={14} className="mr-1.5 text-amber-500" />
+                            <SelectValue placeholder="Tutte le S" />
                         </SelectTrigger>
                         <SelectContent className="bg-zinc-950 border-zinc-800">
                             <SelectItem value="all">Tutte le Sale</SelectItem>
@@ -1171,23 +1159,22 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </SelectContent>
                     </Select>
 
-                    {/* Management Button */}
+                    {/* Settings + Logout — compact icons */}
                     <Button
                         variant="ghost"
-                        size="sm"
-                        className="text-zinc-400 hover:text-amber-500 hover:bg-amber-500/10 h-10 w-10 p-0 rounded-xl"
+                        size="icon"
+                        className="text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10 h-10 w-10 rounded-xl shrink-0"
                         onClick={() => setIsManageDialogOpen(true)}
                     >
-                        <GearSix size={20} weight="duotone" />
+                        <GearSix size={18} />
                     </Button>
-
                     <Button
                         variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-10 w-10 p-0 rounded-xl"
+                        size="icon"
+                        className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10 h-10 w-10 rounded-xl shrink-0"
                         onClick={onLogout}
                     >
-                        <SignOut size={20} weight="duotone" />
+                        <SignOut size={18} />
                     </Button>
                 </div>
             </header>
