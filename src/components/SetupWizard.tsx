@@ -146,7 +146,7 @@ export default function SetupWizard({
               <div className="flex items-center gap-2">
                 <Sparkle size={16} weight="fill" className="text-emerald-400" />
                 <span className="text-sm font-bold text-emerald-400">Configurazione</span>
-                <span className="text-xs text-zinc-500 font-medium">{completedCount}/{steps.length}</span>
+                <span className="text-xs text-zinc-400 font-bold">{currentStep + 1}/{steps.length}</span>
               </div>
               <button onClick={onComplete} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-sm font-medium transition-colors bg-white/5 hover:bg-white/10 rounded-lg px-3 py-1.5">
                 <X size={14} weight="bold" />

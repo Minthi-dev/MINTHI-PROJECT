@@ -118,18 +118,18 @@ export default function DemoGuidePanel({
         />
       )}
 
-      {/* Top banner — clear exit button */}
+      {/* Top banner — subtle, not intrusive */}
       <div className="fixed top-0 left-0 right-0 z-[10000] pointer-events-none" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        <div className="pointer-events-auto bg-amber-500 text-black px-4 py-2.5 flex items-center justify-between shadow-lg">
-          <span className="text-sm font-bold">
-            DEMO — Dati di esempio
+        <div className="pointer-events-auto bg-violet-600 text-white px-4 py-2.5 flex items-center justify-between shadow-lg">
+          <span className="text-sm font-bold tracking-wide">
+            ● DEMO — Dati di esempio
           </span>
           <button
             onClick={onExit}
-            className="flex items-center gap-1.5 text-sm font-bold bg-black/25 hover:bg-black/40 rounded-xl px-4 py-2 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-bold bg-white/20 hover:bg-white/30 rounded-xl px-4 py-2 transition-colors"
           >
             <X size={14} weight="bold" />
-            Esci dalla Demo
+            Esci
           </button>
         </div>
       </div>
@@ -149,13 +149,13 @@ export default function DemoGuidePanel({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ type: 'spring', damping: 25 }}
-              className="bg-zinc-950 border border-amber-500/20 rounded-3xl p-6 sm:p-10 max-w-2xl w-full shadow-[0_20px_60px_-15px_rgba(245,158,11,0.15)] max-h-[90vh] overflow-y-auto"
+              className="bg-zinc-950 border border-violet-500/20 rounded-3xl p-6 sm:p-10 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="text-center mb-6 sm:mb-8">
                 <h1 className="text-3xl sm:text-4xl font-black text-white mb-2">Minthi</h1>
                 <p className="text-zinc-400 text-base sm:text-lg">Gestione completa del tuo ristorante</p>
-                <div className="mt-3 inline-block bg-amber-500/10 border border-amber-500/20 rounded-full px-4 py-1.5">
-                  <span className="text-amber-400 text-sm font-semibold">Demo Interattiva</span>
+                <div className="mt-3 inline-block bg-violet-500/15 border border-violet-500/25 rounded-full px-4 py-1.5">
+                  <span className="text-violet-300 text-sm font-semibold">Demo Interattiva</span>
                 </div>
               </div>
 
@@ -183,7 +183,7 @@ export default function DemoGuidePanel({
               <div className="flex flex-col items-center gap-3">
                 <button
                   onClick={handleNext}
-                  className="bg-amber-500 hover:bg-amber-400 text-black font-bold text-base sm:text-lg px-8 sm:px-10 py-3 sm:py-4 rounded-2xl transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+                  className="bg-violet-600 hover:bg-violet-500 text-white font-bold text-base sm:text-lg px-8 sm:px-10 py-3 sm:py-4 rounded-2xl transition-all shadow-lg shadow-violet-500/20 flex items-center gap-2"
                 >
                   Inizia la Demo
                   <ArrowRight size={20} weight="bold" />
@@ -219,40 +219,40 @@ export default function DemoGuidePanel({
               zIndex: 10000,
             }}
           >
-            <div className="bg-zinc-950 border border-amber-500/25 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="bg-zinc-950 border border-violet-500/30 rounded-2xl shadow-2xl overflow-hidden">
               {/* Progress bar */}
-              <div className="h-1 bg-zinc-800">
+              <div className="h-1.5 bg-zinc-800">
                 <div
-                  className="h-full bg-amber-500 transition-all duration-500"
+                  className="h-full bg-violet-500 transition-all duration-500"
                   style={{ width: `${((currentContentIdx + 1) / contentSteps.length) * 100}%` }}
                 />
               </div>
 
               <div className="p-4 sm:p-5">
                 {/* Step counter + title + exit */}
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-xs font-bold text-amber-500/80 bg-amber-500/10 px-2.5 py-1 rounded-full shrink-0">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span className="text-xs font-bold text-violet-300 bg-violet-500/15 px-2.5 py-1 rounded-full shrink-0">
                     {currentContentIdx + 1}/{contentSteps.length}
                   </span>
-                  <button onClick={onExit} className="text-zinc-500 hover:text-white text-xs font-medium flex items-center gap-1 transition-colors">
+                  <button onClick={onExit} className="text-zinc-400 hover:text-white text-xs font-medium flex items-center gap-1.5 bg-white/5 hover:bg-white/10 rounded-lg px-3 py-1.5 transition-colors">
                     <X size={12} weight="bold" />
                     Esci
                   </button>
                 </div>
-                <h3 className="text-lg font-bold text-white leading-tight mb-2">
+                <h3 className="text-xl font-bold text-white leading-tight mb-2">
                   {step.title}
                 </h3>
 
                 {/* Description */}
-                <p className="text-zinc-300 text-sm leading-relaxed mb-3">
+                <p className="text-zinc-300 text-[15px] leading-relaxed mb-3">
                   {step.description}
                 </p>
 
                 {/* Tip */}
                 {step.tip && (
-                  <div className="bg-amber-500/8 border border-amber-500/15 rounded-lg px-3 py-2 mb-3">
-                    <p className="text-amber-400 text-xs font-medium flex items-start gap-2">
-                      <Lightbulb size={14} weight="fill" className="mt-0.5 shrink-0" />
+                  <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl px-3 py-2.5 mb-3">
+                    <p className="text-violet-300 text-sm font-medium flex items-start gap-2">
+                      <Lightbulb size={16} weight="fill" className="mt-0.5 shrink-0" />
                       <span>{step.tip}</span>
                     </p>
                   </div>
@@ -261,17 +261,17 @@ export default function DemoGuidePanel({
                 {/* Navigation */}
                 <div className="flex items-center justify-between gap-2 pt-1">
                   {/* Progress dots */}
-                  <div className="flex items-center gap-1 flex-wrap max-w-[150px]">
+                  <div className="flex items-center gap-1 flex-wrap max-w-[140px]">
                     {contentSteps.map((_, i) => (
                       <button
                         key={i}
                         onClick={() => goTo(i + 1)}
                         className={`rounded-full transition-all duration-300 ${
                           i === currentContentIdx
-                            ? 'w-4 h-2 bg-amber-500'
+                            ? 'w-5 h-2.5 bg-violet-500'
                             : i < currentContentIdx
-                              ? 'w-2 h-2 bg-amber-500/40'
-                              : 'w-2 h-2 bg-zinc-700 hover:bg-zinc-500'
+                              ? 'w-2.5 h-2.5 bg-violet-500/40'
+                              : 'w-2.5 h-2.5 bg-zinc-700 hover:bg-zinc-500'
                         }`}
                       />
                     ))}
@@ -282,17 +282,17 @@ export default function DemoGuidePanel({
                     {currentContentIdx > 0 && (
                       <button
                         onClick={handlePrev}
-                        className="h-8 px-3 rounded-lg border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-all text-xs font-semibold flex items-center gap-1"
+                        className="h-9 px-3 rounded-xl border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 transition-all text-sm font-semibold flex items-center gap-1"
                       >
-                        <ArrowLeft size={12} />
+                        <ArrowLeft size={14} />
                       </button>
                     )}
                     <button
                       onClick={handleNext}
-                      className="h-8 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition-all flex items-center gap-1.5"
+                      className="h-9 px-5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-sm transition-all flex items-center gap-1.5"
                     >
                       {isLast ? 'Fine Demo' : 'Avanti'}
-                      {!isLast && <ArrowRight size={12} />}
+                      {!isLast && <ArrowRight size={14} />}
                     </button>
                   </div>
                 </div>

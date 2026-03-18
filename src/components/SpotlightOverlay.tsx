@@ -126,7 +126,7 @@ const SpotlightOverlay: React.FC<SpotlightOverlayProps> = ({ targetSelector, act
             left: rect.left - pad - 1,
             width: rect.width + pad * 2 + 2,
             height: rect.height + pad * 2 + 2,
-            border: '2px solid rgba(245, 158, 11, 0.6)',
+            border: '2px solid rgba(139, 92, 246, 0.6)',
             transition: 'all 0.3s ease-in-out',
           }}
         />
