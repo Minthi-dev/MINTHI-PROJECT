@@ -5025,7 +5025,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     </p>
 
                     {/* CTA */}
-                    <p style={{ fontSize: '9px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
+                    <p style={{ fontSize: '11px', fontWeight: '500', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
                       {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                     </p>
 
@@ -5038,7 +5038,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     </div>
 
                     {/* Pin info */}
-                    <p style={{ fontSize: '7px', fontWeight: '400', margin: '5mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
+                    <p style={{ fontSize: '9px', fontWeight: '500', margin: '5mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
                       Il pin è fornito dal personale di sala
                     </p>
                   </div>
@@ -5268,7 +5268,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </p>
 
                       {/* CTA */}
-                      <p style={{ fontSize: '9px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
+                      <p style={{ fontSize: '11px', fontWeight: '500', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
                         {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                       </p>
 
@@ -5281,7 +5281,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </div>
 
                       {/* Pin info */}
-                      <p style={{ fontSize: '7px', fontWeight: '400', margin: '5mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
+                      <p style={{ fontSize: '9px', fontWeight: '500', margin: '5mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
                         Il pin è fornito dal personale di sala
                       </p>
                     </div>
