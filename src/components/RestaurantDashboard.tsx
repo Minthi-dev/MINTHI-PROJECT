@@ -5003,56 +5003,44 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   fontFamily: 'Georgia, "Times New Roman", serif',
                   color: '#18181b'
                 }}>
-                  {/* Thin decorative top line */}
-                  <div style={{ width: '60px', height: '0.5px', backgroundColor: '#d4d4d8', marginBottom: '40px' }} />
-
                   {/* Restaurant Name */}
                   <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#52525b', textAlign: 'center' }}>
                     {currentRestaurant?.name || 'Ristorante'}
                   </p>
 
-                  {/* Thin line between name and Tavolo */}
-                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8', margin: '10px 0' }} />
+                  {/* Divider */}
+                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '14px 0' }} />
 
                   {/* TAVOLO label */}
-                  <p style={{ fontSize: '11px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
+                  <p style={{ fontSize: '10px', fontWeight: '400', margin: '0 0 16px 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
                     Tavolo
                   </p>
 
-                  {/* Spacer — EQUAL above and below number */}
-                  <div style={{ height: '30px' }} />
-
-                  {/* Table Number — centered between Tavolo and CTA */}
-                  <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center', letterSpacing: '-0.02em' }}>
+                  {/* Table Number — exactly between Tavolo and Scansiona */}
+                  <p style={{ fontSize: '86px', lineHeight: '0.9', fontWeight: '300', margin: 0, padding: 0, color: '#18181b', textAlign: 'center' }}>
                     {selectedTableForActions?.number}
                   </p>
 
-                  {/* Spacer — EQUAL above and below number */}
-                  <div style={{ height: '30px' }} />
+                  {/* Equal spacer below number */}
+                  <div style={{ height: '16px' }} />
 
                   {/* CTA text */}
-                  <p style={{ fontSize: '12px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#3f3f46', textAlign: 'center' }}>
+                  <p style={{ fontSize: '11px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#3f3f46', textAlign: 'center' }}>
                     {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                   </p>
 
-                  {/* Spacer */}
-                  <div style={{ height: '24px' }} />
+                  {/* Divider */}
+                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '14px 0 20px 0' }} />
 
                   {/* QR Code */}
-                  <div style={{ padding: '12px', border: '1px solid #e4e4e7', borderRadius: '10px' }}>
-                    <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={220} />
+                  <div style={{ padding: '10px', border: '1px solid #e4e4e7', borderRadius: '8px' }}>
+                    <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={200} />
                   </div>
 
-                  {/* Spacer */}
-                  <div style={{ height: '24px' }} />
-
                   {/* Pin info */}
-                  <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#a1a1aa', textAlign: 'center' }}>
+                  <p style={{ fontSize: '7px', fontWeight: '400', margin: '16px 0 0 0', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa', textAlign: 'center' }}>
                     Il pin di accesso è fornito dal personale di sala
                   </p>
-
-                  {/* Thin decorative bottom line */}
-                  <div style={{ width: '60px', height: '0.5px', backgroundColor: '#d4d4d8', marginTop: '40px' }} />
                 </div>
               </div>
 
@@ -5257,67 +5245,53 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     <div key={table.id} style={{
                       backgroundColor: '#FFFFFF',
                       border: '0.5px solid #e4e4e7',
-                      borderRadius: '6px',
-                      padding: '4mm 3mm',
+                      borderRadius: '4px',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
+                      justifyContent: 'center',
                       color: '#000000',
                       boxSizing: 'border-box',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      overflow: 'hidden'
+                      fontFamily: 'Georgia, "Times New Roman", serif'
                     }}>
-                      {/* === TOP SECTION === */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        {/* Thin top line */}
-                        <div style={{ width: '24px', height: '0.5px', backgroundColor: '#d4d4d8', marginBottom: '3mm' }} />
+                      {/* Restaurant Name */}
+                      <p style={{ fontSize: '6px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
+                        {currentRestaurant?.name || 'Ristorante'}
+                      </p>
 
-                        {/* Restaurant Name */}
-                        <p style={{ fontSize: '6px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.3em', textAlign: 'center' }}>
-                          {currentRestaurant?.name || 'Ristorante'}
-                        </p>
+                      {/* Divider */}
+                      <div style={{ width: '16px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '2mm 0' }} />
+
+                      {/* Tavolo label */}
+                      <p style={{ fontSize: '5px', fontWeight: '400', margin: '0 0 1.5mm 0', textTransform: 'uppercase', letterSpacing: '0.4em', color: '#a1a1aa', textAlign: 'center' }}>
+                        Tavolo
+                      </p>
+
+                      {/* Table Number — exactly between Tavolo and CTA */}
+                      <p style={{ fontSize: '38px', lineHeight: '0.9', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center' }}>
+                        {table.number}
+                      </p>
+
+                      {/* Equal spacer */}
+                      <div style={{ height: '1.5mm' }} />
+
+                      {/* CTA */}
+                      <p style={{ fontSize: '5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
+                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
+                      </p>
+
+                      {/* Divider */}
+                      <div style={{ width: '16px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '2mm 0' }} />
+
+                      {/* QR Code */}
+                      <div style={{ padding: '1mm', border: '0.5px solid #e4e4e7', borderRadius: '3px' }}>
+                        <QRCodeGenerator value={generateQrCode(table.id)} size={100} />
                       </div>
 
-                      {/* === CENTER SECTION — Tavolo + Number === */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        {/* Tavolo label */}
-                        <p style={{ fontSize: '5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
-                          Tavolo
-                        </p>
-
-                        {/* Spacer — EQUAL above and below number */}
-                        <div style={{ height: '2.5mm' }} />
-
-                        {/* Table Number */}
-                        <p style={{ fontSize: '40px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center', letterSpacing: '-0.02em' }}>
-                          {table.number}
-                        </p>
-
-                        {/* Spacer — EQUAL above and below number */}
-                        <div style={{ height: '2.5mm' }} />
-
-                        {/* CTA */}
-                        <p style={{ fontSize: '5.5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#3f3f46', textAlign: 'center' }}>
-                          {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
-                        </p>
-                      </div>
-
-                      {/* === BOTTOM SECTION — QR + pin info === */}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        {/* QR Code */}
-                        <div style={{ padding: '1.5mm', border: '0.5px solid #e4e4e7', borderRadius: '4px', marginBottom: '2mm' }}>
-                          <QRCodeGenerator value={generateQrCode(table.id)} size={110} />
-                        </div>
-
-                        {/* Pin info */}
-                        <p style={{ fontSize: '4px', fontWeight: '400', margin: '0 0 2mm 0', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa', textAlign: 'center' }}>
-                          Il pin è fornito dal personale di sala
-                        </p>
-
-                        {/* Thin bottom line */}
-                        <div style={{ width: '24px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                      </div>
+                      {/* Pin info */}
+                      <p style={{ fontSize: '4px', fontWeight: '400', margin: '2mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
+                        Il pin è fornito dal personale di sala
+                      </p>
                     </div>
                   ))}
                 </div>
