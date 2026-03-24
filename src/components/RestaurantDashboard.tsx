@@ -3521,7 +3521,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         onGoToSettings={() => {
                           setActiveTab('settings')
                           setActiveSection('settings')
-                          // Close dialog by clicking outside
                           const closeBtn = document.querySelector('[data-radix-collection-item]') as HTMLElement
                           closeBtn?.click()
                         }}

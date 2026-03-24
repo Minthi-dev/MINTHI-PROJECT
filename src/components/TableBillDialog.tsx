@@ -66,6 +66,7 @@ export default function TableBillDialog({
     const [isSplitMode, setIsSplitMode] = useState(false)
     const [selectedSplitItems, setSelectedSplitItems] = useState<Set<string>>(new Set())
     const [processingPayment, setProcessingPayment] = useState(false)
+    const [deletingItem, setDeletingItem] = useState<string | null>(null)
     const [equalSplitMode, setEqualSplitMode] = useState(false)
     const [paidPersons, setPaidPersons] = useState(0)
     const [customSplitCount, setCustomSplitCount] = useState(0)
@@ -330,6 +331,55 @@ export default function TableBillDialog({
         }
     }
 
+    // Handle Delete Item from Bill (cancel order_item in DB)
+    const handleDeleteItem = async (itemName: string, itemPrice: number) => {
+        const deleteKey = `${itemName}-${itemPrice}`
+        setDeletingItem(deleteKey)
+
+        try {
+            // Find a matching split item to get the original DB item
+            const matchingItem = splitPayableItems.find(
+                i => !i.isVirtual && i.name === itemName && i.price === itemPrice
+            )
+            if (!matchingItem?.originalId || !matchingItem.originalItem) {
+                toast.error('Elemento non trovato')
+                return
+            }
+
+            const originalItem = matchingItem.originalItem
+            const currentQty = originalItem.quantity || 1
+
+            if (currentQty > 1) {
+                // Decrement quantity by 1
+                const { error } = await supabase
+                    .from('order_items')
+                    .update({ quantity: currentQty - 1 })
+                    .eq('id', matchingItem.originalId)
+                if (error) throw error
+            } else {
+                // Cancel the entire item
+                const { error } = await supabase
+                    .from('order_items')
+                    .update({ status: 'CANCELLED' })
+                    .eq('id', matchingItem.originalId)
+                if (error) throw error
+            }
+
+            toast.success(`${itemName} rimosso dal conto`, {
+                duration: 3000,
+                style: { background: '#422006', border: '1px solid #f59e0b', color: '#fef3c7' }
+            })
+        } catch (error) {
+            console.error('Delete item error:', error)
+            toast.error('Errore durante la rimozione')
+        } finally {
+            setDeletingItem(null)
+        }
+    }
+
+    // Check if delete is allowed (admin always, waiter only with payment permissions)
+    const canDeleteItems = !isWaiter || restaurant?.allow_waiter_payments
+
     const { splitTotal } = useMemo(() => {
         let total = 0
         selectedSplitItems.forEach(id => {
@@ -428,7 +478,7 @@ export default function TableBillDialog({
                                                 })
 
                                                 // Group UNPAID items for clean receipt display — show ALL items including €0 AYCE dishes
-                                                const displayGroups = new Map<string, { name: string, quantity: number, price: number, total: number, isAyce: boolean }>()
+                                                const displayGroups = new Map<string, { name: string, quantity: number, price: number, total: number, isAyce: boolean, isVirtual: boolean }>()
 
                                                 splitPayableItems.forEach(item => {
                                                     const key = `${item.name}-${item.price}`
@@ -442,7 +492,8 @@ export default function TableBillDialog({
                                                             quantity: 1,
                                                             price: item.price,
                                                             total: item.price,
-                                                            isAyce: item.price === 0 && !item.isVirtual
+                                                            isAyce: item.price === 0 && !item.isVirtual,
+                                                            isVirtual: !!item.isVirtual
                                                         })
                                                     }
                                                 })
@@ -490,7 +541,7 @@ export default function TableBillDialog({
                                                             </div>
                                                         )}
                                                         {Array.from(displayGroups.entries()).map(([key, item]) => (
-                                                            <div key={key} className="flex justify-between items-baseline py-2 border-b border-white/5 last:border-0 group hover:bg-white/5 transition-colors rounded-lg px-2 -mx-2">
+                                                            <div key={key} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 group hover:bg-white/5 transition-colors rounded-lg px-2 -mx-2">
                                                                 <div className="flex gap-3 text-sm items-center">
                                                                     <span className="font-bold min-w-[24px] h-6 rounded bg-white/10 flex items-center justify-center text-xs text-zinc-300">{item.quantity}x</span>
                                                                     <div className="flex flex-col">
@@ -498,9 +549,29 @@ export default function TableBillDialog({
                                                                         {item.isAyce && <span className="text-[10px] text-amber-500/70 font-bold uppercase tracking-wider">AYCE incluso</span>}
                                                                     </div>
                                                                 </div>
-                                                                <span className="font-mono font-bold text-sm tabular-nums text-zinc-300">
-                                                                    {item.price === 0 ? <span className="text-emerald-500/70">{'\u20AC'}0.00</span> : `\u20AC${item.total.toFixed(2)}`}
-                                                                </span>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-mono font-bold text-sm tabular-nums text-zinc-300">
+                                                                        {item.price === 0 ? <span className="text-emerald-500/70">{'\u20AC'}0.00</span> : `\u20AC${item.total.toFixed(2)}`}
+                                                                    </span>
+                                                                    {canDeleteItems && !item.isVirtual && (
+                                                                        <button
+                                                                            className="opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 max-md:opacity-60 transition-opacity p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-600 hover:text-red-400"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation()
+                                                                                if (confirm(`Rimuovere ${item.quantity > 1 ? '1x ' : ''}${item.name} dal conto? Verrà cancellato anche dall'ordine.`)) {
+                                                                                    handleDeleteItem(item.name, item.price)
+                                                                                }
+                                                                            }}
+                                                                            disabled={deletingItem === `${item.name}-${item.price}`}
+                                                                        >
+                                                                            {deletingItem === `${item.name}-${item.price}` ? (
+                                                                                <span className="animate-spin block w-4 h-4 border-2 border-red-400/30 border-t-red-400 rounded-full" />
+                                                                            ) : (
+                                                                                <Trash size={14} weight="bold" />
+                                                                            )}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         ))}
                                                     </>
