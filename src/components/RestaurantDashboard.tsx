@@ -5020,7 +5020,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     </p>
 
                     {/* Table Number - Balanced optical center correcting Georgia font ascender */}
-                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-5mm 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '0 0 4mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                       {selectedTableForActions?.number}
                     </p>
 
@@ -5263,7 +5263,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </p>
 
                       {/* Table Number - Balanced optical center correcting Georgia font ascender */}
-                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-5mm 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '0 0 4mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                         {table.number}
                       </p>
 
