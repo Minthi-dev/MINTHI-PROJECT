@@ -5011,33 +5011,27 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     {currentRestaurant?.name || 'Ristorante'}
                   </p>
 
-                  {/* Spacer */}
-                  <div style={{ height: '36px' }} />
+                  {/* Thin line between name and Tavolo */}
+                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8', margin: '16px 0' }} />
 
                   {/* TAVOLO label */}
                   <p style={{ fontSize: '11px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
                     Tavolo
                   </p>
 
-                  {/* Spacer */}
-                  <div style={{ height: '10px' }} />
+                  {/* Spacer — symmetric with below */}
+                  <div style={{ height: '20px' }} />
 
-                  {/* Table Number — large, elegant, the focal center */}
+                  {/* Table Number */}
                   <p style={{ fontSize: '120px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center', letterSpacing: '-0.02em' }}>
                     {selectedTableForActions?.number}
                   </p>
 
-                  {/* Spacer */}
-                  <div style={{ height: '10px' }} />
+                  {/* Spacer — symmetric with above */}
+                  <div style={{ height: '20px' }} />
 
-                  {/* Thin divider */}
-                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-
-                  {/* Spacer */}
-                  <div style={{ height: '36px' }} />
-
-                  {/* CTA text */}
-                  <p style={{ fontSize: '10px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.25em', color: '#71717a', textAlign: 'center' }}>
+                  {/* CTA text — clearly visible */}
+                  <p style={{ fontSize: '12px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#3f3f46', textAlign: 'center' }}>
                     {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                   </p>
 
@@ -5280,15 +5274,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         <div style={{ width: '24px', height: '0.5px', backgroundColor: '#d4d4d8', marginBottom: '3mm' }} />
 
                         {/* Restaurant Name */}
-                        <p style={{ fontSize: '6px', fontWeight: '400', margin: '0 0 2mm 0', color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.3em', textAlign: 'center' }}>
+                        <p style={{ fontSize: '6px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.3em', textAlign: 'center' }}>
                           {currentRestaurant?.name || 'Ristorante'}
                         </p>
                       </div>
 
                       {/* === CENTER SECTION — Tavolo + Number === */}
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        {/* Thin line between name and Tavolo */}
+                        <div style={{ width: '16px', height: '0.5px', backgroundColor: '#d4d4d8', marginBottom: '2mm' }} />
+
                         {/* Tavolo label */}
-                        <p style={{ fontSize: '5px', fontWeight: '400', margin: '0 0 1mm 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
+                        <p style={{ fontSize: '5px', fontWeight: '400', margin: '0 0 1.5mm 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
                           Tavolo
                         </p>
 
@@ -5297,11 +5294,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           {table.number}
                         </p>
 
-                        {/* Thin divider */}
-                        <div style={{ width: '20px', height: '0.5px', backgroundColor: '#d4d4d8', margin: '2mm 0' }} />
+                        {/* Spacer — symmetric with above */}
+                        <div style={{ height: '1.5mm' }} />
 
-                        {/* CTA */}
-                        <p style={{ fontSize: '5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#71717a', textAlign: 'center' }}>
+                        {/* CTA — clearly visible */}
+                        <p style={{ fontSize: '5.5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#3f3f46', textAlign: 'center' }}>
                           {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                         </p>
                       </div>
