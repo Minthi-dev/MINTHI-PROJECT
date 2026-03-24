@@ -5020,16 +5020,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       {currentRestaurant?.name || 'Ristorante'}
                     </p>
 
-                    {/* Symmetric spacer above number */}
-                    <div style={{ height: '14mm' }} />
-
-                    {/* Table Number */}
-                    <p style={{ fontSize: '75px', lineHeight: '0.75', fontWeight: '300', margin: 0, padding: 0, color: '#18181b', textAlign: 'center' }}>
+                    {/* Table Number - Visually symmetric spacing (compensating for text baselines) */}
+                    <p style={{ fontSize: '75px', lineHeight: '0.75', fontWeight: '300', margin: '6mm 0 8mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                       {selectedTableForActions?.number}
                     </p>
-
-                    {/* Symmetric spacer below number */}
-                    <div style={{ height: '14mm' }} />
 
                     {/* CTA */}
                     <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
@@ -5270,16 +5264,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Symmetric spacer above number */}
-                      <div style={{ height: '14mm' }} />
-
-                      {/* Table Number */}
-                      <p style={{ fontSize: '75px', lineHeight: '0.75', fontWeight: '300', margin: 0, padding: 0, color: '#18181b', textAlign: 'center' }}>
+                      {/* Table Number - Visually symmetric spacing (compensating for text baselines) */}
+                      <p style={{ fontSize: '75px', lineHeight: '0.75', fontWeight: '300', margin: '6mm 0 8mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                         {table.number}
                       </p>
-
-                      {/* Symmetric spacer below number */}
-                      <div style={{ height: '14mm' }} />
 
                       {/* CTA */}
                       <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
