@@ -5052,7 +5052,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     <p style={{
                       fontSize: '11px',
                       fontWeight: '400',
-                      margin: '0 0 20px 0',
+                      margin: '0',
                       textTransform: 'uppercase',
                       letterSpacing: '0.6em',
                       color: '#71717a',
@@ -5062,12 +5062,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       Tavolo
                     </p>
 
-                    {/* Table Number — large, centered, equidistant from label and CTA */}
+                    {/* Table Number — large, centered, equal spacing above and below */}
                     <p style={{
                       fontSize: '100px',
                       lineHeight: '1',
                       fontWeight: '300',
-                      margin: '0 0 20px 0',
+                      margin: '30px 0 30px 0',
+                      padding: '0',
                       color: '#18181b',
                       fontFamily: 'Georgia, "Times New Roman", serif',
                       textAlign: 'center'
@@ -5079,7 +5080,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     <p style={{
                       fontSize: '11px',
                       fontWeight: '400',
-                      margin: '0 0 20px 0',
+                      margin: '0 0 24px 0',
                       textTransform: 'uppercase',
                       letterSpacing: '0.25em',
                       color: '#52525b',
@@ -5334,11 +5335,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       <div style={{ width: '20px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
 
                       {/* Tavolo label */}
-                      <p style={{ fontSize: '7px', fontWeight: '400', margin: '2mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#71717a', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
+                      <p style={{ fontSize: '7px', fontWeight: '400', margin: '0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#71717a', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
                         Tavolo
                       </p>
-                      {/* Table Number — centered between label and CTA */}
-                      <p style={{ fontSize: '48px', lineHeight: '1', fontWeight: '300', margin: '2mm 0 2mm 0', color: '#18181b', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
+                      {/* Table Number — equal spacing above and below */}
+                      <p style={{ fontSize: '48px', lineHeight: '1', fontWeight: '300', margin: '4mm 0 4mm 0', color: '#18181b', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
                         {table.number}
                       </p>
 
