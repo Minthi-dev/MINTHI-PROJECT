@@ -122,8 +122,8 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                 }}
             >
                 <div
-                    className="grid gap-4 content-start pb-20"
-                    style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
+                    className="grid gap-3 content-start pb-20"
+                    style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${zoom < 0.8 ? '260px' : '320px'}, 1fr))` }}
                 >
                     {viewMode === 'table' ? (() => {
                         const ordersByTable = new Map<string, { tableName: string, orders: Order[] }>()

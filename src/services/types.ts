@@ -54,6 +54,7 @@ export interface Restaurant {
     dinner_time_start?: string
     dinner_time_end?: string
     enable_course_splitting?: boolean
+    enable_course_suggestions?: boolean
     reservation_duration?: number
     // Weekly scheduling for Coperto, AYCE, and Service Hours
     weekly_coperto?: WeeklyCopertoSchedule

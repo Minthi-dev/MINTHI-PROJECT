@@ -397,6 +397,9 @@ const CustomerMenuBase = () => {
   const [fullRestaurant, setFullRestaurant] = useState<Restaurant | null>(null)
   const [restaurantSuspended, setRestaurantSuspended] = useState(false)
   const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Default to true for backwards compat
+  const [courseSuggestionsEnabled, setCourseSuggestionsEnabled] = useState(false)
+  const [showCourseSuggestions, setShowCourseSuggestions] = useState(false)
+  const [suggestedCategories, setSuggestedCategories] = useState<Category[]>([])
   const [isTableActive, setIsTableActive] = useState(true) // Check if table has active session
   const [isViewOnly, setIsViewOnly] = useState(false) // New state for view-only mode
   const [isClosed, setIsClosed] = useState(false) // New state for closed hours
@@ -507,6 +510,7 @@ const CustomerMenuBase = () => {
               setRestaurantName(restaurant.name)
               setFullRestaurant(restaurant)
               setCourseSplittingEnabled(restaurant.enable_course_splitting !== false)
+              setCourseSuggestionsEnabled((restaurant as any).enable_course_suggestions || false)
               if (restaurant.isActive === false) { // Note: types.ts uses isActive, DB uses is_active. Checking both for safety or assuming mapped
                 // Check raw DB field if possible or mapped
                 // Assuming raw return:
@@ -565,6 +569,7 @@ const CustomerMenuBase = () => {
               setRestaurantName(restaurant.name)
               setFullRestaurant(restaurant)
               setCourseSplittingEnabled(restaurant.enable_course_splitting !== false)
+              setCourseSuggestionsEnabled((restaurant as any).enable_course_suggestions || false)
               if (restaurant.isActive === false) {
                 // Check raw DB field if needed
                 if ((restaurant as any).is_active === false) {
@@ -737,6 +742,7 @@ const CustomerMenuBase = () => {
 
           // Update course splitting setting immediately
           setCourseSplittingEnabled(newSettings.enable_course_splitting !== false)
+          setCourseSuggestionsEnabled((newSettings as any).enable_course_suggestions || false)
 
           // Optionally update active status if changed
           if ((newSettings as any).is_active === false) {
@@ -978,7 +984,7 @@ const CustomerMenuBase = () => {
 
           {/* Footer Info */}
           <p className="text-[10px] tracking-widest uppercase mt-auto" style={{ color: theme.textMuted }}>
-            Il codice è sul segnaposto
+            Inserisci il codice del tavolo
           </p>
 
         </div>
@@ -1064,7 +1070,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [isCartAnimating, setIsCartAnimating] = useState(false)
   const timersRef = React.useRef<ReturnType<typeof setTimeout>[]>([])
   const [activeWaitCourse, setActiveWaitCourse] = useState(1) // Waiter Mode: Selected course for new items
-  const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Default to true
+  const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Note: also declared above for early hooks
+  const [courseSuggestionsEnabled, setCourseSuggestionsEnabled] = useState(false)
+  const [showCourseSuggestions, setShowCourseSuggestions] = useState(false)
+  const [suggestedCategories, setSuggestedCategories] = useState<Category[]>([])
   const [isProcessingStripePayment, setIsProcessingStripePayment] = useState(false)
   const [showPaymentOptions, setShowPaymentOptions] = useState(false)
   const [stripePaymentSplitCount, setStripePaymentSplitCount] = useState(1)
@@ -1455,6 +1464,39 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     addToCart(dish, quantity, notes, 1)
   }
 
+  // Compute suggested categories based on what's in the cart
+  const computeSuggestedCategories = (currentCart: CartItem[], addedDish: Dish) => {
+    if (!courseSuggestionsEnabled || sortedCategories.length === 0) return []
+
+    // Find all category IDs already in cart (including the just-added dish)
+    const cartCategoryIds = new Set<string>()
+    currentCart.forEach(item => {
+      if (item.dish?.category_id) cartCategoryIds.add(item.dish.category_id)
+    })
+    cartCategoryIds.add(addedDish.category_id)
+
+    // Find the highest order among ordered categories
+    let maxOrderedCategoryOrder = -1
+    sortedCategories.forEach(cat => {
+      if (cartCategoryIds.has(cat.id)) {
+        const catOrder = cat.order ?? 9999
+        if (catOrder > maxOrderedCategoryOrder) maxOrderedCategoryOrder = catOrder
+      }
+    })
+
+    // Suggest categories that come AFTER the highest ordered category
+    // and are NOT already in the cart
+    const suggested = sortedCategories.filter(cat => {
+      const catOrder = cat.order ?? 9999
+      return catOrder > maxOrderedCategoryOrder && !cartCategoryIds.has(cat.id)
+    })
+
+    // Only suggest categories that have active dishes
+    return suggested.filter(cat =>
+      dishes.some(d => d.category_id === cat.id && d.is_active)
+    )
+  }
+
   const addToCart = async (dish: Dish, quantity: number = 1, notes: string = '', courseNum?: number) => {
     if (!sessionId) return
     const targetCourse = courseNum !== undefined ? courseNum : currentCourse
@@ -1472,6 +1514,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         setIsCartAnimating(true)
         timersRef.current.push(setTimeout(() => setIsCartAnimating(false), 500))
         toast.success(`Aggiunto al carrello`, { position: 'top-center', duration: 1500, style: { background: '#10B981', color: '#fff', border: 'none' } })
+
+        // Show course suggestions if enabled
+        if (courseSuggestionsEnabled) {
+          const suggested = computeSuggestedCategories(cart, dish)
+          if (suggested.length > 0) {
+            setSuggestedCategories(suggested)
+            setShowCourseSuggestions(true)
+          }
+        }
       }
       setSelectedDish(null)
       setDishNote('')
@@ -1488,10 +1539,20 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     const item = cart.find(i => i.id === cartId)
     if (!item) return
     const newQuantity = item.quantity + delta
+
+    // Optimistic update — update local state immediately
+    if (newQuantity <= 0) {
+      setCart(prev => prev.filter(i => i.id !== cartId))
+    } else {
+      setCart(prev => prev.map(i => i.id === cartId ? { ...i, quantity: newQuantity } : i))
+    }
+
     try {
       await DatabaseService.updateCartItem(cartId, { quantity: newQuantity })
     } catch (err) {
       console.error("Error updating cart:", err)
+      // Revert on error
+      fetchCart()
     }
   }
 
@@ -2158,10 +2219,61 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         </AnimatePresence>
 
 
+        {/* COURSE SUGGESTIONS MODAL */}
+        <Dialog open={showCourseSuggestions} onOpenChange={setShowCourseSuggestions}>
+          <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl w-[90vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
+            <div className="p-5 space-y-4">
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-semibold tracking-wide" style={{ color: theme.textPrimary }}>
+                  Vuoi ordinare anche...?
+                </h3>
+                <p className="text-xs" style={{ color: theme.textMuted }}>
+                  {courseSplittingEnabled ? 'Verrà aggiunto come portata successiva' : 'Sfoglia le altre categorie'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {suggestedCategories.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => {
+                      setShowCourseSuggestions(false)
+                      // If course splitting is enabled, advance to next course
+                      if (courseSplittingEnabled) {
+                        const newCourse = maxCourse + 1
+                        setMaxCourse(newCourse)
+                        setCurrentCourse(newCourse)
+                      }
+                      // Navigate to the category
+                      scrollToCategory(cat.id)
+                    }}
+                    className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                    style={{
+                      backgroundColor: theme.primaryAlpha(0.1),
+                      border: `1px solid ${theme.primaryAlpha(0.25)}`,
+                      color: theme.primary
+                    }}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowCourseSuggestions(false)}
+                className="w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
+                style={{ color: theme.textMuted, backgroundColor: theme.cardBg }}
+              >
+                No grazie
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* CART & HISTORY MODAL */}
         {!isViewOnly && (
           <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
-            <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl max-h-[90vh] min-h-0 flex flex-col w-[95vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
+            <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl max-h-[85dvh] min-h-0 flex flex-col w-[95vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
               <DialogHeader className="p-4 backdrop-blur-xl flex-none" style={{ borderBottom: `1px solid ${theme.divider}`, backgroundColor: theme.cardBg }}>
                 <DialogTitle className="text-center text-xl font-light uppercase tracking-widest" style={{ fontFamily: theme.headerFont, color: theme.textPrimary }}>Riepilogo</DialogTitle>
               </DialogHeader>

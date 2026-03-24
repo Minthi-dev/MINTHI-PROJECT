@@ -110,6 +110,10 @@ interface SettingsViewProps {
     showCookingTimes: boolean
     setShowCookingTimes: (enabled: boolean) => void
 
+    courseSuggestionsEnabled: boolean
+    setCourseSuggestionsEnabled: (enabled: boolean) => void
+    updateCourseSuggestions: (enabled: boolean) => void
+
     restaurantId: string
     onRestartTour?: () => void
     onRestartSetup?: () => void
@@ -166,6 +170,9 @@ export function SettingsView({
     setViewOnlyMenuEnabled,
     showCookingTimes,
     setShowCookingTimes,
+    courseSuggestionsEnabled,
+    setCourseSuggestionsEnabled,
+    updateCourseSuggestions,
     restaurantId,
     onRestartTour,
     onRestartSetup
@@ -725,6 +732,32 @@ export function SettingsView({
                                         onCheckedChange={(val) => {
                                             setCourseSplittingEnabled(val)
                                             updateCourseSplitting(val)
+                                        }}
+                                        className="data-[state=checked]:bg-amber-500"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Suggerimenti Portate Successive */}
+                            <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-3">
+                                            <h3 className="text-2xl font-bold flex items-center gap-3">
+                                                <Sparkle className="text-amber-500 w-8 h-8" weight="duotone" />
+                                                Suggerimenti Portate
+                                            </h3>
+                                            <InfoTip id="suggestions" text="Dopo che il cliente aggiunge un piatto al carrello, il sistema suggerisce automaticamente le categorie successive (es. se ordina un Primo, propone Secondi, Contorni, Dolci, Bevande). L'ordine segue quello delle categorie in Gestione Menu. Se la divisione in portate è attiva, il piatto suggerito verrà inserito automaticamente nella portata successiva." />
+                                        </div>
+                                        <p className="text-sm text-zinc-400 max-w-prose">
+                                            Propone al cliente le portate successive dopo ogni ordine, seguendo l'ordine delle categorie.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={courseSuggestionsEnabled}
+                                        onCheckedChange={(val) => {
+                                            setCourseSuggestionsEnabled(val)
+                                            updateCourseSuggestions(val)
                                         }}
                                         className="data-[state=checked]:bg-amber-500"
                                     />

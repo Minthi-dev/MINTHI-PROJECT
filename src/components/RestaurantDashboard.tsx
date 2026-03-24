@@ -138,6 +138,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [selectedCustomMenuId, setSelectedCustomMenuId] = useState<string>('')
   const [isExportingMenu, setIsExportingMenu] = useState(false)
   const [exportMenuTitle, setExportMenuTitle] = useState('')
+  const [exportExcludedDishes, setExportExcludedDishes] = useState<string[]>([])
   const [exportPreviewData, setExportPreviewData] = useState<{ title: string, subtitle?: string, sections: { id: string, title: string, dishes: Dish[] }[] } | null>(null)
   const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
@@ -217,6 +218,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       // Auto-select all categories
       setExportSelectedCategories(restaurantCategories.map(c => c.id))
       setExportMenuTitle('')
+      setExportExcludedDishes([])
     }
   }, [showExportMenuDialog, restaurantId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -544,7 +546,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       let dataToExport: { title: string, subtitle?: string, sections: { id: string, title: string, dishes: Dish[] }[] }
 
       if (exportMode === 'full') {
-        const selectedCats = categories.filter(c => exportSelectedCategories.includes(c.id))
+        const selectedCats = restaurantCategories.filter(c => exportSelectedCategories.includes(c.id))
         if (selectedCats.length === 0) {
           toast.error('Seleziona almeno una categoria')
           toast.dismiss(toastId)
@@ -557,7 +559,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           sections: selectedCats.map(c => ({
             id: c.id,
             title: c.name,
-            dishes: restaurantDishes.filter(d => d.category_id === c.id && d.is_active)
+            dishes: restaurantDishes.filter(d => d.category_id === c.id && d.is_active && !exportExcludedDishes.includes(d.id))
           })).filter(s => s.dishes.length > 0)
         }
       } else {
@@ -889,6 +891,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [copertoEnabled, setCopertoEnabled] = useState(false)
   const [copertoPrice, setCopertoPrice] = useState<number | string>(0)
   const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(false)
+  const [courseSuggestionsEnabled, setCourseSuggestionsEnabled] = useState(false)
   const [reservationDuration, setReservationDuration] = useState(120)
 
   // Weekly schedule state
@@ -965,6 +968,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       setWaiterPassword('')
       setRestaurantName(currentRestaurant.name || '')
       setCourseSplittingEnabled(currentRestaurant.enable_course_splitting || false)
+      setCourseSuggestionsEnabled((currentRestaurant as any).enable_course_suggestions || false)
 
       // Schedule Times
       if (currentRestaurant.lunch_time_start) setLunchTimeStart(currentRestaurant.lunch_time_start)
@@ -1207,6 +1211,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     setCourseSplittingEnabled(enabled)
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, enable_course_splitting: enabled })
+  }
+
+  const updateCourseSuggestions = async (enabled: boolean) => {
+    if (demoGuard()) return
+    setCourseSuggestionsEnabled(enabled)
+    if (!restaurantId) return
+    await DatabaseService.updateRestaurant({ id: restaurantId, enable_course_suggestions: enabled } as any)
   }
 
   const updateReservationDuration = async (minutes: number) => {
@@ -2391,12 +2402,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     dishes={restaurantDishes}
                     selectedCategoryIds={selectedKitchenCategories}
                     viewMode={kitchenViewMode}
-                    // columns={kitchenColumns} // Removed in favor of responsive grid
                     onCompleteDish={handleCompleteDish}
                     onDeliverDish={handleDeliverDish}
                     onCompleteOrder={handleCompleteOrder}
                     sessions={activeSessions}
                     zoom={kitchenZoom}
+                    waiterModeEnabled={waiterModeEnabled}
                   />
                 )}
             </TabsContent >
@@ -3560,32 +3571,80 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   variant="ghost"
                                   size="sm"
                                   className="h-auto py-1 text-xs text-amber-500"
-                                  onClick={() => setExportSelectedCategories(categories.map(c => c.id))}
+                                  onClick={() => setExportSelectedCategories(restaurantCategories.map(c => c.id))}
                                 >
                                   Seleziona Tutte
                                 </Button>
                               </div>
                             </div>
-                            <ScrollArea className="h-[200px] pr-4">
-                              <div className="space-y-2">
-                                {restaurantCategories.map(cat => (
-                                  <div key={cat.id} className="flex items-center space-x-2 p-2 rounded hover:bg-zinc-900/50">
-                                    <Checkbox
-                                      id={`cat-${cat.id}`}
-                                      checked={exportSelectedCategories.includes(cat.id)}
-                                      onCheckedChange={(checked) => {
-                                        if (checked) {
-                                          setExportSelectedCategories([...exportSelectedCategories, cat.id])
-                                        } else {
-                                          setExportSelectedCategories(exportSelectedCategories.filter(id => id !== cat.id))
-                                        }
-                                      }}
-                                    />
-                                    <Label htmlFor={`cat-${cat.id}`} className="flex-1 cursor-pointer font-normal text-zinc-300">
-                                      {cat.name}
-                                    </Label>
-                                  </div>
-                                ))}
+                            <ScrollArea className="h-[280px] pr-4">
+                              <div className="space-y-1">
+                                {restaurantCategories.map(cat => {
+                                  const catDishes = restaurantDishes.filter(d => d.category_id === cat.id && d.is_active)
+                                  const isCatSelected = exportSelectedCategories.includes(cat.id)
+                                  const excludedInCat = catDishes.filter(d => exportExcludedDishes.includes(d.id)).length
+                                  return (
+                                    <div key={cat.id}>
+                                      <div className="flex items-center space-x-2 p-2 rounded hover:bg-zinc-900/50">
+                                        <Checkbox
+                                          id={`cat-${cat.id}`}
+                                          checked={isCatSelected}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setExportSelectedCategories([...exportSelectedCategories, cat.id])
+                                              // Re-include all dishes of this category
+                                              setExportExcludedDishes(prev => prev.filter(id => !catDishes.some(d => d.id === id)))
+                                            } else {
+                                              setExportSelectedCategories(exportSelectedCategories.filter(id => id !== cat.id))
+                                            }
+                                          }}
+                                        />
+                                        <Label htmlFor={`cat-${cat.id}`} className="flex-1 cursor-pointer font-normal text-zinc-300">
+                                          {cat.name}
+                                          {isCatSelected && excludedInCat > 0 && (
+                                            <span className="ml-2 text-xs text-amber-500">({catDishes.length - excludedInCat}/{catDishes.length})</span>
+                                          )}
+                                        </Label>
+                                        {isCatSelected && catDishes.length > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.preventDefault()
+                                              const el = document.getElementById(`dishes-${cat.id}`)
+                                              if (el) el.classList.toggle('hidden')
+                                            }}
+                                            className="text-xs text-zinc-500 hover:text-zinc-300 px-2 py-1"
+                                          >
+                                            Piatti
+                                          </button>
+                                        )}
+                                      </div>
+                                      {isCatSelected && catDishes.length > 0 && (
+                                        <div id={`dishes-${cat.id}`} className="hidden ml-8 space-y-0.5 pb-2">
+                                          {catDishes.map(dish => (
+                                            <div key={dish.id} className="flex items-center space-x-2 py-1 px-2 rounded hover:bg-zinc-900/30">
+                                              <Checkbox
+                                                id={`dish-${dish.id}`}
+                                                checked={!exportExcludedDishes.includes(dish.id)}
+                                                onCheckedChange={(checked) => {
+                                                  if (checked) {
+                                                    setExportExcludedDishes(prev => prev.filter(id => id !== dish.id))
+                                                  } else {
+                                                    setExportExcludedDishes(prev => [...prev, dish.id])
+                                                  }
+                                                }}
+                                              />
+                                              <Label htmlFor={`dish-${dish.id}`} className="flex-1 cursor-pointer font-normal text-zinc-400 text-xs">
+                                                {dish.name}
+                                              </Label>
+                                              <span className="text-xs text-zinc-600">{'\u20AC'}{dish.price.toFixed(2)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </ScrollArea>
                           </div>
@@ -4108,6 +4167,31 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </div>
               </div>
               {(() => {
+                const hasConfiguredHours = weeklyServiceHours?.useWeeklySchedule &&
+                  weeklyServiceHours.schedule &&
+                  Object.values(weeklyServiceHours.schedule).some((day: any) =>
+                    day?.lunch?.enabled || day?.dinner?.enabled
+                  );
+
+                if (!hasConfiguredHours) {
+                  return (
+                    <div className="flex-1 flex items-center justify-center py-20">
+                      <div className="text-center max-w-md space-y-4">
+                        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
+                          <Clock size={32} className="text-amber-500" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-white">Orari di servizio non configurati</h3>
+                        <p className="text-zinc-400 text-sm leading-relaxed">
+                          Per gestire le prenotazioni, configura prima gli orari di servizio settimanali in <strong className="text-zinc-300">Impostazioni → Generali → Orari di Servizio</strong>.
+                        </p>
+                        <Button variant="outline" className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10" onClick={() => setActiveTab('settings')}>
+                          Vai alle Impostazioni
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 const serviceSegments: { label: string; start: string; end: string }[] = [];
 
                 if (weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule) {
@@ -4232,6 +4316,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                 showCookingTimes={showCookingTimes}
                 setShowCookingTimes={updateShowCookingTimes}
+
+                courseSuggestionsEnabled={courseSuggestionsEnabled}
+                setCourseSuggestionsEnabled={setCourseSuggestionsEnabled}
+                updateCourseSuggestions={updateCourseSuggestions}
 
                 copertoPrice={copertoPrice}
                 setCopertoPrice={updateCopertoPrice}

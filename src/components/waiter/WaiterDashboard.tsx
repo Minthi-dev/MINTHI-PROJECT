@@ -412,8 +412,19 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }, [activeOrders, assistanceRequests, loading, activityRoomFilter, sessions, tables, rooms])
 
     const handleMarkAsDelivered = async (orderId: string, itemId: string) => {
-        // Track in justDeliveredIds for grey-out effect before group disappears
+        // Track in justDeliveredIds for grey-out effect — keeps item visible as "delivered"
         setJustDeliveredIds(prev => new Set([...prev, itemId]))
+
+        // Optimistic update — change status locally first for instant feedback
+        setActiveOrders(prev => prev.map(o => {
+            if (o.id === orderId) {
+                return {
+                    ...o,
+                    items: o.items?.map(i => i.id === itemId ? { ...i, status: 'SERVED' } : i)
+                }
+            }
+            return o
+        }))
 
         await supabase
             .from('order_items')
@@ -424,16 +435,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             DatabaseService.logWaiterActivity(restaurantId, user.id, 'DISH_DELIVERED', { orderId, itemId })
         }
 
-        // Optimistic update
-        setActiveOrders(prev => prev.map(o => {
-            if (o.id === orderId) {
-                return {
-                    ...o,
-                    items: o.items?.map(i => i.id === itemId ? { ...i, status: 'SERVED' } : i)
-                }
-            }
-            return o
-        }))
+        // Remove from justDeliveredIds after 3s so the greyed-out group can disappear
+        setTimeout(() => {
+            setJustDeliveredIds(prev => {
+                const next = new Set(prev)
+                next.delete(itemId)
+                return next
+            })
+        }, 3000)
     }
 
     // Resolve assistance request
@@ -1497,7 +1506,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                 </div>
                                                 <div className="divide-y divide-white/5">
                                                     {items.map(item => (
-                                                        <div key={item.id} className="px-4 py-3 flex items-center gap-3">
+                                                        <div key={item.id} className="px-4 py-2.5 flex items-center gap-3">
                                                             <div className="w-1 h-8 rounded-full bg-blue-500/40 shrink-0" />
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="font-medium text-sm text-zinc-300 truncate">{item.dish?.name || 'Piatto'}</p>
