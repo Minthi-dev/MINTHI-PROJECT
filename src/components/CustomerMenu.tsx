@@ -1475,20 +1475,21 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     })
     cartCategoryIds.add(addedDish.category_id)
 
-    // Find the highest order among ordered categories
-    let maxOrderedCategoryOrder = -1
-    sortedCategories.forEach(cat => {
-      if (cartCategoryIds.has(cat.id)) {
-        const catOrder = cat.order ?? 9999
-        if (catOrder > maxOrderedCategoryOrder) maxOrderedCategoryOrder = catOrder
-      }
+    // Use index in sorted array as position (handles categories without explicit order)
+    const catIndexMap = new Map<string, number>()
+    sortedCategories.forEach((cat, idx) => catIndexMap.set(cat.id, idx))
+
+    // Find the highest index among categories already in cart
+    let maxOrderedIndex = -1
+    cartCategoryIds.forEach(catId => {
+      const idx = catIndexMap.get(catId) ?? -1
+      if (idx > maxOrderedIndex) maxOrderedIndex = idx
     })
 
     // Suggest categories that come AFTER the highest ordered category
     // and are NOT already in the cart
-    const suggested = sortedCategories.filter(cat => {
-      const catOrder = cat.order ?? 9999
-      return catOrder > maxOrderedCategoryOrder && !cartCategoryIds.has(cat.id)
+    const suggested = sortedCategories.filter((cat, idx) => {
+      return idx > maxOrderedIndex && !cartCategoryIds.has(cat.id)
     })
 
     // Only suggest categories that have active dishes

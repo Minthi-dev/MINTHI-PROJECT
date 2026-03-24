@@ -26,6 +26,7 @@ interface CustomMenusManagerProps {
     onDishesChange: () => void
     onMenuDeactivated?: () => void
     weeklyServiceHours?: any
+    onGoToSettings?: () => void
 }
 
 const DAYS_OF_WEEK = [
@@ -43,7 +44,7 @@ const MEAL_TYPES: { value: MealType, label: string }[] = [
     { value: 'dinner', label: 'Cena' },
 ]
 
-export default function CustomMenusManager({ restaurantId, dishes, categories, onDishesChange, onMenuDeactivated, weeklyServiceHours }: CustomMenusManagerProps) {
+export default function CustomMenusManager({ restaurantId, dishes, categories, onDishesChange, onMenuDeactivated, weeklyServiceHours, onGoToSettings }: CustomMenusManagerProps) {
     const serviceHoursConfigured = weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours?.enabled !== false
     const [customMenus, setCustomMenus] = useState<CustomMenu[]>([])
     const [selectedMenu, setSelectedMenu] = useState<CustomMenu | null>(null)
@@ -331,17 +332,25 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     if (!serviceHoursConfigured) {
         return (
             <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center max-w-md space-y-4">
-                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
-                        <Clock size={32} className="text-amber-500" />
+                <div className="text-center max-w-lg space-y-6">
+                    <div className="w-20 h-20 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
+                        <Clock size={40} className="text-amber-500" />
                     </div>
-                    <h3 className="text-xl font-semibold text-white">Configura gli Orari di Servizio</h3>
-                    <p className="text-zinc-400 text-sm leading-relaxed">
-                        Per utilizzare i menu personalizzati, devi prima configurare gli orari di servizio settimanali in <strong className="text-zinc-300">Impostazioni &rarr; Generali &rarr; Orari di Servizio</strong>.
+                    <h3 className="text-2xl font-bold text-white">Configura gli Orari di Servizio</h3>
+                    <p className="text-zinc-300 text-base leading-relaxed">
+                        Per utilizzare i menu personalizzati, devi prima configurare gli orari di servizio settimanali nelle Impostazioni.
                     </p>
-                    <p className="text-zinc-500 text-xs">
+                    <p className="text-zinc-400 text-sm">
                         Gli orari definiscono quando attivare automaticamente pranzo e cena, permettendo ai menu personalizzati di funzionare correttamente.
                     </p>
+                    {onGoToSettings && (
+                        <Button
+                            onClick={onGoToSettings}
+                            className="bg-amber-600 hover:bg-amber-700 text-white px-6 h-11 text-base"
+                        >
+                            Vai alle Impostazioni
+                        </Button>
+                    )}
                 </div>
             </div>
         )

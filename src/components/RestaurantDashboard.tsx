@@ -3465,6 +3465,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         dishes={dishes || []}
                         categories={categories || []}
                         onDishesChange={refreshDishes}
+                        weeklyServiceHours={weeklyServiceHours}
+                        onGoToSettings={() => {
+                          setActiveTab('settings')
+                          setActiveSection('settings')
+                          // Close dialog by clicking outside
+                          const closeBtn = document.querySelector('[data-radix-collection-item]') as HTMLElement
+                          closeBtn?.click()
+                        }}
                         onMenuDeactivated={() => {
                           // Suppress the scheduler until the END of the current meal service
                           const now = new Date()
@@ -4925,7 +4933,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </Button>
               </div>
 
-              {/* Hidden content for PDF generation */}
+              {/* Hidden content for PDF generation — Elegant gala style */}
               <div id="table-qr-pdf-content" style={{ display: 'none', position: 'fixed', top: '-9999px', width: '210mm', height: '297mm', backgroundColor: '#FFFFFF' }}>
                 <div style={{
                   width: '100%',
@@ -4933,88 +4941,88 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '15mm',
+                  padding: '20mm',
                   backgroundColor: '#FFFFFF',
                   boxSizing: 'border-box'
                 }}>
                   <div style={{
                     backgroundColor: '#FFFFFF',
-                    border: '1.5px solid #e4e4e7',
-                    borderRadius: '16px',
-                    padding: '45px 50px',
+                    border: '1px solid #d4d4d8',
+                    borderRadius: '4px',
+                    padding: '50px 40px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '24px',
+                    gap: '20px',
                     color: '#000000',
-                    width: '140mm',
+                    width: '150mm',
                     maxWidth: '100%'
                   }}>
-                    {/* Restaurant Name - TOP */}
+                    {/* Restaurant Name */}
                     <p style={{
-                      fontSize: '13px',
-                      fontWeight: '700',
+                      fontSize: '14px',
+                      fontWeight: '400',
                       margin: 0,
                       color: '#000000',
                       textTransform: 'uppercase',
-                      letterSpacing: '0.3em',
-                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      letterSpacing: '0.5em',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
                       textAlign: 'center'
                     }}>
                       {currentRestaurant?.name || 'Ristorante'}
                     </p>
 
-                    {/* Decorative line */}
-                    <div style={{ width: '50px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                    {/* Thin decorative line */}
+                    <div style={{ width: '60px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
 
-                    {/* Table Label + Number */}
-                    <div style={{ textAlign: 'center' }}>
+                    {/* Table Number — large, centered, serif */}
+                    <div style={{ textAlign: 'center', margin: '10px 0' }}>
                       <p style={{
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        margin: '0 0 8px 0',
+                        fontSize: '11px',
+                        fontWeight: '400',
+                        margin: '0 0 12px 0',
                         textTransform: 'uppercase',
-                        letterSpacing: '0.4em',
+                        letterSpacing: '0.6em',
                         color: '#71717a',
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
+                        fontFamily: 'Georgia, "Times New Roman", serif'
                       }}>
-                        TAVOLO
+                        Tavolo
                       </p>
                       <p style={{
-                        fontSize: '80px',
+                        fontSize: '96px',
                         lineHeight: '1',
-                        fontWeight: '700',
+                        fontWeight: '300',
                         margin: 0,
-                        color: '#000000',
-                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        color: '#18181b',
+                        fontFamily: 'Georgia, "Times New Roman", serif',
                         textAlign: 'center'
                       }}>
                         {selectedTableForActions?.number}
                       </p>
                     </div>
 
-                    {/* QR Code */}
-                    <div style={{ padding: '12px', border: '1.5px solid #e4e4e7', borderRadius: '12px', marginTop: '8px' }}>
-                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={220} />
-                    </div>
-
-                    {/* CTA */}
+                    {/* CTA — ABOVE the QR code */}
                     <p style={{
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      margin: 0,
+                      fontSize: '10px',
+                      fontWeight: '400',
+                      margin: '4px 0 0 0',
                       textTransform: 'uppercase',
-                      letterSpacing: '0.15em',
-                      color: '#52525b',
-                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      letterSpacing: '0.25em',
+                      color: '#71717a',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
                       textAlign: 'center'
                     }}>
                       {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                     </p>
 
-                    {/* Decorative line */}
-                    <div style={{ width: '50px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                    {/* QR Code — clean, no heavy border */}
+                    <div style={{ padding: '8px', border: '1px solid #e4e4e7', borderRadius: '4px' }}>
+                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={240} />
+                    </div>
+
+                    {/* Thin decorative line */}
+                    <div style={{ width: '60px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
                   </div>
                 </div>
               </div>
@@ -5126,8 +5134,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     {section.dishes.map(dish => (
                       <div key={dish.id} className="break-inside-avoid" style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
                         {dish.image_url?.trim() && (
-                          <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
-                            <img src={dish.image_url} alt={dish.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)', position: 'relative', backgroundColor: '#f4f4f5' }}>
+                            <img src={dish.image_url} alt={dish.name} style={{ width: '60px', height: '60px', objectFit: 'cover', display: 'block' }} />
                           </div>
                         )}
                         <div style={{ flex: 1 }}>
@@ -5155,11 +5163,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           <p style={{ color: '#52525b', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', margin: 0 }}>
             {currentRestaurant?.address || ''} {currentRestaurant?.address && currentRestaurant?.phone ? '•' : ''} {currentRestaurant?.phone || ''}
           </p>
-          <p style={{ color: '#3f3f46', fontSize: '9px', marginTop: '8px', letterSpacing: '0.1em' }}>Powered by Minthi</p>
+          {/* Footer - no branding */}
         </div>
       </div>
 
-      {/* HIDDEN GRID PRINT VIEW FOR TABLES - 4 BLOCKS PER PAGE */}
+      {/* HIDDEN GRID PRINT VIEW FOR TABLES - 4 BLOCKS PER PAGE — Elegant gala style */}
       <div id="tables-grid-print-view" style={{
         display: 'none',
         position: 'fixed',
@@ -5168,9 +5176,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         width: '210mm',
         backgroundColor: '#FFFFFF',
         color: '#000000',
-        fontFamily: 'system-ui, -apple-system, sans-serif'
+        fontFamily: 'Georgia, "Times New Roman", serif'
       }}>
-        {/* Generate pages with exactly 4 tables each */}
         {
           Array.from({ length: Math.ceil(restaurantTables.length / 4) }).map((_, pageIndex) => {
             const pageTables = restaurantTables.slice(pageIndex * 4, (pageIndex + 1) * 4)
@@ -5184,88 +5191,88 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
                 gridTemplateRows: '1fr 1fr',
-                gap: '8mm',
+                gap: '6mm',
                 pageBreakAfter: pageIndex < Math.ceil(restaurantTables.length / 4) - 1 ? 'always' : 'auto'
               }}>
                 {
                   pageTables.map((table) => (
                     <div key={table.id} style={{
                       backgroundColor: '#FFFFFF',
-                      border: '1.5px solid #e4e4e7',
-                      borderRadius: '10px',
-                      padding: '6mm',
+                      border: '1px solid #d4d4d8',
+                      borderRadius: '3px',
+                      padding: '5mm',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '4mm',
+                      gap: '3mm',
                       color: '#000000',
                       boxSizing: 'border-box'
                     }}>
-                      {/* Restaurant Name - TOP */}
+                      {/* Restaurant Name */}
                       <p style={{
-                        fontSize: '8px',
-                        fontWeight: '700',
+                        fontSize: '7px',
+                        fontWeight: '400',
                         margin: 0,
                         color: '#000000',
                         textTransform: 'uppercase',
-                        letterSpacing: '0.25em',
-                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        letterSpacing: '0.4em',
+                        fontFamily: 'Georgia, "Times New Roman", serif',
                         textAlign: 'center'
                       }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Decorative line */}
-                      <div style={{ width: '20px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                      {/* Thin line */}
+                      <div style={{ width: '20px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
 
-                      {/* Table Label + Number */}
+                      {/* Table Number — large serif */}
                       <div style={{ textAlign: 'center' }}>
                         <p style={{
-                          fontSize: '8px',
-                          fontWeight: '600',
-                          margin: '0 0 4px 0',
+                          fontSize: '7px',
+                          fontWeight: '400',
+                          margin: '0 0 3px 0',
                           textTransform: 'uppercase',
-                          letterSpacing: '0.35em',
+                          letterSpacing: '0.5em',
                           color: '#71717a',
-                          fontFamily: 'system-ui, -apple-system, sans-serif'
+                          fontFamily: 'Georgia, "Times New Roman", serif'
                         }}>
-                          TAVOLO
+                          Tavolo
                         </p>
                         <p style={{
-                          fontSize: '44px',
+                          fontSize: '48px',
                           lineHeight: '1',
-                          fontWeight: '700',
+                          fontWeight: '300',
                           margin: 0,
-                          color: '#000000',
-                          fontFamily: 'system-ui, -apple-system, sans-serif',
+                          color: '#18181b',
+                          fontFamily: 'Georgia, "Times New Roman", serif',
                           textAlign: 'center'
                         }}>
                           {table.number}
                         </p>
                       </div>
 
-                      {/* QR Code */}
-                      <div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <QRCodeGenerator value={generateQrCode(table.id)} size={130} />
-                      </div>
-
-                      {/* CTA */}
+                      {/* CTA — above QR */}
                       <p style={{
-                        fontSize: '7px',
-                        fontWeight: '600',
+                        fontSize: '6px',
+                        fontWeight: '400',
                         margin: 0,
                         textTransform: 'uppercase',
-                        letterSpacing: '0.15em',
-                        color: '#52525b',
-                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        letterSpacing: '0.2em',
+                        color: '#71717a',
+                        fontFamily: 'Georgia, "Times New Roman", serif',
                         textAlign: 'center'
                       }}>
                         {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                       </p>
 
-                      {/* Decorative line */}
-                      <div style={{ width: '20px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                      {/* QR Code */}
+                      <div style={{ padding: '2mm', border: '0.5px solid #e4e4e7', borderRadius: '2px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <QRCodeGenerator value={generateQrCode(table.id)} size={130} />
+                      </div>
+
+                      {/* Thin line */}
+                      <div style={{ width: '20px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
                     </div>
                   ))}
               </div>

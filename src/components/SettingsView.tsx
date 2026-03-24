@@ -1080,23 +1080,18 @@ export function SettingsView({
                             </div>
                         </div>
 
-                        {/* Bottom row: Orari di Servizio (Full Width) */}
-                        <div className="relative pt-6 sm:pt-8 w-full max-w-4xl mx-auto overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-8 opacity-[0.03] transition-opacity duration-500 group-hover:opacity-5 pointer-events-none">
-                                <Clock size={200} weight="fill" />
-                            </div>
-                            <div className="relative z-10 w-full">
-                                <WeeklyServiceHoursEditor
-                                    schedule={weeklyServiceHours || {
-                                        enabled: true,
-                                        useWeeklySchedule: false,
-                                        schedule: {}
-                                    }}
-                                    onChange={(schedule) => setWeeklyServiceHours(schedule)}
-                                    defaultLunchStart={lunchTimeStart}
-                                    defaultDinnerStart={dinnerTimeStart}
-                                />
-                            </div>
+                        {/* Orari di Servizio */}
+                        <div className="w-full max-w-4xl mx-auto pt-4">
+                            <WeeklyServiceHoursEditor
+                                schedule={weeklyServiceHours || {
+                                    enabled: true,
+                                    useWeeklySchedule: false,
+                                    schedule: {}
+                                }}
+                                onChange={(schedule) => setWeeklyServiceHours(schedule)}
+                                defaultLunchStart={lunchTimeStart}
+                                defaultDinnerStart={dinnerTimeStart}
+                            />
                         </div>
                     </motion.div>
                 </TabsContent>
