@@ -4997,62 +4997,53 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  justifyContent: 'space-between',
                   backgroundColor: '#FFFFFF',
                   boxSizing: 'border-box',
+                  padding: '30mm 20mm',
                   fontFamily: 'Georgia, "Times New Roman", serif',
                   color: '#18181b'
                 }}>
-                  {/* Thin decorative top line */}
-                  <div style={{ width: '60px', height: '0.5px', backgroundColor: '#d4d4d8', marginBottom: '40px' }} />
+                  {/* === TOP SECTION: Restaurant + Tavolo + Number === */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* Restaurant Name */}
+                    <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#52525b', textAlign: 'center' }}>
+                      {currentRestaurant?.name || 'Ristorante'}
+                    </p>
 
-                  {/* Restaurant Name */}
-                  <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#52525b', textAlign: 'center' }}>
-                    {currentRestaurant?.name || 'Ristorante'}
-                  </p>
+                    {/* Thin line */}
+                    <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8', margin: '14px 0' }} />
 
-                  {/* Thin line between name and Tavolo */}
-                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8', margin: '16px 0' }} />
+                    {/* TAVOLO label */}
+                    <p style={{ fontSize: '10px', fontWeight: '400', margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
+                      Tavolo
+                    </p>
 
-                  {/* TAVOLO label */}
-                  <p style={{ fontSize: '11px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
-                    Tavolo
-                  </p>
-
-                  {/* Spacer — symmetric with below */}
-                  <div style={{ height: '20px' }} />
-
-                  {/* Table Number */}
-                  <p style={{ fontSize: '120px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center', letterSpacing: '-0.02em' }}>
-                    {selectedTableForActions?.number}
-                  </p>
-
-                  {/* Spacer — symmetric with above */}
-                  <div style={{ height: '20px' }} />
-
-                  {/* CTA text — clearly visible */}
-                  <p style={{ fontSize: '12px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#3f3f46', textAlign: 'center' }}>
-                    {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
-                  </p>
-
-                  {/* Spacer */}
-                  <div style={{ height: '24px' }} />
-
-                  {/* QR Code */}
-                  <div style={{ padding: '12px', border: '1px solid #e4e4e7', borderRadius: '10px' }}>
-                    <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={220} />
+                    {/* Table Number */}
+                    <p style={{ fontSize: '86px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center', letterSpacing: '-0.02em' }}>
+                      {selectedTableForActions?.number}
+                    </p>
                   </div>
 
-                  {/* Spacer */}
-                  <div style={{ height: '24px' }} />
+                  {/* === MIDDLE SECTION: CTA + QR Code === */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* CTA text */}
+                    <p style={{ fontSize: '11px', fontWeight: '400', margin: '0 0 20px 0', textTransform: 'uppercase', letterSpacing: '0.2em', color: '#3f3f46', textAlign: 'center' }}>
+                      {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
+                    </p>
 
-                  {/* Pin info */}
-                  <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#a1a1aa', textAlign: 'center' }}>
-                    Il pin di accesso è fornito dal personale di sala
-                  </p>
+                    {/* QR Code */}
+                    <div style={{ padding: '10px', border: '1px solid #e4e4e7', borderRadius: '8px' }}>
+                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={180} />
+                    </div>
+                  </div>
 
-                  {/* Thin decorative bottom line */}
-                  <div style={{ width: '60px', height: '0.5px', backgroundColor: '#d4d4d8', marginTop: '40px' }} />
+                  {/* === BOTTOM SECTION: Pin info === */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#a1a1aa', textAlign: 'center' }}>
+                      Il pin di accesso è fornito dal personale di sala
+                    </p>
+                  </div>
                 </div>
               </div>
 
