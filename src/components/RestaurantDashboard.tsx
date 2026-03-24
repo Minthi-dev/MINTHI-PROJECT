@@ -1218,6 +1218,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     setCourseSuggestionsEnabled(enabled)
     if (!restaurantId) return
     await DatabaseService.updateRestaurant({ id: restaurantId, enable_course_suggestions: enabled } as any)
+    refreshRestaurants()
+    toast.success(enabled ? 'Suggerimenti portate attivati' : 'Suggerimenti portate disattivati')
   }
 
   const updateReservationDuration = async (minutes: number) => {
@@ -4924,96 +4926,95 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               </div>
 
               {/* Hidden content for PDF generation */}
-              <div id="table-qr-pdf-content" style={{ display: 'none', position: 'fixed', top: '-9999px', width: '210mm', minHeight: '297mm', backgroundColor: '#FFFFFF' }}>
+              <div id="table-qr-pdf-content" style={{ display: 'none', position: 'fixed', top: '-9999px', width: '210mm', height: '297mm', backgroundColor: '#FFFFFF' }}>
                 <div style={{
                   width: '100%',
                   height: '100%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '20mm',
+                  padding: '15mm',
                   backgroundColor: '#FFFFFF',
                   boxSizing: 'border-box'
                 }}>
-                  {/* Single Elegant Card */}
                   <div style={{
                     backgroundColor: '#FFFFFF',
-                    border: '1px solid #e4e4e7',
-                    borderRadius: '12px',
-                    padding: '50px 40px',
+                    border: '1.5px solid #e4e4e7',
+                    borderRadius: '16px',
+                    padding: '45px 50px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '32px',
+                    gap: '24px',
                     color: '#000000',
-                    width: '120mm',
+                    width: '140mm',
                     maxWidth: '100%'
                   }}>
-                    {/* Thin decorative line */}
-                    <div style={{ width: '40px', height: '2px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                    {/* Restaurant Name - TOP */}
+                    <p style={{
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      margin: 0,
+                      color: '#000000',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3em',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      textAlign: 'center'
+                    }}>
+                      {currentRestaurant?.name || 'Ristorante'}
+                    </p>
 
-                    {/* Table Name */}
+                    {/* Decorative line */}
+                    <div style={{ width: '50px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+
+                    {/* Table Label + Number */}
                     <div style={{ textAlign: 'center' }}>
                       <p style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        margin: '0 0 10px 0',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        margin: '0 0 8px 0',
                         textTransform: 'uppercase',
-                        letterSpacing: '0.35em',
-                        color: '#000000',
+                        letterSpacing: '0.4em',
+                        color: '#71717a',
                         fontFamily: 'system-ui, -apple-system, sans-serif'
                       }}>
                         TAVOLO
                       </p>
-                      <h1 style={{
-                        fontSize: '72px',
-                        lineHeight: '1.2',
-                        fontWeight: '400',
+                      <p style={{
+                        fontSize: '80px',
+                        lineHeight: '1',
+                        fontWeight: '700',
                         margin: 0,
                         color: '#000000',
-                        fontFamily: 'Georgia, "Times New Roman", serif'
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        textAlign: 'center'
                       }}>
                         {selectedTableForActions?.number}
-                      </h1>
+                      </p>
+                    </div>
+
+                    {/* QR Code */}
+                    <div style={{ padding: '12px', border: '1.5px solid #e4e4e7', borderRadius: '12px', marginTop: '8px' }}>
+                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={220} />
                     </div>
 
                     {/* CTA */}
                     <p style={{
-                      fontSize: '10px',
-                      fontWeight: '700',
+                      fontSize: '11px',
+                      fontWeight: '600',
                       margin: 0,
                       textTransform: 'uppercase',
-                      letterSpacing: '0.2em',
-                      color: '#000000',
+                      letterSpacing: '0.15em',
+                      color: '#52525b',
                       fontFamily: 'system-ui, -apple-system, sans-serif',
                       textAlign: 'center'
                     }}>
                       {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                     </p>
 
-                    {/* QR Code */}
-                    <div style={{ padding: '8px', border: '1px solid #e4e4e7', borderRadius: '8px' }}>
-                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={200} />
-                    </div>
-
-                    {/* Restaurant Name */}
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        margin: 0,
-                        color: '#000000',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.25em',
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
-                      }}>
-                        {currentRestaurant?.name || 'Ristorante'}
-                      </p>
-                    </div>
-
-                    {/* Thin decorative line */}
-                    <div style={{ width: '40px', height: '2px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                    {/* Decorative line */}
+                    <div style={{ width: '50px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
                   </div>
                 </div>
               </div>
@@ -5190,63 +5191,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   pageTables.map((table) => (
                     <div key={table.id} style={{
                       backgroundColor: '#FFFFFF',
-                      border: '1px solid #e4e4e7',
+                      border: '1.5px solid #e4e4e7',
                       borderRadius: '10px',
-                      padding: '8mm',
+                      padding: '6mm',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '5mm', // Increased gap
+                      gap: '4mm',
                       color: '#000000',
                       boxSizing: 'border-box'
                     }}>
-                      {/* Decorative line */}
-                      <div style={{ width: '24px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
-
-                      {/* Table Name */}
-                      <div style={{ textAlign: 'center' }}>
-                        <p style={{
-                          fontSize: '9px',
-                          fontWeight: '700',
-                          margin: '0 0 6px 0',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.35em',
-                          color: '#000000',
-                          fontFamily: 'system-ui, -apple-system, sans-serif'
-                        }}>
-                          TAVOLO
-                        </p>
-                        <h1 style={{
-                          fontSize: '48px',
-                          lineHeight: '1.2',
-                          fontWeight: '400',
-                          margin: 0,
-                          color: '#000000',
-                          fontFamily: 'Georgia, "Times New Roman", serif'
-                        }}>
-                          {table.number}
-                        </h1>
-                      </div>
-
-                      <p style={{
-                        fontSize: '7px',
-                        fontWeight: '700',
-                        margin: 0,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.2em',
-                        color: '#000000',
-                        fontFamily: 'system-ui, -apple-system, sans-serif',
-                        textAlign: 'center'
-                      }}>
-                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
-                      </p>
-                      {/* QR Code */}
-                      < div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <QRCodeGenerator value={generateQrCode(table.id)} size={140} />
-                      </div>
-
-                      {/* Restaurant Name */}
+                      {/* Restaurant Name - TOP */}
                       <p style={{
                         fontSize: '8px',
                         fontWeight: '700',
@@ -5261,7 +5217,55 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </p>
 
                       {/* Decorative line */}
-                      <div style={{ width: '24px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                      <div style={{ width: '20px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+
+                      {/* Table Label + Number */}
+                      <div style={{ textAlign: 'center' }}>
+                        <p style={{
+                          fontSize: '8px',
+                          fontWeight: '600',
+                          margin: '0 0 4px 0',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.35em',
+                          color: '#71717a',
+                          fontFamily: 'system-ui, -apple-system, sans-serif'
+                        }}>
+                          TAVOLO
+                        </p>
+                        <p style={{
+                          fontSize: '44px',
+                          lineHeight: '1',
+                          fontWeight: '700',
+                          margin: 0,
+                          color: '#000000',
+                          fontFamily: 'system-ui, -apple-system, sans-serif',
+                          textAlign: 'center'
+                        }}>
+                          {table.number}
+                        </p>
+                      </div>
+
+                      {/* QR Code */}
+                      <div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <QRCodeGenerator value={generateQrCode(table.id)} size={130} />
+                      </div>
+
+                      {/* CTA */}
+                      <p style={{
+                        fontSize: '7px',
+                        fontWeight: '600',
+                        margin: 0,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.15em',
+                        color: '#52525b',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        textAlign: 'center'
+                      }}>
+                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
+                      </p>
+
+                      {/* Decorative line */}
+                      <div style={{ width: '20px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
                     </div>
                   ))}
               </div>

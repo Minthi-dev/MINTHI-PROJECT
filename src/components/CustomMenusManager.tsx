@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import {
     Plus, Trash, Calendar, Clock, CheckCircle, ForkKnife,
     Pencil, X, MagnifyingGlass, Sparkle, CopySimple,
-    CalendarCheck, Check, Info, ArrowLeft
+    CalendarCheck, Check, Info, ArrowLeft, FloppyDisk
 } from '@phosphor-icons/react'
 import type { CustomMenu, CustomMenuSchedule, Dish, MealType, Category } from '../services/types'
 import { cn } from '@/lib/utils'
@@ -25,6 +25,7 @@ interface CustomMenusManagerProps {
     categories: Category[]
     onDishesChange: () => void
     onMenuDeactivated?: () => void
+    weeklyServiceHours?: any
 }
 
 const DAYS_OF_WEEK = [
@@ -42,11 +43,14 @@ const MEAL_TYPES: { value: MealType, label: string }[] = [
     { value: 'dinner', label: 'Cena' },
 ]
 
-export default function CustomMenusManager({ restaurantId, dishes, categories, onDishesChange, onMenuDeactivated }: CustomMenusManagerProps) {
+export default function CustomMenusManager({ restaurantId, dishes, categories, onDishesChange, onMenuDeactivated, weeklyServiceHours }: CustomMenusManagerProps) {
+    const serviceHoursConfigured = weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours?.enabled !== false
     const [customMenus, setCustomMenus] = useState<CustomMenu[]>([])
     const [selectedMenu, setSelectedMenu] = useState<CustomMenu | null>(null)
     const [menuDishes, setMenuDishes] = useState<string[]>([])
+    const [initialMenuDishes, setInitialMenuDishes] = useState<string[]>([])
     const [schedules, setSchedules] = useState<CustomMenuSchedule[]>([])
+    const [isSaving, setIsSaving] = useState(false)
 
     // Editor View State
     const [viewMode, setViewMode] = useState<'list' | 'editor'>('list')
@@ -56,26 +60,6 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     const [editorTab, setEditorTab] = useState<'dishes' | 'schedule'>('dishes')
     const [editingName, setEditingName] = useState(false)
     const [editNameValue, setEditNameValue] = useState('')
-
-    // Track current editor state for auto-save on unmount (dialog X button close)
-    const selectedMenuRef = useRef(selectedMenu)
-    const menuDishesRef = useRef(menuDishes)
-    useEffect(() => { selectedMenuRef.current = selectedMenu }, [selectedMenu])
-    useEffect(() => { menuDishesRef.current = menuDishes }, [menuDishes])
-
-    // Auto-activate menu when component unmounts (e.g., dialog closed via X)
-    useEffect(() => {
-        return () => {
-            const menu = selectedMenuRef.current
-            const dishes = menuDishesRef.current
-            if (menu && !menu.is_active && dishes.length > 0) {
-                // Fire and forget — component is unmounting
-                supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: menu.id })
-                    .then(() => onDishesChange())
-            }
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
 
     // Data Fetching
     const fetchCustomMenus = async () => {
@@ -93,7 +77,9 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
             supabase.from('custom_menu_schedules').select('id, custom_menu_id, day_of_week, meal_type, start_time, end_time, is_active').eq('custom_menu_id', menuId)
         ])
 
-        if (dishesRes.data) setMenuDishes(dishesRes.data.map(d => d.dish_id))
+        const dishIds = dishesRes.data ? dishesRes.data.map(d => d.dish_id) : []
+        setMenuDishes(dishIds)
+        setInitialMenuDishes(dishIds)
         if (schedulesRes.data) setSchedules(schedulesRes.data)
     }
 
@@ -130,6 +116,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         setViewMode('editor')
         setEditorTab('dishes')
         setEditingName(false)
+        setDishSearch('')
         await fetchMenuDetails(menu.id)
     }
 
@@ -150,17 +137,109 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         setEditingName(false)
     }
 
-    const closeEditor = async () => {
-        // Auto-activate the menu if it has dishes and is not yet active
-        if (selectedMenu && !selectedMenu.is_active && menuDishes.length > 0) {
-            const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: selectedMenu.id })
-            if (!error) {
-                toast.success('Menu salvato e attivato!')
+    // Check if there are unsaved changes
+    const hasChanges = useMemo(() => {
+        if (menuDishes.length !== initialMenuDishes.length) return true
+        const sorted1 = [...menuDishes].sort()
+        const sorted2 = [...initialMenuDishes].sort()
+        return sorted1.some((id, i) => id !== sorted2[i])
+    }, [menuDishes, initialMenuDishes])
+
+    // SAVE: persist all dish changes to DB, then apply if menu is active
+    const handleSaveMenu = async () => {
+        if (!selectedMenu) return
+        setIsSaving(true)
+
+        try {
+            // Calculate diff
+            const toAdd = menuDishes.filter(id => !initialMenuDishes.includes(id))
+            const toRemove = initialMenuDishes.filter(id => !menuDishes.includes(id))
+
+            // Batch insert new dishes
+            if (toAdd.length > 0) {
+                const { error } = await supabase.from('custom_menu_dishes').insert(
+                    toAdd.map(dishId => ({ custom_menu_id: selectedMenu.id, dish_id: dishId }))
+                )
+                if (error) throw error
+            }
+
+            // Batch delete removed dishes
+            if (toRemove.length > 0) {
+                const { error } = await supabase.from('custom_menu_dishes')
+                    .delete()
+                    .eq('custom_menu_id', selectedMenu.id)
+                    .in('dish_id', toRemove)
+                if (error) throw error
+            }
+
+            // If menu is currently active, re-apply it to sync dish visibility
+            if (selectedMenu.is_active) {
+                const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: selectedMenu.id })
+                if (error) throw error
                 onDishesChange()
             }
-        } else if (selectedMenu && selectedMenu.is_active) {
-            // Already active — changes are already saved in real-time
+
+            // Update initial state to match
+            setInitialMenuDishes([...menuDishes])
             toast.success('Menu salvato!')
+        } catch (err) {
+            console.error('Error saving menu:', err)
+            toast.error('Errore durante il salvataggio')
+            // Revert to DB state
+            await fetchMenuDetails(selectedMenu.id)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    // SAVE AND ACTIVATE
+    const handleSaveAndActivate = async () => {
+        if (!selectedMenu) return
+        setIsSaving(true)
+
+        try {
+            // Calculate diff
+            const toAdd = menuDishes.filter(id => !initialMenuDishes.includes(id))
+            const toRemove = initialMenuDishes.filter(id => !menuDishes.includes(id))
+
+            if (toAdd.length > 0) {
+                const { error } = await supabase.from('custom_menu_dishes').insert(
+                    toAdd.map(dishId => ({ custom_menu_id: selectedMenu.id, dish_id: dishId }))
+                )
+                if (error) throw error
+            }
+
+            if (toRemove.length > 0) {
+                const { error } = await supabase.from('custom_menu_dishes')
+                    .delete()
+                    .eq('custom_menu_id', selectedMenu.id)
+                    .in('dish_id', toRemove)
+                if (error) throw error
+            }
+
+            // Apply (activate) the menu
+            const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: selectedMenu.id })
+            if (error) throw error
+
+            await supabase.from('custom_menus').update({ updated_at: new Date().toISOString() }).eq('id', selectedMenu.id)
+
+            setInitialMenuDishes([...menuDishes])
+            setSelectedMenu({ ...selectedMenu, is_active: true })
+            onDishesChange()
+            toast.success('Menu salvato e attivato!')
+            fetchCustomMenus()
+        } catch (err) {
+            console.error('Error saving/activating menu:', err)
+            toast.error('Errore durante il salvataggio')
+            await fetchMenuDetails(selectedMenu.id)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const closeEditor = () => {
+        if (hasChanges) {
+            if (!confirm('Hai modifiche non salvate. Vuoi uscire senza salvare?')) return
         }
         fetchCustomMenus()
         setSelectedMenu(null)
@@ -176,7 +255,10 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         if (!error) {
             toast.success('Menù eliminato')
             fetchCustomMenus()
-            if (selectedMenu?.id === menuId) closeEditor()
+            if (selectedMenu?.id === menuId) {
+                setSelectedMenu(null)
+                setViewMode('list')
+            }
         }
     }
 
@@ -184,9 +266,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         e?.stopPropagation()
         const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: menuId })
         if (!error) {
-            // Update updated_at to track manual activation time for 24h expiry
             await supabase.from('custom_menus').update({ updated_at: new Date().toISOString() }).eq('id', menuId)
-
             toast.success('Menù Attivato!')
             fetchCustomMenus()
             onDishesChange()
@@ -209,24 +289,13 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     }
 
     // --- Editor Logic ---
-    const handleToggleDish = async (dishId: string) => {
-        if (!selectedMenu) return
-        const isAdding = !menuDishes.includes(dishId)
-
-        // Optimistic update
-        setMenuDishes(prev => isAdding ? [...prev, dishId] : prev.filter(id => id !== dishId))
-
-        if (isAdding) {
-            await supabase.from('custom_menu_dishes').insert({ custom_menu_id: selectedMenu.id, dish_id: dishId })
-        } else {
-            await supabase.from('custom_menu_dishes').delete().match({ custom_menu_id: selectedMenu.id, dish_id: dishId })
-        }
-
-        // Realtime sync if active
-        if (selectedMenu.is_active) {
-            await supabase.from('dishes').update({ is_active: isAdding }).eq('id', dishId)
-            onDishesChange()
-        }
+    const handleToggleDish = (dishId: string) => {
+        // Local-only toggle, saved on explicit "Salva"
+        setMenuDishes(prev =>
+            prev.includes(dishId)
+                ? prev.filter(id => id !== dishId)
+                : [...prev, dishId]
+        )
     }
 
     const handleToggleSchedule = async (dayOfWeek: number, mealType: MealType) => {
@@ -258,6 +327,26 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         })
     }, [categories, dishes, dishSearch])
 
+    // Guard: require service hours before showing custom menus UI
+    if (!serviceHoursConfigured) {
+        return (
+            <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center max-w-md space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
+                        <Clock size={32} className="text-amber-500" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-white">Configura gli Orari di Servizio</h3>
+                    <p className="text-zinc-400 text-sm leading-relaxed">
+                        Per utilizzare i menu personalizzati, devi prima configurare gli orari di servizio settimanali in <strong className="text-zinc-300">Impostazioni &rarr; Generali &rarr; Orari di Servizio</strong>.
+                    </p>
+                    <p className="text-zinc-500 text-xs">
+                        Gli orari definiscono quando attivare automaticamente pranzo e cena, permettendo ai menu personalizzati di funzionare correttamente.
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
 
     // --- VIEW: LIST ---
     if (viewMode === 'list') {
@@ -266,7 +355,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         return (
             <div className="flex flex-col h-full w-full bg-zinc-950 overflow-hidden">
 
-                {/* Header Section - Spaced correctly to avoid close button overlap */}
+                {/* Header Section */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-8 pt-8 pb-6 border-b border-white/5 bg-zinc-950">
                     <div className="space-y-1">
                         <h2 className="text-2xl font-bold tracking-tight text-white">
@@ -331,13 +420,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                                 <motion.div
                                     key={menu.id}
                                     whileHover={{ y: -2 }}
-                                    onClick={(e) => {
-                                        if (menu.is_active) {
-                                            handleResetToFullMenu()
-                                        } else {
-                                            handleApplyMenu(menu.id, e)
-                                        }
-                                    }}
+                                    onClick={() => openEditor(menu)}
                                     className={cn(
                                         "group relative flex flex-col justify-between h-[140px] p-5 rounded-2xl border transition-all cursor-pointer overflow-hidden backdrop-blur-md",
                                         menu.is_active
@@ -352,18 +435,27 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                                         </div>
 
                                         <div className="flex items-center gap-1 z-20">
-                                            {/* Edit Button */}
+                                            {/* Toggle Active/Inactive */}
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-full"
+                                                className={cn(
+                                                    "h-8 w-8 rounded-full",
+                                                    menu.is_active
+                                                        ? "text-amber-500 hover:text-red-400 hover:bg-red-500/10"
+                                                        : "text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10"
+                                                )}
                                                 onClick={(e) => {
                                                     e.stopPropagation()
-                                                    openEditor(menu)
+                                                    if (menu.is_active) {
+                                                        handleResetToFullMenu()
+                                                    } else {
+                                                        handleApplyMenu(menu.id, e)
+                                                    }
                                                 }}
-                                                title="Modifica Menu"
+                                                title={menu.is_active ? "Disattiva" : "Attiva"}
                                             >
-                                                <Pencil size={18} />
+                                                <CheckCircle size={18} weight={menu.is_active ? "fill" : "regular"} />
                                             </Button>
                                         </div>
                                     </div>
@@ -379,8 +471,9 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                                                 ATTIVO ORA
                                             </p>
                                         ) : (
-                                            <p className="text-xs text-zinc-500 group-hover:text-amber-500 transition-colors flex items-center gap-1">
-                                                Clicca per attivare
+                                            <p className="text-xs text-zinc-500 group-hover:text-amber-400 transition-colors flex items-center gap-1">
+                                                <Pencil size={12} />
+                                                Clicca per modificare
                                             </p>
                                         )}
                                     </div>
@@ -417,23 +510,22 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         )
     }
 
-    // --- VIEW: EDITOR (Minimal refinement) ---
+    // --- VIEW: EDITOR ---
     return (
         <div className="flex flex-col h-full w-full bg-zinc-950">
             {/* Header */}
-            <div className="flex items-center justify-between px-10 py-6 border-b border-white/5 bg-zinc-950 pr-12">
-                {/* Added pr-12 to avoid Dialog Close X overlap */}
-                <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between px-6 sm:px-10 py-4 border-b border-white/5 bg-zinc-950 pr-12">
+                <div className="flex items-center gap-3">
                     <Button
                         variant="ghost"
                         size="icon"
                         onClick={closeEditor}
                         className="h-8 w-8 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                        title="Torna indietro"
+                        title="Torna alla lista"
                     >
                         <ArrowLeft size={18} />
                     </Button>
-                    <div className="h-6 w-px bg-zinc-800 mx-2 hidden sm:block" />
+                    <div className="h-6 w-px bg-zinc-800 hidden sm:block" />
                     <div>
                         {editingName ? (
                             <Input
@@ -461,19 +553,14 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                             <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded-full border border-white/5">
                                 {schedules.length} Orari
                             </span>
+                            {hasChanges && (
+                                <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/30 animate-pulse">
+                                    Modifiche non salvate
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
-                {!selectedMenu?.is_active && (
-                    <Button
-                        size="sm"
-                        onClick={() => selectedMenu && handleApplyMenu(selectedMenu.id)}
-                        className="h-8 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-500/20 rounded-lg"
-                    >
-                        <CheckCircle weight="fill" className="mr-1.5" size={14} />
-                        Attiva Ora
-                    </Button>
-                )}
             </div>
 
             <div className="flex flex-1 overflow-hidden">
@@ -529,7 +616,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                                 </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-                                <div className="max-w-5xl mx-auto pb-20">
+                                <div className="max-w-5xl mx-auto pb-28">
                                     {filteredCategories.map(cat => {
                                         const catDishes = dishes.filter(d => d.category_id === cat.id)
                                         if (dishSearch && catDishes.every(d => !d.name.toLowerCase().includes(dishSearch.toLowerCase()))) return null
@@ -540,12 +627,28 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
 
                                         if (visibleDishes.length === 0) return null
 
+                                        const selectedCount = visibleDishes.filter(d => menuDishes.includes(d.id)).length
+                                        const allSelected = selectedCount === visibleDishes.length
+
                                         return (
                                             <div key={cat.id} className="mb-8 last:mb-0">
                                                 <div className="flex items-center gap-4 mb-4">
                                                     <h4 className="text-xs font-bold text-zinc-400 bg-zinc-900/80 px-3 py-1.5 rounded-lg uppercase tracking-widest backdrop-blur-sm sticky top-0 border border-white/5">
                                                         {cat.name}
                                                     </h4>
+                                                    <span className="text-[10px] text-zinc-500">{selectedCount}/{visibleDishes.length}</span>
+                                                    <button
+                                                        className="text-[10px] text-amber-500 hover:text-amber-400 font-medium"
+                                                        onClick={() => {
+                                                            if (allSelected) {
+                                                                setMenuDishes(prev => prev.filter(id => !visibleDishes.some(d => d.id === id)))
+                                                            } else {
+                                                                setMenuDishes(prev => [...new Set([...prev, ...visibleDishes.map(d => d.id)])])
+                                                            }
+                                                        }}
+                                                    >
+                                                        {allSelected ? 'Deseleziona tutti' : 'Seleziona tutti'}
+                                                    </button>
                                                     <div className="h-px bg-zinc-800 flex-1" />
                                                 </div>
 
@@ -574,7 +677,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                                                                     </div>
                                                                     <div className="flex-1 min-w-0 flex flex-col gap-1">
                                                                         <p className={cn("text-sm truncate transition-colors", isSelected ? "font-bold text-white" : "font-medium text-zinc-300 group-hover:text-zinc-100")}>{dish.name}</p>
-                                                                        <p className="text-xs text-zinc-500 font-mono">€{dish.price.toFixed(2)}</p>
+                                                                        <p className="text-xs text-zinc-500 font-mono">&euro;{dish.price.toFixed(2)}</p>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -653,11 +756,50 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                                         </div>
                                     </div>
                                 </div>
-
-
                             </div>
                         </div>
                     )}
+
+                    {/* FIXED SAVE BUTTON BAR */}
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-zinc-950/95 backdrop-blur-md border-t border-white/10 flex items-center justify-between gap-3 z-20">
+                        <div className="text-xs text-zinc-500">
+                            {menuDishes.length} piatti selezionati
+                            {hasChanges && <span className="ml-2 text-amber-400 font-medium">· Modifiche non salvate</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {!selectedMenu?.is_active && menuDishes.length > 0 && (
+                                <Button
+                                    onClick={handleSaveAndActivate}
+                                    disabled={isSaving || menuDishes.length === 0}
+                                    className="h-10 px-5 text-sm font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-lg shadow-amber-500/20 gap-2"
+                                >
+                                    {isSaving ? (
+                                        <div className="w-4 h-4 border-2 rounded-full animate-spin border-white/30 border-t-white" />
+                                    ) : (
+                                        <CheckCircle weight="fill" size={18} />
+                                    )}
+                                    Salva e Attiva
+                                </Button>
+                            )}
+                            <Button
+                                onClick={handleSaveMenu}
+                                disabled={isSaving || !hasChanges}
+                                className={cn(
+                                    "h-10 px-5 text-sm font-bold rounded-xl gap-2 transition-all",
+                                    hasChanges
+                                        ? "bg-white text-black hover:bg-zinc-200 shadow-lg"
+                                        : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                                )}
+                            >
+                                {isSaving ? (
+                                    <div className="w-4 h-4 border-2 rounded-full animate-spin border-black/30 border-t-black" />
+                                ) : (
+                                    <FloppyDisk weight="fill" size={18} />
+                                )}
+                                Salva
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
