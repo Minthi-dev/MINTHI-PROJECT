@@ -628,18 +628,28 @@ export const DatabaseService = {
         return data as TableSession
     },
 
-    async closeSession(sessionId: string) {
+    async closeSession(sessionId: string, closedByName?: string, closedByRole?: string) {
         const { error } = await supabase
             .from('table_sessions')
-            .update({ status: 'CLOSED', closed_at: new Date().toISOString() })
+            .update({
+                status: 'CLOSED',
+                closed_at: new Date().toISOString(),
+                ...(closedByName ? { closed_by_name: closedByName } : {}),
+                ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+            })
             .eq('id', sessionId)
         if (error) throw error
     },
 
-    async closeAllOpenSessionsForTable(tableId: string) {
+    async closeAllOpenSessionsForTable(tableId: string, closedByName?: string, closedByRole?: string) {
         const { error } = await supabase
             .from('table_sessions')
-            .update({ status: 'CLOSED', closed_at: new Date().toISOString() })
+            .update({
+                status: 'CLOSED',
+                closed_at: new Date().toISOString(),
+                ...(closedByName ? { closed_by_name: closedByName } : {}),
+                ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+            })
             .eq('table_id', tableId)
             .eq('status', 'OPEN')
         if (error) throw error

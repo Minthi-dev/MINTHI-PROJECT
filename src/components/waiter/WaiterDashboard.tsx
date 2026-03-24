@@ -625,10 +625,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             }
 
             // Close session
+            const waiterCloseName = user?.name || user?.username || 'Cameriere'
             await DatabaseService.updateSession({
                 ...session,
                 status: 'CLOSED',
-                closed_at: new Date().toISOString()
+                closed_at: new Date().toISOString(),
+                closed_by_name: waiterCloseName,
+                closed_by_role: 'waiter',
             })
 
             await DatabaseService.clearCart(session.id)
@@ -1760,10 +1763,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                     if (sOrdIds && sOrdIds.length > 0) {
                                                         await supabase.from('order_items').update({ status: 'SERVED' }).in('order_id', sOrdIds.map(o => o.id)).neq('status', 'SERVED')
                                                     }
+                                                    const wName = user?.name || user?.username || 'Cameriere'
                                                     await DatabaseService.updateSession({
                                                         ...session,
                                                         status: 'CLOSED',
-                                                        closed_at: new Date().toISOString()
+                                                        closed_at: new Date().toISOString(),
+                                                        closed_by_name: wName,
+                                                        closed_by_role: 'waiter',
                                                     })
                                                     await DatabaseService.clearCart(session.id)
                                                     setSessions(prev => prev.filter(s => s.id !== session.id))

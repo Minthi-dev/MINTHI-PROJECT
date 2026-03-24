@@ -81,6 +81,10 @@ export interface Restaurant {
     billing_cap?: string
     billing_province?: string
     codice_univoco?: string
+    analytics_password_hash?: string
+    demo_completed?: boolean
+    is_active?: boolean
+    subscription_cancel_at?: string
 }
 
 export interface DayMealConfig {
@@ -205,6 +209,8 @@ export interface TableSession {
     receipt_issued?: boolean
     paid_amount?: number
     notes?: string
+    closed_by_name?: string
+    closed_by_role?: string
 }
 
 export interface Room {
