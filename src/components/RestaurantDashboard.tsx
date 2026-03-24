@@ -5019,8 +5019,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       {currentRestaurant?.name || 'Ristorante'}
                     </p>
 
-                    {/* Table Number - Aggressively pushed up to counter the font's huge top-box empty space */}
-                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-12mm 0 16mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                    {/* Table Number - Exact mathematical center interpolated from visual tests */}
+                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-8mm 0 14mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                       {selectedTableForActions?.number}
                     </p>
 
@@ -5262,8 +5262,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Table Number - Aggressively pushed up to counter the font's huge top-box empty space */}
-                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-12mm 0 16mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                      {/* Table Number - Exact mathematical center interpolated from visual tests */}
+                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-8mm 0 14mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                         {table.number}
                       </p>
 
