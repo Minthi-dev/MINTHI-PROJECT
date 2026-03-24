@@ -5004,20 +5004,20 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   color: '#18181b'
                 }}>
                   {/* Restaurant Name */}
-                  <p style={{ fontSize: '16px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#52525b', textAlign: 'center' }}>
+                  <p style={{ fontSize: '20px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#52525b', textAlign: 'center' }}>
                     {currentRestaurant?.name || 'Ristorante'}
                   </p>
 
-                  {/* Spacer below Restaurant Name */}
-                  <div style={{ height: '50px' }} />
+                  {/* Spacer above number */}
+                  <div style={{ height: '45px' }} />
 
                   {/* Table Number */}
                   <p style={{ fontSize: '150px', lineHeight: '1', fontWeight: '300', margin: 0, padding: 0, color: '#18181b', textAlign: 'center' }}>
                     {selectedTableForActions?.number}
                   </p>
 
-                  {/* Large spacer below number to prevent overlap with CTA text */}
-                  <div style={{ height: '60px' }} />
+                  {/* Spacer below number (symmetric with above) */}
+                  <div style={{ height: '45px' }} />
 
                   {/* CTA text */}
                   <p style={{ fontSize: '14px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#3f3f46', textAlign: 'center' }}>
@@ -5250,11 +5250,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       fontFamily: 'Georgia, "Times New Roman", serif'
                     }}>
                       {/* Restaurant Name */}
-                      <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
+                      <p style={{ fontSize: '10px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Spacer below name */}
+                      {/* Spacer above number */}
                       <div style={{ height: '6mm' }} />
 
                       {/* Table Number */}
@@ -5262,8 +5262,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         {table.number}
                       </p>
 
-                      {/* Large spacer below number to prevent overlap with CTA */}
-                      <div style={{ height: '8mm' }} />
+                      {/* Spacer below number (symmetric with above) */}
+                      <div style={{ height: '6mm' }} />
 
                       {/* CTA */}
                       <p style={{ fontSize: '7px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
