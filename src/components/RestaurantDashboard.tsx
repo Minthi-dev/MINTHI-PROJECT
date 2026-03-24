@@ -5004,33 +5004,28 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   color: '#18181b'
                 }}>
                   {/* Restaurant Name */}
-                  <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#52525b', textAlign: 'center' }}>
+                  <p style={{ fontSize: '16px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#3f3f46', textAlign: 'center' }}>
                     {currentRestaurant?.name || 'Ristorante'}
                   </p>
 
-                  {/* Divider */}
-                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '14px 0' }} />
+                  {/* Spacer */}
+                  <div style={{ height: '20px' }} />
 
-                  {/* TAVOLO label */}
-                  <p style={{ fontSize: '10px', fontWeight: '400', margin: '0 0 16px 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
-                    Tavolo
-                  </p>
-
-                  {/* Table Number — exactly between Tavolo and Scansiona */}
-                  <p style={{ fontSize: '86px', lineHeight: '0.9', fontWeight: '300', margin: 0, padding: 0, color: '#18181b', textAlign: 'center' }}>
+                  {/* Table Number — big and prominent */}
+                  <p style={{ fontSize: '130px', lineHeight: '0.85', fontWeight: '300', margin: 0, padding: 0, color: '#18181b', textAlign: 'center' }}>
                     {selectedTableForActions?.number}
                   </p>
 
-                  {/* Equal spacer below number */}
-                  <div style={{ height: '16px' }} />
+                  {/* Spacer */}
+                  <div style={{ height: '20px' }} />
 
-                  {/* CTA text */}
-                  <p style={{ fontSize: '11px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#3f3f46', textAlign: 'center' }}>
+                  {/* CTA text — large and clear */}
+                  <p style={{ fontSize: '14px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#3f3f46', textAlign: 'center' }}>
                     {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                   </p>
 
                   {/* Divider */}
-                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '14px 0 20px 0' }} />
+                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '18px 0' }} />
 
                   {/* QR Code */}
                   <div style={{ padding: '10px', border: '1px solid #e4e4e7', borderRadius: '8px' }}>
@@ -5038,7 +5033,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   </div>
 
                   {/* Pin info */}
-                  <p style={{ fontSize: '7px', fontWeight: '400', margin: '16px 0 0 0', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa', textAlign: 'center' }}>
+                  <p style={{ fontSize: '9px', fontWeight: '400', margin: '18px 0 0 0', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#71717a', textAlign: 'center' }}>
                     Il pin di accesso è fornito dal personale di sala
                   </p>
                 </div>
@@ -5255,33 +5250,28 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       fontFamily: 'Georgia, "Times New Roman", serif'
                     }}>
                       {/* Restaurant Name */}
-                      <p style={{ fontSize: '6px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
+                      <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, color: '#3f3f46', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Divider */}
-                      <div style={{ width: '16px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '2mm 0' }} />
+                      {/* Spacer */}
+                      <div style={{ height: '2mm' }} />
 
-                      {/* Tavolo label */}
-                      <p style={{ fontSize: '5px', fontWeight: '400', margin: '0 0 1.5mm 0', textTransform: 'uppercase', letterSpacing: '0.4em', color: '#a1a1aa', textAlign: 'center' }}>
-                        Tavolo
-                      </p>
-
-                      {/* Table Number — exactly between Tavolo and CTA */}
-                      <p style={{ fontSize: '38px', lineHeight: '0.9', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center' }}>
+                      {/* Table Number — big and prominent */}
+                      <p style={{ fontSize: '52px', lineHeight: '0.85', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center' }}>
                         {table.number}
                       </p>
 
-                      {/* Equal spacer */}
-                      <div style={{ height: '1.5mm' }} />
+                      {/* Spacer */}
+                      <div style={{ height: '2mm' }} />
 
-                      {/* CTA */}
-                      <p style={{ fontSize: '5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
+                      {/* CTA — clear and visible */}
+                      <p style={{ fontSize: '7px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#3f3f46', textAlign: 'center' }}>
                         {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                       </p>
 
                       {/* Divider */}
-                      <div style={{ width: '16px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '2mm 0' }} />
+                      <div style={{ width: '16px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '2.5mm 0' }} />
 
                       {/* QR Code */}
                       <div style={{ padding: '1mm', border: '0.5px solid #e4e4e7', borderRadius: '3px' }}>
@@ -5289,7 +5279,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </div>
 
                       {/* Pin info */}
-                      <p style={{ fontSize: '4px', fontWeight: '400', margin: '2mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
+                      <p style={{ fontSize: '5.5px', fontWeight: '400', margin: '2mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#71717a', textAlign: 'center' }}>
                         Il pin è fornito dal personale di sala
                       </p>
                     </div>
