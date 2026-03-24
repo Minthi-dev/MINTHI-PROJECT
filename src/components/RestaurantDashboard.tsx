@@ -5000,7 +5000,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   backgroundColor: '#FFFFFF',
                   boxSizing: 'border-box',
                 }}>
-                  {/* Unified Card Design (Hugs content) */}
+                  {/* Unified Card Design (Hugs content with ample bottom space) */}
                   <div style={{
                     border: '0.5px solid #e4e4e7',
                     borderRadius: '8px',
@@ -5012,15 +5012,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     boxSizing: 'border-box',
                     fontFamily: 'Georgia, "Times New Roman", serif',
                     backgroundColor: '#FFFFFF',
-                    padding: '8mm 12mm',
+                    padding: '12mm 16mm 24mm 16mm',
                   }}>
                     {/* Restaurant Name */}
                     <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
                       {currentRestaurant?.name || 'Ristorante'}
                     </p>
 
-                    {/* Table Number - Visually symmetric spacing, pushed up */}
-                    <p style={{ fontSize: '90px', lineHeight: '0.7', fontWeight: '300', margin: '4mm 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                    {/* Table Number - lineHeight 1 to prevent box clipping, margin to balance visual height */}
+                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '0 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                       {selectedTableForActions?.number}
                     </p>
 
@@ -5255,15 +5255,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       boxSizing: 'border-box',
                       fontFamily: 'Georgia, "Times New Roman", serif',
                       margin: 'auto',
-                      padding: '8mm 12mm',
+                      padding: '12mm 16mm 24mm 16mm',
                     }}>
                       {/* Restaurant Name */}
                       <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Table Number - Visually symmetric spacing, pushed up */}
-                      <p style={{ fontSize: '90px', lineHeight: '0.7', fontWeight: '300', margin: '4mm 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                      {/* Table Number - lineHeight 1 to prevent box clipping, margin to balance visual height */}
+                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '0 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                         {table.number}
                       </p>
 
