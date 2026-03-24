@@ -17,7 +17,7 @@ import { Badge } from './ui/badge'
 import { Separator } from './ui/separator'
 import { ScrollArea } from './ui/scroll-area'
 import { Textarea } from './ui/textarea'
-import { hashPassword, verifyPassword } from '../utils/passwordUtils'
+import { hashPassword } from '../utils/passwordUtils'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import {
@@ -59,10 +59,7 @@ import {
   Tag,
   CreditCard,
   Camera,
-  ImageSquare,
-  Lock,
-  LockOpen,
-  ShieldCheck
+  ImageSquare
 } from '@phosphor-icons/react'
 import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -111,17 +108,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [activeSection, setActiveSection] = useState('orders')
   const [pendingAutoOrderTableId, setPendingAutoOrderTableId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('orders')
-
-  // Analytics password gate
-  const [analyticsUnlocked, setAnalyticsUnlocked] = useState(false)
-  const [showAnalyticsPasswordDialog, setShowAnalyticsPasswordDialog] = useState(false)
-  const [showAnalyticsSetupDialog, setShowAnalyticsSetupDialog] = useState(false)
-  const [showAnalyticsManageDialog, setShowAnalyticsManageDialog] = useState(false)
-  const [analyticsPasswordInput, setAnalyticsPasswordInput] = useState('')
-  const [analyticsNewPassword, setAnalyticsNewPassword] = useState('')
-  const [analyticsConfirmPassword, setAnalyticsConfirmPassword] = useState('')
-  const [analyticsPasswordVisible, setAnalyticsPasswordVisible] = useState(false)
-  const [analyticsPasswordError, setAnalyticsPasswordError] = useState('')
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
   const [tableSearchTerm, setTableSearchTerm] = useState('')
@@ -729,26 +715,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           if (soundEnabledRef.current) {
             soundManager.play(selectedSoundRef.current)
           }
-        } else if (newNotes !== oldNotes && newNotes.includes('Pagamento')) {
-          // Fallback if paid_amount wasn't updated but notes were (e.g. some split logic scenario)
-          const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
-          const tableNumber = tableObj?.number || '?'
-          toast.success(
-            `Nuova notifica di pagamento: Tavolo ${tableNumber}`,
-            {
-              duration: 10000,
-              action: tableObj ? {
-                label: 'Vedi Conto',
-                onClick: () => {
-                  setSelectedTableForActions(tableObj)
-                  setShowTableBillDialog(true)
-                }
-              } : undefined
-            }
-          )
-          if (soundEnabledRef.current) {
-            soundManager.play(selectedSoundRef.current)
-          }
         }
 
         // Refresh sessions data to update table cards (e.g. purple "Pagato Online" indicator)
@@ -872,8 +838,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [allergenInput, setAllergenInput] = useState('')
   const [showTableQrDialog, setShowTableQrDialog] = useState(false)
   const [isGeneratingTableQrPdf, setIsGeneratingTableQrPdf] = useState(false)
-  const [gridPrintRoomFilter, setGridPrintRoomFilter] = useState<string | null>(null)
-  const [showGridRoomDialog, setShowGridRoomDialog] = useState(false)
   const [showTableBillDialog, setShowTableBillDialog] = useState(false)
   const [selectedTableForActions, setSelectedTableForActions] = useState<Table | null>(null)
   // Confirmation dialog state for close/pay/empty table
@@ -1290,34 +1254,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString()
 
-  const handleDownloadGridPdf = async (roomId: string | null) => {
-    setGridPrintRoomFilter(roomId)
-    setShowGridRoomDialog(false)
-    // Allow state to update before generating
-    await new Promise(r => setTimeout(r, 100))
-    const toastId = toast.loading('Generazione PDF Griglia Tavoli...')
-    try {
-      const element = document.getElementById('tables-grid-print-view')
-      if (element) {
-        element.style.display = 'block'
-        const roomName = roomId ? rooms?.find(r => r.id === roomId)?.name || 'sala' : 'tutte'
-        await generatePdfFromElement('tables-grid-print-view', {
-          fileName: `Tavoli_QR_${roomName}_${restaurantSlug}.pdf`,
-          scale: 2,
-          backgroundColor: '#FFFFFF',
-          orientation: 'portrait'
-        })
-        element.style.display = 'none'
-        toast.success('PDF scaricato!')
-      }
-    } catch (e) {
-      console.error(e)
-      toast.error('Errore generazione PDF')
-    } finally {
-      toast.dismiss(toastId)
-    }
-  }
-
   const generateQrCode = (tableId: string) => {
     // Use VITE_APP_URL for Capacitor/native apps, fallback to window.location.origin for web
     const envUrl = import.meta.env.VITE_APP_URL
@@ -1387,11 +1323,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       }
 
       try {
-        await DatabaseService.closeSession(openSession.id, 'Dashboard', 'owner')
+        await DatabaseService.closeSession(openSession.id)
         if (markPaid) {
           const payMethod = (openSession.paid_amount || 0) > 0 ? 'stripe' : 'cash'
           await DatabaseService.markOrdersPaidForSession(openSession.id, payMethod)
         } else {
+          // FIX: If just emptying the table (not paid), cancel all active orders
+          // so they don't count as "Active" in analytics.
           await DatabaseService.cancelSessionOrders(openSession.id)
         }
 
@@ -2124,23 +2062,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     }`}
                   onClick={() => {
                     const section = item.id
-                    // Analytics password gate
-                    if (section === 'analytics' && !analyticsUnlocked) {
-                      const hasPassword = !!currentRestaurant?.analytics_password_hash
-                      if (hasPassword) {
-                        setAnalyticsPasswordInput('')
-                        setAnalyticsPasswordError('')
-                        setAnalyticsPasswordVisible(false)
-                        setShowAnalyticsPasswordDialog(true)
-                      } else {
-                        setAnalyticsNewPassword('')
-                        setAnalyticsConfirmPassword('')
-                        setAnalyticsPasswordVisible(false)
-                        setShowAnalyticsSetupDialog(true)
-                      }
-                      setIsSidebarOpen(false)
-                      return
-                    }
                     setActiveTab(section)
                     setActiveSection(section)
                     // Auto collapsing logic
@@ -2500,14 +2421,26 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     variant="outline"
                     size="sm"
                     className="h-10 shadow-sm hover:shadow-md transition-shadow border-dashed border-zinc-700 hover:border-amber-500 hover:text-amber-500"
-                    onClick={() => {
-                      // If there are rooms, show selection dialog
-                      if (rooms && rooms.length > 0) {
-                        setGridPrintRoomFilter(null)
-                        setShowGridRoomDialog(true)
-                      } else {
-                        // No rooms, download all
-                        handleDownloadGridPdf(null)
+                    onClick={async () => {
+                      const toastId = toast.loading('Generazione PDF Griglia Tavoli...')
+                      try {
+                        const element = document.getElementById('tables-grid-print-view')
+                        if (element) {
+                          element.style.display = 'block'
+                          await generatePdfFromElement('tables-grid-print-view', {
+                            fileName: `Tavoli_Griglia_${restaurantSlug}.pdf`,
+                            scale: 2,
+                            backgroundColor: '#FFFFFF',
+                            orientation: 'portrait'
+                          })
+                          element.style.display = 'none'
+                          toast.success('PDF scaricato!')
+                        }
+                      } catch (e) {
+                        console.error(e)
+                        toast.error('Errore generazione PDF')
+                      } finally {
+                        toast.dismiss(toastId)
                       }
                     }}
                   >
@@ -2758,11 +2691,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                           <span>{openDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}{closeDate ? ` - ${closeDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
                                           {duration > 0 && <span className="text-zinc-600">({duration}min)</span>}
                                           {session.customer_count && <span className="text-zinc-600">{session.customer_count} cop.</span>}
-                                          {session.closed_by_name && (
-                                            <span className="text-zinc-500 italic">
-                                              Chiuso da: <span className={session.closed_by_role === 'waiter' ? 'text-blue-400' : 'text-amber-400'}>{session.closed_by_name}</span>
-                                            </span>
-                                          )}
                                         </div>
                                       </div>
                                     </div>
@@ -3351,7 +3279,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         }
                                         try {
                                           await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                          await DatabaseService.closeSession(session.id, 'Dashboard', 'owner');
+                                          await DatabaseService.closeSession(session.id);
                                           await DatabaseService.markOrdersPaidForSession(session.id, 'stripe');
                                           toast.success('Scontrino confermato e tavolo chiuso!');
                                           refreshSessions();
@@ -3517,13 +3445,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         dishes={dishes || []}
                         categories={categories || []}
                         onDishesChange={refreshDishes}
-                        weeklyServiceHours={weeklyServiceHours}
-                        onGoToSettings={() => {
-                          setActiveTab('settings')
-                          setActiveSection('settings')
-                          const closeBtn = document.querySelector('[data-radix-collection-item]') as HTMLElement
-                          closeBtn?.click()
-                        }}
+                        weeklyServiceHours={currentRestaurant?.weekly_service_hours}
                         onMenuDeactivated={() => {
                           // Suppress the scheduler until the END of the current meal service
                           const now = new Date()
@@ -3638,52 +3560,50 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                 </Button>
                               </div>
                             </div>
+                            <p className="text-xs text-zinc-500 mb-2">Seleziona le categorie da includere. Clicca su una categoria per espandere e scegliere i singoli piatti.</p>
                             <ScrollArea className="h-[280px] pr-4">
                               <div className="space-y-1">
                                 {restaurantCategories.map(cat => {
                                   const catDishes = restaurantDishes.filter(d => d.category_id === cat.id && d.is_active)
                                   const isCatSelected = exportSelectedCategories.includes(cat.id)
                                   const excludedInCat = catDishes.filter(d => exportExcludedDishes.includes(d.id)).length
+                                  const includedCount = catDishes.length - excludedInCat
                                   return (
-                                    <div key={cat.id}>
-                                      <div className="flex items-center space-x-2 p-2 rounded hover:bg-zinc-900/50">
+                                    <div key={cat.id} className={`rounded-lg border ${isCatSelected ? 'border-amber-500/30 bg-amber-500/5' : 'border-zinc-800/50'} overflow-hidden`}>
+                                      <div className="flex items-center space-x-2 p-2.5 hover:bg-zinc-900/50 cursor-pointer"
+                                        onClick={() => {
+                                          if (isCatSelected && catDishes.length > 0) {
+                                            const el = document.getElementById(`dishes-${cat.id}`)
+                                            if (el) el.classList.toggle('hidden')
+                                          }
+                                        }}
+                                      >
                                         <Checkbox
                                           id={`cat-${cat.id}`}
                                           checked={isCatSelected}
                                           onCheckedChange={(checked) => {
                                             if (checked) {
                                               setExportSelectedCategories([...exportSelectedCategories, cat.id])
-                                              // Re-include all dishes of this category
                                               setExportExcludedDishes(prev => prev.filter(id => !catDishes.some(d => d.id === id)))
                                             } else {
                                               setExportSelectedCategories(exportSelectedCategories.filter(id => id !== cat.id))
                                             }
                                           }}
+                                          onClick={(e) => e.stopPropagation()}
                                         />
-                                        <Label htmlFor={`cat-${cat.id}`} className="flex-1 cursor-pointer font-normal text-zinc-300">
+                                        <Label htmlFor={`cat-${cat.id}`} className="flex-1 cursor-pointer font-medium text-zinc-200 text-sm" onClick={(e) => e.preventDefault()}>
                                           {cat.name}
-                                          {isCatSelected && excludedInCat > 0 && (
-                                            <span className="ml-2 text-xs text-amber-500">({catDishes.length - excludedInCat}/{catDishes.length})</span>
-                                          )}
                                         </Label>
                                         {isCatSelected && catDishes.length > 0 && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.preventDefault()
-                                              const el = document.getElementById(`dishes-${cat.id}`)
-                                              if (el) el.classList.toggle('hidden')
-                                            }}
-                                            className="text-xs text-zinc-500 hover:text-zinc-300 px-2 py-1"
-                                          >
-                                            Piatti
-                                          </button>
+                                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${excludedInCat > 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                                            {includedCount}/{catDishes.length} piatti
+                                          </span>
                                         )}
                                       </div>
                                       {isCatSelected && catDishes.length > 0 && (
-                                        <div id={`dishes-${cat.id}`} className="hidden ml-8 space-y-0.5 pb-2">
+                                        <div id={`dishes-${cat.id}`} className="hidden border-t border-zinc-800/50 bg-black/20 px-3 py-2 space-y-0.5">
                                           {catDishes.map(dish => (
-                                            <div key={dish.id} className="flex items-center space-x-2 py-1 px-2 rounded hover:bg-zinc-900/30">
+                                            <div key={dish.id} className="flex items-center space-x-2 py-1.5 px-2 rounded hover:bg-zinc-900/30">
                                               <Checkbox
                                                 id={`dish-${dish.id}`}
                                                 checked={!exportExcludedDishes.includes(dish.id)}
@@ -4300,33 +4220,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
-              {/* Analytics Password Manage Button */}
-              <div className="flex justify-end mb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-white/10 text-zinc-400 hover:text-amber-500 hover:border-amber-500/30 gap-2"
-                  onClick={() => {
-                    setAnalyticsNewPassword('')
-                    setAnalyticsConfirmPassword('')
-                    setAnalyticsPasswordError('')
-                    setAnalyticsPasswordVisible(false)
-                    setShowAnalyticsManageDialog(true)
-                  }}
-                >
-                  {currentRestaurant?.analytics_password_hash ? (
-                    <>
-                      <Lock size={16} />
-                      Modifica password
-                    </>
-                  ) : (
-                    <>
-                      <LockOpen size={16} />
-                      Configura password analitiche
-                    </>
-                  )}
-                </Button>
-              </div>
               {/* Analytics Content */}
               <AnalyticsCharts
                 orders={restaurantOrders}
@@ -5011,105 +4904,97 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </Button>
               </div>
 
-              {/* Hidden content for PDF generation — Elegant gala style */}
+              {/* Hidden content for PDF generation */}
               <div id="table-qr-pdf-content" style={{ display: 'none', position: 'fixed', top: '-9999px', width: '210mm', height: '297mm', backgroundColor: '#FFFFFF' }}>
                 <div style={{
                   width: '100%',
-                  height: '297mm',
+                  height: '100%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  padding: '15mm',
                   backgroundColor: '#FFFFFF',
                   boxSizing: 'border-box'
                 }}>
                   <div style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1.5px solid #e4e4e7',
+                    borderRadius: '16px',
+                    padding: '45px 50px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: '24px',
                     color: '#000000',
-                    width: '150mm',
+                    width: '140mm',
+                    maxWidth: '100%'
                   }}>
-                    {/* Restaurant Name — top */}
+                    {/* Restaurant Name - TOP */}
                     <p style={{
                       fontSize: '13px',
-                      fontWeight: '400',
-                      margin: '0 0 24px 0',
-                      color: '#18181b',
+                      fontWeight: '600',
+                      margin: 0,
+                      color: '#000000',
                       textTransform: 'uppercase',
-                      letterSpacing: '0.5em',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      letterSpacing: '0.2em',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
                       textAlign: 'center'
                     }}>
                       {currentRestaurant?.name || 'Ristorante'}
                     </p>
 
                     {/* Decorative line */}
-                    <div style={{ width: '50px', height: '0.5px', backgroundColor: '#a1a1aa', margin: '0 0 28px 0' }} />
+                    <div style={{ width: '40px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
 
-                    {/* TAVOLO label */}
+                    {/* Table Label + Number */}
+                    <div style={{ textAlign: 'center' }}>
+                      <p style={{
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        margin: '0 0 6px 0',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.2em',
+                        color: '#71717a',
+                        fontFamily: 'system-ui, -apple-system, sans-serif'
+                      }}>
+                        TAVOLO
+                      </p>
+                      <p style={{
+                        fontSize: '72px',
+                        lineHeight: '1',
+                        fontWeight: '700',
+                        margin: 0,
+                        color: '#000000',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        letterSpacing: '0.02em',
+                        textAlign: 'center'
+                      }}>
+                        {selectedTableForActions?.number}
+                      </p>
+                    </div>
+
+                    {/* Decorative line */}
+                    <div style={{ width: '40px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+
+                    {/* QR Code */}
+                    <div style={{ padding: '12px', border: '1.5px solid #e4e4e7', borderRadius: '12px' }}>
+                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={220} />
+                    </div>
+
+                    {/* CTA */}
                     <p style={{
                       fontSize: '11px',
-                      fontWeight: '400',
-                      margin: '0',
+                      fontWeight: '600',
+                      margin: 0,
                       textTransform: 'uppercase',
-                      letterSpacing: '0.6em',
-                      color: '#71717a',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center'
-                    }}>
-                      Tavolo
-                    </p>
-
-                    {/* Table Number — large, centered, equal spacing above and below */}
-                    <p style={{
-                      fontSize: '100px',
-                      lineHeight: '1',
-                      fontWeight: '300',
-                      margin: '30px 0 30px 0',
-                      padding: '0',
-                      color: '#18181b',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center'
-                    }}>
-                      {selectedTableForActions?.number}
-                    </p>
-
-                    {/* CTA text — ABOVE QR */}
-                    <p style={{
-                      fontSize: '11px',
-                      fontWeight: '400',
-                      margin: '0 0 24px 0',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.25em',
+                      letterSpacing: '0.2em',
                       color: '#52525b',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
                       textAlign: 'center'
                     }}>
                       {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                     </p>
-
-                    {/* QR Code */}
-                    <div style={{ padding: '10px', border: '1px solid #e4e4e7', borderRadius: '4px', marginBottom: '20px' }}>
-                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={240} />
-                    </div>
-
-                    {/* Pin access info */}
-                    <p style={{
-                      fontSize: '9px',
-                      fontWeight: '400',
-                      margin: '0 0 24px 0',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.2em',
-                      color: '#a1a1aa',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center'
-                    }}>
-                      Il pin di accesso è fornito dal personale di sala
-                    </p>
-
-                    {/* Bottom decorative line */}
-                    <div style={{ width: '50px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
                   </div>
                 </div>
               </div>
@@ -5121,34 +5006,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           </Dialog>
 
           {/* Confirmation Dialog for Close/Pay/Empty */}
-          {/* Room Selection for QR Grid Download */}
-          <Dialog open={showGridRoomDialog} onOpenChange={setShowGridRoomDialog}>
-            <DialogContent className="sm:max-w-sm bg-zinc-950 border-zinc-800 text-zinc-100">
-              <DialogHeader>
-                <DialogTitle className="text-lg font-bold text-white">Scarica QR Tavoli</DialogTitle>
-                <DialogDescription className="text-zinc-400">Scegli quale sala scaricare o scarica tutti i tavoli.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 py-2">
-                <Button
-                  className="w-full h-11 justify-start text-left bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-white font-medium"
-                  onClick={() => handleDownloadGridPdf(null)}
-                >
-                  Tutte le Sale
-                </Button>
-                {rooms?.map(room => (
-                  <Button
-                    key={room.id}
-                    variant="outline"
-                    className="w-full h-11 justify-start text-left border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 text-zinc-300 hover:text-white"
-                    onClick={() => handleDownloadGridPdf(room.id)}
-                  >
-                    {room.name}
-                  </Button>
-                ))}
-              </div>
-            </DialogContent>
-          </Dialog>
-
           <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
             <AlertDialogContent className="bg-zinc-950 border-zinc-800 text-white">
               <AlertDialogHeader>
@@ -5249,8 +5106,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     {section.dishes.map(dish => (
                       <div key={dish.id} className="break-inside-avoid" style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
                         {dish.image_url?.trim() && (
-                          <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)', position: 'relative', backgroundColor: '#f4f4f5' }}>
-                            <img src={dish.image_url} alt={dish.name} style={{ width: '60px', height: '60px', objectFit: 'cover', display: 'block' }} />
+                          <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
+                            <img src={dish.image_url} alt={dish.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           </div>
                         )}
                         <div style={{ flex: 1 }}>
@@ -5278,11 +5135,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           <p style={{ color: '#52525b', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', margin: 0 }}>
             {currentRestaurant?.address || ''} {currentRestaurant?.address && currentRestaurant?.phone ? '•' : ''} {currentRestaurant?.phone || ''}
           </p>
-          {/* Footer - no branding */}
+          <p style={{ color: '#3f3f46', fontSize: '9px', marginTop: '8px', letterSpacing: '0.1em' }}>Powered by Minthi</p>
         </div>
       </div>
 
-      {/* HIDDEN GRID PRINT VIEW FOR TABLES - 4 BLOCKS PER PAGE — Elegant gala style */}
+      {/* HIDDEN GRID PRINT VIEW FOR TABLES - 4 BLOCKS PER PAGE */}
       <div id="tables-grid-print-view" style={{
         display: 'none',
         position: 'fixed',
@@ -5291,78 +5148,110 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         width: '210mm',
         backgroundColor: '#FFFFFF',
         color: '#000000',
-        fontFamily: 'Georgia, "Times New Roman", serif'
+        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
+        {/* Generate pages with exactly 4 tables each */}
         {
-          (() => {
-            const tablesToPrint = gridPrintRoomFilter
-              ? restaurantTables.filter(t => t.room_id === gridPrintRoomFilter)
-              : restaurantTables
-            return Array.from({ length: Math.ceil(tablesToPrint.length / 4) }).map((_, pageIndex) => {
-              const pageTables = tablesToPrint.slice(pageIndex * 4, (pageIndex + 1) * 4)
-              return (
-                <div key={pageIndex} style={{
-                  width: '210mm',
-                  height: '297mm',
-                  padding: '8mm',
-                  backgroundColor: '#FFFFFF',
-                  boxSizing: 'border-box',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gridTemplateRows: '1fr 1fr',
-                  gap: '6mm',
-                  pageBreakAfter: pageIndex < Math.ceil(tablesToPrint.length / 4) - 1 ? 'always' : 'auto'
-                }}>
-                  {pageTables.map((table) => (
+          Array.from({ length: Math.ceil(restaurantTables.length / 4) }).map((_, pageIndex) => {
+            const pageTables = restaurantTables.slice(pageIndex * 4, (pageIndex + 1) * 4)
+            return (
+              <div key={pageIndex} style={{
+                width: '210mm',
+                height: '297mm',
+                padding: '10mm',
+                backgroundColor: '#FFFFFF',
+                boxSizing: 'border-box',
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gridTemplateRows: '1fr 1fr',
+                gap: '8mm',
+                pageBreakAfter: pageIndex < Math.ceil(restaurantTables.length / 4) - 1 ? 'always' : 'auto'
+              }}>
+                {
+                  pageTables.map((table) => (
                     <div key={table.id} style={{
                       backgroundColor: '#FFFFFF',
-                      border: '1px solid #d4d4d8',
-                      borderRadius: '3px',
-                      padding: '4mm',
+                      border: '1.5px solid #e4e4e7',
+                      borderRadius: '10px',
+                      padding: '6mm',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '2.5mm',
+                      gap: '4mm',
                       color: '#000000',
                       boxSizing: 'border-box'
                     }}>
-                      {/* Restaurant Name */}
-                      <p style={{ fontSize: '7px', fontWeight: '400', margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.4em', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
+                      {/* Restaurant Name - TOP */}
+                      <p style={{
+                        fontSize: '8px',
+                        fontWeight: '600',
+                        margin: 0,
+                        color: '#000000',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.2em',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        textAlign: 'center'
+                      }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
-                      <div style={{ width: '20px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
 
-                      {/* Tavolo label */}
-                      <p style={{ fontSize: '7px', fontWeight: '400', margin: '0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#71717a', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        Tavolo
-                      </p>
-                      {/* Table Number — equal spacing above and below */}
-                      <p style={{ fontSize: '48px', lineHeight: '1', fontWeight: '300', margin: '4mm 0 4mm 0', color: '#18181b', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        {table.number}
-                      </p>
+                      {/* Decorative line */}
+                      <div style={{ width: '16px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
 
-                      {/* CTA above QR */}
-                      <p style={{ fontSize: '6px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#52525b', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
-                      </p>
-
-                      {/* QR Code */}
-                      <div style={{ padding: '2mm', border: '0.5px solid #e4e4e7', borderRadius: '2px' }}>
-                        <QRCodeGenerator value={generateQrCode(table.id)} size={120} />
+                      {/* Table Label + Number */}
+                      <div style={{ textAlign: 'center' }}>
+                        <p style={{
+                          fontSize: '7px',
+                          fontWeight: '600',
+                          margin: '0 0 3px 0',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.2em',
+                          color: '#71717a',
+                          fontFamily: 'system-ui, -apple-system, sans-serif'
+                        }}>
+                          TAVOLO
+                        </p>
+                        <p style={{
+                          fontSize: '40px',
+                          lineHeight: '1',
+                          fontWeight: '700',
+                          margin: 0,
+                          color: '#000000',
+                          fontFamily: 'system-ui, -apple-system, sans-serif',
+                          letterSpacing: '0.02em',
+                          textAlign: 'center'
+                        }}>
+                          {table.number}
+                        </p>
                       </div>
 
-                      {/* Pin info */}
-                      <p style={{ fontSize: '5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        Il pin di accesso è fornito dal personale di sala
+                      {/* Decorative line */}
+                      <div style={{ width: '16px', height: '1px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+
+                      {/* QR Code */}
+                      <div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <QRCodeGenerator value={generateQrCode(table.id)} size={130} />
+                      </div>
+
+                      {/* CTA */}
+                      <p style={{
+                        fontSize: '7px',
+                        fontWeight: '600',
+                        margin: 0,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.2em',
+                        color: '#52525b',
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                        textAlign: 'center'
+                      }}>
+                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                       </p>
-                      <div style={{ width: '20px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
                     </div>
                   ))}
-                </div>
-              )
-            })
-          })()
+              </div>
+            )
+          })
         }
       </div>
 
@@ -5416,233 +5305,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           }}
         />
       )}
-
-      {/* Analytics Password — Enter Password Dialog */}
-      <Dialog open={showAnalyticsPasswordDialog} onOpenChange={setShowAnalyticsPasswordDialog}>
-        <DialogContent className="sm:max-w-sm bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Lock size={22} className="text-amber-500" />
-              Accesso Analitiche
-            </DialogTitle>
-            <DialogDescription className="text-zinc-400 text-sm mt-1">
-              Inserisci la password per accedere alle analitiche
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="relative">
-              <Input
-                type={analyticsPasswordVisible ? 'text' : 'password'}
-                value={analyticsPasswordInput}
-                onChange={e => { setAnalyticsPasswordInput(e.target.value); setAnalyticsPasswordError('') }}
-                placeholder="Password..."
-                className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
-                onKeyDown={async e => {
-                  if (e.key === 'Enter' && analyticsPasswordInput) {
-                    const ok = await verifyPassword(analyticsPasswordInput, currentRestaurant?.analytics_password_hash || '')
-                    if (ok) {
-                      setAnalyticsUnlocked(true)
-                      setShowAnalyticsPasswordDialog(false)
-                      setActiveTab('analytics')
-                      setActiveSection('analytics')
-                    } else {
-                      setAnalyticsPasswordError('Password errata')
-                    }
-                  }
-                }}
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-              >
-                {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-            {analyticsPasswordError && (
-              <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
-            )}
-            <Button
-              className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
-              onClick={async () => {
-                const ok = await verifyPassword(analyticsPasswordInput, currentRestaurant?.analytics_password_hash || '')
-                if (ok) {
-                  setAnalyticsUnlocked(true)
-                  setShowAnalyticsPasswordDialog(false)
-                  setActiveTab('analytics')
-                  setActiveSection('analytics')
-                } else {
-                  setAnalyticsPasswordError('Password errata')
-                }
-              }}
-              disabled={!analyticsPasswordInput}
-            >
-              Accedi
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Analytics Password — First Time Setup Dialog */}
-      <Dialog open={showAnalyticsSetupDialog} onOpenChange={setShowAnalyticsSetupDialog}>
-        <DialogContent className="sm:max-w-sm bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <ShieldCheck size={22} className="text-amber-500" />
-              Proteggi le Analitiche
-            </DialogTitle>
-            <DialogDescription className="text-zinc-400 text-sm mt-1">
-              Imposta una password per impedire ai cuochi di vedere le analitiche. Puoi farlo anche dopo.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="relative">
-              <Input
-                type={analyticsPasswordVisible ? 'text' : 'password'}
-                value={analyticsNewPassword}
-                onChange={e => setAnalyticsNewPassword(e.target.value)}
-                placeholder="Nuova password..."
-                className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-              >
-                {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-            <div className="relative">
-              <Input
-                type={analyticsPasswordVisible ? 'text' : 'password'}
-                value={analyticsConfirmPassword}
-                onChange={e => setAnalyticsConfirmPassword(e.target.value)}
-                placeholder="Conferma password..."
-                className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
-              />
-            </div>
-            {analyticsPasswordError && (
-              <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
-            )}
-            <Button
-              className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
-              onClick={async () => {
-                if (analyticsNewPassword.length < 4) {
-                  setAnalyticsPasswordError('La password deve avere almeno 4 caratteri')
-                  return
-                }
-                if (analyticsNewPassword !== analyticsConfirmPassword) {
-                  setAnalyticsPasswordError('Le password non corrispondono')
-                  return
-                }
-                const hashed = await hashPassword(analyticsNewPassword)
-                await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', restaurantId)
-                await refreshRestaurants()
-                setAnalyticsUnlocked(true)
-                setShowAnalyticsSetupDialog(false)
-                setActiveTab('analytics')
-                setActiveSection('analytics')
-                toast.success('Password analitiche impostata')
-              }}
-              disabled={!analyticsNewPassword || !analyticsConfirmPassword}
-            >
-              Imposta Password
-            </Button>
-            <Button
-              variant="ghost"
-              className="w-full h-10 text-zinc-400 hover:text-zinc-200"
-              onClick={() => {
-                setAnalyticsUnlocked(true)
-                setShowAnalyticsSetupDialog(false)
-                setActiveTab('analytics')
-                setActiveSection('analytics')
-              }}
-            >
-              Salta per ora
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Analytics Password — Manage Dialog (change/remove) */}
-      <Dialog open={showAnalyticsManageDialog} onOpenChange={setShowAnalyticsManageDialog}>
-        <DialogContent className="sm:max-w-sm bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <Gear size={22} className="text-amber-500" />
-              Gestisci Password Analitiche
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div className="relative">
-              <Input
-                type={analyticsPasswordVisible ? 'text' : 'password'}
-                value={analyticsNewPassword}
-                onChange={e => setAnalyticsNewPassword(e.target.value)}
-                placeholder="Nuova password..."
-                className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
-                autoFocus
-              />
-              <button
-                type="button"
-                onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-              >
-                {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-            <div className="relative">
-              <Input
-                type={analyticsPasswordVisible ? 'text' : 'password'}
-                value={analyticsConfirmPassword}
-                onChange={e => setAnalyticsConfirmPassword(e.target.value)}
-                placeholder="Conferma password..."
-                className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
-              />
-            </div>
-            {analyticsPasswordError && (
-              <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
-            )}
-            <Button
-              className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
-              onClick={async () => {
-                if (analyticsNewPassword.length < 4) {
-                  setAnalyticsPasswordError('La password deve avere almeno 4 caratteri')
-                  return
-                }
-                if (analyticsNewPassword !== analyticsConfirmPassword) {
-                  setAnalyticsPasswordError('Le password non corrispondono')
-                  return
-                }
-                const hashed = await hashPassword(analyticsNewPassword)
-                await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', restaurantId)
-                await refreshRestaurants()
-                setShowAnalyticsManageDialog(false)
-                toast.success('Password analitiche aggiornata')
-              }}
-              disabled={!analyticsNewPassword || !analyticsConfirmPassword}
-            >
-              Salva Nuova Password
-            </Button>
-            {currentRestaurant?.analytics_password_hash && (
-              <Button
-                variant="ghost"
-                className="w-full h-10 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                onClick={async () => {
-                  await supabase.from('restaurants').update({ analytics_password_hash: null }).eq('id', restaurantId)
-                  await refreshRestaurants()
-                  setShowAnalyticsManageDialog(false)
-                  toast.success('Password analitiche rimossa')
-                }}
-              >
-                Rimuovi Password
-              </Button>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

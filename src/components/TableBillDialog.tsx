@@ -315,11 +315,7 @@ export default function TableBillDialog({
                 return sum + (item?.price || 0)
             }, 0)
 
-            toast.success(`Pagamento per piatti ricevuto: €${totalPaid.toFixed(2)}`, {
-                icon: '💰',
-                duration: 4000,
-                style: { background: '#422006', border: '1px solid #f59e0b', color: '#fef3c7' }
-            })
+            toast.success(`Piatti saldati: €${totalPaid.toFixed(2)}`, { duration: 3000 })
             // Stay in split mode so user can continue paying other items
             setSelectedSplitItems(new Set())
 
@@ -771,10 +767,7 @@ export default function TableBillDialog({
                                                     onClick={() => {
                                                         const newPaid = Math.min(customSplitCount, paidPersons + 1)
                                                         setPaidPersons(newPaid)
-                                                        toast.success(`Pagamento ${newPaid}/${customSplitCount} ricevuto: €${(totalAmount / Math.max(1, customSplitCount)).toFixed(2)}`, {
-                                                            icon: '💰',
-                                                            duration: 3000,
-                                                        })
+                                                        toast.success(`Quota ${newPaid}/${customSplitCount} segnata: €${(totalAmount / Math.max(1, customSplitCount)).toFixed(2)}`, { duration: 2000 })
                                                     }}
                                                     disabled={paidPersons >= customSplitCount}
                                                 >
@@ -829,11 +822,7 @@ export default function TableBillDialog({
                                             className="flex-1 h-12 bg-green-600 hover:bg-green-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-green-500/20 disabled:opacity-40"
                                             disabled={paidPersons < customSplitCount}
                                             onClick={() => {
-                                                toast.success(`Pagamento alla romana completato! Tavolo ${table?.number}: €${totalAmount.toFixed(2)} (${customSplitCount} persone)`, {
-                                                    icon: '✅',
-                                                    duration: 5000,
-                                                    style: { background: '#052e16', border: '1px solid #22c55e', color: '#bbf7d0' }
-                                                })
+                                                toast.success(`Tavolo ${table?.number} saldato alla romana`, { duration: 3000 })
                                                 onPaymentComplete()
                                             }}
                                         >
@@ -870,11 +859,7 @@ export default function TableBillDialog({
                                         <Button
                                             className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xl rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 px-6"
                                             onClick={() => {
-                                                toast.success(`Pagamento confermato! Tavolo ${table?.number} saldato: €${totalAmount.toFixed(2)}`, {
-                                                    icon: '✅',
-                                                    duration: 5000,
-                                                    style: { background: '#052e16', border: '1px solid #22c55e', color: '#bbf7d0' }
-                                                })
+                                                toast.success(`Tavolo ${table?.number} saldato`, { duration: 3000 })
                                                 onPaymentComplete()
                                             }}
                                         >
@@ -885,11 +870,7 @@ export default function TableBillDialog({
                                         <Button
                                             className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xl rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between px-6"
                                             onClick={() => {
-                                                toast.success(`Pagamento ricevuto! Tavolo ${table?.number}: €${remainingAmount.toFixed(2)}`, {
-                                                    icon: '💰',
-                                                    duration: 5000,
-                                                    style: { background: '#422006', border: '1px solid #f59e0b', color: '#fef3c7' }
-                                                })
+                                                toast.success(`Tavolo ${table?.number} saldato`, { duration: 3000 })
                                                 onPaymentComplete()
                                             }}
                                             disabled={remainingAmount <= 0 && totalAmount <= 0}
