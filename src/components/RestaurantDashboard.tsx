@@ -5015,12 +5015,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     padding: '12mm 16mm 24mm 16mm',
                   }}>
                     {/* Restaurant Name */}
-                    <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
+                    <p style={{ fontSize: '18px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
                       {currentRestaurant?.name || 'Ristorante'}
                     </p>
 
-                    {/* Table Number - lineHeight 1 to prevent box clipping, margin to balance visual height */}
-                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '0 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                    {/* Table Number - Negative top-margin to cut Georgia ascender, large bottom margin for symmetry */}
+                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-10mm 0 20mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                       {selectedTableForActions?.number}
                     </p>
 
@@ -5258,12 +5258,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       padding: '12mm 16mm 24mm 16mm',
                     }}>
                       {/* Restaurant Name */}
-                      <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
+                      <p style={{ fontSize: '18px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Table Number - lineHeight 1 to prevent box clipping, margin to balance visual height */}
-                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '0 0 10mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                      {/* Table Number - Negative top-margin to cut Georgia ascender, large bottom margin for symmetry */}
+                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-10mm 0 20mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
                         {table.number}
                       </p>
 
