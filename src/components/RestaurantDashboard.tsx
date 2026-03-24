@@ -4279,33 +4279,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
-              {/* Analytics Password Manage Button — left-aligned */}
-              <div className="flex justify-start mb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-white/10 text-zinc-400 hover:text-amber-500 hover:border-amber-500/30 gap-2"
-                  onClick={() => {
-                    setAnalyticsNewPassword('')
-                    setAnalyticsConfirmPassword('')
-                    setAnalyticsPasswordError('')
-                    setAnalyticsPasswordVisible(false)
-                    setShowAnalyticsManageDialog(true)
-                  }}
-                >
-                  {currentRestaurant?.analytics_password_hash ? (
-                    <>
-                      <Lock size={16} />
-                      Modifica password
-                    </>
-                  ) : (
-                    <>
-                      <LockOpen size={16} />
-                      Configura password analitiche
-                    </>
-                  )}
-                </Button>
-              </div>
               {/* Analytics Content */}
               <AnalyticsCharts
                 orders={restaurantOrders}
@@ -4314,6 +4287,32 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 completedOrders={pastOrders}
                 restaurantName={restaurantName}
                 restaurantId={restaurantId || ''}
+                passwordButton={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300 hover:text-amber-500 hover:border-amber-500/30 gap-2"
+                    onClick={() => {
+                      setAnalyticsNewPassword('')
+                      setAnalyticsConfirmPassword('')
+                      setAnalyticsPasswordError('')
+                      setAnalyticsPasswordVisible(false)
+                      setShowAnalyticsManageDialog(true)
+                    }}
+                  >
+                    {currentRestaurant?.analytics_password_hash ? (
+                      <>
+                        <Lock size={16} />
+                        Modifica password
+                      </>
+                    ) : (
+                      <>
+                        <LockOpen size={16} />
+                        Configura password analitiche
+                      </>
+                    )}
+                  </Button>
+                }
               />
             </TabsContent >
 
@@ -5029,7 +5028,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     <p style={{
                       fontSize: '11px',
                       fontWeight: '500',
-                      margin: '0 0 16px 0',
+                      margin: '0',
                       textTransform: 'uppercase',
                       letterSpacing: '0.4em',
                       color: '#71717a',
@@ -5039,12 +5038,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       Tavolo
                     </p>
 
-                    {/* Table Number — equal margin top and bottom */}
+                    {/* Table Number — vertically centered between Tavolo label and Scansiona text */}
                     <p style={{
                       fontSize: '90px',
                       lineHeight: '1',
                       fontWeight: '700',
-                      margin: '0 0 16px 0',
+                      margin: '24px 0',
                       color: '#18181b',
                       fontFamily: 'system-ui, -apple-system, sans-serif',
                       textAlign: 'center'
@@ -5313,11 +5312,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       <div style={{ width: '16px', height: '0.5px', backgroundColor: '#a1a1aa', margin: '0 0 2mm 0' }} />
 
                       {/* Tavolo label */}
-                      <p style={{ fontSize: '6px', fontWeight: '500', margin: '0 0 1.5mm 0', textTransform: 'uppercase', letterSpacing: '0.3em', color: '#71717a', fontFamily: 'system-ui, -apple-system, sans-serif', textAlign: 'center' }}>
+                      <p style={{ fontSize: '6px', fontWeight: '500', margin: '0', textTransform: 'uppercase', letterSpacing: '0.3em', color: '#71717a', fontFamily: 'system-ui, -apple-system, sans-serif', textAlign: 'center' }}>
                         Tavolo
                       </p>
-                      {/* Table Number */}
-                      <p style={{ fontSize: '44px', lineHeight: '1', fontWeight: '700', margin: '0 0 1.5mm 0', color: '#18181b', fontFamily: 'system-ui, -apple-system, sans-serif', textAlign: 'center' }}>
+                      {/* Table Number — vertically centered */}
+                      <p style={{ fontSize: '44px', lineHeight: '1', fontWeight: '700', margin: '2.5mm 0', color: '#18181b', fontFamily: 'system-ui, -apple-system, sans-serif', textAlign: 'center' }}>
                         {table.number}
                       </p>
 

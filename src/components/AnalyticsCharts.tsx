@@ -24,6 +24,7 @@ interface AnalyticsChartsProps {
   categories: Category[]
   restaurantName?: string
   restaurantId?: string
+  passwordButton?: React.ReactNode
 }
 
 type DateFilter = 'today' | 'yesterday' | 'week' | '2weeks' | 'month' | '3months' | 'custom'
@@ -67,7 +68,7 @@ interface HourlyData {
 
 type FilteredOrder = Order & { filteredItems?: OrderItem[]; filteredAmount?: number }
 
-export default function AnalyticsCharts({ orders, completedOrders, dishes, categories, restaurantName = 'Ristorante', restaurantId }: AnalyticsChartsProps) {
+export default function AnalyticsCharts({ orders, completedOrders, dishes, categories, restaurantName = 'Ristorante', restaurantId, passwordButton }: AnalyticsChartsProps) {
   const [dateFilter, setDateFilter] = useState<DateFilter>('week')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
@@ -628,6 +629,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
             <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Visualizza statistiche e report</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {passwordButton}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300">
