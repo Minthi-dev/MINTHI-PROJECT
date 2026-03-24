@@ -2223,49 +2223,52 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         {/* COURSE SUGGESTIONS MODAL */}
         <Dialog open={showCourseSuggestions} onOpenChange={setShowCourseSuggestions}>
           <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl w-[90vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
-            <div className="p-5 space-y-4">
-              <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold tracking-wide" style={{ color: theme.textPrimary }}>
-                  Vuoi ordinare anche...?
+            <DialogHeader className="sr-only">
+              <DialogTitle>Suggerimenti portate</DialogTitle>
+            </DialogHeader>
+            <div className="p-6 space-y-5">
+              <div className="text-center space-y-1.5">
+                <p className="text-2xl">🍽</p>
+                <h3 className="text-lg font-bold" style={{ color: theme.textPrimary }}>
+                  Ti piacerebbe ordinare anche...
                 </h3>
                 <p className="text-xs" style={{ color: theme.textMuted }}>
-                  {courseSplittingEnabled ? 'Verrà aggiunto come portata successiva' : 'Sfoglia le altre categorie'}
+                  {courseSplittingEnabled ? 'Verrà aggiunto come portata successiva' : 'Scopri le altre categorie del menù'}
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {suggestedCategories.map(cat => (
+              <div className="space-y-2">
+                {suggestedCategories.slice(0, 6).map(cat => (
                   <button
                     key={cat.id}
                     onClick={() => {
                       setShowCourseSuggestions(false)
-                      // If course splitting is enabled, advance to next course
                       if (courseSplittingEnabled) {
                         const newCourse = maxCourse + 1
                         setMaxCourse(newCourse)
                         setCurrentCourse(newCourse)
                       }
-                      // Navigate to the category
                       scrollToCategory(cat.id)
                     }}
-                    className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                    className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
                     style={{
-                      backgroundColor: theme.primaryAlpha(0.1),
-                      border: `1px solid ${theme.primaryAlpha(0.25)}`,
+                      backgroundColor: theme.primaryAlpha(0.08),
+                      border: `1.5px solid ${theme.primaryAlpha(0.2)}`,
                       color: theme.primary
                     }}
                   >
-                    {cat.name}
+                    <span>{cat.name}</span>
+                    <span style={{ color: theme.primaryAlpha(0.5), fontSize: '18px' }}>›</span>
                   </button>
                 ))}
               </div>
 
               <button
                 onClick={() => setShowCourseSuggestions(false)}
-                className="w-full py-2.5 rounded-xl text-sm font-medium transition-colors"
+                className="w-full py-3 rounded-xl text-sm font-medium transition-colors"
                 style={{ color: theme.textMuted, backgroundColor: theme.cardBg }}
               >
-                No grazie
+                No grazie, ho finito
               </button>
             </div>
           </DialogContent>
