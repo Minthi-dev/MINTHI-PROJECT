@@ -402,7 +402,7 @@ export const DatabaseService = {
         return data
     },
 
-    async _compressImage(file: File, maxWidth = 800, quality = 0.7): Promise<File> {
+    async _compressImage(file: File, maxWidth = 1200, quality = 0.65): Promise<File> {
         return new Promise((resolve) => {
             const img = new Image()
             const canvas = document.createElement('canvas')
@@ -412,9 +412,12 @@ export const DatabaseService = {
                 img.onload = () => {
                     let w = img.width
                     let h = img.height
-                    if (w > maxWidth) {
-                        h = Math.round((h * maxWidth) / w)
-                        w = maxWidth
+                    const maxHeight = 1200
+                    // Scale down to fit within maxWidth x maxHeight
+                    if (w > maxWidth || h > maxHeight) {
+                        const ratio = Math.min(maxWidth / w, maxHeight / h)
+                        w = Math.round(w * ratio)
+                        h = Math.round(h * ratio)
                     }
                     canvas.width = w
                     canvas.height = h
@@ -436,7 +439,7 @@ export const DatabaseService = {
 
     // Storage
     _validateUpload(file: File) {
-        const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+        const MAX_SIZE = 20 * 1024 * 1024 // 20MB — compressione automatica dopo
         const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
         if (!ALLOWED_TYPES.includes(file.type)) {
             throw new Error('Tipo file non supportato. Usa JPEG, PNG o WebP.')

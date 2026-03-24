@@ -146,32 +146,29 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         return sorted1.some((id, i) => id !== sorted2[i])
     }, [menuDishes, initialMenuDishes])
 
+    // Save dishes via RPC (bypasses RLS issues)
+    const saveDishesViaRpc = async () => {
+        if (!selectedMenu) return
+        const toAdd = menuDishes.filter(id => !initialMenuDishes.includes(id))
+        const toRemove = initialMenuDishes.filter(id => !menuDishes.includes(id))
+
+        if (toAdd.length > 0 || toRemove.length > 0) {
+            const { error } = await supabase.rpc('save_custom_menu_dishes', {
+                p_menu_id: selectedMenu.id,
+                p_dish_ids_to_add: toAdd,
+                p_dish_ids_to_remove: toRemove
+            })
+            if (error) throw error
+        }
+    }
+
     // SAVE: persist all dish changes to DB, then apply if menu is active
     const handleSaveMenu = async () => {
         if (!selectedMenu) return
         setIsSaving(true)
 
         try {
-            // Calculate diff
-            const toAdd = menuDishes.filter(id => !initialMenuDishes.includes(id))
-            const toRemove = initialMenuDishes.filter(id => !menuDishes.includes(id))
-
-            // Batch insert new dishes
-            if (toAdd.length > 0) {
-                const { error } = await supabase.from('custom_menu_dishes').insert(
-                    toAdd.map(dishId => ({ custom_menu_id: selectedMenu.id, dish_id: dishId }))
-                )
-                if (error) throw error
-            }
-
-            // Batch delete removed dishes
-            if (toRemove.length > 0) {
-                const { error } = await supabase.from('custom_menu_dishes')
-                    .delete()
-                    .eq('custom_menu_id', selectedMenu.id)
-                    .in('dish_id', toRemove)
-                if (error) throw error
-            }
+            await saveDishesViaRpc()
 
             // If menu is currently active, re-apply it to sync dish visibility
             if (selectedMenu.is_active) {
@@ -180,13 +177,11 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                 onDishesChange()
             }
 
-            // Update initial state to match
             setInitialMenuDishes([...menuDishes])
             toast.success('Menu salvato!')
         } catch (err) {
             console.error('Error saving menu:', err)
             toast.error('Errore durante il salvataggio')
-            // Revert to DB state
             await fetchMenuDetails(selectedMenu.id)
         } finally {
             setIsSaving(false)
@@ -199,30 +194,11 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         setIsSaving(true)
 
         try {
-            // Calculate diff
-            const toAdd = menuDishes.filter(id => !initialMenuDishes.includes(id))
-            const toRemove = initialMenuDishes.filter(id => !menuDishes.includes(id))
-
-            if (toAdd.length > 0) {
-                const { error } = await supabase.from('custom_menu_dishes').insert(
-                    toAdd.map(dishId => ({ custom_menu_id: selectedMenu.id, dish_id: dishId }))
-                )
-                if (error) throw error
-            }
-
-            if (toRemove.length > 0) {
-                const { error } = await supabase.from('custom_menu_dishes')
-                    .delete()
-                    .eq('custom_menu_id', selectedMenu.id)
-                    .in('dish_id', toRemove)
-                if (error) throw error
-            }
+            await saveDishesViaRpc()
 
             // Apply (activate) the menu
             const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: selectedMenu.id })
             if (error) throw error
-
-            await supabase.from('custom_menus').update({ updated_at: new Date().toISOString() }).eq('id', selectedMenu.id)
 
             setInitialMenuDishes([...menuDishes])
             setSelectedMenu({ ...selectedMenu, is_active: true })
@@ -426,86 +402,84 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {customMenus.map(menu => (
-                                <motion.div
+                                <div
                                     key={menu.id}
-                                    whileHover={{ y: -2 }}
-                                    onClick={() => openEditor(menu)}
                                     className={cn(
-                                        "group relative flex flex-col justify-between h-[140px] p-5 rounded-2xl border transition-all cursor-pointer overflow-hidden backdrop-blur-md",
+                                        "group relative flex flex-col p-5 rounded-2xl border transition-all overflow-hidden",
                                         menu.is_active
-                                            ? "ring-1 ring-amber-500/50 border-amber-500/50 bg-gradient-to-br from-zinc-900 to-amber-950/20 shadow-[0_8px_30px_rgb(245,158,11,0.15)]"
-                                            : "border-white/5 bg-zinc-900/40 hover:border-white/10 hover:bg-zinc-900/60 shadow-lg"
+                                            ? "ring-1 ring-amber-500/40 border-amber-500/40 bg-zinc-900"
+                                            : "border-white/5 bg-zinc-900/60 hover:border-white/10"
                                     )}
                                 >
-                                    {/* Action Header */}
-                                    <div className="flex justify-between items-start z-10">
-                                        <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-500 mb-3 group-hover:bg-amber-500 group-hover:text-black transition-colors duration-300">
-                                            <ForkKnife size={20} weight={menu.is_active ? "fill" : "regular"} />
-                                        </div>
-
-                                        <div className="flex items-center gap-1 z-20">
-                                            {/* Toggle Active/Inactive */}
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className={cn(
-                                                    "h-8 w-8 rounded-full",
-                                                    menu.is_active
-                                                        ? "text-amber-500 hover:text-red-400 hover:bg-red-500/10"
-                                                        : "text-zinc-500 hover:text-amber-500 hover:bg-amber-500/10"
+                                    {/* Menu Info */}
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className={cn("p-2 rounded-lg", menu.is_active ? "bg-amber-500/15 text-amber-500" : "bg-zinc-800 text-zinc-400")}>
+                                                <ForkKnife size={20} weight={menu.is_active ? "fill" : "regular"} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-base text-white">{menu.name}</h3>
+                                                {menu.is_active && (
+                                                    <p className="text-xs font-bold text-amber-500 flex items-center gap-1.5 mt-0.5">
+                                                        <span className="relative flex h-2 w-2">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                                        </span>
+                                                        ATTIVO
+                                                    </p>
                                                 )}
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    if (menu.is_active) {
-                                                        handleResetToFullMenu()
-                                                    } else {
-                                                        handleApplyMenu(menu.id, e)
-                                                    }
-                                                }}
-                                                title={menu.is_active ? "Disattiva" : "Attiva"}
-                                            >
-                                                <CheckCircle size={18} weight={menu.is_active ? "fill" : "regular"} />
-                                            </Button>
+                                            </div>
                                         </div>
-                                    </div>
-
-                                    <div className="mt-1">
-                                        <h3 className="font-bold text-base truncate mb-1 pr-4 text-white">{menu.name}</h3>
-                                        {menu.is_active ? (
-                                            <p className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
-                                                <span className="relative flex h-2 w-2">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                                                </span>
-                                                ATTIVO ORA
-                                            </p>
-                                        ) : (
-                                            <p className="text-xs text-zinc-500 group-hover:text-amber-400 transition-colors flex items-center gap-1">
-                                                <Pencil size={12} />
-                                                Clicca per modificare
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {/* Delete - Bottom Right */}
-                                    <div className="absolute bottom-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <Button
                                             size="icon"
                                             variant="ghost"
-                                            className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-full"
+                                            className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                                             onClick={(e) => handleDeleteMenu(menu.id, e)}
                                             title="Elimina"
                                         >
                                             <Trash size={16} />
                                         </Button>
                                     </div>
-                                </motion.div>
+
+                                    {/* Clear action buttons */}
+                                    <div className="flex gap-2 mt-auto">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="flex-1 h-10 text-sm font-semibold border-white/10 bg-zinc-800 hover:bg-zinc-700 text-white"
+                                            onClick={() => openEditor(menu)}
+                                        >
+                                            <Pencil size={14} className="mr-1.5" />
+                                            Modifica
+                                        </Button>
+                                        {menu.is_active ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 h-10 text-sm font-semibold border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                                onClick={(e) => { e.stopPropagation(); handleResetToFullMenu() }}
+                                            >
+                                                <X size={14} className="mr-1.5" />
+                                                Disattiva
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                size="sm"
+                                                className="flex-1 h-10 text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white"
+                                                onClick={(e) => { e.stopPropagation(); handleApplyMenu(menu.id, e) }}
+                                            >
+                                                <CheckCircle size={14} weight="fill" className="mr-1.5" />
+                                                Attiva
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
                             ))}
 
                             {/* Empty State Card */}
                             <button
                                 onClick={() => setShowCreateDialog(true)}
-                                className="h-[140px] rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 hover:border-amber-500/30 hover:bg-amber-500/5 flex flex-col items-center justify-center gap-3 transition-all group backdrop-blur-sm shadow-inner"
+                                className="min-h-[140px] rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/50 hover:border-amber-500/30 hover:bg-amber-500/5 flex flex-col items-center justify-center gap-3 transition-all group"
                             >
                                 <div className="w-12 h-12 rounded-full bg-zinc-900 group-hover:bg-amber-500/20 flex items-center justify-center text-zinc-500 group-hover:text-amber-500 transition-colors">
                                     <Plus size={24} />

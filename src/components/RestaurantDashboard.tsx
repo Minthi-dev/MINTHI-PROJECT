@@ -858,6 +858,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [allergenInput, setAllergenInput] = useState('')
   const [showTableQrDialog, setShowTableQrDialog] = useState(false)
   const [isGeneratingTableQrPdf, setIsGeneratingTableQrPdf] = useState(false)
+  const [gridPrintRoomFilter, setGridPrintRoomFilter] = useState<string | null>(null)
+  const [showGridRoomDialog, setShowGridRoomDialog] = useState(false)
   const [showTableBillDialog, setShowTableBillDialog] = useState(false)
   const [selectedTableForActions, setSelectedTableForActions] = useState<Table | null>(null)
   // Confirmation dialog state for close/pay/empty table
@@ -1273,6 +1275,34 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }, [activeTab, refreshSessions])
 
   const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString()
+
+  const handleDownloadGridPdf = async (roomId: string | null) => {
+    setGridPrintRoomFilter(roomId)
+    setShowGridRoomDialog(false)
+    // Allow state to update before generating
+    await new Promise(r => setTimeout(r, 100))
+    const toastId = toast.loading('Generazione PDF Griglia Tavoli...')
+    try {
+      const element = document.getElementById('tables-grid-print-view')
+      if (element) {
+        element.style.display = 'block'
+        const roomName = roomId ? rooms?.find(r => r.id === roomId)?.name || 'sala' : 'tutte'
+        await generatePdfFromElement('tables-grid-print-view', {
+          fileName: `Tavoli_QR_${roomName}_${restaurantSlug}.pdf`,
+          scale: 2,
+          backgroundColor: '#FFFFFF',
+          orientation: 'portrait'
+        })
+        element.style.display = 'none'
+        toast.success('PDF scaricato!')
+      }
+    } catch (e) {
+      console.error(e)
+      toast.error('Errore generazione PDF')
+    } finally {
+      toast.dismiss(toastId)
+    }
+  }
 
   const generateQrCode = (tableId: string) => {
     // Use VITE_APP_URL for Capacitor/native apps, fallback to window.location.origin for web
@@ -2441,26 +2471,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     variant="outline"
                     size="sm"
                     className="h-10 shadow-sm hover:shadow-md transition-shadow border-dashed border-zinc-700 hover:border-amber-500 hover:text-amber-500"
-                    onClick={async () => {
-                      const toastId = toast.loading('Generazione PDF Griglia Tavoli...')
-                      try {
-                        const element = document.getElementById('tables-grid-print-view')
-                        if (element) {
-                          element.style.display = 'block'
-                          await generatePdfFromElement('tables-grid-print-view', {
-                            fileName: `Tavoli_Griglia_${restaurantSlug}.pdf`,
-                            scale: 2,
-                            backgroundColor: '#FFFFFF',
-                            orientation: 'portrait'
-                          })
-                          element.style.display = 'none'
-                          toast.success('PDF scaricato!')
-                        }
-                      } catch (e) {
-                        console.error(e)
-                        toast.error('Errore generazione PDF')
-                      } finally {
-                        toast.dismiss(toastId)
+                    onClick={() => {
+                      // If there are rooms, show selection dialog
+                      if (rooms && rooms.length > 0) {
+                        setGridPrintRoomFilter(null)
+                        setShowGridRoomDialog(true)
+                      } else {
+                        // No rooms, download all
+                        handleDownloadGridPdf(null)
                       }
                     }}
                   >
@@ -4937,34 +4955,27 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               <div id="table-qr-pdf-content" style={{ display: 'none', position: 'fixed', top: '-9999px', width: '210mm', height: '297mm', backgroundColor: '#FFFFFF' }}>
                 <div style={{
                   width: '100%',
-                  height: '100%',
+                  height: '297mm',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '20mm',
                   backgroundColor: '#FFFFFF',
                   boxSizing: 'border-box'
                 }}>
                   <div style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #d4d4d8',
-                    borderRadius: '4px',
-                    padding: '50px 40px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '20px',
                     color: '#000000',
                     width: '150mm',
-                    maxWidth: '100%'
                   }}>
-                    {/* Restaurant Name */}
+                    {/* Restaurant Name — top */}
                     <p style={{
-                      fontSize: '14px',
+                      fontSize: '13px',
                       fontWeight: '400',
-                      margin: 0,
-                      color: '#000000',
+                      margin: '0 0 24px 0',
+                      color: '#18181b',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5em',
                       fontFamily: 'Georgia, "Times New Roman", serif',
@@ -4973,56 +4984,71 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       {currentRestaurant?.name || 'Ristorante'}
                     </p>
 
-                    {/* Thin decorative line */}
-                    <div style={{ width: '60px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
+                    {/* Decorative line */}
+                    <div style={{ width: '50px', height: '0.5px', backgroundColor: '#a1a1aa', margin: '0 0 28px 0' }} />
 
-                    {/* Table Number — large, centered, serif */}
-                    <div style={{ textAlign: 'center', margin: '10px 0' }}>
-                      <p style={{
-                        fontSize: '11px',
-                        fontWeight: '400',
-                        margin: '0 0 12px 0',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.6em',
-                        color: '#71717a',
-                        fontFamily: 'Georgia, "Times New Roman", serif'
-                      }}>
-                        Tavolo
-                      </p>
-                      <p style={{
-                        fontSize: '96px',
-                        lineHeight: '1',
-                        fontWeight: '300',
-                        margin: 0,
-                        color: '#18181b',
-                        fontFamily: 'Georgia, "Times New Roman", serif',
-                        textAlign: 'center'
-                      }}>
-                        {selectedTableForActions?.number}
-                      </p>
-                    </div>
-
-                    {/* CTA — ABOVE the QR code */}
+                    {/* TAVOLO label */}
                     <p style={{
-                      fontSize: '10px',
+                      fontSize: '11px',
                       fontWeight: '400',
-                      margin: '4px 0 0 0',
+                      margin: '0 0 10px 0',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.6em',
+                      color: '#71717a',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      textAlign: 'center'
+                    }}>
+                      Tavolo
+                    </p>
+
+                    {/* Table Number — large, centered */}
+                    <p style={{
+                      fontSize: '100px',
+                      lineHeight: '1',
+                      fontWeight: '300',
+                      margin: '0 0 28px 0',
+                      color: '#18181b',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      textAlign: 'center'
+                    }}>
+                      {selectedTableForActions?.number}
+                    </p>
+
+                    {/* CTA text — ABOVE QR */}
+                    <p style={{
+                      fontSize: '11px',
+                      fontWeight: '400',
+                      margin: '0 0 20px 0',
                       textTransform: 'uppercase',
                       letterSpacing: '0.25em',
-                      color: '#71717a',
+                      color: '#52525b',
                       fontFamily: 'Georgia, "Times New Roman", serif',
                       textAlign: 'center'
                     }}>
                       {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                     </p>
 
-                    {/* QR Code — clean, no heavy border */}
-                    <div style={{ padding: '8px', border: '1px solid #e4e4e7', borderRadius: '4px' }}>
+                    {/* QR Code */}
+                    <div style={{ padding: '10px', border: '1px solid #e4e4e7', borderRadius: '4px', marginBottom: '20px' }}>
                       <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={240} />
                     </div>
 
-                    {/* Thin decorative line */}
-                    <div style={{ width: '60px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
+                    {/* Pin access info */}
+                    <p style={{
+                      fontSize: '9px',
+                      fontWeight: '400',
+                      margin: '0 0 24px 0',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.2em',
+                      color: '#a1a1aa',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      textAlign: 'center'
+                    }}>
+                      Il pin di accesso è fornito dal personale di sala
+                    </p>
+
+                    {/* Bottom decorative line */}
+                    <div style={{ width: '50px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
                   </div>
                 </div>
               </div>
@@ -5034,6 +5060,34 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           </Dialog>
 
           {/* Confirmation Dialog for Close/Pay/Empty */}
+          {/* Room Selection for QR Grid Download */}
+          <Dialog open={showGridRoomDialog} onOpenChange={setShowGridRoomDialog}>
+            <DialogContent className="sm:max-w-sm bg-zinc-950 border-zinc-800 text-zinc-100">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold text-white">Scarica QR Tavoli</DialogTitle>
+                <DialogDescription className="text-zinc-400">Scegli quale sala scaricare o scarica tutti i tavoli.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 py-2">
+                <Button
+                  className="w-full h-11 justify-start text-left bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-white font-medium"
+                  onClick={() => handleDownloadGridPdf(null)}
+                >
+                  Tutte le Sale
+                </Button>
+                {rooms?.map(room => (
+                  <Button
+                    key={room.id}
+                    variant="outline"
+                    className="w-full h-11 justify-start text-left border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 text-zinc-300 hover:text-white"
+                    onClick={() => handleDownloadGridPdf(room.id)}
+                  >
+                    {room.name}
+                  </Button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
             <AlertDialogContent className="bg-zinc-950 border-zinc-800 text-white">
               <AlertDialogHeader>
@@ -5179,105 +5233,75 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         fontFamily: 'Georgia, "Times New Roman", serif'
       }}>
         {
-          Array.from({ length: Math.ceil(restaurantTables.length / 4) }).map((_, pageIndex) => {
-            const pageTables = restaurantTables.slice(pageIndex * 4, (pageIndex + 1) * 4)
-            return (
-              <div key={pageIndex} style={{
-                width: '210mm',
-                height: '297mm',
-                padding: '10mm',
-                backgroundColor: '#FFFFFF',
-                boxSizing: 'border-box',
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gridTemplateRows: '1fr 1fr',
-                gap: '6mm',
-                pageBreakAfter: pageIndex < Math.ceil(restaurantTables.length / 4) - 1 ? 'always' : 'auto'
-              }}>
-                {
-                  pageTables.map((table) => (
+          (() => {
+            const tablesToPrint = gridPrintRoomFilter
+              ? restaurantTables.filter(t => t.room_id === gridPrintRoomFilter)
+              : restaurantTables
+            return Array.from({ length: Math.ceil(tablesToPrint.length / 4) }).map((_, pageIndex) => {
+              const pageTables = tablesToPrint.slice(pageIndex * 4, (pageIndex + 1) * 4)
+              return (
+                <div key={pageIndex} style={{
+                  width: '210mm',
+                  height: '297mm',
+                  padding: '8mm',
+                  backgroundColor: '#FFFFFF',
+                  boxSizing: 'border-box',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gridTemplateRows: '1fr 1fr',
+                  gap: '6mm',
+                  pageBreakAfter: pageIndex < Math.ceil(tablesToPrint.length / 4) - 1 ? 'always' : 'auto'
+                }}>
+                  {pageTables.map((table) => (
                     <div key={table.id} style={{
                       backgroundColor: '#FFFFFF',
                       border: '1px solid #d4d4d8',
                       borderRadius: '3px',
-                      padding: '5mm',
+                      padding: '4mm',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '3mm',
+                      gap: '2.5mm',
                       color: '#000000',
                       boxSizing: 'border-box'
                     }}>
                       {/* Restaurant Name */}
-                      <p style={{
-                        fontSize: '7px',
-                        fontWeight: '400',
-                        margin: 0,
-                        color: '#000000',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.4em',
-                        fontFamily: 'Georgia, "Times New Roman", serif',
-                        textAlign: 'center'
-                      }}>
+                      <p style={{ fontSize: '7px', fontWeight: '400', margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.4em', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
-
-                      {/* Thin line */}
                       <div style={{ width: '20px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
 
-                      {/* Table Number — large serif */}
-                      <div style={{ textAlign: 'center' }}>
-                        <p style={{
-                          fontSize: '7px',
-                          fontWeight: '400',
-                          margin: '0 0 3px 0',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5em',
-                          color: '#71717a',
-                          fontFamily: 'Georgia, "Times New Roman", serif'
-                        }}>
-                          Tavolo
-                        </p>
-                        <p style={{
-                          fontSize: '48px',
-                          lineHeight: '1',
-                          fontWeight: '300',
-                          margin: 0,
-                          color: '#18181b',
-                          fontFamily: 'Georgia, "Times New Roman", serif',
-                          textAlign: 'center'
-                        }}>
-                          {table.number}
-                        </p>
-                      </div>
+                      {/* Tavolo label */}
+                      <p style={{ fontSize: '7px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5em', color: '#71717a', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
+                        Tavolo
+                      </p>
+                      {/* Table Number */}
+                      <p style={{ fontSize: '48px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
+                        {table.number}
+                      </p>
 
-                      {/* CTA — above QR */}
-                      <p style={{
-                        fontSize: '6px',
-                        fontWeight: '400',
-                        margin: 0,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.2em',
-                        color: '#71717a',
-                        fontFamily: 'Georgia, "Times New Roman", serif',
-                        textAlign: 'center'
-                      }}>
+                      {/* CTA above QR */}
+                      <p style={{ fontSize: '6px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#52525b', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
                         {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                       </p>
 
                       {/* QR Code */}
-                      <div style={{ padding: '2mm', border: '0.5px solid #e4e4e7', borderRadius: '2px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <QRCodeGenerator value={generateQrCode(table.id)} size={130} />
+                      <div style={{ padding: '2mm', border: '0.5px solid #e4e4e7', borderRadius: '2px' }}>
+                        <QRCodeGenerator value={generateQrCode(table.id)} size={120} />
                       </div>
 
-                      {/* Thin line */}
+                      {/* Pin info */}
+                      <p style={{ fontSize: '5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
+                        Il pin di accesso è fornito dal personale di sala
+                      </p>
                       <div style={{ width: '20px', height: '0.5px', backgroundColor: '#a1a1aa' }} />
                     </div>
                   ))}
-              </div>
-            )
-          })
+                </div>
+              )
+            })
+          })()
         }
       </div>
 
