@@ -4995,118 +4995,72 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   width: '100%',
                   height: '297mm',
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: '#FFFFFF',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  color: '#18181b'
                 }}>
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    color: '#000000',
-                    width: '140mm',
-                  }}>
-                    {/* ── Top ornament ── */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
-                      <div style={{ width: '50px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                      <div style={{ width: '5px', height: '5px', border: '0.5px solid #a1a1aa', transform: 'rotate(45deg)' }} />
-                      <div style={{ width: '50px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                    </div>
+                  {/* Thin decorative top line */}
+                  <div style={{ width: '60px', height: '0.5px', backgroundColor: '#d4d4d8', marginBottom: '40px' }} />
 
-                    {/* Restaurant Name */}
-                    <p style={{
-                      fontSize: '14px',
-                      fontWeight: '400',
-                      margin: '0 0 32px 0',
-                      color: '#27272a',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.35em',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center'
-                    }}>
-                      {currentRestaurant?.name || 'Ristorante'}
-                    </p>
+                  {/* Restaurant Name */}
+                  <p style={{ fontSize: '13px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.4em', color: '#52525b', textAlign: 'center' }}>
+                    {currentRestaurant?.name || 'Ristorante'}
+                  </p>
 
-                    {/* TAVOLO label */}
-                    <p style={{
-                      fontSize: '10px',
-                      fontWeight: '400',
-                      margin: '0 0 12px 0',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5em',
-                      color: '#a1a1aa',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center'
-                    }}>
-                      Tavolo
-                    </p>
+                  {/* Spacer */}
+                  <div style={{ height: '36px' }} />
 
-                    {/* Table Number — the focal center */}
-                    <p style={{
-                      fontSize: '110px',
-                      lineHeight: '1',
-                      fontWeight: '400',
-                      margin: '0 0 12px 0',
-                      color: '#18181b',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center',
-                      letterSpacing: '-0.02em'
-                    }}>
-                      {selectedTableForActions?.number}
-                    </p>
+                  {/* TAVOLO label */}
+                  <p style={{ fontSize: '11px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
+                    Tavolo
+                  </p>
 
-                    {/* Ornamental divider */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '0 0 32px 0' }}>
-                      <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                      <div style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: '#a1a1aa' }} />
-                      <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                    </div>
+                  {/* Spacer */}
+                  <div style={{ height: '10px' }} />
 
-                    {/* CTA text */}
-                    <p style={{
-                      fontSize: '10px',
-                      fontWeight: '400',
-                      margin: '0 0 28px 0',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.25em',
-                      color: '#71717a',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center'
-                    }}>
-                      {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
-                    </p>
+                  {/* Table Number — large, elegant, the focal center */}
+                  <p style={{ fontSize: '120px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center', letterSpacing: '-0.02em' }}>
+                    {selectedTableForActions?.number}
+                  </p>
 
-                    {/* QR Code */}
-                    <div style={{ padding: '14px', border: '1px solid #e4e4e7', borderRadius: '12px', marginBottom: '28px' }}>
-                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={220} />
-                    </div>
+                  {/* Spacer */}
+                  <div style={{ height: '10px' }} />
 
-                    {/* Pin access info */}
-                    <p style={{
-                      fontSize: '8px',
-                      fontWeight: '400',
-                      margin: '0 0 32px 0',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.2em',
-                      color: '#a1a1aa',
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      textAlign: 'center'
-                    }}>
-                      Il pin di accesso è fornito dal personale di sala
-                    </p>
+                  {/* Thin divider */}
+                  <div style={{ width: '40px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
 
-                    {/* ── Bottom ornament ── */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ width: '50px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                      <div style={{ width: '5px', height: '5px', border: '0.5px solid #a1a1aa', transform: 'rotate(45deg)' }} />
-                      <div style={{ width: '50px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                    </div>
+                  {/* Spacer */}
+                  <div style={{ height: '36px' }} />
+
+                  {/* CTA text */}
+                  <p style={{ fontSize: '10px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.25em', color: '#71717a', textAlign: 'center' }}>
+                    {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
+                  </p>
+
+                  {/* Spacer */}
+                  <div style={{ height: '24px' }} />
+
+                  {/* QR Code */}
+                  <div style={{ padding: '12px', border: '1px solid #e4e4e7', borderRadius: '10px' }}>
+                    <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={220} />
                   </div>
+
+                  {/* Spacer */}
+                  <div style={{ height: '24px' }} />
+
+                  {/* Pin info */}
+                  <p style={{ fontSize: '8px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#a1a1aa', textAlign: 'center' }}>
+                    Il pin di accesso è fornito dal personale di sala
+                  </p>
+
+                  {/* Thin decorative bottom line */}
+                  <div style={{ width: '60px', height: '0.5px', backgroundColor: '#d4d4d8', marginTop: '40px' }} />
                 </div>
               </div>
-
-
 
               <p style={{ fontSize: '11px', color: '#3f3f46', letterSpacing: '1px' }}>MINTHI</p>
             </DialogContent>
@@ -5309,64 +5263,63 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     <div key={table.id} style={{
                       backgroundColor: '#FFFFFF',
                       border: '0.5px solid #e4e4e7',
-                      borderRadius: '8px',
-                      padding: '5mm',
+                      borderRadius: '6px',
+                      padding: '4mm 3mm',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      justifyContent: 'center',
+                      justifyContent: 'space-between',
                       color: '#000000',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      overflow: 'hidden'
                     }}>
-                      {/* Top ornament */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3mm' }}>
-                        <div style={{ width: '20px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                        <div style={{ width: '3px', height: '3px', border: '0.5px solid #a1a1aa', transform: 'rotate(45deg)' }} />
-                        <div style={{ width: '20px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
+                      {/* === TOP SECTION === */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        {/* Thin top line */}
+                        <div style={{ width: '24px', height: '0.5px', backgroundColor: '#d4d4d8', marginBottom: '3mm' }} />
+
+                        {/* Restaurant Name */}
+                        <p style={{ fontSize: '6px', fontWeight: '400', margin: '0 0 2mm 0', color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.3em', textAlign: 'center' }}>
+                          {currentRestaurant?.name || 'Ristorante'}
+                        </p>
                       </div>
 
-                      {/* Restaurant Name */}
-                      <p style={{ fontSize: '6.5px', fontWeight: '400', margin: '0 0 3mm 0', color: '#27272a', textTransform: 'uppercase', letterSpacing: '0.3em', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        {currentRestaurant?.name || 'Ristorante'}
-                      </p>
+                      {/* === CENTER SECTION — Tavolo + Number === */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        {/* Tavolo label */}
+                        <p style={{ fontSize: '5px', fontWeight: '400', margin: '0 0 1mm 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', textAlign: 'center' }}>
+                          Tavolo
+                        </p>
 
-                      {/* Tavolo label */}
-                      <p style={{ fontSize: '5.5px', fontWeight: '400', margin: '0 0 1mm 0', textTransform: 'uppercase', letterSpacing: '0.5em', color: '#a1a1aa', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        Tavolo
-                      </p>
+                        {/* Table Number */}
+                        <p style={{ fontSize: '48px', lineHeight: '1', fontWeight: '300', margin: 0, color: '#18181b', textAlign: 'center', letterSpacing: '-0.02em' }}>
+                          {table.number}
+                        </p>
 
-                      {/* Table Number — focal center */}
-                      <p style={{ fontSize: '50px', lineHeight: '1', fontWeight: '400', margin: '0 0 1mm 0', color: '#18181b', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center', letterSpacing: '-0.02em' }}>
-                        {table.number}
-                      </p>
+                        {/* Thin divider */}
+                        <div style={{ width: '20px', height: '0.5px', backgroundColor: '#d4d4d8', margin: '2mm 0' }} />
 
-                      {/* Ornamental divider */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: '0 0 3mm 0' }}>
-                        <div style={{ width: '16px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                        <div style={{ width: '2.5px', height: '2.5px', borderRadius: '50%', backgroundColor: '#a1a1aa' }} />
-                        <div style={{ width: '16px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
+                        {/* CTA */}
+                        <p style={{ fontSize: '5px', fontWeight: '400', margin: 0, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#71717a', textAlign: 'center' }}>
+                          {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
+                        </p>
                       </div>
 
-                      {/* CTA */}
-                      <p style={{ fontSize: '5.5px', fontWeight: '400', margin: '0 0 2.5mm 0', textTransform: 'uppercase', letterSpacing: '0.2em', color: '#71717a', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
-                      </p>
+                      {/* === BOTTOM SECTION — QR + pin info === */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        {/* QR Code */}
+                        <div style={{ padding: '1.5mm', border: '0.5px solid #e4e4e7', borderRadius: '4px', marginBottom: '2mm' }}>
+                          <QRCodeGenerator value={generateQrCode(table.id)} size={110} />
+                        </div>
 
-                      {/* QR Code */}
-                      <div style={{ padding: '1.5mm', border: '0.5px solid #e4e4e7', borderRadius: '5px', marginBottom: '2.5mm' }}>
-                        <QRCodeGenerator value={generateQrCode(table.id)} size={120} />
-                      </div>
+                        {/* Pin info */}
+                        <p style={{ fontSize: '4px', fontWeight: '400', margin: '0 0 2mm 0', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa', textAlign: 'center' }}>
+                          Il pin è fornito dal personale di sala
+                        </p>
 
-                      {/* Pin info */}
-                      <p style={{ fontSize: '4.5px', fontWeight: '400', margin: '0 0 3mm 0', textTransform: 'uppercase', letterSpacing: '0.15em', color: '#a1a1aa', fontFamily: 'Georgia, "Times New Roman", serif', textAlign: 'center' }}>
-                        Il pin è fornito dal personale di sala
-                      </p>
-
-                      {/* Bottom ornament */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '20px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
-                        <div style={{ width: '3px', height: '3px', border: '0.5px solid #a1a1aa', transform: 'rotate(45deg)' }} />
-                        <div style={{ width: '20px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
+                        {/* Thin bottom line */}
+                        <div style={{ width: '24px', height: '0.5px', backgroundColor: '#d4d4d8' }} />
                       </div>
                     </div>
                   ))}
