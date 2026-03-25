@@ -606,6 +606,13 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         codice_univoco: updatedRestaurant.codice_univoco || null,
       }, user)
 
+      // Save analytics password if changed
+      const analyticsPwInput = (document.getElementById('admin-analytics-pw') as HTMLInputElement)?.value?.trim()
+      if (analyticsPwInput) {
+        const hashed = await hashPassword(analyticsPwInput)
+        await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', editingRestaurant.id)
+      }
+
       if (editingUser) {
         const userUpdate: any = {
           id: editingUser.id,
@@ -2410,6 +2417,48 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   </div>
                 </div>
               )}
+
+              {/* Password Analitiche */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <Label className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Password Analitiche</Label>
+                {editingRestaurant.analytics_password_hash ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-emerald-400">Protetta da password</p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        placeholder="Nuova password (lascia vuoto per non cambiare)"
+                        id="admin-analytics-pw"
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 shrink-0"
+                        onClick={async () => {
+                          await supabase.from('restaurants').update({ analytics_password_hash: null }).eq('id', editingRestaurant.id)
+                          setEditingRestaurant(prev => prev ? ({ ...prev, analytics_password_hash: null }) : null)
+                          if (setRestaurants) {
+                            setRestaurants(prev => prev.map(r => r.id === editingRestaurant.id ? { ...r, analytics_password_hash: null } : r))
+                          }
+                          toast.success('Password analitiche rimossa')
+                        }}
+                      >
+                        Rimuovi
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-zinc-500">Nessuna password impostata</p>
+                    <Input
+                      type="text"
+                      placeholder="Imposta password analitiche"
+                      id="admin-analytics-pw"
+                    />
+                  </div>
+                )}
+              </div>
 
               <Button
                 onClick={handleSaveEdit}
