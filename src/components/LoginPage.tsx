@@ -207,32 +207,10 @@ export default function LoginPage({ onLogin }: Props) {
     }
   }
 
-  // Handle keyboard on login page - shift content up when keyboard opens
-  useEffect(() => {
-    if (!window.visualViewport) return
-    const container = document.getElementById('login-container')
-    if (!container) return
-
-    const handleResize = () => {
-      const vvHeight = window.visualViewport!.height
-      const windowHeight = window.innerHeight
-      // If visual viewport is smaller than window, keyboard is open
-      const keyboardHeight = windowHeight - vvHeight
-      if (keyboardHeight > 100) {
-        container.style.transform = `translateY(-${Math.min(keyboardHeight * 0.4, 200)}px)`
-        container.style.transition = 'transform 0.3s ease'
-      } else {
-        container.style.transform = 'translateY(0)'
-        container.style.transition = 'transform 0.3s ease'
-      }
-    }
-
-    window.visualViewport.addEventListener('resize', handleResize)
-    return () => window.visualViewport?.removeEventListener('resize', handleResize)
-  }, [])
+  // Keyboard handling is done globally in main.tsx via focusin event
 
   return (
-    <div id="login-container" className="h-[100dvh] flex flex-col items-center justify-center bg-black text-amber-50 p-4 font-sans selection:bg-amber-500/30 overflow-hidden relative fixed inset-0" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div id="login-container" className="min-h-[100dvh] flex flex-col items-center justify-center bg-black text-amber-50 p-4 font-sans selection:bg-amber-500/30 overflow-y-auto relative fixed inset-0" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Subtle Gold Ambient Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />

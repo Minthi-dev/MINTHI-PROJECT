@@ -49,23 +49,6 @@ document.addEventListener('focusin', (e) => {
   }
 })
 
-// On iOS, window.visualViewport resize can help detect keyboard open/close
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    const activeEl = document.activeElement as HTMLElement | null
-    if (
-      activeEl &&
-      (activeEl.tagName === 'INPUT' ||
-       activeEl.tagName === 'TEXTAREA' ||
-       activeEl.tagName === 'SELECT' ||
-       activeEl.isContentEditable)
-    ) {
-      setTimeout(() => {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-      }, 100)
-    }
-  })
-}
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary FallbackComponent={ErrorFallback}>
