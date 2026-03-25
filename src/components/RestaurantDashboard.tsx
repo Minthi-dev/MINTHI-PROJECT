@@ -345,77 +345,98 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   useEffect(() => {
     if (!restaurantId) return
 
+    const SUPPRESSION_KEY = 'minthi_menu_suppressed'
+
+    const parseTime = (t: string) => {
+      if (!t) return 0
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + (m || 0)
+    }
+
+    const isSuppressed = (): boolean => {
+      const raw = localStorage.getItem(SUPPRESSION_KEY)
+      if (!raw) return false
+      try {
+        const { expiresAt } = JSON.parse(raw)
+        if (Date.now() < new Date(expiresAt).getTime()) return true
+        localStorage.removeItem(SUPPRESSION_KEY)
+        return false
+      } catch { localStorage.removeItem(SUPPRESSION_KEY); return false }
+    }
+
+    const getCurrentMealInfo = () => {
+      const now = new Date()
+      const dayOfWeek = now.getDay()
+      const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+      // Before 6 AM = still previous day's service
+      const LATE_NIGHT_CUTOFF = 6 * 60
+      let effectiveDay = dayOfWeek
+      let checkTime = currentMinutes
+      if (currentMinutes < LATE_NIGHT_CUTOFF) {
+        effectiveDay = (dayOfWeek + 6) % 7
+        checkTime = currentMinutes + 24 * 60
+      }
+
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+      const dayName = dayNames[effectiveDay]
+      let currentMealType: string | null = null
+      let mealEndMinutes: number | null = null
+
+      const wsHours = currentRestaurant?.weekly_service_hours
+      if (wsHours?.useWeeklySchedule && wsHours.schedule?.[dayName]) {
+        const daySchedule = wsHours.schedule[dayName]
+        if (daySchedule.lunch?.enabled) {
+          const lStart = parseTime(daySchedule.lunch.start)
+          const lEnd = parseTime(daySchedule.lunch.end)
+          if (checkTime >= lStart && checkTime < lEnd) {
+            currentMealType = 'lunch'
+            mealEndMinutes = lEnd
+          }
+        }
+        if (daySchedule.dinner?.enabled) {
+          const dStart = parseTime(daySchedule.dinner.start)
+          const dEnd = parseTime(daySchedule.dinner.end)
+          // Dinner can cross midnight
+          const effectiveEnd = dEnd > dStart ? dEnd : dEnd + 24 * 60
+          if (checkTime >= dStart && checkTime < effectiveEnd) {
+            currentMealType = 'dinner'
+            mealEndMinutes = effectiveEnd
+          }
+        }
+      } else {
+        // Fallback to legacy times
+        const lunchStart = parseTime(lunchTimeStart)
+        const dinnerStart = parseTime(dinnerTimeStart)
+        if (lunchStart > 0 && dinnerStart > 0) {
+          if (checkTime >= lunchStart && checkTime < dinnerStart) {
+            currentMealType = 'lunch'
+            mealEndMinutes = dinnerStart
+          } else if (checkTime >= dinnerStart) {
+            currentMealType = 'dinner'
+            mealEndMinutes = 24 * 60 + 6 * 60 // until 6 AM next day
+          }
+        } else if (lunchStart > 0 && checkTime >= lunchStart) {
+          currentMealType = 'lunch'
+          mealEndMinutes = dinnerStart > 0 ? dinnerStart : 18 * 60
+        } else if (dinnerStart > 0 && checkTime >= dinnerStart) {
+          currentMealType = 'dinner'
+          mealEndMinutes = 24 * 60 + 6 * 60
+        }
+      }
+
+      return { effectiveDay, currentMealType, mealEndMinutes, now }
+    }
+
     const checkAndApplySchedules = async () => {
       try {
-        const now = new Date()
-        const dayOfWeek = now.getDay() // 0 = Sunday
-        const currentTime = now.getHours() * 60 + now.getMinutes() // Minutes from midnight
+        const { effectiveDay, currentMealType, now } = getCurrentMealInfo()
 
-        // Parse time strings (e.g., "12:00") to minutes
-        const parseTime = (t: string) => {
-          if (!t) return 0
-          const [h, m] = t.split(':').map(Number)
-          return h * 60 + m
-        }
+        // 1. Check suppression FIRST — if manually deactivated, do nothing
+        if (isSuppressed()) return
 
-        // Improved Logic for "Restaurant Day"
-        const LATE_NIGHT_CUTOFF = 6 * 60 // 06:00 AM
-
-        let effectiveDay = dayOfWeek
-        let checkTime = currentTime
-
-        if (currentTime < LATE_NIGHT_CUTOFF) {
-          effectiveDay = (dayOfWeek + 6) % 7
-          checkTime = currentTime + (24 * 60)
-        }
-
-        // Determine current meal type using weekly_service_hours if available
-        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-        const dayName = dayNames[effectiveDay]
-        let currentMealType: string | null = null
-
-        const wsHours = currentRestaurant?.weekly_service_hours
-        if (wsHours?.useWeeklySchedule && wsHours.schedule?.[dayName]) {
-          const daySchedule = wsHours.schedule[dayName]
-          if (daySchedule.lunch?.enabled) {
-            const lStart = parseTime(daySchedule.lunch.start)
-            const lEnd = parseTime(daySchedule.lunch.end)
-            if (checkTime >= lStart && checkTime < lEnd) currentMealType = 'lunch'
-          }
-          if (daySchedule.dinner?.enabled) {
-            const dStart = parseTime(daySchedule.dinner.start)
-            const dEnd = parseTime(daySchedule.dinner.end)
-            if (checkTime >= dStart && (dEnd > dStart ? checkTime < dEnd : true)) currentMealType = 'dinner'
-          }
-        } else {
-          // Fallback to legacy lunchTimeStart/dinnerTimeStart
-          const lunchStart = parseTime(lunchTimeStart)
-          const dinnerStart = parseTime(dinnerTimeStart)
-          if (lunchStart > 0 && dinnerStart > 0) {
-            if (lunchStart < dinnerStart) {
-              if (checkTime >= lunchStart && checkTime < dinnerStart) currentMealType = 'lunch'
-              else if (checkTime >= dinnerStart) currentMealType = 'dinner'
-            } else {
-              currentMealType = checkTime >= lunchStart ? 'lunch' : 'dinner'
-            }
-          } else if (lunchStart > 0) {
-            if (checkTime >= lunchStart) currentMealType = 'lunch'
-          } else if (dinnerStart > 0) {
-            if (checkTime >= dinnerStart) currentMealType = 'dinner'
-          }
-        }
-
-        // Valid schedule day is the effective day
-        const scheduleDay = effectiveDay
-        const { data: allSchedules } = await supabase
-          .from('custom_menu_schedules')
-          .select('custom_menu_id, custom_menus!inner(restaurant_id)')
-          .eq('is_active', true)
-          .eq('day_of_week', scheduleDay)
-          .eq('custom_menus.restaurant_id', restaurantId)
-
-        if (!allSchedules || allSchedules.length === 0) {
-          // No schedules found - reset to full menu if a scheduled menu was active
+        // 2. Not in any meal service? Reset to full menu if a scheduled one was active
+        if (!currentMealType) {
           if (lastScheduledMenuRef.current.menuId) {
             await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
@@ -423,15 +444,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
-        // Get full schedule details
+        // 3. Query schedules for this day
         const { data: schedules } = await supabase
           .from('custom_menu_schedules')
-          .select('id, custom_menu_id, day_of_week, meal_type, start_time, end_time, is_active')
+          .select('id, custom_menu_id, meal_type, custom_menus!inner(restaurant_id)')
           .eq('is_active', true)
-          .eq('day_of_week', scheduleDay)
-          .in('custom_menu_id', allSchedules.map(s => s.custom_menu_id))
+          .eq('day_of_week', effectiveDay)
+          .eq('custom_menus.restaurant_id', restaurantId)
 
         if (!schedules || schedules.length === 0) {
+          // No schedules for today — reset if a scheduled menu was active
           if (lastScheduledMenuRef.current.menuId) {
             await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
@@ -439,62 +461,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
-        // Find matching schedule: prefer exact meal match, then 'all'
+        // 4. Find matching schedule: exact meal type > 'all'
         const exactMatch = schedules.find(s => s.meal_type === currentMealType)
         const allMatch = schedules.find(s => s.meal_type === 'all')
         const match = exactMatch || allMatch
 
         if (!match) {
-          // No matching schedule for current meal type
-
-          // Check if there's a stale manual menu (> 24 hours)
-          const { data: activeMenus } = await supabase
-            .from('custom_menus')
-            .select('updated_at')
-            .eq('restaurant_id', restaurantId)
-            .eq('is_active', true)
-
-          if (activeMenus && activeMenus.length > 0) {
-            const activeMenu = activeMenus[0]
-            if (activeMenu.updated_at) {
-              const lastUpdate = new Date(activeMenu.updated_at).getTime()
-              const diffHours = (now.getTime() - lastUpdate) / (1000 * 60 * 60)
-
-              if (diffHours >= 24) {
-                console.log('Manual menu active for > 24h, resetting.')
-                await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
-                lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
-                return
-              }
-            }
-          }
-
-          // EARLY SUPPRESSION CHECK:
-          // If we manually deactivated a scheduled menu, suppression lasts until end of current meal service.
-          const suppressionKey = 'minthi_menu_suppressed'
-          const suppression = localStorage.getItem(suppressionKey)
-          let isSuppressedForNow = false;
-          if (suppression) {
-            try {
-              const sup = JSON.parse(suppression)
-              const expiresAt = sup.expiresAt ? new Date(sup.expiresAt).getTime() : 0
-              if (now.getTime() < expiresAt) {
-                isSuppressedForNow = true;
-              } else {
-                localStorage.removeItem(suppressionKey)
-              }
-            } catch { localStorage.removeItem(suppressionKey) }
-          }
-
-          if (isSuppressedForNow) {
-            // We have actively suppressed the custom menu until service ends.
-            // DO NOT process any new schedule activations.
-            if (lastScheduledMenuRef.current.menuId) {
-              lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
-            }
-            return // Skip applying any new schedule
-          }
-
+          // Schedules exist for today but not for this meal — reset
           if (lastScheduledMenuRef.current.menuId) {
             await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
@@ -502,30 +475,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
-        // EARLY SUPPRESSION CHECK FOR MULTIPLE MENUS:
-        const suppressionKey2 = 'minthi_menu_suppressed'
-        const suppression2 = localStorage.getItem(suppressionKey2)
-        if (suppression2) {
-          try {
-            const sup = JSON.parse(suppression2)
-            const expiresAt = sup.expiresAt ? new Date(sup.expiresAt).getTime() : 0
-            if (now.getTime() < expiresAt) {
-              return
-            } else {
-              localStorage.removeItem(suppressionKey2)
-            }
-          } catch { localStorage.removeItem(suppressionKey2) }
-        }
-
+        // 5. Already applied this exact menu for this meal+day? Skip
         if (
           lastScheduledMenuRef.current.menuId === match.custom_menu_id &&
           lastScheduledMenuRef.current.mealType === currentMealType &&
-          lastScheduledMenuRef.current.day === scheduleDay
+          lastScheduledMenuRef.current.day === effectiveDay
         ) {
-          // Already applied, no change needed
           return
         }
-        // Apply the scheduled menu
+
+        // 6. Apply the scheduled menu
         const { error } = await supabase.rpc('apply_custom_menu', {
           p_restaurant_id: restaurantId,
           p_menu_id: match.custom_menu_id
@@ -535,17 +494,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           lastScheduledMenuRef.current = {
             menuId: match.custom_menu_id,
             mealType: currentMealType,
-            day: scheduleDay
+            day: effectiveDay
           }
-          console.log(`Applied scheduled menu: ${match.custom_menu_id} for ${currentMealType} on day ${scheduleDay}`)
         }
       } catch (err) {
-        console.error("Error in menu scheduler:", err)
+        console.error('Menu scheduler error:', err)
       }
     }
 
-    const interval = setInterval(checkAndApplySchedules, 60 * 1000) // Every minute
-    checkAndApplySchedules() // Run immediately
+    const interval = setInterval(checkAndApplySchedules, 60 * 1000)
+    checkAndApplySchedules()
 
     return () => clearInterval(interval)
   }, [restaurantId, lunchTimeStart, dinnerTimeStart])
@@ -3509,29 +3467,47 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           // Suppress the scheduler until the END of the current meal service
                           const now = new Date()
                           const currentMinutes = now.getHours() * 60 + now.getMinutes()
-                          const lunchMin = lunchTimeStart ? parseInt(lunchTimeStart.split(':')[0]) * 60 + parseInt(lunchTimeStart.split(':')[1]) : 0
-                          const dinnerMin = dinnerTimeStart ? parseInt(dinnerTimeStart.split(':')[0]) * 60 + parseInt(dinnerTimeStart.split(':')[1]) : 0
+                          const parseT = (t: string) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
 
-                          // Calculate when the current meal service ends
-                          let endMinutes: number
-                          if (dinnerMin > 0 && currentMinutes >= dinnerMin) {
-                            // Currently in dinner service → suppress until next day 06:00
-                            endMinutes = 24 * 60 + 6 * 60 // next day 06:00
-                          } else if (lunchMin > 0 && currentMinutes >= lunchMin && dinnerMin > 0) {
-                            // Currently in lunch service → suppress until dinner starts
-                            endMinutes = dinnerMin
-                          } else if (lunchMin > 0 && currentMinutes >= lunchMin) {
-                            // Only lunch configured → suppress until 18:00 or end of day
-                            endMinutes = 18 * 60
-                          } else {
-                            // Outside service hours → suppress for 4 hours
-                            endMinutes = currentMinutes + 4 * 60
+                          let endMinutes: number | null = null
+
+                          // Use weekly_service_hours if available
+                          const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+                          const wsH = currentRestaurant?.weekly_service_hours
+                          const checkTime = currentMinutes < 360 ? currentMinutes + 24 * 60 : currentMinutes
+                          const effDay = currentMinutes < 360 ? (now.getDay() + 6) % 7 : now.getDay()
+                          const dayName = dayNames[effDay]
+
+                          if (wsH?.useWeeklySchedule && wsH.schedule?.[dayName]) {
+                            const ds = wsH.schedule[dayName]
+                            if (ds.lunch?.enabled) {
+                              const lS = parseT(ds.lunch.start), lE = parseT(ds.lunch.end)
+                              if (checkTime >= lS && checkTime < lE) endMinutes = lE
+                            }
+                            if (ds.dinner?.enabled) {
+                              const dS = parseT(ds.dinner.start), dE = parseT(ds.dinner.end)
+                              const effEnd = dE > dS ? dE : dE + 24 * 60
+                              if (checkTime >= dS && checkTime < effEnd) endMinutes = effEnd
+                            }
                           }
 
-                          // Convert endMinutes to an actual Date
+                          // Fallback to legacy times
+                          if (endMinutes === null) {
+                            const lunchMin = parseT(lunchTimeStart)
+                            const dinnerMin = parseT(dinnerTimeStart)
+                            if (dinnerMin > 0 && checkTime >= dinnerMin) {
+                              endMinutes = 24 * 60 + 6 * 60
+                            } else if (lunchMin > 0 && checkTime >= lunchMin && dinnerMin > 0) {
+                              endMinutes = dinnerMin
+                            } else if (lunchMin > 0 && checkTime >= lunchMin) {
+                              endMinutes = 18 * 60
+                            } else {
+                              endMinutes = currentMinutes + 4 * 60
+                            }
+                          }
+
                           const expiresAt = new Date(now)
                           if (endMinutes >= 24 * 60) {
-                            // Next day
                             expiresAt.setDate(expiresAt.getDate() + 1)
                             expiresAt.setHours(Math.floor((endMinutes - 24 * 60) / 60), (endMinutes - 24 * 60) % 60, 0, 0)
                           } else {
@@ -3539,7 +3515,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           }
 
                           localStorage.setItem('minthi_menu_suppressed', JSON.stringify({ expiresAt: expiresAt.toISOString() }))
-                          // Also clear the lastScheduledMenuRef so it doesn't think it's already applied
                           lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
                         }}
                       />
