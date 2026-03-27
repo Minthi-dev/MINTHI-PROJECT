@@ -114,6 +114,28 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [generatedLink, setGeneratedLink] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
 
+  // Public landing page promo settings
+  const [showPublicLinkDialog, setShowPublicLinkDialog] = useState(false)
+  const [publicBonus, setPublicBonus] = useState(0)
+  const [publicDiscount, setPublicDiscount] = useState<number | string>('')
+  const [publicToken, setPublicToken] = useState('')
+  const [savingPublicLink, setSavingPublicLink] = useState(false)
+  const [publicLinkLoaded, setPublicLinkLoaded] = useState(false)
+
+  // Load public link settings from app_config
+  useEffect(() => {
+    Promise.all([
+      DatabaseService.getAppConfig('landing_bonus_months'),
+      DatabaseService.getAppConfig('landing_discount_percent'),
+      DatabaseService.getAppConfig('landing_token'),
+    ]).then(([b, d, t]) => {
+      setPublicBonus(parseInt(b || '0') || 0)
+      setPublicDiscount(parseInt(d || '0') || 0)
+      setPublicToken(t || '')
+      setPublicLinkLoaded(true)
+    }).catch(() => setPublicLinkLoaded(true))
+  }, [])
+
   // Clear generated link when params change so user can generate a new one
   useEffect(() => {
     setGeneratedLink('')
@@ -1737,6 +1759,15 @@ export default function AdminDashboard({ user, onLogout }: Props) {
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Public Landing Page Promo Settings */}
+                <Button
+                  variant="outline"
+                  className="h-11 px-4 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 rounded-xl"
+                  onClick={() => setShowPublicLinkDialog(true)}
+                >
+                  <Rocket size={18} weight="bold" className="mr-2" />
+                  Promo Pubblico
+                </Button>
                 {/* Invite Link Generator */}
                 <Button
                   variant="outline"
@@ -2035,6 +2066,135 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                           {generatingLink ? 'Generazione...' : 'Genera Link'}
                         </Button>
                       )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Public Landing Promo Dialog */}
+                <Dialog open={showPublicLinkDialog} onOpenChange={setShowPublicLinkDialog}>
+                  <DialogContent className="sm:max-w-[420px] bg-zinc-950 border-emerald-500/20 text-white">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2"><Rocket size={20} className="text-emerald-500" /> Promo Pagina Pubblica</DialogTitle>
+                      <DialogDescription className="text-zinc-400">
+                        Configura promozioni globali visibili su minthi.it/info (senza link specifico).
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      {/* Mesi gratis */}
+                      <div className="space-y-2">
+                        <Label className="text-xs text-zinc-400">Mesi gratis</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={24}
+                          placeholder="0 = nessun bonus"
+                          value={publicBonus || ''}
+                          onChange={(e) => setPublicBonus(parseInt(e.target.value) || 0)}
+                          className="h-9 bg-zinc-900 border-white/10"
+                        />
+                      </div>
+
+                      {/* Sconto */}
+                      <div className="space-y-2">
+                        <Label className="text-xs text-zinc-400">Sconto (%)</Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            placeholder="0 = nessuno sconto"
+                            value={publicDiscount}
+                            onChange={(e) => setPublicDiscount(e.target.value === '' ? '' : Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                            className="h-9 pr-8 bg-zinc-900 border-white/10"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">%</span>
+                        </div>
+                      </div>
+
+                      {/* Token di registrazione collegato */}
+                      <div className="space-y-2">
+                        <Label className="text-xs text-zinc-400">Token di registrazione (opzionale)</Label>
+                        <Input
+                          placeholder="Lascia vuoto per link senza token"
+                          value={publicToken}
+                          onChange={(e) => setPublicToken(e.target.value)}
+                          className="h-9 bg-zinc-900 border-white/10 font-mono text-sm"
+                        />
+                        <p className="text-[11px] text-zinc-600">Se impostato, il pulsante "Inizia Ora" porterà alla registrazione con questo token.</p>
+                      </div>
+
+                      {/* Preview */}
+                      {(publicBonus > 0 || Number(publicDiscount) > 0) && (
+                        <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-1">
+                          {publicBonus > 0 && (
+                            <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                              <CheckCircle size={13} weight="fill" />
+                              {publicBonus} {publicBonus === 1 ? 'mese' : 'mesi'} gratis
+                            </p>
+                          )}
+                          {Number(publicDiscount) > 0 && (
+                            <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                              <CheckCircle size={13} weight="fill" />
+                              {publicDiscount}% di sconto
+                              {stripePriceAmount > 0 && ` → €${(stripePriceAmount * (1 - Number(publicDiscount) / 100)).toFixed(2)}/mese`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Link preview */}
+                      <div className="p-3 bg-zinc-900 rounded-xl border border-white/10">
+                        <p className="text-[11px] text-zinc-500 mb-1">Pagina pubblica:</p>
+                        <p className="text-sm text-white font-mono truncate">{window.location.origin}/info</p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          className="flex-1 h-11 bg-emerald-600 text-white font-bold hover:bg-emerald-500 rounded-xl shadow-lg transition-all active:scale-95"
+                          disabled={savingPublicLink}
+                          onClick={async () => {
+                            setSavingPublicLink(true)
+                            try {
+                              await DatabaseService.setAppConfig('landing_bonus_months', String(publicBonus || 0))
+                              await DatabaseService.setAppConfig('landing_discount_percent', String(Number(publicDiscount) || 0))
+                              await DatabaseService.setAppConfig('landing_token', publicToken || '')
+                              toast.success('Promo pubblica salvata!')
+                              setShowPublicLinkDialog(false)
+                            } catch (err: any) {
+                              toast.error('Errore: ' + (err.message || 'Riprova'))
+                            } finally {
+                              setSavingPublicLink(false)
+                            }
+                          }}
+                        >
+                          {savingPublicLink ? 'Salvataggio...' : 'Salva'}
+                        </Button>
+                        {(publicBonus > 0 || Number(publicDiscount) > 0 || publicToken) && (
+                          <Button
+                            variant="outline"
+                            className="h-11 px-4 border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl"
+                            onClick={async () => {
+                              setSavingPublicLink(true)
+                              try {
+                                await DatabaseService.setAppConfig('landing_bonus_months', '0')
+                                await DatabaseService.setAppConfig('landing_discount_percent', '0')
+                                await DatabaseService.setAppConfig('landing_token', '')
+                                setPublicBonus(0)
+                                setPublicDiscount('')
+                                setPublicToken('')
+                                toast.success('Promo rimossa')
+                                setShowPublicLinkDialog(false)
+                              } catch (err: any) {
+                                toast.error('Errore: ' + (err.message || 'Riprova'))
+                              } finally {
+                                setSavingPublicLink(false)
+                              }
+                            }}
+                          >
+                            Rimuovi
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </DialogContent>
                 </Dialog>
