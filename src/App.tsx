@@ -17,6 +17,7 @@ const CustomerMenu = lazyImportRetry(() => import('./components/CustomerMenu'))
 const PublicReservationPage = lazyImportRetry(() => import('./components/reservations/PublicReservationPage'))
 const RestaurantOnboarding = lazyImportRetry(() => import('./components/RestaurantOnboarding'))
 const RegisterSuccessPage = lazyImportRetry(() => import('./components/RegisterSuccessPage'))
+const LandingPage = lazyImportRetry(() => import('./components/LandingPage'))
 
 // Loading spinner component
 const LoadingSpinner = () => (
@@ -146,6 +147,9 @@ const AppContent = () => {
     <>
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
+          {/* LANDING PAGE — public, no auth */}
+          <Route path="/info" element={<LandingPage />} />
+
           {/* PUBLIC / ADMIN LOGIN */}
           <Route
             path="/"
@@ -215,6 +219,17 @@ const AppContent = () => {
 }
 
 function App() {
+  const location = useLocation()
+
+  // Landing page is fully public — no auth, no session, no loading
+  if (location.pathname === '/info') {
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <LandingPage />
+      </Suspense>
+    )
+  }
+
   return (
     <SessionProvider>
       <AppContent />
