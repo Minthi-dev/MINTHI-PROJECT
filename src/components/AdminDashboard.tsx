@@ -2016,7 +2016,10 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                               const dur = inviteDiscountDuration
                               const durMonths = dur === 'once' ? 1 : dur === 'forever' ? undefined : parseInt(dur)
                               const { token } = await DatabaseService.createRegistrationToken(freeMonths, discountPct, dur === 'once' ? 'once' : dur === 'forever' ? 'forever' : 'repeating', durMonths)
-                              const link = `${window.location.origin}/register/${token}`
+                              const params = new URLSearchParams({ token })
+                              if (freeMonths > 0) params.set('bonus', String(freeMonths))
+                              if (discountPct > 0) params.set('discount', String(discountPct))
+                              const link = `${window.location.origin}/info?${params.toString()}`
                               setGeneratedLink(link)
                               if (navigator.clipboard && window.isSecureContext) {
                                 navigator.clipboard.writeText(link).catch(() => { })
