@@ -51,6 +51,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     const [menuDishes, setMenuDishes] = useState<string[]>([])
     const [initialMenuDishes, setInitialMenuDishes] = useState<string[]>([])
     const [schedules, setSchedules] = useState<CustomMenuSchedule[]>([])
+    const [initialSchedules, setInitialSchedules] = useState<CustomMenuSchedule[]>([])
     const [isSaving, setIsSaving] = useState(false)
 
     // Editor View State
@@ -81,7 +82,10 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         const dishIds = dishesRes.data ? dishesRes.data.map(d => d.dish_id) : []
         setMenuDishes(dishIds)
         setInitialMenuDishes(dishIds)
-        if (schedulesRes.data) setSchedules(schedulesRes.data)
+        if (schedulesRes.data) {
+            setSchedules(schedulesRes.data)
+            setInitialSchedules(schedulesRes.data)
+        }
     }
 
     useEffect(() => {
@@ -138,13 +142,19 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         setEditingName(false)
     }
 
-    // Check if there are unsaved changes
+    // Check if there are unsaved changes (dishes OR schedules)
     const hasChanges = useMemo(() => {
+        // Check dish changes
         if (menuDishes.length !== initialMenuDishes.length) return true
         const sorted1 = [...menuDishes].sort()
         const sorted2 = [...initialMenuDishes].sort()
-        return sorted1.some((id, i) => id !== sorted2[i])
-    }, [menuDishes, initialMenuDishes])
+        if (sorted1.some((id, i) => id !== sorted2[i])) return true
+        // Check schedule changes
+        if (schedules.length !== initialSchedules.length) return true
+        const schedKeys = schedules.map(s => `${s.day_of_week}-${s.meal_type}`).sort()
+        const initSchedKeys = initialSchedules.map(s => `${s.day_of_week}-${s.meal_type}`).sort()
+        return schedKeys.some((k, i) => k !== initSchedKeys[i])
+    }, [menuDishes, initialMenuDishes, schedules, initialSchedules])
 
     // Save dishes via RPC (bypasses RLS issues)
     const saveDishesViaRpc = async () => {
@@ -162,13 +172,38 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         }
     }
 
-    // SAVE: persist all dish changes to DB, then apply if menu is active
+    // Persist schedule changes to DB
+    const saveSchedules = async () => {
+        if (!selectedMenu) return
+        const currentKeys = schedules.map(s => `${s.day_of_week}-${s.meal_type}`)
+        const initialKeys = initialSchedules.map(s => `${s.day_of_week}-${s.meal_type}`)
+
+        // Schedules to add (in current but not in initial)
+        const toAdd = schedules.filter(s => !initialKeys.includes(`${s.day_of_week}-${s.meal_type}`))
+        // Schedules to remove (in initial but not in current)
+        const toRemove = initialSchedules.filter(s => !currentKeys.includes(`${s.day_of_week}-${s.meal_type}`))
+
+        for (const s of toRemove) {
+            await supabase.from('custom_menu_schedules').delete().eq('id', s.id)
+        }
+        for (const s of toAdd) {
+            await supabase.from('custom_menu_schedules').insert({
+                custom_menu_id: selectedMenu.id,
+                day_of_week: s.day_of_week,
+                meal_type: s.meal_type,
+                is_active: true
+            })
+        }
+    }
+
+    // SAVE: persist all dish + schedule changes to DB, then apply if menu is active
     const handleSaveMenu = async () => {
         if (!selectedMenu) return
         setIsSaving(true)
 
         try {
             await saveDishesViaRpc()
+            await saveSchedules()
 
             // If menu is currently active, re-apply it to sync dish visibility
             if (selectedMenu.is_active) {
@@ -178,6 +213,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
             }
 
             setInitialMenuDishes([...menuDishes])
+            setInitialSchedules([...schedules])
             toast.success('Menu salvato!')
         } catch (err) {
             console.error('Error saving menu:', err)
@@ -195,12 +231,14 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
 
         try {
             await saveDishesViaRpc()
+            await saveSchedules()
 
             // Apply (activate) the menu
             const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: selectedMenu.id })
             if (error) throw error
 
             setInitialMenuDishes([...menuDishes])
+            setInitialSchedules([...schedules])
             setSelectedMenu({ ...selectedMenu, is_active: true })
             onDishesChange()
             toast.success('Menu salvato e attivato!')
@@ -275,22 +313,21 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         )
     }
 
-    const handleToggleSchedule = async (dayOfWeek: number, mealType: MealType) => {
+    const handleToggleSchedule = (dayOfWeek: number, mealType: MealType) => {
         if (!selectedMenu) return
         const existing = schedules.find(s => s.day_of_week === dayOfWeek && s.meal_type === mealType)
 
         if (existing) {
             setSchedules(prev => prev.filter(s => s.id !== existing.id))
-            await supabase.from('custom_menu_schedules').delete().eq('id', existing.id)
         } else {
-            const { data } = await supabase.from('custom_menu_schedules').insert({
+            // Add locally with a temporary id — will be persisted on Save
+            setSchedules(prev => [...prev, {
+                id: `temp-${dayOfWeek}-${mealType}`,
                 custom_menu_id: selectedMenu.id,
                 day_of_week: dayOfWeek,
                 meal_type: mealType,
                 is_active: true
-            }).select().single()
-
-            if (data) setSchedules(prev => [...prev, data])
+            } as unknown as CustomMenuSchedule])
         }
     }
 

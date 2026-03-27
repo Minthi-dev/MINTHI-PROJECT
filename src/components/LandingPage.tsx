@@ -55,7 +55,7 @@ const childVariant = {
 } as const
 
 // ─── Desktop screenshot with browser chrome cropped via CSS ───
-function DesktopMockup({ src, alt, className = '', cropTop = 70 }: {
+function DesktopMockup({ src, alt, className = '', cropTop = 130 }: {
   src: string; alt: string; className?: string; cropTop?: number
 }) {
   const ref = useRef(null)
@@ -174,10 +174,10 @@ export default function LandingPage() {
       id: 'menu',
       badge: 'Menu Digitale',
       title: 'Il tuo menu, sempre aggiornato',
-      description: 'I clienti scansionano il QR code al tavolo e sfogliano il menu dal proprio telefono. Foto HD, descrizioni dettagliate, allergeni, prezzi — tutto aggiornabile in tempo reale dalla dashboard.',
+      description: 'I clienti scansionano il QR code al tavolo e sfogliano il menu dal proprio telefono. Foto, descrizioni, allergeni, prezzi — tutto aggiornabile in tempo reale dalla dashboard.',
       details: [
         'Categorie personalizzabili con ordinamento drag & drop',
-        'Foto piatti con compressione automatica',
+        'Foto HD per ogni piatto con upload rapido',
         'Allergeni e varianti per ogni piatto',
         'Esportazione menu in PDF per la stampa',
         'QR code unico per ogni tavolo con PIN di accesso',
@@ -190,7 +190,7 @@ export default function LandingPage() {
       id: 'orders',
       badge: 'Gestione Ordini',
       title: 'Tutto sotto controllo, in tempo reale',
-      description: 'Ogni ordine arriva istantaneamente in cucina. Vedi lo stato di ogni piatto, il tempo di attesa, e gestisci le priorità con un tocco. La cucina non perde più neanche un ordine.',
+      description: 'Ogni ordine arriva istantaneamente in cucina. Vedi lo stato di ogni piatto, il tempo di attesa e gestisci le priorità con un tocco. La cucina non perde più neanche un ordine.',
       details: [
         'Notifiche sonore personalizzabili per nuovi ordini',
         'Vista per tavolo o per piatto singolo',
@@ -200,7 +200,24 @@ export default function LandingPage() {
         'Suggerimento portate successive automatico',
       ],
       desktopImg: '/landing/ordini2-desktop.png',
-      cropTop: 90,
+    },
+    {
+      id: 'analytics',
+      badge: 'Analitiche & Performance',
+      title: 'Decisioni basate sui dati, efficienza sotto controllo',
+      description: 'Dashboard completa con ricavi, piatti più venduti, andamento nel tempo e performance del team. Classifica camerieri per efficienza: ordini gestiti, tempi di servizio, piatti consegnati. Scopri chi lavora meglio e dove migliorare.',
+      details: [
+        'Ricavi giornalieri, ordini totali e scontrino medio',
+        'Grafico andamento nel tempo (giorno/settimana/mese)',
+        'Classifica piatti più venduti e meno venduti',
+        'Performance per categoria con grafici a barre',
+        'Classifica camerieri più efficienti per ordini e velocità',
+        'Analisi tempi di servizio per cameriere',
+        'Protezione con password per privacy',
+        'Export report in formato CSV',
+      ],
+      desktopImg: '/landing/analitiche-desktop.png',
+      desktopImg2: '/landing/camerieri-desktop.png',
     },
     {
       id: 'tables',
@@ -271,23 +288,6 @@ export default function LandingPage() {
         'Notifica in tempo reale quando il cliente paga',
         'Storico pagamenti e ricevute nella dashboard',
       ],
-    },
-    {
-      id: 'analytics',
-      badge: 'Analitiche',
-      title: 'Decisioni basate sui dati',
-      description: 'Ricavi giornalieri, piatti più venduti, performance per categoria, andamento nel tempo. Report esportabili, grafici interattivi — tutto aggiornato in tempo reale.',
-      details: [
-        'Dashboard con ricavi, ordini e scontrino medio',
-        'Grafico andamento nel tempo (giorno/settimana/mese)',
-        'Classifica piatti più venduti e meno venduti',
-        'Performance per categoria con grafici a barre',
-        'Performance camerieri con ordini gestiti',
-        'Protezione con password per privacy',
-        'Export report in formato CSV',
-      ],
-      desktopImg: '/landing/analitiche-desktop.png',
-      desktopImg2: '/landing/camerieri-desktop.png',
     },
     {
       id: 'customer',
@@ -471,7 +471,7 @@ export default function LandingPage() {
               {/* Desktop only */}
               {feature.desktopImg && !feature.mobileImgs && (
                 <div className="max-w-5xl mx-auto">
-                  <DesktopMockup src={feature.desktopImg} alt={feature.title} cropTop={feature.cropTop || 70} />
+                  <DesktopMockup src={feature.desktopImg} alt={feature.title} />
                   {feature.desktopImg2 && (
                     <FadeIn delay={0.3} className="mt-8">
                       <DesktopMockup src={feature.desktopImg2} alt={`${feature.title} 2`} />
@@ -575,7 +575,7 @@ export default function LandingPage() {
               { title: 'Aggiornamenti continui', desc: 'Nuove funzionalità ogni mese, senza costi aggiuntivi. Il tuo ristorante migliora con noi.' },
               { title: 'Tempo reale', desc: 'Ogni ordine, ogni modifica, ogni notifica — istantanea. Zero ritardi, zero errori di comunicazione.' },
               { title: 'Multi-dispositivo', desc: 'Dashboard su desktop, app camerieri su telefono, menu cliente su qualsiasi smartphone.' },
-              { title: 'Supporto dedicato', desc: 'Assistenza umana via telefono e chat. Ti aiutiamo a configurare tutto e risolvere qualsiasi problema.' },
+              { title: 'Supporto dedicato', desc: 'Assistenza umana via telefono, chat e anche di persona. Ti aiutiamo a configurare tutto e risolvere qualsiasi problema.' },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -587,6 +587,42 @@ export default function LandingPage() {
               </motion.div>
             ))}
           </StaggerChildren>
+        </div>
+      </section>
+
+      {/* ════════ DEMO CTA ════════ */}
+      <section className="py-20 md:py-24 relative">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-amber-500/[0.02] to-transparent" />
+        <div className="relative max-w-3xl mx-auto px-6 text-center">
+          <FadeIn>
+            <p className="text-amber-500 text-[13px] font-medium tracking-[0.4em] uppercase mb-4">Provalo dal vivo</p>
+            <h2 className="text-3xl md:text-5xl font-extralight tracking-tight mb-6">
+              Vuoi vedere MINTHI in azione?
+            </h2>
+            <p className="text-zinc-400 text-lg font-light max-w-xl mx-auto mb-8 leading-relaxed">
+              Richiedi una demo gratuita: ti mostriamo l'app dal vivo, anche di persona.
+              Ti guidiamo nella configurazione e rispondiamo a tutte le tue domande.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <a
+                href="tel:+393517570155"
+                className="px-8 py-4 bg-white/5 border border-white/10 text-white rounded-full text-base hover:bg-white/10 transition-all font-light hover:border-white/20"
+              >
+                Chiama: +39 351 757 0155
+              </a>
+              <a
+                href="https://wa.me/393517570155?text=Ciao%2C%20vorrei%20richiedere%20una%20demo%20di%20MINTHI"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-8 py-4 bg-emerald-600 text-white font-semibold rounded-full text-base hover:bg-emerald-500 transition-all hover:shadow-[0_0_30px_-8px_rgba(16,185,129,0.4)]"
+              >
+                Richiedi Demo su WhatsApp
+              </a>
+            </div>
+            <p className="text-zinc-600 text-sm mt-6 font-light">
+              Assistenza telefonica, via chat e anche di persona
+            </p>
+          </FadeIn>
         </div>
       </section>
 
