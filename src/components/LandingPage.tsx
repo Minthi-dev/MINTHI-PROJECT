@@ -185,12 +185,12 @@ export default function LandingPage() {
     ? (price * (1 - discountPercent / 100)).toFixed(2)
     : null
 
-  // CTA click — go to register if token, otherwise go to login
+  // CTA click — always go to registration page
   const handleCTA = () => {
     if (token) {
       navigate(`/register/${token}`)
     } else {
-      navigate('/')
+      navigate('/register')
     }
   }
 

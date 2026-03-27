@@ -987,7 +987,7 @@ export const DatabaseService = {
     // Crea una registrazione pending e avvia il checkout Stripe.
     // Il ristorante viene creato nel DB SOLO quando Stripe conferma il pagamento.
     async createPendingRegistrationCheckout(data: {
-        registrationToken: string,
+        registrationToken: string | null,
         name: string, phone: string, email: string,
         username: string, password: string,
         billingName: string, vatNumber: string, billingAddress: string,

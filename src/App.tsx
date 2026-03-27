@@ -205,6 +205,7 @@ const AppContent = () => {
           <Route path="/menu" element={<LegacyCustomerMenuRedirect />} />
           <Route path="/book/:restaurantId" element={<PublicReservationPage />} />
           <Route path="/register/:token" element={<RestaurantOnboarding />} />
+          <Route path="/register" element={<RestaurantOnboarding />} />
           <Route path="/register-success" element={<RegisterSuccessPage />} />
           <Route path="/register-cancelled" element={<Navigate to="/" replace />} />
 

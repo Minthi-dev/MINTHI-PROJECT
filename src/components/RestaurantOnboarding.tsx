@@ -84,17 +84,22 @@ export default function RestaurantOnboarding() {
         codiceUnivoco: '',
     })
 
-    // Validate token on mount
+    // Validate token on mount (token is optional — /register works without it)
     useEffect(() => {
         // Clear any existing session to prevent conflicting redirects after registration
         localStorage.removeItem('minthi_user')
         supabase.auth.signOut().catch(console.error)
 
-        if (!token) { setTokenError(true); setLoading(false); return }
-        DatabaseService.validateRegistrationToken(token).then(data => {
-            if (data) { setTokenData(data) } else { setTokenError(true) }
+        if (!token) {
+            // No token — standard registration (no bonus/discount)
+            setTokenData({ token: null, free_months: 0, discount_percent: 0, stripe_coupon_id: null })
             setLoading(false)
-        }).catch(() => { setTokenError(true); setLoading(false) })
+        } else {
+            DatabaseService.validateRegistrationToken(token).then(data => {
+                if (data) { setTokenData(data) } else { setTokenError(true) }
+                setLoading(false)
+            }).catch(() => { setTokenError(true); setLoading(false) })
+        }
 
         // Fetch subscription price for display
         DatabaseService.getAppConfig('stripe_price_amount').then(val => {
@@ -113,7 +118,7 @@ export default function RestaurantOnboarding() {
         if (!form.billingCap.trim()) return toast.error('Inserisci il CAP')
         if (!form.billingProvince.trim()) return toast.error('Inserisci la provincia')
         if (!form.codiceUnivoco.trim()) return toast.error('Inserisci il codice univoco SDI')
-        if (!tokenData) return toast.error('Token non valido')
+        if (!tokenData) return toast.error('Errore di configurazione. Ricarica la pagina.')
 
         setSubmitting(true)
         try {
@@ -151,7 +156,7 @@ export default function RestaurantOnboarding() {
 
             toast.loading('Preparazione pagamento...', { id: 'stripe' })
             const { url } = await DatabaseService.createPendingRegistrationCheckout({
-                registrationToken: tokenData.token,
+                registrationToken: tokenData.token || null,
                 name: form.name.trim(),
                 phone: form.phone.trim(),
                 email: form.email.trim(),
