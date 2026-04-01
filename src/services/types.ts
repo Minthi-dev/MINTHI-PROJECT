@@ -25,10 +25,8 @@ export interface Restaurant {
     logo_url?: string
     owner_id: string
     created_at?: string
-    cover_image_url?: string
     // Frontend helpers
     isActive?: boolean
-    hours?: string
     coverChargePerPerson?: number
     allYouCanEat?: {
         enabled: boolean
@@ -54,6 +52,7 @@ export interface Restaurant {
     dinner_time_start?: string
     dinner_time_end?: string
     enable_course_splitting?: boolean
+    enable_course_suggestions?: boolean
     reservation_duration?: number
     // Weekly scheduling for Coperto, AYCE, and Service Hours
     weekly_coperto?: WeeklyCopertoSchedule
@@ -80,6 +79,10 @@ export interface Restaurant {
     billing_cap?: string
     billing_province?: string
     codice_univoco?: string
+    analytics_password_hash?: string
+    demo_completed?: boolean
+    is_active?: boolean
+    subscription_cancel_at?: string
 }
 
 export interface DayMealConfig {
@@ -143,6 +146,7 @@ export interface Category {
     name: string
     restaurant_id: string
     order: number
+    is_active?: boolean
     created_at?: string
 }
 
@@ -203,6 +207,8 @@ export interface TableSession {
     receipt_issued?: boolean
     paid_amount?: number
     notes?: string
+    closed_by_name?: string
+    closed_by_role?: string
 }
 
 export interface Room {
@@ -326,7 +332,7 @@ export interface SubscriptionPayment {
     period_start?: string
     period_end?: string
     created_at?: string
-    admin_completed?: boolean
+    invoice_confirmed?: boolean
 }
 
 export interface RestaurantBonus {

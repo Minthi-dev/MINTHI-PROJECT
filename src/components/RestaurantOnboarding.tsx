@@ -224,10 +224,7 @@ export default function RestaurantOnboarding() {
             {/* Header */}
             <header className="relative z-10 flex items-center justify-between px-6 py-5 border-b border-white/5 bg-black/60 backdrop-blur-xl sticky top-0">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                        <ForkKnife size={20} weight="fill" className="text-black" />
-                    </div>
-                    <span className="text-lg font-bold tracking-tight">MINTHI</span>
+                    <img src="/minthi-logo.png" alt="MINTHI" className="h-9 w-auto" />
                 </div>
                 <button
                     onClick={() => setShowForm(true)}
@@ -644,7 +641,7 @@ export default function RestaurantOnboarding() {
 
             {/* Footer */}
             <footer className="relative z-10 border-t border-white/5 px-6 py-8 text-center">
-                <p className="text-xs text-zinc-600">© 2026 MINTHI — Piattaforma per la ristorazione digitale</p>
+                <p className="text-xs text-zinc-600 flex items-center justify-center gap-1.5">© 2026 <img src="/minthi-logo.png" alt="MINTHI" className="h-3.5 w-auto inline-block opacity-50" /> — Piattaforma per la ristorazione digitale</p>
                 <p className="text-xs text-zinc-600 mt-1">Assistenza: <a href="tel:+393517570155" className="text-amber-400/60 hover:text-amber-400 transition-colors">+39 351 757 0155</a></p>
             </footer>
         </div>

@@ -73,13 +73,13 @@ export const DatabaseService = {
 
         // Campi permessi per l'aggiornamento
         const allowedFields = [
-            'name', 'address', 'phone', 'email', 'logo_url', 'cover_image_url', 'owner_id',
+            'name', 'address', 'phone', 'email', 'logo_url', 'owner_id',
             'all_you_can_eat', 'ayce_price', 'ayce_max_orders', 'cover_charge_per_person',
             'lunch_time_start', 'dinner_time_start', 'enable_course_splitting', 'reservation_duration',
             'weekly_coperto', 'weekly_ayce', 'weekly_service_hours', 'waiter_password',
             'menu_style', 'menu_primary_color', 'view_only_menu_enabled',
             'enable_reservation_room_selection', 'enable_public_reservations',
-            'show_cooking_times'
+            'show_cooking_times', 'enable_course_suggestions'
         ]
 
         // Copia solo i campi presenti nell'oggetto input
@@ -158,14 +158,132 @@ export const DatabaseService = {
     },
 
     async deleteRestaurant(restaurantId: string) {
-        const { error } = await supabase.rpc('delete_restaurant_admin', { p_restaurant_id: restaurantId })
+        // 0. Recupera info ristorante per eliminare il logo e l'owner
+        const { data: restaurant } = await supabase
+            .from('restaurants')
+            .select('logo_url, owner_id')
+            .eq('id', restaurantId)
+            .single()
+
+        // 1. Elimina dipendenze complesse (Order Items)
+        const { data: orders } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('restaurant_id', restaurantId)
+
+        if (orders && orders.length > 0) {
+            const orderIds = orders.map(o => o.id)
+            await supabase.from('order_items').delete().in('order_id', orderIds)
+        }
+
+        // 2. Elimina TUTTE le tabelle dipendenti da restaurant_id (ordine: foglie → radice)
+        await supabase.from('waiter_activity_logs').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('restaurant_staff').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('subscription_payments').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('restaurant_bonuses').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('restaurant_discounts').delete().eq('restaurant_id', restaurantId)
+
+        await supabase.from('orders').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('table_sessions').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('bookings').delete().eq('restaurant_id', restaurantId)
+
+        // Custom menus (dishes dipende da custom_menu_dishes che dipende da custom_menus)
+        const { data: menus } = await supabase.from('custom_menus').select('id').eq('restaurant_id', restaurantId)
+        if (menus && menus.length > 0) {
+            const menuIds = menus.map(m => m.id)
+            await supabase.from('custom_menu_schedules').delete().in('custom_menu_id', menuIds)
+            await supabase.from('custom_menu_dishes').delete().in('custom_menu_id', menuIds)
+        }
+        await supabase.from('custom_menus').delete().eq('restaurant_id', restaurantId)
+
+        await supabase.from('dishes').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('categories').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('tables').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('rooms').delete().eq('restaurant_id', restaurantId)
+
+        // 3. Elimina logo dallo Storage se esiste
+        if (restaurant?.logo_url) {
+            try {
+                const urlParts = restaurant.logo_url.split('/')
+                const fileName = urlParts[urlParts.length - 1]
+
+                if (fileName) {
+                    await supabase.storage
+                        .from('logos')
+                        .remove([fileName])
+                }
+            } catch (e) {
+                console.warn("Could not delete logo file", e)
+            }
+        }
+
+        // 4. Infine elimina il ristorante
+        const { error } = await supabase
+            .from('restaurants')
+            .delete()
+            .eq('id', restaurantId)
+
         if (error) throw error
+
+        // 5. Tenta di eliminare l'utente proprietario (se esiste), MA NON SE È ADMIN
+        if (restaurant?.owner_id) {
+            try {
+                const { data: user } = await supabase.from('users').select('role').eq('id', restaurant.owner_id).single()
+
+                if (user?.role !== 'ADMIN') {
+                    await supabase.from('users').delete().eq('id', restaurant.owner_id)
+                } else {
+                    console.log('Skipping deletion of restaurant owner because they are ADMIN')
+                }
+            } catch (e) {
+                console.warn("Could not auto-delete owner user", e)
+            }
+        }
     },
 
     async nukeDatabase() {
-        // Usa RPC con SECURITY DEFINER per bypassare RLS e cancellare tutto
-        const { error } = await supabase.rpc('reset_database_admin')
-        if (error) throw error
+        // ATTENZIONE: Ordine inverso di dipendenza per evitare errori di Foreign Key
+
+        // 1. Dati volatili di sessione
+        await supabase.from('pin_attempts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('cart_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('order_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('orders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('table_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 2. Sistema Menu Personalizzati
+        await supabase.from('custom_menu_schedules').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('custom_menu_dishes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('custom_menus').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 3. Struttura Menu e Locale
+        await supabase.from('dishes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('categories').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('tables').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('rooms').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 4. Logs e dati admin
+        await supabase.from('waiter_activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('subscription_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('restaurant_bonuses').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('restaurant_discounts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 5. Staff e Ristoranti
+        await supabase.from('restaurant_staff').delete().neq('restaurant_id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('restaurants').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 6. Registrazioni e tokens
+        await supabase.from('pending_registrations').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('registration_tokens').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 7. Archivi
+        await supabase.from('archived_order_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('archived_orders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+        await supabase.from('archived_table_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+        // 8. Utenti (tranne ADMIN)
+        await supabase.from('users').delete().neq('role', 'ADMIN')
     },
 
     async updateUser(user: Partial<User>) {
@@ -284,7 +402,7 @@ export const DatabaseService = {
         return data
     },
 
-    async _compressImage(file: File, maxWidth = 800, quality = 0.7): Promise<File> {
+    async _compressImage(file: File, maxWidth = 1200, quality = 0.65): Promise<File> {
         return new Promise((resolve) => {
             const img = new Image()
             const canvas = document.createElement('canvas')
@@ -294,9 +412,12 @@ export const DatabaseService = {
                 img.onload = () => {
                     let w = img.width
                     let h = img.height
-                    if (w > maxWidth) {
-                        h = Math.round((h * maxWidth) / w)
-                        w = maxWidth
+                    const maxHeight = 1200
+                    // Scale down to fit within maxWidth x maxHeight
+                    if (w > maxWidth || h > maxHeight) {
+                        const ratio = Math.min(maxWidth / w, maxHeight / h)
+                        w = Math.round(w * ratio)
+                        h = Math.round(h * ratio)
                     }
                     canvas.width = w
                     canvas.height = h
@@ -318,7 +439,7 @@ export const DatabaseService = {
 
     // Storage
     _validateUpload(file: File) {
-        const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+        const MAX_SIZE = 20 * 1024 * 1024 // 20MB — compressione automatica dopo
         const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
         if (!ALLOWED_TYPES.includes(file.type)) {
             throw new Error('Tipo file non supportato. Usa JPEG, PNG o WebP.')
@@ -507,18 +628,28 @@ export const DatabaseService = {
         return data as TableSession
     },
 
-    async closeSession(sessionId: string) {
+    async closeSession(sessionId: string, closedByName?: string, closedByRole?: string) {
         const { error } = await supabase
             .from('table_sessions')
-            .update({ status: 'CLOSED', closed_at: new Date().toISOString() })
+            .update({
+                status: 'CLOSED',
+                closed_at: new Date().toISOString(),
+                ...(closedByName ? { closed_by_name: closedByName } : {}),
+                ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+            })
             .eq('id', sessionId)
         if (error) throw error
     },
 
-    async closeAllOpenSessionsForTable(tableId: string) {
+    async closeAllOpenSessionsForTable(tableId: string, closedByName?: string, closedByRole?: string) {
         const { error } = await supabase
             .from('table_sessions')
-            .update({ status: 'CLOSED', closed_at: new Date().toISOString() })
+            .update({
+                status: 'CLOSED',
+                closed_at: new Date().toISOString(),
+                ...(closedByName ? { closed_by_name: closedByName } : {}),
+                ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+            })
             .eq('table_id', tableId)
             .eq('status', 'OPEN')
         if (error) throw error
@@ -856,7 +987,7 @@ export const DatabaseService = {
     // Crea una registrazione pending e avvia il checkout Stripe.
     // Il ristorante viene creato nel DB SOLO quando Stripe conferma il pagamento.
     async createPendingRegistrationCheckout(data: {
-        registrationToken: string,
+        registrationToken: string | null,
         name: string, phone: string, email: string,
         username: string, password: string,
         billingName: string, vatNumber: string, billingAddress: string,
@@ -1050,6 +1181,22 @@ export const DatabaseService = {
         const { data, error } = await query
         if (error) throw error
         return data
+    },
+
+    async updateSubscriptionPayment(paymentId: string, updates: { invoice_confirmed?: boolean }) {
+        const { error } = await supabase
+            .from('subscription_payments')
+            .update(updates)
+            .eq('id', paymentId)
+        if (error) throw error
+    },
+
+    async deleteSubscriptionPayment(paymentId: string) {
+        const { error } = await supabase
+            .from('subscription_payments')
+            .delete()
+            .eq('id', paymentId)
+        if (error) throw error
     },
 
     // Admin - Restaurant bonuses

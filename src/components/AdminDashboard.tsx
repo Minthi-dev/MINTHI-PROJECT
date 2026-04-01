@@ -553,9 +553,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-                <Crown weight="bold" size={20} className="text-black" />
-              </div>
+              <img src="/minthi-logo.png" alt="MINTHI" className="h-10 w-auto" />
               <div>
                 <h1 className="text-xl font-bold text-white">Amministrazione</h1>
                 <p className="text-xs font-bold text-amber-500/70 tracking-[0.2em] uppercase">Control Panel</p>
