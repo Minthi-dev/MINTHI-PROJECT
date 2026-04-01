@@ -8,7 +8,7 @@ import { ChartBar, Money, ShoppingCart, Users, Clock, Fire, Calendar, TrendUp, S
 import { format, isWithinInterval, startOfDay, endOfDay, parseISO, eachDayOfInterval, isSameDay, subDays } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { it } from 'date-fns/locale'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Cell } from 'recharts'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '../lib/supabase'
@@ -686,7 +686,7 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
                     </CardContent>
                 </Card>
 
-                {/* Peak Hours Breakdown */}
+                {/* Peak Hours Breakdown - Full 24h Chart */}
                 <Card className="col-span-1 bg-zinc-900/40 backdrop-blur-3xl border border-white/5 rounded-3xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.9)] overflow-hidden">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-3 text-lg font-bold text-white">
@@ -694,22 +694,48 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-4 mt-4">
-                            {stats.peakHours.filter(h => h.count > 0 || [12, 13, 20, 21].includes(h.hour)).map((item) => {
-                                const max = Math.max(...stats.peakHours.map(i => i.count)) || 1
-                                return (
-                                    <div key={item.hour} className="flex items-center gap-4">
-                                        <span className="w-12 text-xs font-bold text-zinc-500 tabular-nums">{item.hour}:00</span>
-                                        <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden">
-                                            <div
-                                                className={`h-full rounded-full transition-all duration-700 ${item.count / max > 0.8 ? 'bg-amber-500' : 'bg-zinc-700'}`}
-                                                style={{ width: `${(item.count / max) * 100}%` }}
-                                            />
-                                        </div>
-                                        <span className="text-[10px] font-black text-zinc-400 w-6 text-right">{item.count}</span>
-                                    </div>
-                                )
-                            })}
+                        <div className="h-[300px] mt-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats.peakHours.map(h => ({ ...h, label: `${h.hour}:00` }))} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                                    <XAxis
+                                        dataKey="hour"
+                                        tick={{ fill: '#71717a', fontSize: 10 }}
+                                        tickFormatter={(h) => `${h}`}
+                                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                                        tickLine={false}
+                                        interval={1}
+                                    />
+                                    <YAxis
+                                        tick={{ fill: '#71717a', fontSize: 10 }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        allowDecimals={false}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                                        formatter={(value: number) => [`${value} ordini`, 'Ordini']}
+                                        labelFormatter={(h) => `${h}:00`}
+                                        cursor={{ fill: 'rgba(245, 158, 11, 0.08)' }}
+                                    />
+                                    <Bar
+                                        dataKey="count"
+                                        fill="#52525b"
+                                        radius={[4, 4, 0, 0]}
+                                        maxBarSize={24}
+                                    >
+                                        {stats.peakHours.map((entry, index) => {
+                                            const max = Math.max(...stats.peakHours.map(i => i.count)) || 1
+                                            return (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={entry.count / max > 0.7 ? '#f59e0b' : entry.count > 0 ? '#52525b' : '#27272a'}
+                                                />
+                                            )
+                                        })}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
                         </div>
                     </CardContent>
                 </Card>

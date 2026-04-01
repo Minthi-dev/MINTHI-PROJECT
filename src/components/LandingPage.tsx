@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService } from '../services/DatabaseService'
+import { supabase } from '../lib/supabase'
 
 // ─── Animated reveal on scroll ───
 function FadeIn({ children, className = '', delay = 0, direction = 'up' }: {
@@ -72,7 +73,10 @@ function DesktopMockup({ src, alt, className = '', cropTop = 130 }: {
       <div className="absolute -inset-4 bg-gradient-to-b from-amber-500/10 via-amber-500/5 to-transparent rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
       {/* Screen */}
       <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-2xl shadow-black/60 bg-zinc-950">
-        <div style={{ marginTop: `-${cropTop}px`, paddingBottom: 0 }}>
+        <div className="hidden md:block" style={{ marginTop: `-${cropTop}px`, paddingBottom: 0 }}>
+          <img src={src} alt={alt} className="w-full block" style={{ display: 'block' }} />
+        </div>
+        <div className="block md:hidden" style={{ marginTop: `-${Math.round(cropTop * 0.4)}px`, paddingBottom: 0 }}>
           <img src={src} alt={alt} className="w-full block" style={{ display: 'block' }} />
         </div>
       </div>
@@ -144,14 +148,31 @@ export default function LandingPage() {
   const heroY = useTransform(scrollYProgress, [0, 0.5], ['0%', '8%'])
 
   // URL params from admin registration link
-  const bonusMonths = parseInt(searchParams.get('bonus') || '0')
-  const discountPercent = parseInt(searchParams.get('discount') || '0')
+  const urlBonusMonths = parseInt(searchParams.get('bonus') || '0')
+  const urlDiscountPercent = parseInt(searchParams.get('discount') || '0')
   const token = searchParams.get('token') || ''
+  const [publicBonus, setPublicBonus] = useState(0)
+  const [publicDiscount, setPublicDiscount] = useState(0)
+
+  // Effective values: URL params override public defaults
+  const bonusMonths = urlBonusMonths || publicBonus
+  const discountPercent = urlDiscountPercent || publicDiscount
 
   useEffect(() => {
     DatabaseService.getStripePriceDetails()
-      .then(d => setPrice(d.amount / 100))
+      .then(d => setPrice(d.amount))
       .catch(() => setPrice(null))
+    // Fetch public landing page config (global bonus/discount)
+    supabase.from('app_config').select('key, value')
+      .in('key', ['public_landing_bonus_months', 'public_landing_discount_percent'])
+      .then(({ data }) => {
+        if (data) {
+          data.forEach(row => {
+            if (row.key === 'public_landing_bonus_months') setPublicBonus(parseInt(row.value) || 0)
+            if (row.key === 'public_landing_discount_percent') setPublicDiscount(parseInt(row.value) || 0)
+          })
+        }
+      })
   }, [])
 
   const displayPrice = price !== null ? price.toFixed(2) : null
@@ -159,12 +180,17 @@ export default function LandingPage() {
     ? (price * (1 - discountPercent / 100)).toFixed(2)
     : null
 
-  // CTA click — go to register if token, otherwise go to login
+  // CTA click — go to register page
   const handleCTA = () => {
     if (token) {
       navigate(`/register/${token}`)
     } else {
-      navigate('/')
+      // Navigate to register with public landing params
+      const params = new URLSearchParams()
+      if (bonusMonths > 0) params.set('bonus', String(bonusMonths))
+      if (discountPercent > 0) params.set('discount', String(discountPercent))
+      const query = params.toString()
+      navigate(`/register/public${query ? '?' + query : ''}`)
     }
   }
 

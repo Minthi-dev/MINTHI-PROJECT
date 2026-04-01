@@ -6,12 +6,13 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSupabaseData } from '../hooks/useSupabaseData'
 import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
 import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info, Percent, X, Calendar } from '@phosphor-icons/react'
+import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info, Percent, X, Calendar, Globe } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
@@ -104,6 +105,11 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [bulkDiscountDuration, setBulkDiscountDuration] = useState('once')
   const [applyingBulk, setApplyingBulk] = useState(false)
 
+  // Public landing page config
+  const [publicLandingBonus, setPublicLandingBonus] = useState(0)
+  const [publicLandingDiscount, setPublicLandingDiscount] = useState(0)
+  const [savingPublicConfig, setSavingPublicConfig] = useState(false)
+
   // Registration Link Generator
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [inviteFreeMonths, setInviteFreeMonths] = useState(false)
@@ -159,6 +165,17 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       DatabaseService.getStripePriceDetails().then(details => {
         if (details?.amount) setStripePriceAmount(details.amount)
       }).catch(console.error).finally(() => setLoadingPriceDetails(false))
+      // Fetch public landing page config
+      supabase.from('app_config').select('key, value')
+        .in('key', ['public_landing_bonus_months', 'public_landing_discount_percent'])
+        .then(({ data }) => {
+          if (data) {
+            data.forEach(row => {
+              if (row.key === 'public_landing_bonus_months') setPublicLandingBonus(parseInt(row.value) || 0)
+              if (row.key === 'public_landing_discount_percent') setPublicLandingDiscount(parseInt(row.value) || 0)
+            })
+          }
+        })
     }
   }, [activeView])
 
@@ -1754,6 +1771,71 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   <LinkIcon size={18} weight="bold" className="mr-2" />
                   Genera Link
                 </Button>
+                {/* Public Landing Config */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="h-11 px-4 border-white/10 text-zinc-400 hover:text-white rounded-xl"
+                    >
+                      <Globe size={18} weight="bold" className="mr-2" />
+                      Link Pubblico
+                      {(publicLandingBonus > 0 || publicLandingDiscount > 0) && (
+                        <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-4 bg-zinc-950 border-zinc-800 text-zinc-100" align="end">
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="font-bold text-sm text-white mb-1">Pagina Pubblica (minthi.it/info)</h4>
+                        <p className="text-xs text-zinc-500">Configura sconti e mesi bonus visibili a tutti i visitatori.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-zinc-400">Mesi bonus gratuiti</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={24}
+                          value={publicLandingBonus}
+                          onChange={(e) => setPublicLandingBonus(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="h-9 bg-black/40 border-white/10 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs text-zinc-400">Sconto % per tutti</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={publicLandingDiscount}
+                          onChange={(e) => setPublicLandingDiscount(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                          className="h-9 bg-black/40 border-white/10 text-sm"
+                        />
+                      </div>
+                      <Button
+                        className="w-full h-9 bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm"
+                        disabled={savingPublicConfig}
+                        onClick={async () => {
+                          setSavingPublicConfig(true)
+                          try {
+                            await supabase.from('app_config').upsert({ key: 'public_landing_bonus_months', value: String(publicLandingBonus) })
+                            await supabase.from('app_config').upsert({ key: 'public_landing_discount_percent', value: String(publicLandingDiscount) })
+                            toast.success('Configurazione pubblica salvata')
+                          } catch { toast.error('Errore salvataggio') }
+                          finally { setSavingPublicConfig(false) }
+                        }}
+                      >
+                        {savingPublicConfig ? '...' : 'Salva'}
+                      </Button>
+                      {(publicLandingBonus > 0 || publicLandingDiscount > 0) && (
+                        <p className="text-xs text-emerald-400">
+                          Attivo: {publicLandingBonus > 0 ? `${publicLandingBonus} mesi gratis` : ''}{publicLandingBonus > 0 && publicLandingDiscount > 0 ? ' + ' : ''}{publicLandingDiscount > 0 ? `${publicLandingDiscount}% sconto` : ''}
+                        </p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
                 {/* Search Bar */}
                 <div className="relative w-full md:w-64">
                   <MagnifyingGlass className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />

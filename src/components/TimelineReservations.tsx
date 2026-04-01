@@ -307,13 +307,22 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
         const minutes = parseInt(parts[1]) || 0
         const startMinutes = hours * 60 + minutes
 
-        // Use configurable duration from settings
-        // For "infinite" (9999), extend to end of closing time
+        // Use per-booking duration, or fall back to global setting
         let duration = booking.duration || reservationDuration
+
+        // Find which service segment this booking falls into
+        const segment = timelineSegments.find(seg => startMinutes >= seg.startMin && startMinutes < seg.endMin)
+
         if (duration >= 9999) {
-          const [cH, cM] = closingTime.split(':').map(Number)
-          const closingMinutes = cH * 60 + cM
-          duration = Math.max(60, closingMinutes - startMinutes)
+          // "Fino a fine servizio" — extend to end of current segment
+          const segEnd = segment ? segment.endMin : (parseInt(closingTime.split(':')[0]) || 23) * 60
+          duration = Math.max(60, segEnd - startMinutes)
+        } else if (segment) {
+          // Clamp duration so it doesn't extend past the service segment (e.g. pranzo into cena)
+          const maxDuration = segment.endMin - startMinutes
+          if (duration > maxDuration) {
+            duration = maxDuration
+          }
         }
 
         return {
@@ -518,7 +527,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
         name: newReservation.name,
         phone: newReservation.phone,
         notes: newReservation.notes,
-        // duration: newReservation.duration // Not in DB schema yet, but logic is ready
+        duration: newReservation.duration,
       })
 
       toast.success('Prenotazione creata')
