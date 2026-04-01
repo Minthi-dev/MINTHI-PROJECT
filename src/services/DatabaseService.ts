@@ -64,8 +64,6 @@ export const DatabaseService = {
 
         // Rimuovi campi frontend-only
         delete payload.isActive
-        delete payload.hours
-        delete payload.coverChargePerPerson
         delete payload.allYouCanEat
         delete payload.waiter_mode_enabled
         delete payload.allow_waiter_payments

@@ -28,7 +28,6 @@ export interface Restaurant {
     cover_image_url?: string
     // Frontend helpers
     isActive?: boolean
-    hours?: string
     coverChargePerPerson?: number
     allYouCanEat?: {
         enabled: boolean
@@ -81,10 +80,11 @@ export interface Restaurant {
     billing_cap?: string
     billing_province?: string
     codice_univoco?: string
-    analytics_password_hash?: string
+    analytics_password_hash?: string | null
     demo_completed?: boolean
     is_active?: boolean
     subscription_cancel_at?: string
+    setup_completed?: boolean
 }
 
 export interface DayMealConfig {
