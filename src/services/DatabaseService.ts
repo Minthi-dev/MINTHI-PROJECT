@@ -5,6 +5,12 @@ import { hashPassword } from '../utils/passwordUtils'
 export const DatabaseService = {
     // Users
     async getUsers() {
+        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash')
+        if (error) throw error
+        return data as unknown as User[]
+    },
+
+    async getUsersFull() {
         const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash, raw_password')
         if (error) throw error
         return data as unknown as User[]
@@ -58,8 +64,6 @@ export const DatabaseService = {
 
         // Rimuovi campi frontend-only
         delete payload.isActive
-        delete payload.hours
-        delete payload.coverChargePerPerson
         delete payload.allYouCanEat
         delete payload.waiter_mode_enabled
         delete payload.allow_waiter_payments

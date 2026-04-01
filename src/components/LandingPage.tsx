@@ -180,17 +180,12 @@ export default function LandingPage() {
     ? (price * (1 - discountPercent / 100)).toFixed(2)
     : null
 
-  // CTA click — go to register page
+  // CTA click — go to registration with token, or login page
   const handleCTA = () => {
     if (token) {
       navigate(`/register/${token}`)
     } else {
-      // Navigate to register with public landing params
-      const params = new URLSearchParams()
-      if (bonusMonths > 0) params.set('bonus', String(bonusMonths))
-      if (discountPercent > 0) params.set('discount', String(discountPercent))
-      const query = params.toString()
-      navigate(`/register/public${query ? '?' + query : ''}`)
+      navigate('/')
     }
   }
 

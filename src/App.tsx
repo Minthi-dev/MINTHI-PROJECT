@@ -59,9 +59,10 @@ const LoadingSpinner = () => (
 )
 
 // Route Guard for Admin/Staff
-const ProtectedRoute = ({ children, user, loading }: { children: React.ReactNode, user: any, loading: boolean }) => {
+const ProtectedRoute = ({ children, user, loading, requiredRoles }: { children: React.ReactNode, user: any, loading: boolean, requiredRoles?: string[] }) => {
   if (loading) return <LoadingSpinner />
   if (!user) return <Navigate to="/" replace />
+  if (requiredRoles && !requiredRoles.includes(user.role)) return <Navigate to="/" replace />
 
   return React.cloneElement(children as React.ReactElement<any>, { user })
 }
@@ -99,6 +100,19 @@ const AppContent = () => {
         const parsedUser = JSON.parse(savedUser)
         setUser(parsedUser)
         setLoading(false)
+
+        // Server-side role validation: verify user still exists with claimed role
+        // This prevents localStorage manipulation attacks
+        if (parsedUser.role === 'ADMIN' || parsedUser.role === 'OWNER') {
+          supabase.from('users').select('id, role').eq('id', parsedUser.id).single()
+            .then(({ data }) => {
+              if (!data || data.role !== parsedUser.role) {
+                // Role mismatch or user deleted — force logout
+                localStorage.removeItem('minthi_user')
+                setUser(null)
+              }
+            })
+        }
         return
       } catch (e) {
         localStorage.removeItem('minthi_user')
@@ -152,7 +166,7 @@ const AppContent = () => {
           <Route
             path="/admin/*"
             element={
-              <ProtectedRoute user={user} loading={loading}>
+              <ProtectedRoute user={user} loading={loading} requiredRoles={['ADMIN']}>
                 <AdminDashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }
@@ -162,7 +176,7 @@ const AppContent = () => {
           <Route
             path="/dashboard/*"
             element={
-              <ProtectedRoute user={user} loading={loading}>
+              <ProtectedRoute user={user} loading={loading} requiredRoles={['OWNER', 'ADMIN']}>
                 <RestaurantDashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }
@@ -172,7 +186,7 @@ const AppContent = () => {
           <Route
             path="/waiter"
             element={
-              <ProtectedRoute user={user} loading={loading}>
+              <ProtectedRoute user={user} loading={loading} requiredRoles={['STAFF']}>
                 <WaiterDashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }
@@ -180,7 +194,7 @@ const AppContent = () => {
           <Route
             path="/waiter/table/:tableId/order"
             element={
-              <ProtectedRoute user={user} loading={loading}>
+              <ProtectedRoute user={user} loading={loading} requiredRoles={['STAFF']}>
                 <WaiterOrderPage />
               </ProtectedRoute>
             }
