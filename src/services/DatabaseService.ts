@@ -5,6 +5,12 @@ import { hashPassword } from '../utils/passwordUtils'
 export const DatabaseService = {
     // Users
     async getUsers() {
+        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash')
+        if (error) throw error
+        return data as unknown as User[]
+    },
+
+    async getUsersFull() {
         const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash, raw_password')
         if (error) throw error
         return data as unknown as User[]
