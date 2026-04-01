@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DatabaseService } from '../services/DatabaseService'
+import { supabase } from '../lib/supabase'
 
 // ─── Animated reveal on scroll ───
 function FadeIn({ children, className = '', delay = 0, direction = 'up' }: {
@@ -70,17 +71,12 @@ function DesktopMockup({ src, alt, className = '', cropTop = 130 }: {
     >
       {/* Glow */}
       <div className="absolute -inset-4 bg-gradient-to-b from-amber-500/10 via-amber-500/5 to-transparent rounded-3xl blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-      {/* Mac-style window chrome */}
+      {/* Screen */}
       <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-2xl shadow-black/60 bg-zinc-950">
-        {/* Title bar */}
-        <div className="h-8 sm:h-9 bg-zinc-900 border-b border-white/5 flex items-center px-3 gap-1.5">
-          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-red-500/80" />
-          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-yellow-500/80" />
-          <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-green-500/80" />
-          <span className="flex-1 text-center text-[10px] sm:text-[11px] text-zinc-500 font-light truncate">MINTHI — Dashboard</span>
+        <div className="hidden md:block" style={{ marginTop: `-${cropTop}px`, paddingBottom: 0 }}>
+          <img src={src} alt={alt} className="w-full block" style={{ display: 'block' }} />
         </div>
-        {/* Screen content — crop browser bar from screenshot */}
-        <div style={{ marginTop: `-${cropTop}px`, paddingBottom: 0 }}>
+        <div className="block md:hidden" style={{ marginTop: `-${Math.round(cropTop * 0.4)}px`, paddingBottom: 0 }}>
           <img src={src} alt={alt} className="w-full block" style={{ display: 'block' }} />
         </div>
       </div>
@@ -104,9 +100,9 @@ function PhoneMockup({ src, alt, className = '', cropTop = 65, cropBottom = 50, 
       transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
       className={`relative ${className}`}
     >
-      <div className="relative rounded-[1.6rem] sm:rounded-[2.2rem] overflow-hidden border-[2px] sm:border-[3px] border-zinc-700/60 shadow-2xl shadow-black/70 bg-black">
-        {/* Dynamic Island */}
-        <div className="absolute top-1 sm:top-1.5 left-1/2 -translate-x-1/2 w-16 sm:w-24 h-4 sm:h-5 bg-black rounded-full z-20" />
+      <div className="relative rounded-[2.2rem] overflow-hidden border-[3px] border-zinc-700/60 shadow-2xl shadow-black/70 bg-black">
+        {/* Notch */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-5 bg-black rounded-b-2xl z-20" />
         {/* Screen content — crop status bar and bottom bar */}
         <div className="relative overflow-hidden" style={{ marginTop: `-${cropTop}px`, marginBottom: `-${cropBottom}px` }}>
           <img src={src} alt={alt} className="w-full block" />
@@ -151,46 +147,50 @@ export default function LandingPage() {
   const heroScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.95])
   const heroY = useTransform(scrollYProgress, [0, 0.5], ['0%', '8%'])
 
-  // Global promo from app_config (used when no URL params)
-  const [globalBonus, setGlobalBonus] = useState(0)
-  const [globalDiscount, setGlobalDiscount] = useState(0)
-  const [globalToken, setGlobalToken] = useState('')
+  // URL params from admin registration link
+  const urlBonusMonths = parseInt(searchParams.get('bonus') || '0')
+  const urlDiscountPercent = parseInt(searchParams.get('discount') || '0')
+  const token = searchParams.get('token') || ''
+  const [publicBonus, setPublicBonus] = useState(0)
+  const [publicDiscount, setPublicDiscount] = useState(0)
 
-  // URL params from admin registration link — fall back to global settings
-  const bonusMonths = parseInt(searchParams.get('bonus') || '0') || globalBonus
-  const discountPercent = parseInt(searchParams.get('discount') || '0') || globalDiscount
-  const token = searchParams.get('token') || globalToken
+  // Effective values: URL params override public defaults
+  const bonusMonths = urlBonusMonths || publicBonus
+  const discountPercent = urlDiscountPercent || publicDiscount
 
   useEffect(() => {
     DatabaseService.getStripePriceDetails()
-      .then(d => setPrice(d.amount)) // amount already in EUR (not cents)
+      .then(d => setPrice(d.amount))
       .catch(() => setPrice(null))
-
-    // Fetch global promo settings if no URL params
-    if (!searchParams.get('bonus') && !searchParams.get('discount')) {
-      Promise.all([
-        DatabaseService.getAppConfig('landing_bonus_months'),
-        DatabaseService.getAppConfig('landing_discount_percent'),
-        DatabaseService.getAppConfig('landing_token'),
-      ]).then(([b, d, t]) => {
-        if (b) setGlobalBonus(parseInt(b) || 0)
-        if (d) setGlobalDiscount(parseInt(d) || 0)
-        if (t) setGlobalToken(t)
-      }).catch(() => {})
-    }
+    // Fetch public landing page config (global bonus/discount)
+    supabase.from('app_config').select('key, value')
+      .in('key', ['public_landing_bonus_months', 'public_landing_discount_percent'])
+      .then(({ data }) => {
+        if (data) {
+          data.forEach(row => {
+            if (row.key === 'public_landing_bonus_months') setPublicBonus(parseInt(row.value) || 0)
+            if (row.key === 'public_landing_discount_percent') setPublicDiscount(parseInt(row.value) || 0)
+          })
+        }
+      })
   }, [])
 
-  const displayPrice = price !== null ? (Number.isInteger(price) ? String(price) : price.toFixed(2)) : null
+  const displayPrice = price !== null ? price.toFixed(2) : null
   const discountedPrice = price !== null && discountPercent > 0
     ? (price * (1 - discountPercent / 100)).toFixed(2)
     : null
 
-  // CTA click — always go to registration page
+  // CTA click — go to register page
   const handleCTA = () => {
     if (token) {
       navigate(`/register/${token}`)
     } else {
-      navigate('/register')
+      // Navigate to register with public landing params
+      const params = new URLSearchParams()
+      if (bonusMonths > 0) params.set('bonus', String(bonusMonths))
+      if (discountPercent > 0) params.set('discount', String(discountPercent))
+      const query = params.toString()
+      navigate(`/register/public${query ? '?' + query : ''}`)
     }
   }
 
@@ -340,8 +340,9 @@ export default function LandingPage() {
       {/* ════════ NAVBAR ════════ */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/70 backdrop-blur-2xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center">
-            <img src="/minthi-logo.png" alt="MINTHI" className="h-8 w-auto" />
+          <div className="flex items-center gap-1">
+            <span className="text-lg font-light tracking-[0.3em] text-white">MIN</span>
+            <span className="text-lg font-light tracking-[0.3em] text-amber-500">THI</span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-[13px] text-zinc-400">
             <a href="#funzioni" className="hover:text-white transition-colors duration-300">Funzionalità</a>
@@ -507,17 +508,17 @@ export default function LandingPage() {
 
               {/* Desktop + Mobile combo */}
               {feature.desktopImg && feature.mobileImgs && (
-                <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-6 md:gap-12">
-                  <FadeIn direction="left" className="flex-[2] w-full">
+                <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-8 md:gap-12">
+                  <FadeIn direction="left" className="flex-[2]">
                     <DesktopMockup src={feature.desktopImg} alt={feature.title} />
                   </FadeIn>
-                  <div className="flex gap-3 sm:gap-4 md:gap-5 justify-center">
+                  <div className="flex gap-4 md:gap-5">
                     {feature.mobileImgs.map((img, i) => (
                       <FadeIn key={i} direction="right" delay={0.15 * (i + 1)}>
                         <PhoneMockup
                           src={img}
                           alt={`${feature.title} mobile ${i + 1}`}
-                          className="w-[120px] sm:w-[150px] md:w-[200px]"
+                          className="w-[150px] md:w-[200px]"
                           hideRestaurantName={feature.hideName}
                         />
                       </FadeIn>
@@ -529,7 +530,7 @@ export default function LandingPage() {
               {/* Mobile only */}
               {!feature.desktopImg && feature.mobileImgs && (
                 <FadeIn>
-                  <div className={`flex justify-center gap-3 sm:gap-5 md:gap-8 ${feature.isCustomerSection ? 'items-end' : 'items-center'}`}>
+                  <div className={`flex justify-center gap-5 md:gap-8 ${feature.isCustomerSection ? 'items-end' : 'items-center'}`}>
                     {feature.mobileImgs.map((img, i) => {
                       const rotations = [-3, 0, 3]
                       const translates = [0, -12, 0]
@@ -541,12 +542,12 @@ export default function LandingPage() {
                           viewport={{ once: true, margin: '-40px' }}
                           transition={{ duration: 0.8, delay: i * 0.12, ease: [0.22, 1, 0.36, 1] }}
                           style={{ transform: `rotate(${rotations[i] || 0}deg)` }}
-                          className={`${feature.isCustomerSection && i > 1 ? 'hidden sm:block' : ''} ${!feature.isCustomerSection && i > 1 ? 'hidden sm:block' : ''}`}
+                          className={`${feature.isCustomerSection ? 'hidden sm:block' : ''} ${i === 0 || i === 1 ? '' : 'hidden sm:block'}`}
                         >
                           <PhoneMockup
                             src={img}
                             alt={`${feature.title} ${i + 1}`}
-                            className="w-[120px] sm:w-[160px] md:w-[220px]"
+                            className="w-[160px] md:w-[220px]"
                             hideRestaurantName={feature.hideName}
                           />
                         </motion.div>

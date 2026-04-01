@@ -102,7 +102,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
     date: '',
     time: '',
     guests: 1,
-    notes: ''
+    notes: '',
+    duration: reservationDuration || 120
   })
 
   // Move form state
@@ -143,7 +144,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
       date: date,
       time: time.substring(0, 5),
       guests: booking.guests,
-      notes: booking.notes || ''
+      notes: booking.notes || '',
+      duration: booking.duration || reservationDuration || 120
     })
     setShowEditDialog(true)
   }
@@ -185,7 +187,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
           table_id: editForm.tableId,
           date_time: dateTime,
           guests: editForm.guests,
-          notes: editForm.notes.trim()
+          notes: editForm.notes.trim(),
+          duration: editForm.duration
         }
         await DatabaseService.updateBooking(updatedBooking)
         toast.success('Prenotazione modificata con successo')
@@ -199,7 +202,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
           date_time: dateTime,
           guests: editForm.guests,
           notes: editForm.notes.trim(),
-          status: 'CONFIRMED' // Default status
+          duration: editForm.duration,
+          status: 'CONFIRMED'
         }
 
         // Assuming DatabaseService has createBooking, if not we use supabase directly or update service?
@@ -563,9 +567,10 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                 phone: '',
                 tableId: '',
                 date: selectedDate.toISOString().split('T')[0],
-                time: '20:00', // Default time
+                time: '20:00',
                 guests: 2,
-                notes: ''
+                notes: '',
+                duration: reservationDuration || 120
               })
               setSelectedBooking(null) // Null indicates create mode
               setShowEditDialog(true)
@@ -664,7 +669,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-4">
               <div className="space-y-2.5">
                 <Label htmlFor="edit-date" className="text-zinc-400">Data *</Label>
                 <div className="relative">
@@ -705,6 +710,26 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                   />
                   <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                 </div>
+              </div>
+              <div className="space-y-2.5">
+                <Label htmlFor="edit-duration" className="text-zinc-400">Durata (min)</Label>
+                <Select
+                  value={String(editForm.duration)}
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, duration: parseInt(value) }))}
+                >
+                  <SelectTrigger className="bg-zinc-900 border-zinc-800">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-zinc-800">
+                    <SelectItem value="30">30 min</SelectItem>
+                    <SelectItem value="60">1 ora</SelectItem>
+                    <SelectItem value="90">1h 30m</SelectItem>
+                    <SelectItem value="120">2 ore</SelectItem>
+                    <SelectItem value="150">2h 30m</SelectItem>
+                    <SelectItem value="180">3 ore</SelectItem>
+                    <SelectItem value="240">4 ore</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
