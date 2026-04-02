@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -14,17 +14,18 @@ const supabase = createClient(
 );
 
 serve(async (req) => {
+    const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+        return new Response("ok", { headers: cors });
     }
 
     try {
         const { restaurantId, returnUrl } = await req.json();
 
-        if (!restaurantId) {
+        if (!isValidUUID(restaurantId)) {
             return new Response(JSON.stringify({ error: "restaurantId richiesto" }), {
                 status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
             });
         }
 
@@ -37,7 +38,7 @@ serve(async (req) => {
         if (error || !restaurant?.stripe_customer_id) {
             return new Response(
                 JSON.stringify({ error: "Nessun account Stripe trovato. Attiva prima un abbonamento." }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }
 
@@ -48,13 +49,13 @@ serve(async (req) => {
         });
 
         return new Response(JSON.stringify({ url: session.url }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 200,
         });
     } catch (error) {
         console.error("Errore Billing Portal:", error);
         return new Response(JSON.stringify({ error: error.message }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 500,
         });
     }

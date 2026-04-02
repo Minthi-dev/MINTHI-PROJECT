@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -20,17 +20,18 @@ function couponName(percentOff: number, duration: string, durationMonths?: numbe
 }
 
 serve(async (req) => {
+    const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+        return new Response("ok", { headers: cors });
     }
 
     try {
         const { restaurantId, discountPercent, discountDuration, discountDurationMonths, reason, grantedBy } = await req.json();
 
-        if (!restaurantId || !discountPercent || !discountDuration) {
+        if (!isValidUUID(restaurantId) || !discountPercent || !discountDuration) {
             return new Response(JSON.stringify({ error: "Mancano parametri obbligatori" }), {
                 status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
             });
         }
 
@@ -44,7 +45,7 @@ serve(async (req) => {
         if (!restaurant?.stripe_subscription_id) {
             return new Response(JSON.stringify({ error: "Il ristorante non ha un abbonamento attivo" }), {
                 status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
             });
         }
 
@@ -74,7 +75,7 @@ serve(async (req) => {
             console.error("Errore creazione coupon:", err);
             return new Response(JSON.stringify({ error: "Errore creazione coupon Stripe: " + err.message }), {
                 status: 500,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
             });
         }
 
@@ -106,13 +107,13 @@ serve(async (req) => {
         console.log(`Sconto ${discountPercent}% applicato a ristorante ${restaurantId}`);
 
         return new Response(JSON.stringify({ success: true, couponId }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 200,
         });
     } catch (error) {
         console.error("Errore stripe-apply-discount:", error);
         return new Response(JSON.stringify({ error: error.message }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 500,
         });
     }

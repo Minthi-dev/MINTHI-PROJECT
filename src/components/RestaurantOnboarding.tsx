@@ -2,58 +2,13 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
-    ForkKnife, QrCode, ChartBar, CreditCard, CalendarBlank,
-    Users, CheckCircle, ArrowRight, Eye, EyeSlash, Rocket, ShieldCheck, Clock,
-    X, Sparkle, ChefHat, Tray
+    CreditCard,
+    CheckCircle, Eye, EyeSlash, Rocket, ShieldCheck,
+    X
 } from '@phosphor-icons/react'
 import { supabase } from '../lib/supabase'
-
-const MACRO_FEATURES = [
-    {
-        id: 'ordini_qr',
-        icon: QrCode,
-        title: 'Ordini QR Code in Tempo Reale',
-        short: 'I clienti ordinano dal tavolo. Niente attese.',
-        details: 'Trasforma ogni tavolo in un punto cassa digitale. I clienti inquadrano il QR code, sfogliano il menu interattivo e inviano l\'ordine direttamente in cucina. Elimina le attese, riduce gli errori del personale e aumenta lo scontrino medio grazie agli upsell suggeriti automaticamente durante l\'ordine.'
-    },
-    {
-        id: 'camerieri',
-        icon: Users,
-        title: 'Piattaforma Camerieri',
-        short: 'Gestione completa dello staff di sala.',
-        details: 'Un\'interfaccia dedicata per il tuo staff. I camerieri possono prendere ordini al tavolo da smartphone o tablet, gestire i pagamenti, e ricevere notifiche istantanee quando i piatti sono pronti. Monitora le performance di ogni membro del team direttamente dalla tua dashboard.'
-    },
-    {
-        id: 'prenotazioni_ai',
-        icon: Sparkle,
-        title: 'Prenotazioni Intelligenti AI',
-        short: 'Ricerca tavoli automatica con intelligenza artificiale.',
-        details: 'Dimentica le telefonate continue. I clienti prenotano online 24/7. L\'A.I. gestisce l\'assegnazione ottimale dei tavoli, calcola i tempi medi di permanenza per massimizzare i coperti e previene gli overbooking. Include promemoria automatici per ridurre i no-show.'
-    },
-    {
-        id: 'menu_smart',
-        icon: ForkKnife,
-        title: 'Menù Intelligente',
-        short: 'Menu dinamici, personalizzati e sempre aggiornati.',
-        details: 'Crea menu personalizzati (es. Menu Pranzo, Cena, Eventi) che si attivano automaticamente in base agli orari. Aggiungi foto ad alta risoluzione, evidenzia gli allergeni e gestisci tag come "Vegano" o "Gluten Free". Modifica prezzi e disponibilità in 1 secondo, ovunque ti trovi.'
-    },
-    {
-        id: 'analitiche',
-        icon: ChartBar,
-        title: 'Analitiche Avanzate',
-        short: 'Fatturato, vendite e performance sotto controllo.',
-        details: 'Monitora la salute del tuo business con grafici in tempo reale. Scopri i piatti più redditizi, gli orari di punta e l\'incasso totale giornaliero. Analizza i trend per ottimizzare il margine operativo e gli acquisti in magazzino.'
-    },
-    {
-        id: 'pagamenti_ayce',
-        icon: CreditCard,
-        title: 'Gestione Completa Pagamenti e AYCE',
-        short: 'Incassi via app, coperto automatico e formula All You Can Eat.',
-        details: 'I clienti possono pagare in autonomia dal tavolo usando Apple Pay, Google Pay o carta. Il sistema calcola in automatico le quote alla romana, aggiunge il costo del coperto e gestisce scenari complessi come la formula All You Can Eat, bloccando preventivamente abusi o ordini eccessivi.'
-    },
-]
 
 export default function RestaurantOnboarding() {
     const { token } = useParams<{ token: string }>()
@@ -64,7 +19,6 @@ export default function RestaurantOnboarding() {
     const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
     const [submitting, setSubmitting] = useState(false)
-    const [selectedFeature, setSelectedFeature] = useState<typeof MACRO_FEATURES[0] | null>(null)
     const [priceAmount, setPriceAmount] = useState<number>(0)
     const [passwordVisible, setPasswordVisible] = useState(false)
 
@@ -84,22 +38,22 @@ export default function RestaurantOnboarding() {
         codiceUnivoco: '',
     })
 
-    // Validate token on mount (token is optional — /register works without it)
+    // Validate token on mount
     useEffect(() => {
         // Clear any existing session to prevent conflicting redirects after registration
         localStorage.removeItem('minthi_user')
         supabase.auth.signOut().catch(console.error)
 
         if (!token) {
-            // No token — standard registration (no bonus/discount)
             setTokenData({ token: null, free_months: 0, discount_percent: 0, stripe_coupon_id: null })
+            setShowForm(true)
             setLoading(false)
-        } else {
-            DatabaseService.validateRegistrationToken(token).then(data => {
-                if (data) { setTokenData(data) } else { setTokenError(true) }
-                setLoading(false)
-            }).catch(() => { setTokenError(true); setLoading(false) })
+            return
         }
+        DatabaseService.validateRegistrationToken(token).then(data => {
+            if (data) { setTokenData(data); setShowForm(true) } else { setTokenError(true) }
+            setLoading(false)
+        }).catch(() => { setTokenError(true); setLoading(false) })
 
         // Fetch subscription price for display
         DatabaseService.getAppConfig('stripe_price_amount').then(val => {
@@ -118,7 +72,7 @@ export default function RestaurantOnboarding() {
         if (!form.billingCap.trim()) return toast.error('Inserisci il CAP')
         if (!form.billingProvince.trim()) return toast.error('Inserisci la provincia')
         if (!form.codiceUnivoco.trim()) return toast.error('Inserisci il codice univoco SDI')
-        if (!tokenData) return toast.error('Errore di configurazione. Ricarica la pagina.')
+        if (!tokenData) return toast.error('Errore di configurazione')
 
         setSubmitting(true)
         try {
@@ -131,7 +85,7 @@ export default function RestaurantOnboarding() {
                     username: form.username.trim(),
                     password: form.password,
                     freeMonths: tokenData.free_months,
-                    registrationToken: tokenData.token,
+                    registrationToken: tokenData.token || null,
                     billingName: form.billingName.trim(),
                     vatNumber: form.vatNumber.trim(),
                     billingAddress: form.billingAddress.trim(),
@@ -173,17 +127,17 @@ export default function RestaurantOnboarding() {
                 couponId: tokenData.stripe_coupon_id || null,
             })
             toast.dismiss('stripe')
+            // Save username so the success page can poll for account readiness
+            sessionStorage.setItem('minthi_pending_username', form.username.trim())
             window.location.href = url
         } catch (err: any) {
             toast.dismiss('stripe')
             console.error('Registration error:', err)
             const msg = err.message || ''
-            if (msg.includes('Username') && msg.includes('già in uso')) {
-                toast.error(msg)
-            } else if (msg.includes('Esiste già')) {
+            if (msg.includes('Esiste già')) {
                 toast.error(msg)
             } else if (msg.includes('duplicate') || msg.includes('unique')) {
-                toast.error('Nome ristorante o username già in uso. Scegli valori diversi.')
+                toast.error('Nome ristorante già in uso. Scegli un nome diverso.')
             } else {
                 toast.error('Errore durante la registrazione: ' + (msg || 'Riprova'))
             }
@@ -229,17 +183,19 @@ export default function RestaurantOnboarding() {
             {/* Header */}
             <header className="relative z-10 flex items-center justify-between px-6 py-5 border-b border-white/5 bg-black/60 backdrop-blur-xl sticky top-0">
                 <div className="flex items-center gap-3">
-                    <img src="/minthi-logo.png" alt="MINTHI" className="h-9 w-auto" />
+                    <img src="/minthi-logo.png" alt="MINTHI" className="h-14 w-auto" />
                 </div>
-                <button
-                    onClick={() => setShowForm(true)}
-                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-full text-sm transition-all hover:shadow-lg hover:shadow-amber-500/20 active:scale-95"
-                >
-                    Inizia Ora
-                </button>
+                {!showForm && (
+                    <button
+                        onClick={() => setShowForm(true)}
+                        className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-full text-sm transition-all hover:shadow-lg hover:shadow-amber-500/20 active:scale-95"
+                    >
+                        Inizia Ora
+                    </button>
+                )}
             </header>
 
-            {/* Hero */}
+            {/* Minimal background content behind form overlay */}
             <section className="relative z-10 px-6 py-20 text-center max-w-3xl mx-auto">
                 <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
                     <div className="flex flex-wrap items-center justify-center gap-2 mb-6">
@@ -264,160 +220,10 @@ export default function RestaurantOnboarding() {
                         <span className="bg-gradient-to-r from-amber-400 to-amber-600 bg-clip-text text-transparent">completamente digitale</span>
                     </h1>
                     <p className="text-lg text-zinc-400 leading-relaxed max-w-xl mx-auto mb-10">
-                        La piattaforma All-in-One per gestire ordini, camerieri, pagamenti e prenotazioni. Progettata per massimizzare in tuoi incassi e dimezzare i tempi di attesa.
+                        La piattaforma All-in-One per gestire ordini, camerieri, pagamenti e prenotazioni.
                     </p>
-                    <button
-                        onClick={() => setShowForm(true)}
-                        className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-black font-bold rounded-2xl text-lg hover:shadow-xl hover:shadow-amber-500/30 transition-all active:scale-95"
-                    >
-                        Registra il tuo Ristorante
-                        <ArrowRight size={20} weight="bold" />
-                    </button>
 
-                    {/* Pricing info */}
-                    {(priceAmount > 0 || tokenData?.free_months > 0 || tokenData?.discount_percent > 0) && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.3, duration: 0.5 }}
-                            className="mt-8 inline-block"
-                        >
-                            <div className="px-6 py-4 rounded-2xl bg-white/[0.03] border border-white/8 text-center">
-                                {tokenData?.free_months > 0 ? (
-                                    <p className="text-emerald-400 font-semibold text-base">
-                                        {tokenData.free_months} {tokenData.free_months === 1 ? 'mese' : 'mesi'} gratis
-                                        {priceAmount > 0 && <span className="text-zinc-500 font-normal text-sm">, poi €{priceAmount.toFixed(0)}/mese</span>}
-                                    </p>
-                                ) : tokenData?.discount_percent > 0 && priceAmount > 0 ? (
-                                    <div className="flex items-center justify-center gap-3">
-                                        <div>
-                                            <p className="text-zinc-500 text-sm line-through">€{priceAmount.toFixed(0)}/mese</p>
-                                            <p className="text-white font-bold text-2xl">€{(priceAmount * (1 - tokenData.discount_percent / 100)).toFixed(2)}<span className="text-sm font-normal text-zinc-400">/mese</span></p>
-                                        </div>
-                                        <div className="px-3 py-1 bg-amber-500/15 border border-amber-500/20 rounded-full">
-                                            <p className="text-amber-400 font-bold text-sm">-{tokenData.discount_percent}%</p>
-                                            <p className="text-amber-500/60 text-[10px]">
-                                                {tokenData.discount_duration === 'forever' ? 'per sempre'
-                                                    : tokenData.discount_duration === 'once' ? '1 mese'
-                                                        : `${tokenData.discount_duration} mesi`}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ) : priceAmount > 0 ? (
-                                    <p className="text-white font-semibold text-lg">
-                                        €{priceAmount.toFixed(0)}<span className="text-zinc-500 font-normal text-sm">/mese</span>
-                                    </p>
-                                ) : null}
-                                <p className="text-zinc-600 text-xs mt-1">Annullabile in qualsiasi momento</p>
-                            </div>
-                        </motion.div>
-                    )}
                 </motion.div>
-            </section>
-
-            {/* Features Grid */}
-            <section className="relative z-10 px-6 pb-20 max-w-5xl mx-auto">
-                <div className="mb-10 text-center">
-                    <h2 className="text-2xl font-bold mb-3">Tutto quello di cui hai bisogno</h2>
-                    <p className="text-zinc-400 text-sm">Clicca sulle funzionalità per scoprire i dettagli</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {MACRO_FEATURES.map((f, i) => (
-                        <motion.div
-                            key={f.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.08, duration: 0.4 }}
-                            onClick={() => setSelectedFeature(f)}
-                            className="p-6 rounded-2xl bg-zinc-900/60 border border-white/5 hover:border-amber-500/30 hover:bg-zinc-800/80 transition-all group cursor-pointer"
-                        >
-                            <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500 group-hover:shadow-lg group-hover:shadow-amber-500/20 transition-all">
-                                <f.icon size={24} weight="duotone" className="text-amber-400 group-hover:text-black transition-colors" />
-                            </div>
-                            <h3 className="font-bold text-base text-white mb-2">{f.title}</h3>
-                            <p className="text-sm text-zinc-400 leading-relaxed mb-4">{f.short}</p>
-                            <div className="text-xs font-bold text-amber-500 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                Scopri di più <ArrowRight size={12} weight="bold" />
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
-            </section>
-
-            {/* Feature Modal Popup */}
-            <AnimatePresence>
-                {selectedFeature && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={() => setSelectedFeature(null)}>
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                            className="w-full max-w-lg bg-zinc-950 border border-amber-500/20 rounded-3xl overflow-hidden shadow-2xl"
-                            onClick={e => e.stopPropagation()}
-                        >
-                            <div className="p-6 sm:p-8">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                                        <selectedFeature.icon size={28} weight="duotone" className="text-black" />
-                                    </div>
-                                    <button
-                                        onClick={() => setSelectedFeature(null)}
-                                        className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
-                                    >
-                                        <X size={16} weight="bold" />
-                                    </button>
-                                </div>
-                                <h3 className="text-2xl font-bold text-white mb-4 leading-tight">{selectedFeature.title}</h3>
-                                <p className="text-zinc-300 leading-relaxed text-sm sm:text-base">
-                                    {selectedFeature.details}
-                                </p>
-                            </div>
-                            <div className="p-4 bg-zinc-900 border-t border-white/5 flex justify-end">
-                                <button
-                                    onClick={() => {
-                                        setSelectedFeature(null)
-                                        setTimeout(() => setShowForm(true), 150)
-                                    }}
-                                    className="px-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl text-sm transition-colors"
-                                >
-                                    Attiva {selectedFeature.title}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* How it works */}
-            <section className="relative z-10 px-6 pb-20 max-w-3xl mx-auto">
-                <h2 className="text-2xl font-bold text-center mb-10">
-                    Come <span className="text-amber-400">funziona</span>
-                </h2>
-                <div className="space-y-6">
-                    {[
-                        { step: '1', title: 'Registrati', desc: 'Inserisci i dati del tuo ristorante e scegli le credenziali di accesso.' },
-                        { step: '2', title: 'Configura il menu', desc: 'Aggiungi categorie, piatti, prezzi e foto. Puoi anche importare dati di esempio.' },
-                        { step: '3', title: 'Stampa i QR code', desc: 'Ogni tavolo ha il suo QR. I clienti scansionano, sfogliano il menu e ordinano.' },
-                        { step: '4', title: 'Ricevi ordini', desc: 'Gli ordini arrivano in tempo reale nella dashboard cucina. Basta carta e penna.' },
-                    ].map((s, i) => (
-                        <motion.div
-                            key={s.step}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.3 + i * 0.1, duration: 0.4 }}
-                            className="flex items-start gap-4"
-                        >
-                            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-                                <span className="text-amber-400 font-bold text-sm">{s.step}</span>
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-white text-sm mb-0.5">{s.title}</h3>
-                                <p className="text-xs text-zinc-500">{s.desc}</p>
-                            </div>
-                        </motion.div>
-                    ))}
-                </div>
             </section>
 
             {/* Registration Form (slide up panel) */}
@@ -646,7 +452,7 @@ export default function RestaurantOnboarding() {
 
             {/* Footer */}
             <footer className="relative z-10 border-t border-white/5 px-6 py-8 text-center">
-                <p className="text-xs text-zinc-600 flex items-center justify-center gap-1.5">© 2026 <img src="/minthi-logo.png" alt="MINTHI" className="h-3.5 w-auto inline-block opacity-50" /> — Piattaforma per la ristorazione digitale</p>
+                <p className="text-xs text-zinc-600 flex items-center justify-center gap-1.5">© 2026 <img src="/minthi-logo.png" alt="MINTHI" className="h-4 w-auto inline-block opacity-50" /> — Piattaforma per la ristorazione digitale</p>
                 <p className="text-xs text-zinc-600 mt-1">Assistenza: <a href="tel:+393517570155" className="text-amber-400/60 hover:text-amber-400 transition-colors">+39 351 757 0155</a></p>
             </footer>
         </div>

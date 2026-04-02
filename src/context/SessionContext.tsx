@@ -36,7 +36,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const urlTableId = match ? match[1] : null;
 
         if (urlTableId && currentTableId && urlTableId !== currentTableId) {
-            console.log('Detected Table Switch: Clearing old session');
             exitSession(); // Clear previous session immediately
             // The new component mounting in the route will handle joining the new session
         }
@@ -65,7 +64,6 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 }
 
                 if (!data || data.status === 'CLOSED' || data.status === 'PAID') {
-                    console.log('Session confirmed CLOSED/PAID - Logging out');
                     exitSession();
                 } else {
                     setSessionStatus(data.status);

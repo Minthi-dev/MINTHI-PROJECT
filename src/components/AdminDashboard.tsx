@@ -6,13 +6,12 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSupabaseData } from '../hooks/useSupabaseData'
 import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
 import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info, Percent, X, Calendar, Globe } from '@phosphor-icons/react'
+import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
@@ -72,43 +71,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [fatturazioneDateTo, setFatturazioneDateTo] = useState('')
   const [fatturazioneSortField, setFatturazioneSortField] = useState<'date' | 'amount' | 'restaurant'>('date')
   const [fatturazioneSortDir, setFatturazioneSortDir] = useState<'asc' | 'desc'>('desc')
-  const [fatturazionePeriod, setFatturazionePeriod] = useState<'7d' | '1w' | '2w' | '1m' | '3m' | 'custom'>('1m')
-
-  // Abbonamenti: expanded restaurant details
-  const [expandedRestaurantId, setExpandedRestaurantId] = useState<string | null>(null)
-  // Abbonamenti: search within subscription list
-  const [abbonamentiSearch, setAbbonamentiSearch] = useState('')
-  // Fatturazione: invoice confirmation & delete (persisted to localStorage)
-  const [confirmedInvoices, setConfirmedInvoices] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('minthi_confirmed_invoices')
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    } catch { return new Set() }
-  })
-  const persistConfirmedInvoice = (id: string) => {
-    setConfirmedInvoices(prev => {
-      const next = new Set([...prev, id])
-      try { localStorage.setItem('minthi_confirmed_invoices', JSON.stringify([...next])) } catch {}
-      return next
-    })
-  }
-  const [confirmInvoiceId, setConfirmInvoiceId] = useState<string | null>(null)
-  const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null)
-  const [deletingPayment, setDeletingPayment] = useState(false)
-  // Bulk actions: multi-select
-  const [selectedRestaurants, setSelectedRestaurants] = useState<Set<string>>(new Set())
-  const [showBulkBonusDialog, setShowBulkBonusDialog] = useState(false)
-  const [showBulkDiscountDialog, setShowBulkDiscountDialog] = useState(false)
-  const [bulkBonusMonths, setBulkBonusMonths] = useState(1)
-  const [bulkBonusReason, setBulkBonusReason] = useState('')
-  const [bulkDiscountPercent, setBulkDiscountPercent] = useState<number | string>('')
-  const [bulkDiscountDuration, setBulkDiscountDuration] = useState('once')
-  const [applyingBulk, setApplyingBulk] = useState(false)
-
-  // Public landing page config
-  const [publicLandingBonus, setPublicLandingBonus] = useState(0)
-  const [publicLandingDiscount, setPublicLandingDiscount] = useState(0)
-  const [savingPublicConfig, setSavingPublicConfig] = useState(false)
 
   // Registration Link Generator
   const [showInviteDialog, setShowInviteDialog] = useState(false)
@@ -119,28 +81,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [inviteDiscountDurationMonths, setInviteDiscountDurationMonths] = useState(1)
   const [generatedLink, setGeneratedLink] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
-
-  // Public landing page promo settings
-  const [showPublicLinkDialog, setShowPublicLinkDialog] = useState(false)
-  const [publicBonus, setPublicBonus] = useState(0)
-  const [publicDiscount, setPublicDiscount] = useState<number | string>('')
-  const [publicToken, setPublicToken] = useState('')
-  const [savingPublicLink, setSavingPublicLink] = useState(false)
-  const [publicLinkLoaded, setPublicLinkLoaded] = useState(false)
-
-  // Load public link settings from app_config
-  useEffect(() => {
-    Promise.all([
-      DatabaseService.getAppConfig('landing_bonus_months'),
-      DatabaseService.getAppConfig('landing_discount_percent'),
-      DatabaseService.getAppConfig('landing_token'),
-    ]).then(([b, d, t]) => {
-      setPublicBonus(parseInt(b || '0') || 0)
-      setPublicDiscount(parseInt(d || '0') || 0)
-      setPublicToken(t || '')
-      setPublicLinkLoaded(true)
-    }).catch(() => setPublicLinkLoaded(true))
-  }, [])
 
   // Clear generated link when params change so user can generate a new one
   useEffect(() => {
@@ -187,17 +127,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       DatabaseService.getStripePriceDetails().then(details => {
         if (details?.amount) setStripePriceAmount(details.amount)
       }).catch(console.error).finally(() => setLoadingPriceDetails(false))
-      // Fetch public landing page config
-      supabase.from('app_config').select('key, value')
-        .in('key', ['public_landing_bonus_months', 'public_landing_discount_percent'])
-        .then(({ data }) => {
-          if (data) {
-            data.forEach(row => {
-              if (row.key === 'public_landing_bonus_months') setPublicLandingBonus(parseInt(row.value) || 0)
-              if (row.key === 'public_landing_discount_percent') setPublicLandingDiscount(parseInt(row.value) || 0)
-            })
-          }
-        })
     }
   }, [activeView])
 
@@ -254,6 +183,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [showDetailDialog, setShowDetailDialog] = useState(false)
   const [detailRestaurant, setDetailRestaurant] = useState<Restaurant | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
+  const [detailPasswordVisible, setDetailPasswordVisible] = useState(false)
 
   // Visibility state for passwords
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({})
@@ -297,89 +227,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     return result
   }, [restaurants, salesByRestaurant, searchQuery, sortOption])
 
-  // Period preset date range helper
-  const getPeriodDateRange = (period: typeof fatturazionePeriod): { from: Date | null; to: Date | null } => {
-    const now = new Date()
-    const to = new Date(now)
-    to.setHours(23, 59, 59, 999)
-    let from: Date | null = null
-
-    switch (period) {
-      case '7d': {
-        from = new Date(now)
-        from.setDate(from.getDate() - 7)
-        from.setHours(0, 0, 0, 0)
-        break
-      }
-      case '1w': {
-        // Last Monday to last Sunday
-        const dayOfWeek = now.getDay()
-        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-        from = new Date(now)
-        from.setDate(from.getDate() - diffToMonday - 7)
-        from.setHours(0, 0, 0, 0)
-        const toDate = new Date(from)
-        toDate.setDate(toDate.getDate() + 6)
-        toDate.setHours(23, 59, 59, 999)
-        return { from, to: toDate }
-      }
-      case '2w': {
-        from = new Date(now)
-        from.setDate(from.getDate() - 14)
-        from.setHours(0, 0, 0, 0)
-        break
-      }
-      case '1m': {
-        from = new Date(now)
-        from.setMonth(from.getMonth() - 1)
-        from.setHours(0, 0, 0, 0)
-        break
-      }
-      case '3m': {
-        from = new Date(now)
-        from.setMonth(from.getMonth() - 3)
-        from.setHours(0, 0, 0, 0)
-        break
-      }
-      case 'custom':
-        return { from: null, to: null }
-    }
-    return { from, to }
-  }
-
-  // Upcoming payments for active subscribers
-  const upcomingPayments = useMemo(() => {
-    const activeRestaurants = (restaurants || []).filter(r => r.stripe_subscription_id && r.isActive)
-    const upcoming = activeRestaurants.map(r => {
-      const rPayments = (subscriptionPayments || []).filter(p => p.restaurant_id === r.id && p.status === 'paid')
-      // Sort by created_at desc to get last payment
-      rPayments.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
-      const lastPayment = rPayments[0]
-      let nextDate: Date
-      if (lastPayment?.period_end) {
-        nextDate = new Date(lastPayment.period_end)
-      } else if (lastPayment?.created_at) {
-        nextDate = new Date(lastPayment.created_at)
-        nextDate.setMonth(nextDate.getMonth() + 1)
-      } else {
-        // No payment history; estimate from now
-        nextDate = new Date()
-        nextDate.setMonth(nextDate.getMonth() + 1)
-      }
-      const now = new Date()
-      const daysUntil = Math.ceil((nextDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-      return {
-        restaurant: r,
-        nextDate,
-        daysUntil,
-        amount: lastPayment?.amount || 0
-      }
-    })
-    // Sort by closest date first, only include future payments (not expired)
-    upcoming.sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime())
-    return upcoming.filter(u => u.daysUntil > 0)
-  }, [restaurants, subscriptionPayments])
-
   // Fatturazione: filtered and sorted subscription payments
   const filteredFatturazionePayments = useMemo(() => {
     let result = [...(subscriptionPayments || [])]
@@ -400,26 +247,16 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       })
     }
 
-    // Filter by date range (preset or custom)
-    if (fatturazionePeriod !== 'custom') {
-      const range = getPeriodDateRange(fatturazionePeriod)
-      if (range.from) {
-        result = result.filter(p => p.created_at && new Date(p.created_at) >= range.from!)
-      }
-      if (range.to) {
-        result = result.filter(p => p.created_at && new Date(p.created_at) <= range.to!)
-      }
-    } else {
-      if (fatturazioneDateFrom) {
-        const from = new Date(fatturazioneDateFrom)
-        from.setHours(0, 0, 0, 0)
-        result = result.filter(p => p.created_at && new Date(p.created_at) >= from)
-      }
-      if (fatturazioneDateTo) {
-        const to = new Date(fatturazioneDateTo)
-        to.setHours(23, 59, 59, 999)
-        result = result.filter(p => p.created_at && new Date(p.created_at) <= to)
-      }
+    // Filter by date range
+    if (fatturazioneDateFrom) {
+      const from = new Date(fatturazioneDateFrom)
+      from.setHours(0, 0, 0, 0)
+      result = result.filter(p => p.created_at && new Date(p.created_at) >= from)
+    }
+    if (fatturazioneDateTo) {
+      const to = new Date(fatturazioneDateTo)
+      to.setHours(23, 59, 59, 999)
+      result = result.filter(p => p.created_at && new Date(p.created_at) <= to)
     }
 
     // Sort
@@ -438,7 +275,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     })
 
     return result
-  }, [subscriptionPayments, restaurants, fatturazioneSearch, fatturazioneStatus, fatturazioneDateFrom, fatturazioneDateTo, fatturazioneSortField, fatturazioneSortDir, fatturazionePeriod])
+  }, [subscriptionPayments, restaurants, fatturazioneSearch, fatturazioneStatus, fatturazioneDateFrom, fatturazioneDateTo, fatturazioneSortField, fatturazioneSortDir])
 
   // Fatturazione summary stats
   const fatturazioneStats = useMemo(() => {
@@ -613,15 +450,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       setIsUploading(true)
       let finalLogoUrl = editingRestaurant.logo_url
       if (editLogoFile) {
-        const oldLogoUrl = editingRestaurant.logo_url
         const uploadedUrl = await handleLogoUpload(editLogoFile)
-        if (uploadedUrl) {
-          finalLogoUrl = uploadedUrl
-          // Elimina vecchio logo dallo Storage
-          if (oldLogoUrl) {
-            DatabaseService._deleteStorageFile(oldLogoUrl, 'logos')
-          }
-        }
+        if (uploadedUrl) finalLogoUrl = uploadedUrl
       }
 
       const updatedRestaurant = {
@@ -649,13 +479,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         billing_province: updatedRestaurant.billing_province || null,
         codice_univoco: updatedRestaurant.codice_univoco || null,
       }, user)
-
-      // Save analytics password if changed
-      const analyticsPwInput = (document.getElementById('admin-analytics-pw') as HTMLInputElement)?.value?.trim()
-      if (analyticsPwInput) {
-        const hashed = await hashPassword(analyticsPwInput)
-        await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', editingRestaurant.id)
-      }
 
       if (editingUser) {
         const userUpdate: any = {
@@ -727,7 +550,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <img src="/minthi-logo.png" alt="MINTHI" className="h-10 w-auto" />
+              <img src="/minthi-logo.png" alt="MINTHI" className="h-14 w-auto" />
               <div>
                 <h1 className="text-xl font-bold text-white">Amministrazione</h1>
                 <p className="text-xs font-bold text-amber-500/70 tracking-[0.2em] uppercase">Control Panel</p>
@@ -791,487 +614,417 @@ export default function AdminDashboard({ user, onLogout }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-3xl font-bold text-white tracking-tight">Pagamenti</h2>
-                <p className="text-zinc-500 text-sm mt-1">Gestione abbonamenti e fatturazione</p>
+                <h2 className="text-2xl font-bold text-white">Pagamenti</h2>
+                <p className="text-zinc-500 text-sm mt-0.5">Gestione abbonamenti, bonus e fatturazione</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {adminSubTab === 'abbonamenti' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 rounded-lg h-9"
+                    onClick={() => setShowBonusDialog(true)}
+                  >
+                    <Gift size={15} className="mr-1.5" />
+                    Assegna Bonus
+                  </Button>
+                )}
               </div>
             </div>
 
             {/* Sub-Tab Navigation */}
-            <div className="flex items-center gap-1 bg-zinc-900/60 p-1.5 rounded-2xl border border-white/5 w-fit shadow-xl shadow-black/40">
+            <div className="flex items-center gap-1 bg-zinc-900/50 p-1 rounded-xl border border-white/5 w-fit">
               <button
                 onClick={() => setAdminSubTab('abbonamenti')}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   adminSubTab === 'abbonamenti'
-                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-[1.02]'
+                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
                     : 'text-zinc-400 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <CreditCard size={17} weight={adminSubTab === 'abbonamenti' ? 'fill' : 'regular'} />
+                <CreditCard size={16} weight={adminSubTab === 'abbonamenti' ? 'fill' : 'regular'} />
                 Abbonamenti
               </button>
               <button
                 onClick={() => setAdminSubTab('fatturazione')}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   adminSubTab === 'fatturazione'
-                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-[1.02]'
+                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
                     : 'text-zinc-400 hover:text-white hover:bg-white/5'
                 }`}
               >
-                <Receipt size={17} weight={adminSubTab === 'fatturazione' ? 'fill' : 'regular'} />
+                <Receipt size={16} weight={adminSubTab === 'fatturazione' ? 'fill' : 'regular'} />
                 Fatturazione
               </button>
             </div>
 
             {/* ==================== FATTURAZIONE TAB ==================== */}
             {adminSubTab === 'fatturazione' && (
-              <div className="space-y-8">
-                {/* ---- FATTURE FUTURE ---- */}
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center shadow-lg shadow-blue-500/5">
-                      <CalendarBlank size={20} className="text-blue-400" weight="duotone" />
+              <div className="space-y-6">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/10 shadow-lg shadow-emerald-500/[0.03]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle size={18} className="text-emerald-500" weight="fill" />
+                      <p className="text-xs text-emerald-500/80 font-semibold uppercase tracking-wider">Totale Incassato</p>
                     </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white">Fatture Future</h3>
-                      <p className="text-xs text-zinc-500">Prossimi pagamenti in arrivo</p>
-                    </div>
+                    <p className="text-3xl font-bold text-emerald-400">{'\u20AC'}{fatturazioneStats.totaleIncassato.toFixed(2)}</p>
                   </div>
-
-                  {upcomingPayments.length === 0 ? (
-                    <div className="text-center py-12 rounded-2xl bg-zinc-900/30 border border-white/5">
-                      <CalendarBlank size={40} className="mx-auto mb-3 text-zinc-700" />
-                      <p className="text-zinc-500 text-base font-medium">Nessun pagamento futuro</p>
+                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-amber-500/10 shadow-lg shadow-amber-500/[0.03]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock size={18} className="text-amber-500" weight="fill" />
+                      <p className="text-xs text-amber-500/80 font-semibold uppercase tracking-wider">In Sospeso</p>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {upcomingPayments.map(up => (
-                        <div
-                          key={up.restaurant.id}
-                          className="flex items-center justify-between p-5 rounded-2xl bg-zinc-900/40 border border-white/5 shadow-lg shadow-black/20 hover:shadow-xl hover:border-white/10 transition-all duration-300"
-                        >
-                          <div className="flex items-center gap-4 min-w-0">
-                            <div className={`w-3 h-3 rounded-full shrink-0 ${
-                              up.daysUntil <= 0 ? 'bg-red-500 animate-pulse' :
-                              up.daysUntil <= 3 ? 'bg-red-500' :
-                              up.daysUntil <= 7 ? 'bg-amber-500' :
-                              'bg-emerald-500/60'
-                            }`} />
-                            <div className="min-w-0">
-                              <p className="text-base font-semibold text-white truncate">{up.restaurant.name}</p>
-                              <p className="text-sm text-zinc-500 mt-0.5">
-                                {up.nextDate.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' })}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4 shrink-0">
-                            <span className="text-xl font-bold text-white">{'\u20AC'}{up.amount > 0 ? up.amount.toFixed(2) : '—'}</span>
-                            <span className={`text-xs font-semibold px-3 py-1.5 rounded-xl ${
-                              up.daysUntil <= 0 ? 'bg-red-500/10 text-red-400' :
-                              up.daysUntil <= 3 ? 'bg-red-500/10 text-red-400' :
-                              up.daysUntil <= 7 ? 'bg-amber-500/10 text-amber-400' :
-                              'bg-emerald-500/10 text-emerald-400'
-                            }`}>
-                              {up.daysUntil <= 0 ? 'Scaduto' :
-                               up.daysUntil === 1 ? 'Domani' :
-                               `Tra ${up.daysUntil}g`}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                    <p className="text-3xl font-bold text-amber-400">{fatturazioneStats.pagamentiInSospeso}</p>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Receipt size={18} className="text-zinc-400" weight="fill" />
+                      <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Fatture Emesse</p>
                     </div>
-                  )}
+                    <p className="text-3xl font-bold text-white">{fatturazioneStats.fattureEmesse}</p>
+                  </div>
                 </div>
 
-                {/* ---- FATTURE PASSATE ---- */}
-                <div>
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center shadow-lg shadow-black/20">
-                      <Receipt size={20} className="text-zinc-300" weight="duotone" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-white">Fatture Passate</h3>
-                      <p className="text-xs text-zinc-500">Storico pagamenti avvenuti</p>
-                    </div>
+                {/* Filters Bar */}
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-white/5">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Funnel size={16} className="text-zinc-500" />
                   </div>
-
-                  {/* Filters row - analytics style */}
-                  <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-900/40 p-4 rounded-2xl border border-white/5">
-                    <div className="relative flex-1 min-w-[180px] max-w-xs">
-                      <MagnifyingGlass className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <div className="flex flex-wrap items-center gap-2 flex-1">
+                    <div className="relative w-full md:w-56">
+                      <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                       <Input
                         placeholder="Cerca ristorante..."
                         value={fatturazioneSearch}
                         onChange={(e) => setFatturazioneSearch(e.target.value)}
-                        className="h-10 pl-10 bg-black/40 border-white/10 text-sm rounded-xl"
+                        className="h-10 pl-9 bg-black/40 border-white/5 text-sm rounded-xl"
                       />
                     </div>
-
-                    {/* Date filter - Select dropdown like analytics */}
-                    <Select value={fatturazionePeriod} onValueChange={(v) => {
-                      setFatturazionePeriod(v as typeof fatturazionePeriod)
-                      if (v !== 'custom') { setFatturazioneDateFrom(''); setFatturazioneDateTo('') }
-                    }}>
-                      <SelectTrigger className="h-10 w-auto min-w-[180px] border-white/10 bg-black/40 hover:bg-zinc-900/60 text-zinc-300 rounded-xl">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="text-zinc-500" size={16} />
-                          <SelectValue />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-950 border-zinc-800">
-                        <SelectItem value="7d">Ultimi 7 giorni</SelectItem>
-                        <SelectItem value="1w">Ultima settimana</SelectItem>
-                        <SelectItem value="2w">Ultime 2 settimane</SelectItem>
-                        <SelectItem value="1m">Ultimo mese</SelectItem>
-                        <SelectItem value="3m">Ultimi 3 mesi</SelectItem>
-                        <SelectItem value="custom">Personalizzato</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {fatturazionePeriod === 'custom' && (
-                      <div className="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-white/5">
-                        <Input
-                          type="date"
-                          value={fatturazioneDateFrom}
-                          onChange={(e) => setFatturazioneDateFrom(e.target.value)}
-                          className="bg-transparent border-none text-white text-sm w-32 h-8 focus-visible:ring-0"
-                        />
-                        <div className="w-3 h-px bg-zinc-700" />
-                        <Input
-                          type="date"
-                          value={fatturazioneDateTo}
-                          onChange={(e) => setFatturazioneDateTo(e.target.value)}
-                          className="bg-transparent border-none text-white text-sm w-32 h-8 focus-visible:ring-0"
-                        />
-                      </div>
+                    <div className="flex items-center gap-1">
+                      {(['all', 'paid', 'failed'] as const).map(status => (
+                        <button
+                          key={status}
+                          onClick={() => setFatturazioneStatus(status)}
+                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                            fatturazioneStatus === status
+                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-md shadow-emerald-500/5'
+                              : status === 'failed' ? 'bg-red-500/15 text-red-400 border border-red-500/20 shadow-md shadow-red-500/5'
+                              : 'bg-white text-black shadow-md'
+                              : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent'
+                          }`}
+                        >
+                          {status === 'all' && 'Tutti'}
+                          {status === 'paid' && 'Pagati'}
+                          {status === 'failed' && 'Falliti'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CalendarBlank size={16} className="text-zinc-500 shrink-0" />
+                      <input
+                        type="date"
+                        value={fatturazioneDateFrom}
+                        onChange={(e) => setFatturazioneDateFrom(e.target.value)}
+                        className="h-10 px-3 rounded-xl bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
+                        title="Data da"
+                      />
+                      <span className="text-zinc-600">→</span>
+                      <input
+                        type="date"
+                        value={fatturazioneDateTo}
+                        onChange={(e) => setFatturazioneDateTo(e.target.value)}
+                        className="h-10 px-3 rounded-xl bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
+                        title="Data a"
+                      />
+                    </div>
+                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
+                      <button
+                        onClick={() => {
+                          setFatturazioneSearch('')
+                          setFatturazioneStatus('all')
+                          setFatturazioneDateFrom('')
+                          setFatturazioneDateTo('')
+                        }}
+                        className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-all"
+                      >
+                        <XCircle size={16} />
+                        Cancella
+                      </button>
                     )}
-
-                    {/* Status filter - Select dropdown */}
-                    <Select value={fatturazioneStatus} onValueChange={(v) => setFatturazioneStatus(v as typeof fatturazioneStatus)}>
-                      <SelectTrigger className="h-10 w-auto min-w-[130px] border-white/10 bg-black/40 hover:bg-zinc-900/60 text-zinc-300 rounded-xl">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-zinc-950 border-zinc-800">
-                        <SelectItem value="all">Tutti gli stati</SelectItem>
-                        <SelectItem value="paid">Pagati</SelectItem>
-                        <SelectItem value="failed">Falliti</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {/* Sort */}
-                    <button
-                      onClick={() => setFatturazioneSortDir(prev => prev === 'asc' ? 'desc' : 'asc')}
-                      className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-zinc-500 hover:text-white hover:bg-white/5 transition-all border border-white/5"
-                    >
-                      {fatturazioneSortDir === 'desc' ? <CaretDown size={14} /> : <CaretUp size={14} />}
-                      {fatturazioneSortDir === 'desc' ? 'Recenti' : 'Meno recenti'}
-                    </button>
                   </div>
+                </div>
 
-                  {/* Results */}
-                  <div className="space-y-3">
-                    {filteredFatturazionePayments.length === 0 ? (
-                      <div className="text-center py-16 rounded-2xl bg-zinc-900/30 border border-white/5">
-                        <Receipt size={40} className="mx-auto mb-3 text-zinc-700" />
-                        <p className="text-zinc-500 text-base font-medium">Nessun pagamento trovato</p>
-                        <p className="text-zinc-600 text-sm mt-1">Modifica i filtri per vedere altri risultati</p>
-                      </div>
-                    ) : (
-                      filteredFatturazionePayments.map(payment => {
-                        const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
-                        const isConfirmed = confirmedInvoices.has(payment.id)
-                        return (
-                          <div
-                            key={payment.id}
-                            className={`flex items-center justify-between p-5 rounded-2xl border shadow-lg shadow-black/20 hover:shadow-xl transition-all duration-300 ${
-                              payment.status === 'paid' ? 'bg-zinc-900/40 border-white/5 hover:border-emerald-500/15' :
-                              payment.status === 'failed' ? 'bg-red-950/10 border-red-500/10 hover:border-red-500/20' :
-                              'bg-zinc-900/40 border-white/5'
-                            }`}
-                          >
-                            <div className="flex items-center gap-4 min-w-0 flex-1">
-                              {/* Status dot */}
-                              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                                payment.status === 'paid' ? 'bg-emerald-500' :
-                                payment.status === 'failed' ? 'bg-red-500' :
-                                'bg-amber-500'
-                              }`} />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-3">
-                                  <p className="text-base font-semibold text-white truncate">{restaurant?.name || 'Sconosciuto'}</p>
-                                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
-                                    payment.status === 'paid' ? 'bg-emerald-500/10 text-emerald-400' :
-                                    payment.status === 'failed' ? 'bg-red-500/10 text-red-400' :
-                                    'bg-amber-500/10 text-amber-400'
-                                  }`}>
-                                    {payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : 'In sospeso'}
-                                  </span>
-                                  {isConfirmed && (
-                                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                                      <CheckCircle size={14} weight="fill" /> Confermato
-                                    </span>
-                                  )}
+                {/* Results count + sort */}
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-zinc-500">
+                    {filteredFatturazionePayments.length} {filteredFatturazionePayments.length === 1 ? 'risultato' : 'risultati'}
+                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
+                      <span> su {(subscriptionPayments || []).length} totali</span>
+                    )}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {(['date', 'amount', 'restaurant'] as const).map(field => (
+                      <button
+                        key={field}
+                        onClick={() => { setFatturazioneSortField(field); setFatturazioneSortDir(prev => fatturazioneSortField === field ? (prev === 'asc' ? 'desc' : 'asc') : field === 'restaurant' ? 'asc' : 'desc') }}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          fatturazioneSortField === field ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {field === 'date' && 'Data'}
+                        {field === 'amount' && 'Importo'}
+                        {field === 'restaurant' && 'Nome'}
+                        {fatturazioneSortField === field && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payments List (card-based) */}
+                <div className="space-y-2">
+                  {filteredFatturazionePayments.length === 0 ? (
+                    <div className="text-center py-16 rounded-2xl bg-zinc-900/30 border border-white/5">
+                      <Receipt size={40} className="mx-auto mb-4 text-zinc-700" />
+                      <p className="text-base text-zinc-500">Nessun pagamento trovato</p>
+                      <p className="text-sm text-zinc-600 mt-1">Prova a modificare i filtri</p>
+                    </div>
+                  ) : (
+                    filteredFatturazionePayments.map(payment => {
+                      const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
+                      const isCompleted = payment.admin_completed
+                      return (
+                        <div key={payment.id} className={`group p-4 rounded-2xl border transition-all hover:shadow-lg ${
+                          isCompleted ? 'bg-zinc-900/30 border-white/3 opacity-70'
+                          : payment.status === 'paid' ? 'bg-zinc-900/60 border-emerald-500/10 hover:border-emerald-500/20 hover:shadow-emerald-500/[0.03]'
+                          : payment.status === 'failed' ? 'bg-zinc-900/60 border-red-500/10 hover:border-red-500/20 hover:shadow-red-500/[0.03]'
+                          : 'bg-zinc-900/60 border-white/5 hover:border-white/10'
+                        }`}>
+                          <div className="flex items-center gap-4">
+                            {/* Restaurant */}
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              {restaurant?.logo_url ? (
+                                <img src={restaurant.logo_url} alt="" className="w-10 h-10 rounded-xl object-cover border border-white/10 shrink-0" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
+                                  <Buildings size={16} className="text-zinc-600" />
                                 </div>
-                                <div className="flex items-center gap-3 mt-1 text-sm text-zinc-500">
-                                  <span>{payment.created_at ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}</span>
-                                  {payment.stripe_invoice_id && (
-                                    <span className="font-mono text-xs text-zinc-600 truncate max-w-[180px]">{payment.stripe_invoice_id}</span>
-                                  )}
-                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-base font-semibold text-white truncate">{restaurant?.name || 'Sconosciuto'}</p>
+                                <p className="text-sm text-zinc-500">
+                                  {payment.created_at ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
+                                </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span className={`text-xl font-bold ${
-                                payment.status === 'paid' ? 'text-emerald-400' :
-                                payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'
+
+                            {/* Amount */}
+                            <div className="text-right shrink-0">
+                              <p className={`text-xl font-bold ${
+                                payment.status === 'paid' ? 'text-emerald-400' : payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'
                               }`}>
                                 {'\u20AC'}{payment.amount.toFixed(2)}
-                              </span>
-                              {/* Confirm button */}
-                              {payment.status === 'paid' && !isConfirmed && (
-                                <button
-                                  onClick={() => setConfirmInvoiceId(payment.id)}
-                                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
-                                  title="Conferma emissione fattura"
-                                >
-                                  <CheckCircle size={15} weight="bold" />
-                                  Conferma
-                                </button>
-                              )}
-                              {/* Delete button - small X */}
-                              <button
-                                onClick={() => setDeletePaymentId(payment.id)}
-                                className="p-1.5 rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                                title="Elimina"
+                              </p>
+                            </div>
+
+                            {/* Status */}
+                            <div className="shrink-0">
+                              <Badge
+                                variant="outline"
+                                className={`text-xs font-semibold border px-3 py-1 rounded-xl ${
+                                  isCompleted
+                                    ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                                    : payment.status === 'paid'
+                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                                    : payment.status === 'failed'
+                                    ? 'border-red-500/20 bg-red-500/10 text-red-400'
+                                    : payment.status === 'pending'
+                                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                                    : 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400'
+                                }`}
                               >
-                                <X size={14} weight="bold" />
-                              </button>
+                                {isCompleted ? 'Completata' : payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : payment.status === 'pending' ? 'In sospeso' : 'Rimborsato'}
+                              </Badge>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {payment.status === 'paid' && !isCompleted && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 rounded-xl text-xs font-medium"
+                                  onClick={async () => {
+                                    try {
+                                      await supabase.from('subscription_payments').update({ admin_completed: true }).eq('id', payment.id)
+                                      setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: true } : p))
+                                      toast.success('Fattura completata')
+                                    } catch { toast.error('Errore') }
+                                  }}
+                                  title="Segna come completata"
+                                >
+                                  <CheckCircle size={16} className="mr-1" /> Completa
+                                </Button>
+                              )}
+                              {isCompleted && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-9 px-3 text-zinc-500 hover:bg-zinc-800 rounded-xl text-xs"
+                                  onClick={async () => {
+                                    try {
+                                      await supabase.from('subscription_payments').update({ admin_completed: false }).eq('id', payment.id)
+                                      setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: false } : p))
+                                      toast.success('Fattura riaperta')
+                                    } catch { toast.error('Errore') }
+                                  }}
+                                >
+                                  Riapri
+                                </Button>
+                              )}
                             </div>
                           </div>
-                        )
-                      })
-                    )}
-                  </div>
 
-                  {/* Totals bar */}
-                  {filteredFatturazionePayments.length > 0 && (
-                    <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-900/60 border border-white/5 mt-4">
-                      <span className="text-sm font-semibold text-zinc-400">{filteredFatturazionePayments.length} pagamenti</span>
-                      <div className="flex items-center gap-4">
-                        <span className="text-sm text-emerald-400 font-bold">
-                          {filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati — {'\u20AC'}{filteredFatturazionePayments.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0).toFixed(2)}
-                        </span>
-                        {filteredFatturazionePayments.filter(p => p.status === 'failed').length > 0 && (
-                          <span className="text-sm text-red-400 font-bold">
-                            {filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                          {/* Invoice ID row */}
+                          {payment.stripe_invoice_id && (
+                            <p className="text-[11px] font-mono text-zinc-600 mt-2 ml-[52px] truncate">
+                              {payment.stripe_invoice_id}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
 
-                {/* Delete confirmation dialog */}
-                <Dialog open={!!deletePaymentId} onOpenChange={() => setDeletePaymentId(null)}>
-                  <DialogContent className="max-w-sm bg-zinc-950 border-white/10 text-white">
-                    <DialogHeader>
-                      <DialogTitle className="flex items-center gap-2 text-base">
-                        <Warning size={20} className="text-red-400" weight="fill" />
-                        Conferma eliminazione
-                      </DialogTitle>
-                      <DialogDescription className="text-zinc-400">
-                        Sei sicuro di voler eliminare questo pagamento? L'azione non può essere annullata.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="flex gap-3 pt-4">
-                      <Button
-                        variant="outline"
-                        className="flex-1 h-11 rounded-xl border-white/10 text-zinc-400"
-                        onClick={() => setDeletePaymentId(null)}
-                      >
-                        Annulla
-                      </Button>
-                      <Button
-                        className="flex-1 h-11 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold"
-                        disabled={deletingPayment}
-                        onClick={async () => {
-                          if (!deletePaymentId) return
-                          setDeletingPayment(true)
-                          try {
-                            await supabase.from('subscription_payments').delete().eq('id', deletePaymentId)
-                            if (setSubscriptionPayments) {
-                              setSubscriptionPayments(prev => prev.filter(p => p.id !== deletePaymentId))
-                            }
-                            toast.success('Pagamento eliminato')
-                            setDeletePaymentId(null)
-                          } catch (e: any) { toast.error(e.message) }
-                          finally { setDeletingPayment(false) }
-                        }}
-                      >
-                        {deletingPayment ? 'Eliminazione...' : 'Elimina'}
-                      </Button>
+                {/* Summary Footer */}
+                {filteredFatturazionePayments.length > 0 && (
+                  <div className="flex items-center justify-between p-5 rounded-2xl bg-zinc-900/50 border border-white/5">
+                    <div>
+                      <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1">Totale filtrato</p>
+                      <p className="text-2xl font-bold text-white">
+                        {'\u20AC'}{filteredFatturazionePayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
+                      </p>
                     </div>
-                  </DialogContent>
-                </Dialog>
-
-                {/* Confirm invoice dialog */}
-                <Dialog open={!!confirmInvoiceId} onOpenChange={() => setConfirmInvoiceId(null)}>
-                  <DialogContent className="max-w-sm bg-zinc-950 border-white/10 text-white">
-                    <DialogHeader>
-                      <DialogTitle className="flex items-center gap-2 text-base">
-                        <CheckCircle size={20} className="text-emerald-400" weight="fill" />
-                        Conferma emissione fattura
-                      </DialogTitle>
-                      <DialogDescription className="text-zinc-400">
-                        Confermi che la fattura è stata emessa correttamente?
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="flex gap-3 pt-4">
-                      <Button
-                        variant="outline"
-                        className="flex-1 h-11 rounded-xl border-white/10 text-zinc-400"
-                        onClick={() => setConfirmInvoiceId(null)}
-                      >
-                        Annulla
-                      </Button>
-                      <Button
-                        className="flex-1 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold"
-                        onClick={() => {
-                          if (confirmInvoiceId) {
-                            persistConfirmedInvoice(confirmInvoiceId)
-                          }
-                          setConfirmInvoiceId(null)
-                          toast.success('Fattura confermata')
-                        }}
-                      >
-                        Conferma
-                      </Button>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-emerald-400 font-medium">{filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati</span>
+                      {filteredFatturazionePayments.filter(p => p.status === 'failed').length > 0 && (
+                        <span className="text-red-400 font-medium">{filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti</span>
+                      )}
+                      <span className="text-zinc-500">{filteredFatturazionePayments.length} totali</span>
                     </div>
-                  </DialogContent>
-                </Dialog>
+                  </div>
+                )}
               </div>
             )}
 
             {/* ==================== ABBONAMENTI TAB ==================== */}
             {adminSubTab === 'abbonamenti' && <>
-            {/* Prezzo abbonamento - compact */}
-            <div className="flex items-center gap-4 p-5 rounded-2xl bg-zinc-900/40 border border-white/5 shadow-lg shadow-black/20">
-              <div className="flex items-center gap-3 flex-1">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <CreditCard size={20} className="text-amber-400" weight="duotone" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Prezzo Abbonamento</p>
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
+                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-2">Totale</p>
+                <p className="text-3xl font-bold text-white">{restaurants?.length || 0}</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/10 shadow-lg shadow-emerald-500/[0.03]">
+                <p className="text-xs text-emerald-500/80 font-semibold uppercase tracking-wider mb-2">Abbonati</p>
+                <p className="text-3xl font-bold text-emerald-400">{restaurants?.filter(r => r.stripe_subscription_id).length || 0}</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-amber-500/10 shadow-lg shadow-amber-500/[0.03]">
+                <p className="text-xs text-amber-500/80 font-semibold uppercase tracking-wider mb-2">Non abbonati</p>
+                <p className="text-3xl font-bold text-amber-400">{restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0}</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-red-500/10 shadow-lg shadow-red-500/[0.03]">
+                <p className="text-xs text-red-500/80 font-semibold uppercase tracking-wider mb-2">Sospesi</p>
+                <p className="text-3xl font-bold text-red-400">{restaurants?.filter(r => !r.isActive).length || 0}</p>
+              </div>
+              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
+                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-2">Incassato</p>
+                <p className="text-3xl font-bold text-white">€{subscriptionPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(0)}</p>
+              </div>
+            </div>
+
+            {/* Gestione Prezzo Abbonamento */}
+            <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+              <div className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <CreditCard size={18} className="text-amber-400" weight="duotone" />
+                    <span className="text-sm font-semibold text-white">Prezzo Abbonamento</span>
+                  </div>
                   {stripePriceAmount > 0 && (
-                    <p className="text-2xl font-bold text-amber-400 mt-0.5">
-                      {'\u20AC'}{stripePriceAmount.toFixed(0)}<span className="text-sm font-normal text-zinc-500">/mese</span>
-                    </p>
+                    <span className="text-2xl font-bold text-white">
+                      €{stripePriceAmount.toFixed(0)}<span className="text-sm font-normal text-zinc-500">/mese</span>
+                    </span>
                   )}
-                  {loadingPriceDetails && <p className="text-xs text-zinc-500 mt-0.5">Caricamento...</p>}
+                  {loadingPriceDetails && <span className="text-xs text-zinc-500">Caricamento...</span>}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">{'\u20AC'}</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="Nuovo"
-                    value={newPriceInput}
-                    onChange={(e) => setNewPriceInput(e.target.value)}
-                    className="h-11 pl-7 w-28 bg-black/40 border-white/5 text-sm rounded-xl"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder={stripePriceAmount > 0 ? String(stripePriceAmount) : 'Nuovo importo...'}
+                      value={newPriceInput}
+                      onChange={(e) => setNewPriceInput(e.target.value)}
+                      className="h-10 pl-7 bg-black/40 border-white/5 text-sm"
+                    />
+                  </div>
+                  <Button
+                    disabled={!newPriceInput || updatingPrice}
+                    className="h-10 px-4 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded-xl shrink-0"
+                    onClick={async () => {
+                      const cents = Math.round(parseFloat(newPriceInput) * 100)
+                      if (!cents || cents <= 0) return toast.error('Importo non valido')
+                      setUpdatingPrice(true)
+                      try {
+                        const result = await DatabaseService.createStripePrice(cents)
+                        setStripePriceAmount(result.amount)
+                        setStripePriceId(result.priceId)
+                        setStripePriceIdSaved(result.priceId)
+                        setNewPriceInput('')
+                        toast.success(`Prezzo aggiornato a €${result.amount}/mese`)
+                      } catch (e: any) { toast.error(e.message) }
+                      finally { setUpdatingPrice(false) }
+                    }}
+                  >
+                    {updatingPrice ? 'Aggiornamento...' : 'Aggiorna'}
+                  </Button>
                 </div>
-                <Button
-                  disabled={!newPriceInput || updatingPrice}
-                  className="h-11 px-5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm rounded-xl shadow-lg shadow-amber-500/20"
-                  onClick={async () => {
-                    const cents = Math.round(parseFloat(newPriceInput) * 100)
-                    if (!cents || cents <= 0) return toast.error('Importo non valido')
-                    setUpdatingPrice(true)
-                    try {
-                      const result = await DatabaseService.createStripePrice(cents)
-                      setStripePriceAmount(result.amount)
-                      setStripePriceId(result.priceId)
-                      setStripePriceIdSaved(result.priceId)
-                      setNewPriceInput('')
-                      toast.success(`Prezzo aggiornato a €${result.amount}/mese`)
-                    } catch (e: any) { toast.error(e.message) }
-                    finally { setUpdatingPrice(false) }
-                  }}
-                >
-                  {updatingPrice ? '...' : 'Aggiorna'}
-                </Button>
-              </div>
-            </div>
-
-            {/* Bulk actions + filter row */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {/* Filters */}
-                <div className="flex items-center gap-1.5">
-                  {(['all', 'paying', 'not_paying', 'suspended'] as const).map(filter => {
-                    const count = filter === 'all' ? (restaurants?.length || 0)
-                      : filter === 'paying' ? (restaurants?.filter(r => r.stripe_subscription_id).length || 0)
-                      : filter === 'not_paying' ? (restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0)
-                      : (restaurants?.filter(r => !r.isActive).length || 0)
-                    return (
-                      <button
-                        key={filter}
-                        onClick={() => setAdminFilter(filter)}
-                        className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${adminFilter === filter
-                          ? 'bg-white text-black shadow-lg shadow-white/10'
-                          : 'text-zinc-500 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        {filter === 'all' ? 'Tutti' : filter === 'paying' ? 'Abbonati' : filter === 'not_paying' ? 'Non abbonati' : 'Sospesi'}
-                        <span className={`ml-1.5 ${adminFilter === filter ? 'text-black/40' : 'text-zinc-700'}`}>{count}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                {/* Search */}
-                <div className="relative">
-                  <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                  <Input
-                    placeholder="Cerca..."
-                    value={abbonamentiSearch}
-                    onChange={(e) => setAbbonamentiSearch(e.target.value)}
-                    className="h-10 pl-9 w-48 bg-zinc-900/50 border-white/5 text-sm rounded-xl"
-                  />
-                </div>
-              </div>
-              {/* Bulk action buttons */}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  className="h-10 px-4 border-purple-500/20 text-purple-400 hover:bg-purple-500/10 rounded-xl text-sm font-semibold"
-                  onClick={() => {
-                    setSelectedRestaurants(new Set())
-                    setBulkBonusMonths(1)
-                    setBulkBonusReason('')
-                    setShowBulkBonusDialog(true)
-                  }}
-                >
-                  <Gift size={16} className="mr-1.5" />
-                  Bonus Multiplo
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-10 px-4 border-amber-500/20 text-amber-400 hover:bg-amber-500/10 rounded-xl text-sm font-semibold"
-                  onClick={() => {
-                    setSelectedRestaurants(new Set())
-                    setBulkDiscountPercent('')
-                    setBulkDiscountDuration('once')
-                    setShowBulkDiscountDialog(true)
-                  }}
-                >
-                  <Percent size={16} className="mr-1.5" />
-                  Sconto Multiplo
-                </Button>
+                {stripePriceIdSaved && (
+                  <p className="text-[10px] text-zinc-600 mt-2 font-mono truncate">{stripePriceIdSaved}</p>
+                )}
               </div>
             </div>
 
-            {/* Restaurant List - minimal cards */}
+            {/* Filters */}
+            <div className="flex items-center gap-1.5">
+              {(['all', 'paying', 'not_paying', 'suspended'] as const).map(filter => {
+                const count = filter === 'all' ? (restaurants?.length || 0)
+                  : filter === 'paying' ? (restaurants?.filter(r => r.stripe_subscription_id).length || 0)
+                  : filter === 'not_paying' ? (restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0)
+                  : (restaurants?.filter(r => !r.isActive).length || 0)
+                return (
+                  <button
+                    key={filter}
+                    onClick={() => setAdminFilter(filter)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${adminFilter === filter
+                      ? 'bg-white text-black'
+                      : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {filter === 'all' && 'Tutti'}
+                    {filter === 'paying' && 'Abbonati'}
+                    {filter === 'not_paying' && 'Non abbonati'}
+                    {filter === 'suspended' && 'Sospesi'}
+                    <span className={`ml-1.5 ${adminFilter === filter ? 'text-black/50' : 'text-zinc-600'}`}>{count}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Restaurant List */}
             <div className="space-y-2">
               {(restaurants || [])
                 .filter(r => {
@@ -1280,10 +1033,10 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   if (adminFilter === 'suspended') return !r.isActive
                   return true
                 })
-                .filter(r => !abbonamentiSearch || r.name.toLowerCase().includes(abbonamentiSearch.toLowerCase()))
                 .map(restaurant => {
                   const payments = subscriptionPayments.filter(p => p.restaurant_id === restaurant.id)
                   const bonuses = restaurantBonuses.filter(b => b.restaurant_id === restaurant.id && b.is_active)
+                  const lastPayment = payments.find(p => p.status === 'paid')
                   const activeBonus = bonuses.find(b => b.expires_at && new Date(b.expires_at) > new Date())
                   const hasSubscription = !!restaurant.stripe_subscription_id
                   const status = !restaurant.isActive ? 'suspended'
@@ -1291,55 +1044,92 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     : hasSubscription ? 'active'
                     : activeBonus ? 'bonus'
                     : 'none'
-                  const isExpanded = expandedRestaurantId === restaurant.id
-                  const paidPayments = payments.filter(p => p.status === 'paid').sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
-                  const firstPayment = paidPayments[paidPayments.length - 1]
-                  const subscribedSince = firstPayment?.created_at ? new Date(firstPayment.created_at) : null
 
                   return (
-                    <div
-                      key={restaurant.id}
-                      className={`rounded-2xl border shadow-lg shadow-black/20 overflow-hidden transition-all duration-300 ${
-                        status === 'suspended' ? 'bg-red-950/5 border-red-500/8'
-                        : status === 'active' ? 'bg-zinc-900/40 border-emerald-500/10'
-                        : status === 'past_due' ? 'bg-zinc-900/40 border-amber-500/15'
-                        : 'bg-zinc-900/40 border-white/5'
-                      } ${isExpanded ? 'shadow-xl shadow-black/40' : 'hover:shadow-xl hover:border-white/10'}`}
-                    >
-                      {/* Main row: name + status + info button */}
-                      <div className="flex items-center justify-between p-5">
-                        <div className="flex items-center gap-4 min-w-0">
-                          <h3 className="text-lg font-bold text-white truncate">{restaurant.name}</h3>
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold shrink-0 ${
-                            status === 'active' ? 'bg-emerald-500/10 text-emerald-400'
-                            : status === 'past_due' ? 'bg-amber-500/10 text-amber-400'
-                            : status === 'suspended' ? 'bg-red-500/10 text-red-400'
-                            : status === 'bonus' ? 'bg-purple-500/10 text-purple-400'
-                            : 'bg-zinc-800 text-zinc-500'
-                          }`}>
-                            {status === 'active' && <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Attivo</>}
-                            {status === 'past_due' && 'Pagamento fallito'}
-                            {status === 'suspended' && 'Sospeso'}
-                            {status === 'bonus' && 'Bonus'}
-                            {status === 'none' && 'Nessun piano'}
-                          </span>
+                    <div key={restaurant.id} className={`group p-4 rounded-xl border transition-all hover:bg-white/[0.02] ${
+                      status === 'suspended' ? 'bg-red-950/5 border-red-500/10'
+                      : status === 'active' ? 'bg-zinc-900/50 border-emerald-500/10'
+                      : status === 'past_due' ? 'bg-zinc-900/50 border-amber-500/15'
+                      : 'bg-zinc-900/50 border-white/5'
+                    }`}>
+                      <div className="flex items-center gap-3">
+                        {/* Logo */}
+                        {restaurant.logo_url ? (
+                          <img src={restaurant.logo_url} alt="" className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
+                            <Buildings size={16} className="text-zinc-600" />
+                          </div>
+                        )}
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-sm text-white truncate">{restaurant.name}</h3>
+                            {/* Status indicator */}
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                              status === 'active' ? 'bg-emerald-500/10 text-emerald-400'
+                              : status === 'past_due' ? 'bg-amber-500/10 text-amber-400'
+                              : status === 'suspended' ? 'bg-red-500/10 text-red-400'
+                              : status === 'bonus' ? 'bg-purple-500/10 text-purple-400'
+                              : 'bg-zinc-800 text-zinc-500'
+                            }`}>
+                              {status === 'active' && <><span className="w-1 h-1 rounded-full bg-emerald-400" />Attivo</>}
+                              {status === 'past_due' && 'Pagamento fallito'}
+                              {status === 'suspended' && 'Sospeso'}
+                              {status === 'bonus' && 'Bonus'}
+                              {status === 'none' && 'Nessun piano'}
+                            </span>
+                            {restaurant.enable_stripe_payments && (
+                              <span className="text-[10px] text-blue-400/60 font-medium">Connect</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-zinc-500">
+                            {lastPayment && (
+                              <span>Ultimo: €{lastPayment.amount} il {new Date(lastPayment.created_at || '').toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
+                            )}
+                            {activeBonus && (
+                              <span className="text-purple-400/70">{activeBonus.free_months}m gratis fino {new Date(activeBonus.expires_at || '').toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
+                            )}
+                            {restaurant.suspension_reason && (
+                              <span className="text-red-400/70">{restaurant.suspension_reason}</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* Bonus button */}
-                          <button
+
+                        {/* Payment history pills */}
+                        {payments.length > 0 && (
+                          <div className="hidden md:flex items-center gap-1 shrink-0">
+                            {payments.slice(0, 4).map(p => (
+                              <div
+                                key={p.id}
+                                title={`€${p.amount} — ${new Date(p.created_at || '').toLocaleDateString('it-IT')} — ${p.status === 'paid' ? 'Pagato' : 'Fallito'}`}
+                                className={`w-2 h-2 rounded-full ${p.status === 'paid' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-purple-400 hover:bg-purple-500/10 rounded-lg"
                             onClick={() => {
                               setBonusRestaurantId(restaurant.id)
                               setBonusMonths(1)
                               setBonusReason('')
                               setShowBonusDialog(true)
                             }}
-                            className="p-2.5 rounded-xl text-purple-400/60 hover:text-purple-400 hover:bg-purple-500/10 transition-all"
-                            title="Regala mesi bonus"
+                            title="Assegna Bonus"
                           >
-                            <Gift size={18} />
-                          </button>
-                          {/* Discount button */}
-                          <button
+                            <Gift size={15} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-amber-400 hover:bg-amber-500/10 rounded-lg"
                             onClick={() => {
                               setDiscountRestaurantId(restaurant.id)
                               setDiscountPercent('')
@@ -1348,105 +1138,29 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                               setDiscountReason('')
                               setShowDiscountDialog(true)
                             }}
-                            className="p-2.5 rounded-xl text-amber-400/60 hover:text-amber-400 hover:bg-amber-500/10 transition-all"
-                            title="Regala sconto"
+                            title="Assegna Sconto"
                           >
-                            <Percent size={18} />
-                          </button>
-                          {/* Info expand button */}
-                          <button
-                            onClick={() => setExpandedRestaurantId(isExpanded ? null : restaurant.id)}
-                            className={`p-2.5 rounded-xl transition-all duration-300 ${
-                              isExpanded ? 'bg-amber-500/15 text-amber-400 rotate-180' : 'text-zinc-500 hover:text-white hover:bg-white/5'
-                            }`}
-                            title="Dettagli"
-                          >
-                            <Info size={18} weight={isExpanded ? 'fill' : 'regular'} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Expanded details */}
-                      <div className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                        <div className="overflow-hidden">
-                          {isExpanded && (
-                            <div className="px-5 pb-5 space-y-4 border-t border-white/5 pt-4">
-                              {/* Info grid */}
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div>
-                                  <p className="text-xs text-zinc-500 mb-1">Abbonato da</p>
-                                  <p className="text-base font-semibold text-white">
-                                    {subscribedSince ? subscribedSince.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-zinc-500 mb-1">Totale pagato</p>
-                                  <p className="text-base font-semibold text-emerald-400">
-                                    {'\u20AC'}{paidPayments.reduce((s, p) => s + p.amount, 0).toFixed(2)}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-zinc-500 mb-1">N. pagamenti</p>
-                                  <p className="text-base font-semibold text-white">{paidPayments.length}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-zinc-500 mb-1">Stato</p>
-                                  <p className="text-base font-semibold text-white capitalize">{restaurant.subscription_status || 'Nessuno'}</p>
-                                </div>
-                              </div>
-
-                              {/* Active bonus */}
-                              {activeBonus && (
-                                <div className="flex items-center justify-between p-3 rounded-xl bg-purple-500/5 border border-purple-500/10">
-                                  <div className="flex items-center gap-2">
-                                    <Gift size={16} className="text-purple-400" />
-                                    <span className="text-sm font-medium text-purple-300">
-                                      {activeBonus.free_months} mesi bonus — scade {new Date(activeBonus.expires_at || '').toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                    </span>
-                                  </div>
-                                  <button
-                                    onClick={async () => {
-                                      if (confirm(`Revocare il bonus per ${restaurant.name}?`)) {
-                                        try {
-                                          await DatabaseService.deactivateBonus(activeBonus.id)
-                                          toast.success('Bonus revocato')
-                                          refreshRestaurants()
-                                          DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
-                                        } catch (e: any) { toast.error(e.message) }
-                                      }
-                                    }}
-                                    className="text-xs text-red-400/60 hover:text-red-400 font-semibold"
-                                  >
-                                    Revoca
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* Payment history */}
-                              {paidPayments.length > 0 && (
-                                <div>
-                                  <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Elenco Pagamenti</p>
-                                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                                    {paidPayments.map(p => (
-                                      <div key={p.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-black/20 hover:bg-white/[0.02] transition-colors">
-                                        <div className="flex items-center gap-2.5">
-                                          <div className={`w-2 h-2 rounded-full ${p.status === 'paid' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                                          <span className="text-sm text-zinc-300">
-                                            {p.created_at ? new Date(p.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                                          </span>
-                                        </div>
-                                        <span className="text-sm font-bold text-white">{'\u20AC'}{p.amount.toFixed(2)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Stripe info */}
-                              {restaurant.stripe_subscription_id && (
-                                <p className="text-xs text-zinc-600 font-mono truncate">Sub: {restaurant.stripe_subscription_id}</p>
-                              )}
-                            </div>
+                            <CreditCard size={15} />
+                          </Button>
+                          {activeBonus && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
+                              onClick={async () => {
+                                if (confirm(`Revocare il bonus per ${restaurant.name}?`)) {
+                                  try {
+                                    await DatabaseService.deactivateBonus(activeBonus.id)
+                                    toast.success('Bonus revocato')
+                                    refreshRestaurants()
+                                    DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
+                                  } catch (e: any) { toast.error(e.message) }
+                                }
+                              }}
+                              title="Revoca Bonus"
+                            >
+                              <Trash size={14} />
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -1460,163 +1174,12 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 if (adminFilter === 'not_paying') return !r.stripe_subscription_id && r.isActive
                 if (adminFilter === 'suspended') return !r.isActive
                 return true
-              }).filter(r => !abbonamentiSearch || r.name.toLowerCase().includes(abbonamentiSearch.toLowerCase())).length === 0 && (
-                <div className="text-center py-16 rounded-2xl bg-zinc-900/30 border border-white/5">
-                  <Buildings size={40} className="mx-auto mb-3 text-zinc-700" />
-                  <p className="text-zinc-500 text-base font-medium">Nessun ristorante trovato</p>
+              }).length === 0 && (
+                <div className="text-center py-12 text-zinc-500 text-sm">
+                  Nessun ristorante trovato per questo filtro.
                 </div>
               )}
             </div>
-
-            {/* Bulk Bonus Dialog */}
-            <Dialog open={showBulkBonusDialog} onOpenChange={setShowBulkBonusDialog}>
-              <DialogContent className="max-w-md bg-zinc-950 border-white/10 text-white">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-lg"><Gift size={20} className="text-purple-400" /> Bonus Multiplo</DialogTitle>
-                  <DialogDescription className="text-zinc-500">Seleziona i ristoranti e assegna mesi gratuiti.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Mesi gratuiti</Label>
-                    <div className="flex items-center gap-3">
-                      <Button variant="outline" size="icon" onClick={() => setBulkBonusMonths(m => Math.max(1, m - 1))} className="h-10 w-10 rounded-xl"><span className="text-lg">-</span></Button>
-                      <span className="text-3xl font-bold text-purple-400 w-12 text-center">{bulkBonusMonths}</span>
-                      <Button variant="outline" size="icon" onClick={() => setBulkBonusMonths(m => Math.min(24, m + 1))} className="h-10 w-10 rounded-xl"><span className="text-lg">+</span></Button>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Motivo (opzionale)</Label>
-                    <Input placeholder="Es. Promozione lancio..." value={bulkBonusReason} onChange={(e) => setBulkBonusReason(e.target.value)} className="h-10 rounded-xl" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Ristoranti ({selectedRestaurants.size} selezionati)</Label>
-                    <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded-xl bg-black/30 border border-white/5">
-                      {(restaurants || []).map(r => (
-                        <label key={r.id} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={selectedRestaurants.has(r.id)}
-                            onChange={() => setSelectedRestaurants(prev => {
-                              const next = new Set(prev)
-                              next.has(r.id) ? next.delete(r.id) : next.add(r.id)
-                              return next
-                            })}
-                            className="w-4 h-4 accent-purple-500 rounded"
-                          />
-                          <span className="text-sm text-white font-medium">{r.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <Button
-                    className="w-full h-12 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl shadow-lg shadow-purple-500/20"
-                    disabled={selectedRestaurants.size === 0 || applyingBulk}
-                    onClick={async () => {
-                      setApplyingBulk(true)
-                      try {
-                        for (const rid of selectedRestaurants) {
-                          await DatabaseService.createRestaurantBonus({
-                            restaurant_id: rid,
-                            free_months: bulkBonusMonths,
-                            reason: bulkBonusReason || undefined,
-                            granted_by: user.name || user.email,
-                          })
-                        }
-                        toast.success(`Bonus assegnato a ${selectedRestaurants.size} ristoranti!`)
-                        setShowBulkBonusDialog(false)
-                        refreshRestaurants()
-                        DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
-                      } catch (e: any) { toast.error(e.message) }
-                      finally { setApplyingBulk(false) }
-                    }}
-                  >
-                    {applyingBulk ? 'Applicazione...' : `Assegna ${bulkBonusMonths} mesi a ${selectedRestaurants.size} ristoranti`}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Bulk Discount Dialog */}
-            <Dialog open={showBulkDiscountDialog} onOpenChange={setShowBulkDiscountDialog}>
-              <DialogContent className="max-w-md bg-zinc-950 border-white/10 text-white">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-lg"><Percent size={20} className="text-amber-400" /> Sconto Multiplo</DialogTitle>
-                  <DialogDescription className="text-zinc-500">Seleziona i ristoranti e applica uno sconto.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Sconto (%)</Label>
-                    <div className="relative">
-                      <Input
-                        type="number" min={1} max={100} placeholder="Es. 50"
-                        value={bulkDiscountPercent}
-                        onChange={(e) => setBulkDiscountPercent(e.target.value === '' ? '' : Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
-                        className="h-10 pr-8 rounded-xl"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">%</span>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Durata</Label>
-                    <Select value={bulkDiscountDuration} onValueChange={setBulkDiscountDuration}>
-                      <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="once">1 mese</SelectItem>
-                        <SelectItem value="2">2 mesi</SelectItem>
-                        <SelectItem value="3">3 mesi</SelectItem>
-                        <SelectItem value="6">6 mesi</SelectItem>
-                        <SelectItem value="12">1 anno</SelectItem>
-                        <SelectItem value="forever">Per sempre</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Ristoranti ({selectedRestaurants.size} selezionati)</Label>
-                    <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded-xl bg-black/30 border border-white/5">
-                      {(restaurants || []).filter(r => r.stripe_subscription_id).map(r => (
-                        <label key={r.id} className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
-                          <input
-                            type="checkbox"
-                            checked={selectedRestaurants.has(r.id)}
-                            onChange={() => setSelectedRestaurants(prev => {
-                              const next = new Set(prev)
-                              next.has(r.id) ? next.delete(r.id) : next.add(r.id)
-                              return next
-                            })}
-                            className="w-4 h-4 accent-amber-500 rounded"
-                          />
-                          <span className="text-sm text-white font-medium">{r.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  <Button
-                    className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl shadow-lg shadow-amber-500/20"
-                    disabled={selectedRestaurants.size === 0 || !bulkDiscountPercent || applyingBulk}
-                    onClick={async () => {
-                      setApplyingBulk(true)
-                      try {
-                        const months = bulkDiscountDuration === 'once' ? 1 : bulkDiscountDuration === 'forever' ? undefined : parseInt(bulkDiscountDuration)
-                        for (const rid of selectedRestaurants) {
-                          await DatabaseService.applyRestaurantDiscount({
-                            restaurantId: rid,
-                            discountPercent: Number(bulkDiscountPercent),
-                            discountDuration: bulkDiscountDuration === 'once' ? 'once' : bulkDiscountDuration === 'forever' ? 'forever' : 'repeating',
-                            discountDurationMonths: months,
-                            grantedBy: user.name || user.email,
-                          })
-                        }
-                        toast.success(`Sconto ${bulkDiscountPercent}% applicato a ${selectedRestaurants.size} ristoranti!`)
-                        setShowBulkDiscountDialog(false)
-                      } catch (e: any) { toast.error(e.message) }
-                      finally { setApplyingBulk(false) }
-                    }}
-                  >
-                    {applyingBulk ? 'Applicazione...' : `Applica ${bulkDiscountPercent || '—'}% a ${selectedRestaurants.size} ristoranti`}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
             </>}
 
             {/* Discount Dialog */}
@@ -1777,15 +1340,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Public Landing Page Promo Settings */}
-                <Button
-                  variant="outline"
-                  className="h-11 px-4 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 rounded-xl"
-                  onClick={() => setShowPublicLinkDialog(true)}
-                >
-                  <Rocket size={18} weight="bold" className="mr-2" />
-                  Promo Pubblico
-                </Button>
                 {/* Invite Link Generator */}
                 <Button
                   variant="outline"
@@ -1803,71 +1357,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   <LinkIcon size={18} weight="bold" className="mr-2" />
                   Genera Link
                 </Button>
-                {/* Public Landing Config */}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="h-11 px-4 border-white/10 text-zinc-400 hover:text-white rounded-xl"
-                    >
-                      <Globe size={18} weight="bold" className="mr-2" />
-                      Link Pubblico
-                      {(publicLandingBonus > 0 || publicLandingDiscount > 0) && (
-                        <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 p-4 bg-zinc-950 border-zinc-800 text-zinc-100" align="end">
-                    <div className="space-y-3">
-                      <div>
-                        <h4 className="font-bold text-sm text-white mb-1">Pagina Pubblica (minthi.it/info)</h4>
-                        <p className="text-xs text-zinc-500">Configura sconti e mesi bonus visibili a tutti i visitatori.</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">Mesi bonus gratuiti</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={24}
-                          value={publicLandingBonus}
-                          onChange={(e) => setPublicLandingBonus(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="h-9 bg-black/40 border-white/10 text-sm"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">Sconto % per tutti</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={publicLandingDiscount}
-                          onChange={(e) => setPublicLandingDiscount(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
-                          className="h-9 bg-black/40 border-white/10 text-sm"
-                        />
-                      </div>
-                      <Button
-                        className="w-full h-9 bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm"
-                        disabled={savingPublicConfig}
-                        onClick={async () => {
-                          setSavingPublicConfig(true)
-                          try {
-                            await supabase.from('app_config').upsert({ key: 'public_landing_bonus_months', value: String(publicLandingBonus) })
-                            await supabase.from('app_config').upsert({ key: 'public_landing_discount_percent', value: String(publicLandingDiscount) })
-                            toast.success('Configurazione pubblica salvata')
-                          } catch { toast.error('Errore salvataggio') }
-                          finally { setSavingPublicConfig(false) }
-                        }}
-                      >
-                        {savingPublicConfig ? '...' : 'Salva'}
-                      </Button>
-                      {(publicLandingBonus > 0 || publicLandingDiscount > 0) && (
-                        <p className="text-xs text-emerald-400">
-                          Attivo: {publicLandingBonus > 0 ? `${publicLandingBonus} mesi gratis` : ''}{publicLandingBonus > 0 && publicLandingDiscount > 0 ? ' + ' : ''}{publicLandingDiscount > 0 ? `${publicLandingDiscount}% sconto` : ''}
-                        </p>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
                 {/* Search Bar */}
                 <div className="relative w-full md:w-64">
                   <MagnifyingGlass className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -2130,10 +1619,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                               const dur = inviteDiscountDuration
                               const durMonths = dur === 'once' ? 1 : dur === 'forever' ? undefined : parseInt(dur)
                               const { token } = await DatabaseService.createRegistrationToken(freeMonths, discountPct, dur === 'once' ? 'once' : dur === 'forever' ? 'forever' : 'repeating', durMonths)
-                              const params = new URLSearchParams({ token })
-                              if (freeMonths > 0) params.set('bonus', String(freeMonths))
-                              if (discountPct > 0) params.set('discount', String(discountPct))
-                              const link = `${window.location.origin}/info?${params.toString()}`
+                              const link = `${window.location.origin}/register/${token}`
                               setGeneratedLink(link)
                               if (navigator.clipboard && window.isSecureContext) {
                                 navigator.clipboard.writeText(link).catch(() => { })
@@ -2149,135 +1635,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                           {generatingLink ? 'Generazione...' : 'Genera Link'}
                         </Button>
                       )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-
-                {/* Public Landing Promo Dialog */}
-                <Dialog open={showPublicLinkDialog} onOpenChange={setShowPublicLinkDialog}>
-                  <DialogContent className="sm:max-w-[420px] bg-zinc-950 border-emerald-500/20 text-white">
-                    <DialogHeader>
-                      <DialogTitle className="flex items-center gap-2"><Rocket size={20} className="text-emerald-500" /> Promo Pagina Pubblica</DialogTitle>
-                      <DialogDescription className="text-zinc-400">
-                        Configura promozioni globali visibili su minthi.it/info (senza link specifico).
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                      {/* Mesi gratis */}
-                      <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">Mesi gratis</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={24}
-                          placeholder="0 = nessun bonus"
-                          value={publicBonus || ''}
-                          onChange={(e) => setPublicBonus(parseInt(e.target.value) || 0)}
-                          className="h-9 bg-zinc-900 border-white/10"
-                        />
-                      </div>
-
-                      {/* Sconto */}
-                      <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">Sconto (%)</Label>
-                        <div className="relative">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            placeholder="0 = nessuno sconto"
-                            value={publicDiscount}
-                            onChange={(e) => setPublicDiscount(e.target.value === '' ? '' : Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
-                            className="h-9 pr-8 bg-zinc-900 border-white/10"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">%</span>
-                        </div>
-                      </div>
-
-                      {/* Token di registrazione collegato */}
-                      <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">Token di registrazione (opzionale)</Label>
-                        <Input
-                          placeholder="Lascia vuoto per link senza token"
-                          value={publicToken}
-                          onChange={(e) => setPublicToken(e.target.value)}
-                          className="h-9 bg-zinc-900 border-white/10 font-mono text-sm"
-                        />
-                        <p className="text-[11px] text-zinc-600">Se impostato, il pulsante "Inizia Ora" porterà alla registrazione con questo token.</p>
-                      </div>
-
-                      {/* Preview */}
-                      {(publicBonus > 0 || Number(publicDiscount) > 0) && (
-                        <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-1">
-                          {publicBonus > 0 && (
-                            <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-                              <CheckCircle size={13} weight="fill" />
-                              {publicBonus} {publicBonus === 1 ? 'mese' : 'mesi'} gratis
-                            </p>
-                          )}
-                          {Number(publicDiscount) > 0 && (
-                            <p className="text-xs text-amber-400 flex items-center gap-1.5">
-                              <CheckCircle size={13} weight="fill" />
-                              {publicDiscount}% di sconto
-                              {stripePriceAmount > 0 && ` → €${(stripePriceAmount * (1 - Number(publicDiscount) / 100)).toFixed(2)}/mese`}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Link preview */}
-                      <div className="p-3 bg-zinc-900 rounded-xl border border-white/10">
-                        <p className="text-[11px] text-zinc-500 mb-1">Pagina pubblica:</p>
-                        <p className="text-sm text-white font-mono truncate">{window.location.origin}/info</p>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          className="flex-1 h-11 bg-emerald-600 text-white font-bold hover:bg-emerald-500 rounded-xl shadow-lg transition-all active:scale-95"
-                          disabled={savingPublicLink}
-                          onClick={async () => {
-                            setSavingPublicLink(true)
-                            try {
-                              await DatabaseService.setAppConfig('landing_bonus_months', String(publicBonus || 0))
-                              await DatabaseService.setAppConfig('landing_discount_percent', String(Number(publicDiscount) || 0))
-                              await DatabaseService.setAppConfig('landing_token', publicToken || '')
-                              toast.success('Promo pubblica salvata!')
-                              setShowPublicLinkDialog(false)
-                            } catch (err: any) {
-                              toast.error('Errore: ' + (err.message || 'Riprova'))
-                            } finally {
-                              setSavingPublicLink(false)
-                            }
-                          }}
-                        >
-                          {savingPublicLink ? 'Salvataggio...' : 'Salva'}
-                        </Button>
-                        {(publicBonus > 0 || Number(publicDiscount) > 0 || publicToken) && (
-                          <Button
-                            variant="outline"
-                            className="h-11 px-4 border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-xl"
-                            onClick={async () => {
-                              setSavingPublicLink(true)
-                              try {
-                                await DatabaseService.setAppConfig('landing_bonus_months', '0')
-                                await DatabaseService.setAppConfig('landing_discount_percent', '0')
-                                await DatabaseService.setAppConfig('landing_token', '')
-                                setPublicBonus(0)
-                                setPublicDiscount('')
-                                setPublicToken('')
-                                toast.success('Promo rimossa')
-                                setShowPublicLinkDialog(false)
-                              } catch (err: any) {
-                                toast.error('Errore: ' + (err.message || 'Riprova'))
-                              } finally {
-                                setSavingPublicLink(false)
-                              }
-                            }}
-                          >
-                            Rimuovi
-                          </Button>
-                        )}
-                      </div>
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -2360,6 +1717,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             onClick={() => {
                               setDetailRestaurant(restaurant)
                               setDetailUser(restaurantUser || null)
+                              setDetailPasswordVisible(false)
                               setShowDetailDialog(true)
                             }}
                             title="Vedi Tutti i Dati"
@@ -2499,9 +1857,9 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     </div>
                     <div>
                       <span className="text-zinc-500 text-xs">Password</span>
-                      <p className="text-zinc-400 font-medium text-xs">
-                        {detailUser.password_hash ? 'Password impostata' : 'Nessuna password'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-zinc-400 font-medium font-mono">••••••••</p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2654,48 +2012,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                   </div>
                 </div>
               )}
-
-              {/* Password Analitiche */}
-              <div className="space-y-2 pt-2 border-t border-white/10">
-                <Label className="text-xs text-zinc-400 uppercase tracking-wider font-bold">Password Analitiche</Label>
-                {editingRestaurant.analytics_password_hash ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-emerald-400">Protetta da password</p>
-                    <div className="flex gap-2">
-                      <Input
-                        type="text"
-                        placeholder="Nuova password (lascia vuoto per non cambiare)"
-                        id="admin-analytics-pw"
-                        className="flex-1"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 shrink-0"
-                        onClick={async () => {
-                          await supabase.from('restaurants').update({ analytics_password_hash: null }).eq('id', editingRestaurant.id)
-                          setEditingRestaurant(prev => prev ? ({ ...prev, analytics_password_hash: null }) : null)
-                          if (setRestaurants) {
-                            setRestaurants(prev => prev.map(r => r.id === editingRestaurant.id ? { ...r, analytics_password_hash: null } : r))
-                          }
-                          toast.success('Password analitiche rimossa')
-                        }}
-                      >
-                        Rimuovi
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-xs text-zinc-500">Nessuna password impostata</p>
-                    <Input
-                      type="text"
-                      placeholder="Imposta password analitiche"
-                      id="admin-analytics-pw"
-                    />
-                  </div>
-                )}
-              </div>
 
               <Button
                 onClick={handleSaveEdit}

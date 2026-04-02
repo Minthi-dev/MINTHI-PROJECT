@@ -10,7 +10,6 @@ export interface User {
     name?: string
     username?: string
     password_hash?: string
-    raw_password?: string
     role: UserRole
     created_at?: string
     restaurant_id?: string
@@ -25,7 +24,6 @@ export interface Restaurant {
     logo_url?: string
     owner_id: string
     created_at?: string
-    cover_image_url?: string
     // Frontend helpers
     isActive?: boolean
     coverChargePerPerson?: number
@@ -80,11 +78,10 @@ export interface Restaurant {
     billing_cap?: string
     billing_province?: string
     codice_univoco?: string
-    analytics_password_hash?: string | null
+    analytics_password_hash?: string
     demo_completed?: boolean
     is_active?: boolean
     subscription_cancel_at?: string
-    setup_completed?: boolean
 }
 
 export interface DayMealConfig {
@@ -334,7 +331,7 @@ export interface SubscriptionPayment {
     period_start?: string
     period_end?: string
     created_at?: string
-    invoice_confirmed?: boolean
+    admin_completed?: boolean
 }
 
 export interface RestaurantBonus {

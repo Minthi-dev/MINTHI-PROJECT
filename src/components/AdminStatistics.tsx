@@ -8,7 +8,7 @@ import { ChartBar, Money, ShoppingCart, Users, Clock, Fire, Calendar, TrendUp, S
 import { format, isWithinInterval, startOfDay, endOfDay, parseISO, eachDayOfInterval, isSameDay, subDays } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { it } from 'date-fns/locale'
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Cell } from 'recharts'
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '../lib/supabase'
@@ -686,7 +686,7 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
                     </CardContent>
                 </Card>
 
-                {/* Peak Hours Breakdown - Full 24h Chart */}
+                {/* Peak Hours Breakdown — Bar Chart */}
                 <Card className="col-span-1 bg-zinc-900/40 backdrop-blur-3xl border border-white/5 rounded-3xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.9)] overflow-hidden">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-3 text-lg font-bold text-white">
@@ -694,46 +694,41 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px] mt-2">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.peakHours.map(h => ({ ...h, label: `${h.hour}:00` }))} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                        <div className="mt-2">
+                            <ResponsiveContainer width="100%" height={320}>
+                                <BarChart data={stats.peakHours} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                                     <XAxis
                                         dataKey="hour"
-                                        tick={{ fill: '#71717a', fontSize: 10 }}
-                                        tickFormatter={(h) => `${h}`}
-                                        axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                                        tick={{ fill: '#52525b', fontSize: 10 }}
+                                        axisLine={false}
                                         tickLine={false}
-                                        interval={1}
+                                        tickFormatter={(h: number) => `${h}`}
                                     />
                                     <YAxis
-                                        tick={{ fill: '#71717a', fontSize: 10 }}
+                                        tick={{ fill: '#52525b', fontSize: 10 }}
                                         axisLine={false}
                                         tickLine={false}
                                         allowDecimals={false}
                                     />
                                     <Tooltip
-                                        contentStyle={{ backgroundColor: '#18181b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
+                                        contentStyle={{
+                                            backgroundColor: '#09090b',
+                                            borderRadius: '12px',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+                                        }}
+                                        itemStyle={{ color: '#fbbf24', fontWeight: 'bold' }}
+                                        labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
+                                        labelFormatter={(h: number) => `${String(h).padStart(2, '0')}:00`}
                                         formatter={(value: number) => [`${value} ordini`, 'Ordini']}
-                                        labelFormatter={(h) => `${h}:00`}
-                                        cursor={{ fill: 'rgba(245, 158, 11, 0.08)' }}
                                     />
                                     <Bar
                                         dataKey="count"
-                                        fill="#52525b"
+                                        fill="#f59e0b"
                                         radius={[4, 4, 0, 0]}
-                                        maxBarSize={24}
-                                    >
-                                        {stats.peakHours.map((entry, index) => {
-                                            const max = Math.max(...stats.peakHours.map(i => i.count)) || 1
-                                            return (
-                                                <Cell
-                                                    key={`cell-${index}`}
-                                                    fill={entry.count / max > 0.7 ? '#f59e0b' : entry.count > 0 ? '#52525b' : '#27272a'}
-                                                />
-                                            )
-                                        })}
-                                    </Bar>
+                                        maxBarSize={20}
+                                    />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>

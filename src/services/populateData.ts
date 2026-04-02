@@ -4,7 +4,6 @@ import { Category, Dish, Table, Room, TableSession, Order, OrderItem, Booking } 
 import { subDays, addDays, setHours, setMinutes } from 'date-fns'
 
 export const populateRestaurantData = async (restaurantId: string) => {
-    console.log('Populating robust data for restaurant:', restaurantId)
 
     // 1. Create Rooms
     const roomsData = [
@@ -118,7 +117,6 @@ export const populateRestaurantData = async (restaurantId: string) => {
     }
 
     // 5. Create Historical Data (50 Orders)
-    console.log('Generating historical orders...')
     for (let i = 0; i < 50; i++) {
         const randomTable = createdTables[Math.floor(Math.random() * createdTables.length)]
         const randomDate = subDays(new Date(), Math.floor(Math.random() * 30))
@@ -160,7 +158,6 @@ export const populateRestaurantData = async (restaurantId: string) => {
     }
 
     // 6. Create Active Data (5 Sessions)
-    console.log('Generating active orders...')
     for (let i = 0; i < 5; i++) {
         const table = createdTables[i] // Use first few tables
         const session = await DatabaseService.createSession({
@@ -183,7 +180,6 @@ export const populateRestaurantData = async (restaurantId: string) => {
     }
 
     // 7. Create Bookings (20)
-    console.log('Generating bookings...')
     const names = ['Marco Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Elena Neri', 'Alessandro Fonti', 'Chiara Gallo', 'Roberto Esposito', 'Anna Romano']
     for (let i = 0; i < 20; i++) {
         const offset = Math.floor(Math.random() * 5) - 2 // -2 to +2 days
@@ -202,5 +198,4 @@ export const populateRestaurantData = async (restaurantId: string) => {
         })
     }
 
-    console.log('Data population complete for:', restaurantId)
 }

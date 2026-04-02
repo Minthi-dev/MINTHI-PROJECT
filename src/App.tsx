@@ -17,7 +17,6 @@ const CustomerMenu = lazyImportRetry(() => import('./components/CustomerMenu'))
 const PublicReservationPage = lazyImportRetry(() => import('./components/reservations/PublicReservationPage'))
 const RestaurantOnboarding = lazyImportRetry(() => import('./components/RestaurantOnboarding'))
 const RegisterSuccessPage = lazyImportRetry(() => import('./components/RegisterSuccessPage'))
-const LandingPage = lazyImportRetry(() => import('./components/LandingPage'))
 
 // Loading spinner component
 const LoadingSpinner = () => (
@@ -38,7 +37,7 @@ const LoadingSpinner = () => (
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
       >
-        <img src="/minthi-logo.png" alt="MINTHI" className="h-24 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
+        <img src="/minthi-logo.png" alt="MINTHI" className="h-36 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
       </motion.div>
 
       <motion.div
@@ -59,10 +58,9 @@ const LoadingSpinner = () => (
 )
 
 // Route Guard for Admin/Staff
-const ProtectedRoute = ({ children, user, loading, requiredRoles }: { children: React.ReactNode, user: any, loading: boolean, requiredRoles?: string[] }) => {
+const ProtectedRoute = ({ children, user, loading }: { children: React.ReactNode, user: any, loading: boolean }) => {
   if (loading) return <LoadingSpinner />
   if (!user) return <Navigate to="/" replace />
-  if (requiredRoles && !requiredRoles.includes(user.role)) return <Navigate to="/" replace />
 
   return React.cloneElement(children as React.ReactElement<any>, { user })
 }
@@ -100,19 +98,6 @@ const AppContent = () => {
         const parsedUser = JSON.parse(savedUser)
         setUser(parsedUser)
         setLoading(false)
-
-        // Server-side role validation: verify user still exists with claimed role
-        // This prevents localStorage manipulation attacks
-        if (parsedUser.role === 'ADMIN' || parsedUser.role === 'OWNER') {
-          supabase.from('users').select('id, role').eq('id', parsedUser.id).single()
-            .then(({ data }) => {
-              if (!data || data.role !== parsedUser.role) {
-                // Role mismatch or user deleted — force logout
-                localStorage.removeItem('minthi_user')
-                setUser(null)
-              }
-            })
-        }
         return
       } catch (e) {
         localStorage.removeItem('minthi_user')
@@ -149,9 +134,6 @@ const AppContent = () => {
     <>
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
-          {/* LANDING PAGE — public, no auth */}
-          <Route path="/info" element={<LandingPage />} />
-
           {/* PUBLIC / ADMIN LOGIN */}
           <Route
             path="/"
@@ -166,7 +148,7 @@ const AppContent = () => {
           <Route
             path="/admin/*"
             element={
-              <ProtectedRoute user={user} loading={loading} requiredRoles={['ADMIN']}>
+              <ProtectedRoute user={user} loading={loading}>
                 <AdminDashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }
@@ -176,7 +158,7 @@ const AppContent = () => {
           <Route
             path="/dashboard/*"
             element={
-              <ProtectedRoute user={user} loading={loading} requiredRoles={['OWNER', 'ADMIN']}>
+              <ProtectedRoute user={user} loading={loading}>
                 <RestaurantDashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }
@@ -184,9 +166,9 @@ const AppContent = () => {
 
           {/* WAITER DASHBOARD */}
           <Route
-            path="/waiter"
+            path="/waiter/*"
             element={
-              <ProtectedRoute user={user} loading={loading} requiredRoles={['STAFF']}>
+              <ProtectedRoute user={user} loading={loading}>
                 <WaiterDashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }
@@ -194,7 +176,7 @@ const AppContent = () => {
           <Route
             path="/waiter/table/:tableId/order"
             element={
-              <ProtectedRoute user={user} loading={loading} requiredRoles={['STAFF']}>
+              <ProtectedRoute user={user} loading={loading}>
                 <WaiterOrderPage />
               </ProtectedRoute>
             }
@@ -216,23 +198,12 @@ const AppContent = () => {
         </Routes>
       </Suspense>
 
-      <Toaster position="top-center" expand={false} richColors visibleToasts={2} duration={2500} toastOptions={{ style: { marginTop: 'env(safe-area-inset-top, 0px)' } }} />
+      <Toaster position="top-right" expand={true} richColors />
     </>
   )
 }
 
 function App() {
-  const location = useLocation()
-
-  // Landing page is fully public — no auth, no session, no loading
-  if (location.pathname === '/info') {
-    return (
-      <Suspense fallback={<LoadingSpinner />}>
-        <LandingPage />
-      </Suspense>
-    )
-  }
-
   return (
     <SessionProvider>
       <AppContent />

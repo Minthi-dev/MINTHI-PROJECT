@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import Stripe from "https://esm.sh/stripe@17.7.0?target=denoland";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
@@ -13,7 +12,7 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-serve(async (req) => {
+Deno.serve(async (req) => {
     // Handle CORS preflight
     if (req.method === "OPTIONS") {
         return new Response("ok", {
@@ -148,10 +147,24 @@ serve(async (req) => {
                         try {
                             const paidItemIds = JSON.parse(paidItemIdsRaw);
                             if (Array.isArray(paidItemIds) && paidItemIds.length > 0) {
-                                const { error: itemUpdateError } = await supabase
+                                // Validate items belong to orders in this session (same restaurant)
+                                const { data: validItems } = await supabase
                                     .from("order_items")
-                                    .update({ status: "PAID" })
-                                    .in("id", paidItemIds);
+                                    .select("id, order_id, orders!inner(table_session_id)")
+                                    .in("id", paidItemIds)
+                                    .eq("orders.table_session_id", sessionId);
+
+                                const validIds = (validItems || []).map((i: any) => i.id);
+                                if (validIds.length !== paidItemIds.length) {
+                                    console.warn(`[WEBHOOK] ${paidItemIds.length - validIds.length} order_items non appartengono alla sessione ${sessionId}, ignorati`);
+                                }
+
+                                const { error: itemUpdateError } = validIds.length > 0
+                                    ? await supabase
+                                        .from("order_items")
+                                        .update({ status: "PAID" })
+                                        .in("id", validIds)
+                                    : { error: null };
 
                                 if (itemUpdateError) {
                                     console.error(`[WEBHOOK] Errore aggiornamento order_items a PAID:`, itemUpdateError);

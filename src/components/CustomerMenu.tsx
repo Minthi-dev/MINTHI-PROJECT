@@ -397,9 +397,6 @@ const CustomerMenuBase = () => {
   const [fullRestaurant, setFullRestaurant] = useState<Restaurant | null>(null)
   const [restaurantSuspended, setRestaurantSuspended] = useState(false)
   const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Default to true for backwards compat
-  const [courseSuggestionsEnabled, setCourseSuggestionsEnabled] = useState(false)
-  const [showCourseSuggestions, setShowCourseSuggestions] = useState(false)
-  const [suggestedCategories, setSuggestedCategories] = useState<Category[]>([])
   const [isTableActive, setIsTableActive] = useState(true) // Check if table has active session
   const [isViewOnly, setIsViewOnly] = useState(false) // New state for view-only mode
   const [isClosed, setIsClosed] = useState(false) // New state for closed hours
@@ -510,7 +507,6 @@ const CustomerMenuBase = () => {
               setRestaurantName(restaurant.name)
               setFullRestaurant(restaurant)
               setCourseSplittingEnabled(restaurant.enable_course_splitting !== false)
-              setCourseSuggestionsEnabled((restaurant as any).enable_course_suggestions || false)
               if (restaurant.isActive === false) { // Note: types.ts uses isActive, DB uses is_active. Checking both for safety or assuming mapped
                 // Check raw DB field if possible or mapped
                 // Assuming raw return:
@@ -569,7 +565,6 @@ const CustomerMenuBase = () => {
               setRestaurantName(restaurant.name)
               setFullRestaurant(restaurant)
               setCourseSplittingEnabled(restaurant.enable_course_splitting !== false)
-              setCourseSuggestionsEnabled((restaurant as any).enable_course_suggestions || false)
               if (restaurant.isActive === false) {
                 // Check raw DB field if needed
                 if ((restaurant as any).is_active === false) {
@@ -628,7 +623,6 @@ const CustomerMenuBase = () => {
           } else {
             // Session query failed (RLS/network) but we have saved PIN - trust localStorage
             if (sessionPin && !isViewOnly) {
-              console.log('Session query failed but PIN exists in localStorage, trusting saved PIN')
               setIsAuthenticated(true)
             } else if (!isViewOnly) {
               setIsAuthenticated(false)
@@ -742,7 +736,6 @@ const CustomerMenuBase = () => {
 
           // Update course splitting setting immediately
           setCourseSplittingEnabled(newSettings.enable_course_splitting !== false)
-          setCourseSuggestionsEnabled((newSettings as any).enable_course_suggestions || false)
 
           // Optionally update active status if changed
           if ((newSettings as any).is_active === false) {
@@ -909,7 +902,7 @@ const CustomerMenuBase = () => {
   // LOGIN SCREEN (PIN) - Themed Design
   if (!isAuthenticated && !isViewOnly) {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center p-6 overflow-hidden" style={{ background: theme.pageBgGradient, color: theme.textPrimary, fontFamily: theme.bodyFont, ...theme.cssVars }}>
+      <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: theme.pageBgGradient, color: theme.textPrimary, fontFamily: theme.bodyFont, ...theme.cssVars }}>
 
         <div className="w-full max-w-sm flex flex-col items-center gap-12">
 
@@ -984,7 +977,7 @@ const CustomerMenuBase = () => {
 
           {/* Footer Info */}
           <p className="text-[10px] tracking-widest uppercase mt-auto" style={{ color: theme.textMuted }}>
-            Inserisci il codice del tavolo
+            Il codice è sul segnaposto
           </p>
 
         </div>
@@ -1013,7 +1006,7 @@ const CustomerMenuBase = () => {
         tableId={tableId}
         sessionId={sessionId!}
         activeSession={activeSession!}
-        setActiveSession={setActiveSession}
+        onSessionUpdate={setActiveSession}
         isViewOnly={isViewOnly}
         isClosed={isClosed}
         isAuthenticated={isAuthenticated}
@@ -1027,7 +1020,7 @@ const CustomerMenuBase = () => {
 
 // Refactored Content Component to keep logic clean
 //  -- UPDATED INTERFACE to include auth and full restaurant --
-function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, setActiveSession, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, setActiveSession: (session: TableSession | null) => void, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
+function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, onSessionUpdate, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, onSessionUpdate?: (session: TableSession) => void, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
   // Using passed props instead of resolving them
   const isWaiterMode = false // Or pass as prop if needed
 
@@ -1070,10 +1063,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [isCartAnimating, setIsCartAnimating] = useState(false)
   const timersRef = React.useRef<ReturnType<typeof setTimeout>[]>([])
   const [activeWaitCourse, setActiveWaitCourse] = useState(1) // Waiter Mode: Selected course for new items
-  const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Note: also declared above for early hooks
-  const [courseSuggestionsEnabled, setCourseSuggestionsEnabled] = useState(false)
-  const [showCourseSuggestions, setShowCourseSuggestions] = useState(false)
-  const [suggestedCategories, setSuggestedCategories] = useState<Category[]>([])
+  const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(true) // Default to true
   const [isProcessingStripePayment, setIsProcessingStripePayment] = useState(false)
   const [showPaymentOptions, setShowPaymentOptions] = useState(false)
   const [stripePaymentSplitCount, setStripePaymentSplitCount] = useState(1)
@@ -1252,7 +1242,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       // But let's re-fetch strictly by restaurant_id to be safe and consistent.
       const { data: tableData } = await supabase.from('tables').select('restaurant_id, number').eq('id', tableId).single()
       const { data: restData } = await supabase.from('restaurants').select('id, name, enable_course_splitting, all_you_can_eat, ayce_price, ayce_max_orders, cover_charge_per_person, menu_style, menu_primary_color, view_only_menu_enabled, is_active, logo_url, weekly_coperto, weekly_ayce, weekly_service_hours').eq('id', restaurantId).single()
-      const { data: catsData } = await supabase.from('categories').select('id, name, restaurant_id, "order", is_active, created_at').eq('restaurant_id', restaurantId).neq('is_active', false).order('order', { ascending: true })
+      const { data: catsData } = await supabase.from('categories').select('id, name, restaurant_id, "order", created_at').eq('restaurant_id', restaurantId).order('order', { ascending: true })
       const { data: dishesData } = await supabase.from('dishes').select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, is_available, short_code, exclude_from_all_you_can_eat, is_ayce, allergens').eq('restaurant_id', restaurantId).eq('is_active', true)
       if (tableData) setTableName(tableData.number || '')
       if (restData) {
@@ -1356,13 +1346,13 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const historyTotal = useMemo(() => previousOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0), [previousOrders])
   const grandTotal = cartTotal + historyTotal
 
-  // AYCE order limit — only show if AYCE is globally enabled AND session has AYCE AND limit > 0
+  // AYCE order limit
   const ayceMaxOrders = useMemo(() => {
     if (!activeSession?.ayce_enabled) return 0
     const weeklyAyce = (fullRestaurant as any)?.weekly_ayce
-    const legacyAyce = (fullRestaurant as any)?.all_you_can_eat
-    // Check if AYCE is enabled at restaurant level
+    // If weekly schedule exists but AYCE is disabled there, don't show limit
     if (weeklyAyce && !weeklyAyce.enabled) return 0
+    const legacyAyce = (fullRestaurant as any)?.all_you_can_eat
     if (!weeklyAyce && legacyAyce && !legacyAyce.enabled) return 0
     return weeklyAyce?.defaultMaxOrders || legacyAyce?.maxOrders || (fullRestaurant as any)?.ayce_max_orders || 0
   }, [fullRestaurant, activeSession])
@@ -1372,15 +1362,11 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }, [ayceMaxOrders, previousOrders])
   const orderLimitReached = remainingOrders <= 0 && remainingOrders !== Infinity
 
-  // AYCE time-based order interval — only when AYCE is globally enabled
+  // AYCE time-based order interval
   const ayceOrderInterval = useMemo(() => {
     if (!activeSession?.ayce_enabled) return 0
     const weeklyAyce = (fullRestaurant as any)?.weekly_ayce
-    const legacyAyce = (fullRestaurant as any)?.all_you_can_eat
-    // Check if AYCE is enabled at restaurant level
-    if (weeklyAyce && !weeklyAyce.enabled) return 0
-    if (!weeklyAyce && legacyAyce && !legacyAyce.enabled) return 0
-    return weeklyAyce?.defaultOrderInterval || legacyAyce?.orderInterval || 0
+    return weeklyAyce?.defaultOrderInterval || 0
   }, [fullRestaurant, activeSession])
 
   const timeUntilNextOrder = useMemo(() => {
@@ -1464,40 +1450,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     addToCart(dish, quantity, notes, 1)
   }
 
-  // Compute suggested categories based on what's in the cart
-  const computeSuggestedCategories = (currentCart: CartItem[], addedDish: Dish) => {
-    if (!courseSuggestionsEnabled || sortedCategories.length === 0) return []
-
-    // Find all category IDs already in cart (including the just-added dish)
-    const cartCategoryIds = new Set<string>()
-    currentCart.forEach(item => {
-      if (item.dish?.category_id) cartCategoryIds.add(item.dish.category_id)
-    })
-    cartCategoryIds.add(addedDish.category_id)
-
-    // Use index in sorted array as position (handles categories without explicit order)
-    const catIndexMap = new Map<string, number>()
-    sortedCategories.forEach((cat, idx) => catIndexMap.set(cat.id, idx))
-
-    // Find the highest index among categories already in cart
-    let maxOrderedIndex = -1
-    cartCategoryIds.forEach(catId => {
-      const idx = catIndexMap.get(catId) ?? -1
-      if (idx > maxOrderedIndex) maxOrderedIndex = idx
-    })
-
-    // Suggest categories that come AFTER the highest ordered category
-    // and are NOT already in the cart
-    const suggested = sortedCategories.filter((cat, idx) => {
-      return idx > maxOrderedIndex && !cartCategoryIds.has(cat.id)
-    })
-
-    // Only suggest categories that have active dishes
-    return suggested.filter(cat =>
-      dishes.some(d => d.category_id === cat.id && d.is_active)
-    )
-  }
-
   const addToCart = async (dish: Dish, quantity: number = 1, notes: string = '', courseNum?: number) => {
     if (!sessionId) return
     const targetCourse = courseNum !== undefined ? courseNum : currentCourse
@@ -1515,15 +1467,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         setIsCartAnimating(true)
         timersRef.current.push(setTimeout(() => setIsCartAnimating(false), 500))
         toast.success(`Aggiunto al carrello`, { position: 'top-center', duration: 1500, style: { background: '#10B981', color: '#fff', border: 'none' } })
-
-        // Show course suggestions if enabled
-        if (courseSuggestionsEnabled) {
-          const suggested = computeSuggestedCategories(cart, dish)
-          if (suggested.length > 0) {
-            setSuggestedCategories(suggested)
-            setShowCourseSuggestions(true)
-          }
-        }
       }
       setSelectedDish(null)
       setDishNote('')
@@ -1540,20 +1483,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     const item = cart.find(i => i.id === cartId)
     if (!item) return
     const newQuantity = item.quantity + delta
-
-    // Optimistic update — update local state immediately
-    if (newQuantity <= 0) {
-      setCart(prev => prev.filter(i => i.id !== cartId))
-    } else {
-      setCart(prev => prev.map(i => i.id === cartId ? { ...i, quantity: newQuantity } : i))
-    }
-
     try {
       await DatabaseService.updateCartItem(cartId, { quantity: newQuantity })
     } catch (err) {
       console.error("Error updating cart:", err)
-      // Revert on error
-      fetchCart()
     }
   }
 
@@ -1810,7 +1743,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           try {
             const freshSession = await DatabaseService.getSessionById(sessionId)
             if (freshSession) {
-              setActiveSession(freshSession)
+              onSessionUpdate?.(freshSession)
               // Stop polling if paid_amount increased (webhook worked)
               const currentPaid = activeSession?.paid_amount || 0
               if ((freshSession.paid_amount || 0) > currentPaid) {
@@ -2220,64 +2153,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         </AnimatePresence>
 
 
-        {/* COURSE SUGGESTIONS MODAL */}
-        <Dialog open={showCourseSuggestions} onOpenChange={setShowCourseSuggestions}>
-          <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl w-[90vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
-            <DialogHeader className="sr-only">
-              <DialogTitle>Suggerimenti portate</DialogTitle>
-            </DialogHeader>
-            <div className="p-6 space-y-5">
-              <div className="text-center space-y-1.5">
-                <p className="text-2xl">🍽</p>
-                <h3 className="text-lg font-bold" style={{ color: theme.textPrimary }}>
-                  Ti piacerebbe ordinare anche...
-                </h3>
-                <p className="text-xs" style={{ color: theme.textMuted }}>
-                  {courseSplittingEnabled ? 'Verrà aggiunto come portata successiva' : 'Scopri le altre categorie del menù'}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                {suggestedCategories.slice(0, 6).map(cat => (
-                  <button
-                    key={cat.id}
-                    onClick={() => {
-                      setShowCourseSuggestions(false)
-                      if (courseSplittingEnabled) {
-                        const newCourse = maxCourse + 1
-                        setMaxCourse(newCourse)
-                        setCurrentCourse(newCourse)
-                      }
-                      scrollToCategory(cat.id)
-                    }}
-                    className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
-                    style={{
-                      backgroundColor: theme.primaryAlpha(0.08),
-                      border: `1.5px solid ${theme.primaryAlpha(0.2)}`,
-                      color: theme.primary
-                    }}
-                  >
-                    <span>{cat.name}</span>
-                    <span style={{ color: theme.primaryAlpha(0.5), fontSize: '18px' }}>›</span>
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setShowCourseSuggestions(false)}
-                className="w-full py-3 rounded-xl text-sm font-medium transition-colors"
-                style={{ color: theme.textMuted, backgroundColor: theme.cardBg }}
-              >
-                No grazie, ho finito
-              </button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
         {/* CART & HISTORY MODAL */}
         {!isViewOnly && (
           <Dialog open={isCartOpen} onOpenChange={setIsCartOpen}>
-            <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl max-h-[85dvh] min-h-0 flex flex-col w-[95vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
+            <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden shadow-2xl rounded-3xl max-h-[90vh] min-h-0 flex flex-col w-[95vw]" style={{ backgroundColor: theme.dialogBg, borderColor: theme.primaryAlpha(0.2), color: theme.textPrimary }}>
               <DialogHeader className="p-4 backdrop-blur-xl flex-none" style={{ borderBottom: `1px solid ${theme.divider}`, backgroundColor: theme.cardBg }}>
                 <DialogTitle className="text-center text-xl font-light uppercase tracking-widest" style={{ fontFamily: theme.headerFont, color: theme.textPrimary }}>Riepilogo</DialogTitle>
               </DialogHeader>

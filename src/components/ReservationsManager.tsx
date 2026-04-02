@@ -103,7 +103,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
     time: '',
     guests: 1,
     notes: '',
-    duration: reservationDuration || 120
+    duration: reservationDuration
   })
 
   // Move form state
@@ -145,7 +145,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
       time: time.substring(0, 5),
       guests: booking.guests,
       notes: booking.notes || '',
-      duration: booking.duration || reservationDuration || 120
+      duration: booking.duration || reservationDuration
     })
     setShowEditDialog(true)
   }
@@ -203,7 +203,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
           guests: editForm.guests,
           notes: editForm.notes.trim(),
           duration: editForm.duration,
-          status: 'CONFIRMED'
+          status: 'CONFIRMED' // Default status
         }
 
         // Assuming DatabaseService has createBooking, if not we use supabase directly or update service?
@@ -567,10 +567,10 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                 phone: '',
                 tableId: '',
                 date: selectedDate.toISOString().split('T')[0],
-                time: '20:00',
+                time: '20:00', // Default time
                 guests: 2,
                 notes: '',
-                duration: reservationDuration || 120
+                duration: reservationDuration
               })
               setSelectedBooking(null) // Null indicates create mode
               setShowEditDialog(true)
@@ -669,7 +669,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-4">
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2.5">
                 <Label htmlFor="edit-date" className="text-zinc-400">Data *</Label>
                 <div className="relative">
@@ -696,6 +696,9 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                   <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                 </div>
               </div>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2.5">
                 <Label htmlFor="edit-guests" className="text-zinc-400">Ospiti *</Label>
                 <div className="relative">
@@ -712,20 +715,22 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                 </div>
               </div>
               <div className="space-y-2.5">
-                <Label htmlFor="edit-duration" className="text-zinc-400">Durata (min)</Label>
+                <Label className="text-zinc-400">Durata</Label>
                 <Select
                   value={String(editForm.duration)}
                   onValueChange={(value) => setEditForm(prev => ({ ...prev, duration: parseInt(value) }))}
                 >
                   <SelectTrigger className="bg-zinc-900 border-zinc-800">
-                    <SelectValue />
+                    <div className="flex items-center gap-2">
+                      <Clock size={16} className="text-zinc-500" />
+                      <SelectValue placeholder="Durata" />
+                    </div>
                   </SelectTrigger>
                   <SelectContent className="bg-zinc-950 border-zinc-800">
-                    <SelectItem value="30">30 min</SelectItem>
                     <SelectItem value="60">1 ora</SelectItem>
-                    <SelectItem value="90">1h 30m</SelectItem>
+                    <SelectItem value="90">1h 30min</SelectItem>
                     <SelectItem value="120">2 ore</SelectItem>
-                    <SelectItem value="150">2h 30m</SelectItem>
+                    <SelectItem value="150">2h 30min</SelectItem>
                     <SelectItem value="180">3 ore</SelectItem>
                     <SelectItem value="240">4 ore</SelectItem>
                   </SelectContent>
@@ -1186,7 +1191,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                 disabled={isGeneratingPdf}
                 className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold h-12 shadow-md"
               >
-                {isGeneratingPdf ? 'Generazione PDF...' : 'Scarica PDF Locandina'}
+                {isGeneratingPdf ? 'Generazione PDF...' : '📷 Scarica PDF Locandina'}
               </Button>
             </div>
 
@@ -1215,36 +1220,32 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                   textAlign: 'center',
                   boxShadow: 'none'
                 }}>
-                  <div style={{ width: '60px', height: '3px', background: 'linear-gradient(to right, transparent, #d97706, transparent)', margin: '0 auto 30px auto', borderRadius: '2px' }} />
-                  <h1 style={{ fontSize: '44px', fontWeight: '300', marginBottom: '8px', color: '#18181b', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Prenota il Tuo Tavolo</h1>
-                  <p style={{ fontSize: '22px', color: '#71717a', marginBottom: '45px', fontWeight: '300', letterSpacing: '0.02em' }}>Scopri il nostro Menu Digitale</p>
+                  <h1 style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '10px', color: '#18181b' }}>Prenota il Tuo Tavolo</h1>
+                  <p style={{ fontSize: '24px', color: '#52525b', marginBottom: '50px' }}>& Scopri il nostro Menu Digitale</p>
 
                   <div style={{
                     background: 'white',
-                    padding: '24px',
-                    borderRadius: '16px',
-                    marginBottom: '35px',
-                    border: '1px solid #e4e4e7',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.06)'
+                    padding: '30px',
+                    borderRadius: '30px',
+                    marginBottom: '40px',
+                    border: '1px solid #e4e4e7'
                   }}>
                     <QRCodeGenerator
                       value={`${window.location.origin}/book/${restaurantId}`}
-                      size={320}
+                      size={350}
                     />
                   </div>
 
                   <div style={{
-                    background: '#fffbeb',
-                    border: '1px solid #fcd34d',
-                    borderRadius: '16px',
-                    padding: '25px 30px',
-                    width: '100%',
-                    textAlign: 'center'
+                    background: '#fffbeb', // amber-50
+                    border: '1px solid #fcd34d', // amber-300
+                    borderRadius: '20px',
+                    padding: '30px',
+                    width: '100%'
                   }}>
-                    <h3 style={{ color: '#b45309', fontSize: '24px', marginBottom: '10px', fontWeight: '600', letterSpacing: '0.03em' }}>Scansiona il QR Code</h3>
-                    <p style={{ fontSize: '18px', color: '#3f3f46', lineHeight: '1.5', fontWeight: '300' }}>Inquadra il codice con la fotocamera per prenotare in un attimo</p>
+                    <h3 style={{ color: '#b45309', fontSize: '28px', marginBottom: '15px' }}>📱 Scansiona Qui</h3>
+                    <p style={{ fontSize: '20px', color: '#18181b' }}>Inquadra il codice con la fotocamera per prenotare in un attimo.</p>
                   </div>
-                  <div style={{ width: '60px', height: '3px', background: 'linear-gradient(to right, transparent, #d97706, transparent)', margin: '30px auto 0 auto', borderRadius: '2px' }} />
                 </div>
               </div>
             </div>

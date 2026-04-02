@@ -1558,7 +1558,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               </tr>
             </thead>
             <tbody>
-              {analytics.dailyData.slice(0, 14).map((day: any, idx: number) => (
+              {analytics.dailyData.map((day: any, idx: number) => (
                 <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5' }}>
                   <td style={{ padding: '10px 0', fontWeight: 600, color: '#18181b' }}>{day.date}</td>
                   <td style={{ padding: '10px 0', textAlign: 'right', color: '#52525b' }}>{day.orders}</td>
@@ -1568,11 +1568,6 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               ))}
             </tbody>
           </table>
-          {analytics.dailyData.length > 14 && (
-            <div style={{ textAlign: 'center', marginTop: '15px', color: '#71717a', fontSize: '12px', fontStyle: 'italic' }}>
-              ... e altri {analytics.dailyData.length - 14} giorni
-            </div>
-          )}
         </div>
 
         {/* Section: Category Performance (Visual Table) */}
@@ -1604,8 +1599,37 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
           </table>
         </div>
 
+        {/* Section: Top Dishes Ranking */}
+        {analytics.dishStats.length > 0 && (
+          <div style={{ marginBottom: '40px', background: '#ffffff', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #e4e4e7' }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#18181b', marginBottom: '20px', borderBottom: '1px solid #f4f4f5', paddingBottom: '15px' }}>Classifica Piatti Più Venduti</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', borderBottom: '2px solid #e4e4e7' }}>
+                  <th style={{ padding: '12px', color: '#52525b', fontWeight: 700, width: '40px' }}>#</th>
+                  <th style={{ padding: '12px', color: '#52525b', fontWeight: 700 }}>Piatto</th>
+                  <th style={{ padding: '12px', color: '#52525b', fontWeight: 700 }}>Categoria</th>
+                  <th style={{ padding: '12px', color: '#52525b', fontWeight: 700, textAlign: 'center' }}>Quantità</th>
+                  <th style={{ padding: '12px', color: '#52525b', fontWeight: 700, textAlign: 'right' }}>Ricavo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.dishStats.map((dish, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #f4f4f5', background: idx % 2 === 0 ? 'transparent' : '#fafafa' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: 800, color: idx < 3 ? '#f59e0b' : '#a1a1aa', fontSize: '14px' }}>{idx + 1}</td>
+                    <td style={{ padding: '10px 12px', fontWeight: 600, color: '#18181b' }}>{dish.name}</td>
+                    <td style={{ padding: '10px 12px', color: '#71717a' }}>{dish.category}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#18181b' }}>{dish.quantity}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#f59e0b' }}>€{dish.revenue.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* Section: Inventory Analysis (Data Table) */}
-        <div style={{ background: '#ffffff', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #e4e4e7', pageBreakInside: 'avoid' }}>
+        <div style={{ background: '#ffffff', borderRadius: '20px', padding: '30px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #e4e4e7' }}>
           <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#18181b', marginBottom: '20px', borderBottom: '1px solid #f4f4f5', paddingBottom: '15px' }}>Dettaglio Magazzino & Vendite</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
@@ -1619,7 +1643,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               </tr>
             </thead>
             <tbody>
-              {inventoryData.dishes.slice(0, 30).map((dish, idx) => ( // Limit to top 30 to fit one page nicely, or handle pagination
+              {inventoryData.dishes.map((dish, idx) => (
                 <tr key={dish.id} style={{ borderBottom: '1px solid #f4f4f5', background: idx % 2 === 0 ? 'transparent' : '#fafafa' }}>
                   <td style={{ padding: '10px 12px', fontWeight: 600, color: '#18181b' }}>{dish.name}</td>
                   <td style={{ padding: '10px 12px', color: '#71717a' }}>{dish.category}</td>
@@ -1644,11 +1668,6 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               ))}
             </tbody>
           </table>
-          {inventoryData.dishes.length > 30 && (
-            <div style={{ textAlign: 'center', marginTop: '15px', color: '#71717a', fontSize: '12px', fontStyle: 'italic' }}>
-              ... e altri {inventoryData.dishes.length - 30} articoli (lista completa consultabile in dashboard)
-            </div>
-          )}
         </div>
 
         {/* Footer */}

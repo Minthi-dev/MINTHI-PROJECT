@@ -1,9 +1,9 @@
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { useNavigate } from 'react-router-dom' // Restored
 
 import { DatabaseService } from '../../services/DatabaseService' // Corrected path (../services -> ../../services)
-import { Table, Order, TableSession, Restaurant, Room, Dish, Category } from '../../services/types'
+import { Table, Order, TableSession, Restaurant, Room, Dish, Category, Booking } from '../../services/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card' // Restored
@@ -11,15 +11,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel } from '@phosphor-icons/react'
+import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel, ArrowsClockwise, Eye, EyeSlash, CalendarCheck, Phone, Envelope, NotePencil } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase' // Corrected path (../../supabaseClient -> ../../lib/supabase usually, or just check file tree)
 import { cn } from '@/lib/utils'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { motion, AnimatePresence } from 'framer-motion'
 import TableBillDialog from '../TableBillDialog'
-import { getCurrentAyceSettings } from '../../utils/pricingUtils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu' // Restored
+import { Switch } from '@/components/ui/switch'
 import { soundManager } from '../../utils/SoundManager'
 
 interface WaiterDashboardProps {
@@ -79,6 +79,21 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const [activityRoomFilter, setActivityRoomFilter] = useState<string>('all')
     const [justDeliveredIds, setJustDeliveredIds] = useState<Set<string>>(new Set())
 
+    // Management Dialog Tab
+    const [manageTab, setManageTab] = useState<'tables' | 'menu' | 'bookings'>('tables')
+    const [menuSearch, setMenuSearch] = useState('')
+    const [menuCategoryFilter, setMenuCategoryFilter] = useState<string>('all')
+
+    // Bookings State
+    const [bookings, setBookings] = useState<Booking[]>([])
+    const [newBookingName, setNewBookingName] = useState('')
+    const [newBookingPhone, setNewBookingPhone] = useState('')
+    const [newBookingGuests, setNewBookingGuests] = useState('2')
+    const [newBookingDate, setNewBookingDate] = useState(new Date().toISOString().split('T')[0])
+    const [newBookingTime, setNewBookingTime] = useState('20:00')
+    const [newBookingNotes, setNewBookingNotes] = useState('')
+    const [showAddBookingForm, setShowAddBookingForm] = useState(false)
+
     // Device ID for notification routing
     const deviceId = useMemo(() => {
         let id = localStorage.getItem('waiter_device_id')
@@ -134,7 +149,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 }
 
                 setRestaurantId(rId)
-                restaurantIdRef.current = rId // Set ref immediately, don't wait for useEffect
 
                 const { data: restMeta } = await supabase
                     .from('restaurants')
@@ -146,28 +160,30 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 }
 
                 // Parallel fetch all data at once
-                const [tbs, rms, ds, cats, sessResult, ordsResult] = await Promise.all([
+                const [tbs, rms, ds, cats, sessResult, ordsResult, bks] = await Promise.all([
                     DatabaseService.getTables(rId),
                     DatabaseService.getRooms(rId),
                     DatabaseService.getDishes(rId),
                     DatabaseService.getCategories(rId),
-                    supabase.from('table_sessions').select('*').eq('restaurant_id', rId).eq('status', 'OPEN'),
+                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled').eq('restaurant_id', rId).eq('status', 'OPEN'),
                     supabase.from('orders')
                         .select(`
                             id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
-                            items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at,
+                            items:order_items(id, quantity, status, note, course_number, created_at, ready_at,
                                 dish:dishes(id, name, price, category_id)
                             )
                         `)
                         .eq('restaurant_id', rId)
-                        .eq('status', 'OPEN')
+                        .in('status', ['OPEN', 'PAID', 'CANCELLED']),
+                    DatabaseService.getBookings(rId).catch(() => [] as Booking[])
                 ])
                 setTables(tbs)
                 setRooms(rms)
                 setDishes(ds)
                 setCategories(cats)
-                setSessions(sessResult.data || [])
-                setActiveOrders((ordsResult.data || []) as unknown as Order[])
+                if (sessResult.data) setSessions(sessResult.data)
+                if (ordsResult.data) setActiveOrders(ordsResult.data as unknown as Order[])
+                setBookings(bks)
 
             } catch (error) {
                 console.error('Error loading waiter dashboard:', error)
@@ -178,8 +194,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
 
         initDashboard()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [user])
 
 
 
@@ -188,26 +203,20 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
     const refreshSessionsDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-    // Use refs for refresh functions to avoid stale closures in realtime handlers
-    const restaurantIdRef = useRef(restaurantId)
-    useEffect(() => { restaurantIdRef.current = restaurantId }, [restaurantId])
-
-    // Refresh solo sessioni
-    const refreshSessions = useCallback(async () => {
-        const rId = restaurantIdRef.current
-        if (!rId) return
-        const { data: sess, error: sessErr } = await supabase
+    // Refresh solo sessioni — definito prima dell'useEffect che lo richiama
+    const refreshSessions = async () => {
+        if (!restaurantId) return
+        const { data: sess } = await supabase
             .from('table_sessions')
-            .select('*')
-            .eq('restaurant_id', rId)
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
+            .eq('restaurant_id', restaurantId)
             .eq('status', 'OPEN')
         if (sess) setSessions(sess as TableSession[])
-    }, [])
+    }
 
     // Refresh solo ordini (select specifico, no select *)
-    const refreshOrders = useCallback(async () => {
-        const rId = restaurantIdRef.current
-        if (!rId) return
+    const refreshOrders = async () => {
+        if (!restaurantId) return
         const { data: ords } = await supabase
             .from('orders')
             .select(`
@@ -216,17 +225,17 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     dish:dishes(id, name, price, category_id)
                 )
             `)
-            .eq('restaurant_id', rId)
-            .eq('status', 'OPEN')
+            .eq('restaurant_id', restaurantId)
+            .in('status', ['OPEN', 'PAID', 'CANCELLED'])
         if (ords) setActiveOrders(ords as unknown as Order[])
-    }, [])
+    }
 
     // refreshData completo — usato per refresh manuale
-    const refreshData = useCallback(async () => {
+    const refreshData = async () => {
         await Promise.all([refreshSessions(), refreshOrders()])
-    }, [refreshSessions, refreshOrders])
+    }
 
-    // Realtime Subscriptions — stable handlers via useCallback
+    // Realtime Subscriptions — aggiornamenti chirurgici invece di rifare tutto
     useEffect(() => {
         if (!restaurantId) return
 
@@ -247,8 +256,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 refreshDebounceRef.current = setTimeout(() => refreshOrders(), 300)
             })
             .on('postgres_changes', {
-                event: '*', schema: 'public', table: 'order_items',
-                filter: `restaurant_id=eq.${restaurantId}`
+                event: '*', schema: 'public', table: 'order_items'
             }, () => {
                 if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current)
                 refreshDebounceRef.current = setTimeout(() => refreshOrders(), 400)
@@ -271,7 +279,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             supabase.removeChannel(channel)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [restaurantId, refreshSessions, refreshOrders])
+    }, [restaurantId])
 
     // ... (getTableTotal, getSplitTotal, getDetailedTableStatus functions remain same) ...
 
@@ -304,7 +312,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
 
         // 2. Attesa Cibo (Waiting) - Has orders that are NOT fully served
-        const pendingOrders = sessionOrders.filter(o => o.status === 'OPEN')
+        const pendingOrders = sessionOrders.filter(o => ['OPEN', 'pending', 'preparing', 'ready'].includes(o.status))
 
         if (pendingOrders.length > 0) {
             const oldestPending = pendingOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0]
@@ -345,7 +353,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (loading) return
 
         const currentReadyCount = activeOrders.reduce((acc, order) => {
-            return acc + (order.items?.filter(i => i.status?.toUpperCase() === 'READY').length || 0)
+            return acc + (order.items?.filter(i => i.status?.toLowerCase() === 'ready').length || 0)
         }, 0)
 
         const currentAssistanceCount = assistanceRequests.length
@@ -369,18 +377,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 const session = sessions.find(s => s.id === order.table_session_id)
                 const table = tables.find(t => t.id === session?.table_id)
                 if (!table || table.room_id !== activityRoomFilter) return acc
-                return acc + (order.items?.filter(i => i.status?.toUpperCase() === 'READY').length || 0)
+                return acc + (order.items?.filter(i => i.status?.toLowerCase() === 'ready').length || 0)
             }, 0)
 
         const prevFilteredReady = prevReadyCountRef.current
         if (filteredReadyCount > prevFilteredReady || (activityRoomFilter === 'all' && currentReadyCount > prevFilteredReady)) {
             soundManager.play('kitchen-bell')
             setTimeout(() => soundManager.play('success'), 400)
-            toast.success('Piatti pronti da servire!', {
-                id: 'ready-items-toast',
+            toast.success('Ci sono piatti pronti da servire!', {
                 icon: '🔔',
-                duration: 2500,
-                dismissible: true,
+                duration: 6000,
                 style: { background: '#422006', border: '1px solid #f59e0b', color: '#fbbf24' }
             })
         }
@@ -399,9 +405,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             setTimeout(() => soundManager.play('alert'), 500)
             setTimeout(() => soundManager.play('alert'), 1000)
             toast.error('Nuova richiesta assistenza al tavolo!', {
-                id: 'assistance-toast',
                 icon: '🚨',
-                duration: 5000,
+                duration: 10000,
                 style: { background: '#450a0a', border: '1px solid #ef4444', color: '#fca5a5' }
             })
         }
@@ -412,19 +417,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }, [activeOrders, assistanceRequests, loading, activityRoomFilter, sessions, tables, rooms])
 
     const handleMarkAsDelivered = async (orderId: string, itemId: string) => {
-        // Track in justDeliveredIds for grey-out effect — keeps item visible as "delivered"
+        // Track in justDeliveredIds for grey-out effect before group disappears
         setJustDeliveredIds(prev => new Set([...prev, itemId]))
-
-        // Optimistic update — change status locally first for instant feedback
-        setActiveOrders(prev => prev.map(o => {
-            if (o.id === orderId) {
-                return {
-                    ...o,
-                    items: o.items?.map(i => i.id === itemId ? { ...i, status: 'SERVED' } : i)
-                }
-            }
-            return o
-        }))
 
         await supabase
             .from('order_items')
@@ -435,14 +429,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             DatabaseService.logWaiterActivity(restaurantId, user.id, 'DISH_DELIVERED', { orderId, itemId })
         }
 
-        // Remove from justDeliveredIds after 3s so the greyed-out group can disappear
-        setTimeout(() => {
-            setJustDeliveredIds(prev => {
-                const next = new Set(prev)
-                next.delete(itemId)
-                return next
-            })
-        }, 3000)
+        // Optimistic update
+        setActiveOrders(prev => prev.map(o => {
+            if (o.id === orderId) {
+                return {
+                    ...o,
+                    items: o.items?.map(i => i.id === itemId ? { ...i, status: 'SERVED' } : i)
+                }
+            }
+            return o
+        }))
     }
 
     // Resolve assistance request
@@ -471,7 +467,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!table) return []
 
         return (o.items || [])
-            .filter(i => i.status?.toUpperCase() === 'READY')
+            .filter(i => i.status?.toLowerCase() === 'ready')
             .map(i => ({
                 ...i,
                 tableId: table.id,
@@ -479,24 +475,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 dish: i.dish || dishes.find(d => d.id === i.dish_id)
             }))
     }).sort((a, b) => new Date(a.created_at || Date.now()).getTime() - new Date(b.created_at || Date.now()).getTime()), [activeOrders, sessions, tables, dishes])
-
-    // Pending items (in kitchen, not ready yet) for activity center
-    const pendingItems = useMemo(() => activeOrders.flatMap(o => {
-        const session = sessions.find(s => s.id === o.table_session_id)
-        if (!session) return []
-        const table = tables.find(t => t.id === session.table_id)
-        if (!table) return []
-        return (o.items || [])
-            .filter(i => ['PENDING', 'IN_PREPARATION'].includes(i.status?.toUpperCase()))
-            .map(i => ({
-                ...i,
-                tableId: table.id,
-                tableName: table.number,
-                roomName: rooms.find(r => r.id === table.room_id)?.name || null,
-                order_id: o.id,
-                dish: i.dish || dishes.find(d => d.id === i.dish_id)
-            }))
-    }).sort((a, b) => new Date(a.created_at || Date.now()).getTime() - new Date(b.created_at || Date.now()).getTime()), [activeOrders, sessions, tables, rooms, dishes])
 
     // Grouped display: ready items (+ just-delivered greyed) grouped by table, filtered by room
     const displayReadyItemsByTable = useMemo(() => {
@@ -526,7 +504,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             const room = rooms.find(r => r.id === table.room_id)
 
             return (o.items || [])
-                .filter(i => i.status?.toUpperCase() === 'READY' || justDeliveredIds.has(i.id))
+                .filter(i => i.status?.toLowerCase() === 'ready' || justDeliveredIds.has(i.id))
                 .map(i => ({
                     id: i.id,
                     tableId: table.id,
@@ -604,34 +582,30 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         // Logic: Empty Table (markAsPaid=false) sets everything to COMPLETED/CANCELLED?
 
         try {
-            // Close ALL open orders for this session directly in DB (not just local state)
-            await supabase
-                .from('orders')
-                .update({ status: 'PAID', closed_at: new Date().toISOString() })
-                .eq('table_session_id', session.id)
-                .neq('status', 'PAID')
+            // Update orders if marking as paid
+            const sessionOrders = activeOrders.filter(o => o.table_session_id === session.id)
+            if (sessionOrders.length > 0) {
+                // If closing, we update all UNPAID orders/items
+                // Actually, handleCloseTable is "Close Session". 
+                // Using DatabaseService logic.
 
-            // Mark all order items as SERVED
-            const { data: sessionOrderIds } = await supabase
-                .from('orders')
-                .select('id')
-                .eq('table_session_id', session.id)
-            if (sessionOrderIds && sessionOrderIds.length > 0) {
                 await supabase
-                    .from('order_items')
-                    .update({ status: 'SERVED' })
-                    .in('order_id', sessionOrderIds.map(o => o.id))
-                    .neq('status', 'SERVED')
+                    .from('orders')
+                    .update({ status: 'PAID' })
+                    .in('id', sessionOrders.map(o => o.id))
+
+                // Also ensure items are marked if we track them individually?
+                const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
+                if (allItemIds.length > 0) {
+                    await supabase.from('order_items').update({ status: markAsPaid ? 'PAID' : 'SERVED' }).in('id', allItemIds)
+                }
             }
 
             // Close session
-            const waiterCloseName = user?.name || user?.username || 'Cameriere'
             await DatabaseService.updateSession({
                 ...session,
                 status: 'CLOSED',
-                closed_at: new Date().toISOString(),
-                closed_by_name: waiterCloseName,
-                closed_by_role: 'waiter',
+                closed_at: new Date().toISOString()
             })
 
             await DatabaseService.clearCart(session.id)
@@ -652,8 +626,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const activateTable = async (table: Table) => {
         setTableToActivate(table)
         setActivateCustomerCount(String(table.seats || 2))
-        // Derive AYCE/coperto defaults from restaurant settings
-        const ayceDefault = restaurant ? getCurrentAyceSettings(restaurant).enabled : false
+        // Derive AYCE/coperto defaults from restaurant settings — weekly schedule is source of truth
+        const weeklyAyce = (restaurant as any)?.weekly_ayce
+        const ayceDefault = weeklyAyce ? !!weeklyAyce.enabled : !!(restaurant?.all_you_can_eat?.enabled)
         const copertoDefault = !!((restaurant?.cover_charge_per_person && restaurant.cover_charge_per_person > 0) || (restaurant as any)?.coperto_enabled)
         setActivateAyceEnabled(ayceDefault)
         setActivateCopertoEnabled(copertoDefault)
@@ -665,21 +640,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!restaurantId || !tableToActivate) return
         setActivatingTable(true)
         try {
-            // Find any old open sessions for this table and close their orders too
-            const { data: oldSessions } = await supabase
-                .from('table_sessions')
-                .select('id')
-                .eq('table_id', tableToActivate.id)
-                .eq('status', 'OPEN')
-            if (oldSessions && oldSessions.length > 0) {
-                const oldSessionIds = oldSessions.map(s => s.id)
-                // Close all orders from old sessions
-                await supabase
-                    .from('orders')
-                    .update({ status: 'PAID', closed_at: new Date().toISOString() })
-                    .in('table_session_id', oldSessionIds)
-                    .neq('status', 'PAID')
-            }
             await DatabaseService.closeAllOpenSessionsForTable(tableToActivate.id)
 
             const pin = Math.floor(1000 + Math.random() * 9000).toString()
@@ -849,6 +809,102 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         setIsEditRoomDialogOpen(true)
     }
 
+    // MENU MANAGEMENT (waiter)
+    const handleToggleDishActive = async (dish: Dish) => {
+        try {
+            await DatabaseService.updateDish({ id: dish.id, is_active: !dish.is_active })
+            setDishes(prev => prev.map(d => d.id === dish.id ? { ...d, is_active: !d.is_active } : d))
+            toast.success(`${dish.name} ${dish.is_active ? 'nascosto' : 'visibile'}`)
+        } catch {
+            toast.error('Errore aggiornamento piatto')
+        }
+    }
+
+    const handleToggleDishAvailable = async (dish: Dish) => {
+        try {
+            const newVal = !(dish.is_available ?? true)
+            await DatabaseService.updateDish({ id: dish.id, is_available: newVal })
+            setDishes(prev => prev.map(d => d.id === dish.id ? { ...d, is_available: newVal } : d))
+            toast.success(`${dish.name} ${newVal ? 'disponibile' : 'esaurito'}`)
+        } catch {
+            toast.error('Errore aggiornamento piatto')
+        }
+    }
+
+    const handleQuickPriceEdit = async (dish: Dish, newPrice: number) => {
+        if (isNaN(newPrice) || newPrice < 0) return
+        try {
+            await DatabaseService.updateDish({ id: dish.id, price: newPrice })
+            setDishes(prev => prev.map(d => d.id === dish.id ? { ...d, price: newPrice } : d))
+            toast.success(`Prezzo aggiornato: €${newPrice.toFixed(2)}`)
+        } catch {
+            toast.error('Errore aggiornamento prezzo')
+        }
+    }
+
+    // BOOKINGS MANAGEMENT (waiter)
+    const handleUpdateBookingStatus = async (booking: Booking, status: 'confirmed' | 'cancelled' | 'pending') => {
+        try {
+            await DatabaseService.updateBooking({ ...booking, status })
+            setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status } : b))
+            toast.success(`Prenotazione ${status === 'confirmed' ? 'confermata' : status === 'cancelled' ? 'annullata' : 'in attesa'}`)
+        } catch {
+            toast.error('Errore aggiornamento prenotazione')
+        }
+    }
+
+    const handleAddBooking = async () => {
+        if (!restaurantId || !newBookingName.trim()) {
+            toast.error('Inserisci almeno il nome'); return
+        }
+        try {
+            const dateTime = `${newBookingDate}T${newBookingTime}:00`
+            const newBooking = await DatabaseService.createBooking({
+                restaurant_id: restaurantId,
+                name: newBookingName.trim(),
+                phone: newBookingPhone.trim() || undefined,
+                date_time: dateTime,
+                guests: parseInt(newBookingGuests) || 2,
+                notes: newBookingNotes.trim() || undefined,
+                status: 'confirmed'
+            })
+            setBookings(prev => [newBooking, ...prev])
+            setNewBookingName(''); setNewBookingPhone(''); setNewBookingGuests('2')
+            setNewBookingNotes(''); setShowAddBookingForm(false)
+            toast.success('Prenotazione aggiunta')
+        } catch {
+            toast.error('Errore creazione prenotazione')
+        }
+    }
+
+    // Filtered dishes for menu management
+    const filteredMenuDishes = useMemo(() => {
+        let filtered = dishes
+        if (menuCategoryFilter !== 'all') filtered = filtered.filter(d => d.category_id === menuCategoryFilter)
+        if (menuSearch.trim()) {
+            const q = menuSearch.toLowerCase()
+            filtered = filtered.filter(d => d.name.toLowerCase().includes(q))
+        }
+        return filtered
+    }, [dishes, menuCategoryFilter, menuSearch])
+
+    // Today's bookings
+    const todayBookings = useMemo(() => {
+        const today = new Date().toISOString().split('T')[0]
+        return bookings
+            .filter(b => b.date_time?.startsWith(today))
+            .sort((a, b) => a.date_time.localeCompare(b.date_time))
+    }, [bookings])
+
+    const upcomingBookings = useMemo(() => {
+        const now = new Date()
+        const todayStr = now.toISOString().split('T')[0]
+        return bookings
+            .filter(b => b.date_time > todayStr && !b.date_time.startsWith(todayStr))
+            .sort((a, b) => a.date_time.localeCompare(b.date_time))
+            .slice(0, 10)
+    }, [bookings])
+
     // Filtered tables based on room selection (memoizzata)
     const filteredTables = useMemo(() => selectedRoomFilter === 'all'
         ? tables
@@ -859,15 +915,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     // Must be before early return to maintain consistent hook call order
     const sortedTables = useMemo(() => sortTables(filteredTables), [filteredTables, sortBy, sessions, activeOrders])
     const readyCount = readyItems.length
-    const pendingCount = pendingItems.length
-    // Activity count shows only actionable items for waiters (ready to serve + assistance requests)
-    const totalActivityCount = readyCount + assistanceRequests.length
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
             {/* Ambient Background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full opacity-40" />
+                <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
             </div>
 
             <motion.div
@@ -881,7 +934,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
                 >
-                    <img src="/minthi-logo.png" alt="MINTHI" className="h-24 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
+                    <img src="/minthi-logo.png" alt="MINTHI" className="h-36 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
                 </motion.div>
 
                 <motion.div
@@ -916,16 +969,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         const tableCardClasses = isTableMarkedInactive
             ? 'opacity-60 grayscale'
             : (() => {
-                if (hasStripePaymentToConfirm) return 'bg-purple-900/40 border-purple-500/70 animate-pulse-slow' // Purple Stripe
-                if (!isActive) return 'bg-black/40 border-emerald-500/20' // Green (Free)
-                if (statusInfo.step === 'waiting') return 'bg-red-900/20 border-red-500/50' // Red (Waiting for food)
-                return 'bg-amber-900/20 border-amber-500/50' // Yellow (Eating)
+                if (hasStripePaymentToConfirm) return 'bg-purple-900/40 border-purple-500/70 shadow-[0_0_20px_-5px_rgba(168,85,247,0.5)] animate-pulse-slow' // Purple Stripe
+                if (!isActive) return 'bg-black/40 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.1)] hover:border-emerald-500/40' // Green (Free)
+                if (statusInfo.step === 'waiting') return 'bg-red-900/20 border-red-500/50 shadow-[0_0_15px_-5px_rgba(239,68,68,0.3)]' // Red (Waiting for food)
+                return 'bg-amber-900/20 border-amber-500/50 shadow-[0_0_15px_-5px_rgba(245,158,11,0.3)]' // Yellow (Eating)
             })()
 
         return (
             <Card
                 key={table.id}
-                className={`relative overflow-hidden group cursor-pointer ${tableCardClasses}`}
+                className={`relative overflow-hidden transition-all duration-300 group cursor-pointer ${tableCardClasses}`}
                 onClick={() => {
                     if (isTableMarkedInactive) return
                     if (isActive) {
@@ -940,17 +993,22 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 -rotate-12 border-2 border-white/20 px-3 py-1 rounded">Disattivato</span>
                     </div>
                 )}
-                {/* Removed blur decorations for iOS performance */}
+                {isActive && (
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 blur-xl rounded-full -mr-8 -mt-8 pointer-events-none"></div>
+                )}
+                {!isActive && (
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 blur-xl rounded-full -mr-8 -mt-8 pointer-events-none"></div>
+                )}
 
                 <CardContent className="p-0 flex flex-col h-full">
-                    <div className="p-3 flex flex-wrap items-center justify-between gap-1.5 border-b border-white/5 relative z-10">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className={`text-xl font-bold tracking-tight whitespace-nowrap ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
+                    <div className="p-4 flex flex-wrap items-center justify-between gap-2 border-b border-white/5 relative z-10">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <span className={`text-2xl font-bold tracking-tight whitespace-nowrap ${isActive ? 'text-amber-500' : 'text-zinc-100'}`}>
                                 {table.number}
                             </span>
-                            <div className="flex items-center gap-1 text-zinc-400 bg-white/5 px-2 py-0.5 rounded-full shrink-0">
-                                <User size={12} weight="bold" />
-                                <span className="text-xs font-bold">{table.seats || 4}</span>
+                            <div className="flex items-center gap-1.5 text-zinc-400 bg-white/5 px-3 py-1 rounded-full shrink-0">
+                                <User size={16} weight="bold" />
+                                <span className="text-sm font-bold">{table.seats || 4}</span>
                             </div>
                         </div>
                         <Badge
@@ -961,13 +1019,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </Badge>
                     </div>
 
-                    <div className="flex-1 p-3 flex flex-col items-center justify-center gap-2 relative z-10">
+                    <div className="flex-1 p-5 flex flex-col items-center justify-center gap-3 relative z-10">
                         {isActive ? (
                             <>
                                 <div className="text-center">
                                     <p className="text-[9px] text-amber-500/70 mb-1 uppercase tracking-[0.2em] font-semibold">PIN</p>
-                                    <div className="bg-black/40 px-4 py-2 rounded-xl border border-amber-500/20 shadow-inner">
-                                        <span className="text-3xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
+                                    <div className="bg-black/40 px-6 py-3 rounded-xl border border-amber-500/20 shadow-inner min-w-[120px]">
+                                        <span className="text-4xl font-mono font-bold tracking-widest text-amber-500 whitespace-nowrap">
                                             {session?.session_pin || '...'}
                                         </span>
                                     </div>
@@ -985,14 +1043,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                 )}
                             </>
                         ) : (
-                            <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-colors">
+                            <div className="text-center text-zinc-700 group-hover:text-zinc-500 transition-all duration-300">
                                 <ForkKnife size={32} className="mx-auto mb-1" weight="duotone" />
                                 <p className="text-xs font-medium">Clicca per Ordinare</p>
                             </div>
                         )}
                     </div>
 
-                    <div className="p-2.5 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-1.5 relative z-10">
+                    <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2 relative z-10">
                         {isActive ? (
                             <div className={`grid gap-2 ${hasStripePaymentToConfirm ? 'grid-cols-1' : (restaurant?.allow_waiter_payments ? 'grid-cols-2' : 'grid-cols-1')}`}>
                                 {hasStripePaymentToConfirm ? (
@@ -1067,90 +1125,116 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="fixed inset-0 bg-black text-zinc-100 font-sans selection:bg-amber-500/30 overflow-hidden flex flex-col">
+        <div className="min-h-[100dvh] bg-zinc-950 p-4 md:p-6 pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
+            {/* Background Ambience */}
+            <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-zinc-950 to-zinc-950 pointer-events-none" />
+            <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none brightness-100 contrast-150 mix-blend-overlay"></div>
 
-            {/* Header — fixed top, covers notch area */}
-            <header className="shrink-0 z-50 bg-black border-b border-white/10" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
-                <div className="flex items-center gap-2 px-3 py-2.5 overflow-x-auto scrollbar-hide">
-                    {/* Activity Button — big and clear */}
+            {/* Header */}
+            <header className="sticky top-0 z-50 flex flex-col md:flex-row items-center justify-between mb-4 sm:mb-8 gap-3 bg-zinc-950/80 backdrop-blur-xl p-3 sm:p-4 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300">
+                <div className="flex items-center gap-3 sm:gap-5 w-full md:w-auto">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10">
+                        <User size={22} weight="duotone" className="sm:hidden" />
+                        <User size={28} weight="duotone" className="hidden sm:block" />
+                    </div>
+                    <div>
+                        <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight">Gestione Sala</h1>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                            </span>
+                            <p className="text-xs sm:text-sm font-medium text-zinc-400">Sistema Attivo</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
+                    {/* Activity Button - Ready items + Assistance requests */}
                     <Button
-                        variant={totalActivityCount > 0 ? "default" : "outline"}
-                        className={`h-11 px-4 rounded-xl font-bold transition-all shrink-0 text-[15px] ${assistanceRequests.length > 0
-                            ? 'bg-red-500 hover:bg-red-400 text-white border-transparent animate-pulse'
-                            : readyCount > 0
-                            ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent'
-                            : 'text-zinc-400 bg-zinc-900 border-white/10'
+                        variant={(readyCount + assistanceRequests.length) > 0 ? "default" : "outline"}
+                        size="sm"
+                        className={`md:mr-4 h-10 px-4 rounded-xl font-bold transition-all shadow-lg ${(readyCount + assistanceRequests.length) > 0
+                            ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
+                            : 'text-zinc-400 bg-zinc-900/50 border-white/5 hover:bg-zinc-800 hover:text-white'
                             }`}
                         onClick={() => setIsReadyDrawerOpen(true)}
                     >
                         {assistanceRequests.length > 0 ? (
-                            <BellSimple size={20} weight="fill" className="mr-2" />
+                            <BellSimple size={20} weight="fill" className="mr-2 animate-bounce text-yellow-400" />
                         ) : readyCount > 0 ? (
-                            <BellRinging size={20} weight="fill" className="mr-2" />
+                            <BellRinging size={20} weight="fill" className="mr-2 animate-bounce" />
                         ) : (
                             <CheckCircle size={20} className="mr-2" />
                         )}
-                        Attività {totalActivityCount > 0 && `(${totalActivityCount})`}
+                        Attività: {readyCount + assistanceRequests.length}
                     </Button>
 
-                    {/* Sort Dropdown — clearer */}
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="h-11 px-4 rounded-xl bg-zinc-900 border-white/10 text-[15px] font-bold text-zinc-300 shrink-0">
-                                <Funnel size={18} className="mr-2 text-amber-500" />
-                                {sortBy === 'status' ? 'Stato' : sortBy === 'alpha' ? 'A-Z' : 'Posti'}
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="bg-zinc-950 border-zinc-800">
-                            <DropdownMenuLabel className="text-xs text-zinc-500">Ordina per</DropdownMenuLabel>
-                            <DropdownMenuSeparator className="bg-zinc-800" />
-                            <DropdownMenuItem onClick={() => setSortBy('status')} className={sortBy === 'status' ? 'text-amber-500' : ''}>Stato</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSortBy('alpha')} className={sortBy === 'alpha' ? 'text-amber-500' : ''}>A-Z</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSortBy('seats')} className={sortBy === 'seats' ? 'text-amber-500' : ''}>Posti</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSortBy('status')}
+                            className={`text-xs font-bold h-8 rounded-lg transition-all ${sortBy === 'status' ? 'bg-zinc-800 text-amber-500 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            Stato
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSortBy('alpha')}
+                            className={`text-xs font-bold h-8 rounded-lg transition-all ${sortBy === 'alpha' ? 'bg-zinc-800 text-amber-500 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            A-Z
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSortBy('seats')}
+                            className={`text-xs font-bold h-8 rounded-lg transition-all ${sortBy === 'seats' ? 'bg-zinc-800 text-amber-500 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        >
+                            Posti
+                        </Button>
+                    </div>
 
-                    {/* Room Filter — clearer, no "Sala" label */}
-                    {rooms.length > 0 && (
-                        <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                            <SelectTrigger className="h-11 min-w-[130px] bg-zinc-900 border-white/10 text-[15px] font-bold rounded-xl shrink-0">
-                                <House size={18} className="mr-2 text-amber-500 shrink-0" />
-                                <SelectValue placeholder="Tutte" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-zinc-950 border-zinc-800">
-                                <SelectItem value="all">Tutte</SelectItem>
-                                <SelectItem value="no-room">Senza Sala</SelectItem>
-                                {rooms.map(room => (
-                                    <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
+                    <div className="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
+
+                    {/* Room Filter */}
+                    <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
+                        <SelectTrigger className="w-[140px] h-10 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl">
+                            <House size={16} className="mr-2 text-amber-500" />
+                            <SelectValue placeholder="Sala" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-zinc-950 border-zinc-800">
+                            <SelectItem value="all">Tutte le Sale</SelectItem>
+                            <SelectItem value="no-room">Senza Sala</SelectItem>
+                            {rooms.map(room => (
+                                <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+
+                    {/* Management Button */}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-zinc-400 hover:text-amber-500 hover:bg-amber-500/10 h-10 w-10 p-0 rounded-xl"
+                        onClick={() => setIsManageDialogOpen(true)}
+                    >
+                        <GearSix size={20} weight="duotone" />
+                    </Button>
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-10 w-10 p-0 rounded-xl"
+                        onClick={onLogout}
+                    >
+                        <SignOut size={20} weight="duotone" />
+                    </Button>
                 </div>
             </header>
 
-            {/* Fixed bottom-left: Settings + Logout */}
-            <div className="fixed z-[60] flex items-center gap-1 bg-zinc-900/95 border border-white/10 rounded-xl p-1" style={{ bottom: 'max(12px, env(safe-area-inset-bottom, 12px))', left: 'max(12px, env(safe-area-inset-left, 12px))' }}>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-zinc-400 hover:text-amber-500 hover:bg-amber-500/10 h-9 w-9 rounded-lg"
-                    onClick={() => setIsManageDialogOpen(true)}
-                >
-                    <GearSix size={18} />
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-9 w-9 rounded-lg"
-                    onClick={onLogout}
-                >
-                    <SignOut size={18} />
-                </Button>
-            </div>
-
-            {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto overscroll-none px-2 pt-2" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
             {/* Tables grouped by Room */}
             <div className="relative z-10 space-y-8">
                 {(() => {
@@ -1213,7 +1297,6 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     return roomSections
                 })()}
             </div>
-            </div>{/* end scrollable content */}
 
             {/* Activity Center View (Full Screen) */}
             <AnimatePresence>
@@ -1222,54 +1305,52 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         initial={{ opacity: 0, x: '100%' }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: '100%' }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                         className="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
                     >
                         {/* Header */}
-                        <div className="px-4 py-3 border-b border-white/10 bg-black shrink-0 space-y-3" style={{ paddingTop: 'calc(12px + env(safe-area-inset-top, 0px))' }}>
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => {
-                                            setIsReadyDrawerOpen(false)
-                                            setJustDeliveredIds(new Set())
-                                        }}
-                                        className="text-zinc-400 hover:text-white h-10 w-10 shrink-0"
-                                    >
-                                        <ArrowLeft size={22} />
-                                    </Button>
-                                    <h2 className="text-xl font-bold text-white flex items-center gap-2.5 truncate">
-                                        <BellRinging className="text-amber-500 shrink-0" weight="fill" size={24} />
-                                        <span className="truncate">Centro Attività</span>
-                                    </h2>
-                                </div>
-                                {totalActivityCount > 0 && (
-                                    <div className="h-8 min-w-[32px] px-2.5 rounded-full bg-amber-500 text-black font-bold text-sm flex items-center justify-center shrink-0">
-                                        {totalActivityCount}
-                                    </div>
-                                )}
+                        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0 gap-3 flex-wrap">
+                            <div className="flex items-center gap-3">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                        setIsReadyDrawerOpen(false)
+                                        setJustDeliveredIds(new Set())
+                                    }}
+                                    className="text-zinc-400 hover:text-white"
+                                >
+                                    <ArrowLeft size={24} />
+                                </Button>
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <BellRinging className="text-amber-500" weight="fill" />
+                                    Centro Attività
+                                </h2>
                             </div>
-                            {/* Room filter for activity center */}
-                            {rooms.length > 0 && (
-                                <Select value={activityRoomFilter} onValueChange={setActivityRoomFilter}>
-                                    <SelectTrigger className="w-full h-10 bg-zinc-900 border-white/10 text-sm font-bold rounded-xl">
-                                        <House size={18} className="mr-2 text-amber-500 shrink-0" />
-                                        <SelectValue placeholder="Tutte le Sale" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-zinc-950 border-zinc-800">
-                                        <SelectItem value="all">Tutte le Sale</SelectItem>
-                                        {rooms.map(room => (
-                                            <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
+                            <div className="flex items-center gap-3">
+                                {/* Room filter for activity center */}
+                                {rooms.length > 0 && (
+                                    <Select value={activityRoomFilter} onValueChange={setActivityRoomFilter}>
+                                        <SelectTrigger className="w-[160px] h-9 bg-zinc-900/80 border-white/10 text-xs font-bold rounded-xl">
+                                            <House size={14} className="mr-1.5 text-amber-500 shrink-0" />
+                                            <SelectValue placeholder="Tutte le Sale" />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-zinc-950 border-zinc-800">
+                                            <SelectItem value="all">Tutte le Sale</SelectItem>
+                                            {rooms.map(room => (
+                                                <SelectItem key={room.id} value={room.id}>{room.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                                <Badge variant="outline" className="border-amber-500/30 text-amber-500 shrink-0">
+                                    {readyItems.length + assistanceRequests.length} attivi
+                                </Badge>
+                            </div>
                         </div>
 
                         {/* Content */}
-                        <div className="flex-1 overflow-y-auto overscroll-none p-4 space-y-6 pb-24">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
                             {/* Assistance Requests Section — filtered by room */}
                             {(() => {
                                 const filteredAssistance = activityRoomFilter === 'all'
@@ -1277,30 +1358,32 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                     : assistanceRequests.filter(t => t.room_id === activityRoomFilter)
                                 return filteredAssistance.length > 0 ? (
                                     <div className="space-y-3">
-                                        <h3 className="text-sm font-bold uppercase tracking-wider text-red-400 flex items-center gap-2">
-                                            <WarningCircle size={20} weight="fill" />
+                                        <h3 className="text-xs font-bold uppercase tracking-widest text-red-500 flex items-center gap-2">
+                                            <WarningCircle size={16} weight="fill" />
                                             Richieste Assistenza
                                         </h3>
                                         {filteredAssistance.map(t => {
                                             const room = rooms.find(r => r.id === t.room_id)
-                                            const minutesAgo = t.last_assistance_request ? Math.max(0, Math.floor((Date.now() - new Date(t.last_assistance_request).getTime()) / 60000)) : 0
                                             return (
-                                                <div key={t.id} className="bg-red-950/60 border border-red-500/30 p-4 rounded-2xl flex items-center justify-between">
+                                                <div key={t.id} className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl flex items-center justify-between animate-pulse-slow">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-black font-bold text-xl shrink-0">
+                                                        <div className="w-10 h-10 rounded-full bg-red-500 flex items-center justify-center text-black font-bold text-lg shrink-0">
                                                             {t.number}
                                                         </div>
                                                         <div>
-                                                            <p className="font-bold text-base text-white">Tavolo {t.number}</p>
-                                                            {room && <p className="text-sm text-zinc-400 font-medium">{room.name}</p>}
-                                                            <p className="text-sm text-red-400 font-medium">{minutesAgo}min fa</p>
+                                                            <p className="font-bold text-red-400">Richiesta Cameriere</p>
+                                                            {room && <p className="text-xs text-red-300/40 font-medium">{room.name}</p>}
+                                                            <p className="text-xs text-red-300/60">
+                                                                {t.last_assistance_request ? new Date(t.last_assistance_request).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Adesso'}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                     <Button
-                                                        className="bg-red-500 hover:bg-red-400 text-white font-bold h-11 px-5 rounded-xl text-sm"
+                                                        size="sm"
+                                                        className="bg-red-500 hover:bg-red-400 text-black font-bold h-9 px-4 rounded-lg"
                                                         onClick={() => handleResolveAssistance(t.id)}
                                                     >
-                                                        <Check size={18} weight="bold" className="mr-2" />
+                                                        <CheckCircle size={18} className="mr-2" weight="fill" />
                                                         Risolvi
                                                     </Button>
                                                 </div>
@@ -1312,8 +1395,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
                             {/* Ready Items Section — grouped by table */}
                             <div className="space-y-3">
-                                <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
-                                    <ChefHat size={20} />
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                                    <ChefHat size={16} />
                                     Piatti Pronti da Servire
                                     {activityRoomFilter !== 'all' && (
                                         <span className="text-amber-500 normal-case font-normal">
@@ -1323,209 +1406,135 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                 </h3>
 
                                 {displayReadyItemsByTable.length === 0 ? (
-                                    <div className="py-16 flex flex-col items-center justify-center text-zinc-600 rounded-2xl">
-                                        <ForkKnife size={48} className="mb-4 opacity-30" />
-                                        <p className="text-base text-zinc-500">Nessun piatto pronto</p>
+                                    <div className="py-12 flex flex-col items-center justify-center text-zinc-600 border border-dashed border-white/5 rounded-2xl bg-zinc-900/20">
+                                        <ForkKnife size={48} className="mb-4 opacity-20" />
+                                        <p>Nessun piatto pronto da servire</p>
                                     </div>
                                 ) : (
                                     <AnimatePresence>
-                                        {displayReadyItemsByTable.map(tableGroup => {
-                                            const undeliveredItems = tableGroup.items.filter(i => !i.isDelivered)
-                                            return (
+                                        {displayReadyItemsByTable.map(tableGroup => (
                                             <motion.div
                                                 key={tableGroup.tableId}
                                                 initial={{ opacity: 1 }}
                                                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                                                 transition={{ duration: 0.4 }}
                                                 className={cn(
-                                                    "rounded-2xl overflow-hidden border transition-colors",
+                                                    "rounded-2xl overflow-hidden border shadow-lg shadow-black/50 transition-all duration-300",
                                                     tableGroup.allDelivered
-                                                        ? "border-zinc-800 bg-zinc-900/30 opacity-40"
+                                                        ? "border-zinc-700/30 bg-zinc-900/30 opacity-50"
                                                         : "border-amber-500/20 bg-zinc-900"
                                                 )}
                                             >
                                                 {/* Table Group Header */}
                                                 <div className={cn(
-                                                    "px-4 py-3.5 flex items-center justify-between border-b",
+                                                    "px-4 py-3 flex items-center justify-between border-b",
                                                     tableGroup.allDelivered
-                                                        ? "border-zinc-800 bg-zinc-900/20"
-                                                        : "border-amber-500/10 bg-amber-950/40"
+                                                        ? "border-zinc-700/20 bg-zinc-900/20"
+                                                        : "border-amber-500/10 bg-amber-500/5"
                                                 )}>
-                                                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                        <div className="flex flex-col min-w-0">
+                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                        <div className={cn(
+                                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-inner shrink-0",
+                                                            tableGroup.allDelivered
+                                                                ? "bg-zinc-700/50 text-zinc-400"
+                                                                : "bg-amber-500 text-black"
+                                                        )}>
+                                                            <span className="truncate px-1 max-w-[2.25rem] text-center leading-none">
+                                                                {tableGroup.tableName}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                                             <p className={cn(
-                                                                "font-bold text-base truncate",
+                                                                "font-bold text-sm truncate",
                                                                 tableGroup.allDelivered ? "text-zinc-500" : "text-white"
                                                             )}>
                                                                 Tavolo {tableGroup.tableName}
                                                             </p>
                                                             {tableGroup.roomName && (
                                                                 <span className={cn(
-                                                                    "text-sm font-medium truncate",
-                                                                    tableGroup.allDelivered ? "text-zinc-600" : "text-zinc-400"
+                                                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium truncate max-w-[7rem] shrink-0",
+                                                                    tableGroup.allDelivered
+                                                                        ? "bg-zinc-800 text-zinc-500"
+                                                                        : "bg-zinc-800 text-zinc-400"
                                                                 )}>
-                                                                    {tableGroup.roomName}
+                                                                    <House size={9} className="shrink-0" />
+                                                                    <span className="truncate">{tableGroup.roomName}</span>
                                                                 </span>
                                                             )}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2 shrink-0">
-                                                        {/* Mark all as delivered button */}
-                                                        {undeliveredItems.length > 1 && (
-                                                            <Button
-                                                                className="h-9 px-4 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black rounded-xl"
-                                                                onClick={async () => {
-                                                                    for (const item of undeliveredItems) {
-                                                                        await handleMarkAsDelivered(item.order_id, item.id)
-                                                                    }
-                                                                    toast.success(`${undeliveredItems.length} piatti consegnati`)
-                                                                }}
-                                                            >
-                                                                <Check size={14} weight="bold" className="mr-1.5" />
-                                                                Tutti
-                                                            </Button>
-                                                        )}
-                                                        <div className={cn(
-                                                            "h-8 px-3 rounded-full flex items-center text-xs font-bold",
-                                                            tableGroup.allDelivered
-                                                                ? "bg-zinc-800 text-zinc-500"
-                                                                : "bg-amber-500/15 text-amber-400"
-                                                        )}>
-                                                            {undeliveredItems.length} da servire
-                                                        </div>
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={cn(
+                                                                "text-[10px] font-bold whitespace-nowrap",
+                                                                tableGroup.allDelivered
+                                                                    ? "border-zinc-600 text-zinc-500"
+                                                                    : "border-amber-500/40 text-amber-400 bg-amber-500/5"
+                                                            )}
+                                                        >
+                                                            {tableGroup.items.filter(i => !i.isDelivered).length} da servire
+                                                        </Badge>
                                                     </div>
                                                 </div>
 
                                                 {/* Dishes in this table group */}
                                                 <div className="divide-y divide-white/5">
-                                                    {tableGroup.items.map(item => {
-                                                        const minutesAgo = Math.max(0, Math.floor((Date.now() - new Date(item.created_at || Date.now()).getTime()) / 60000))
-                                                        return (
+                                                    {tableGroup.items.map(item => (
                                                         <div
                                                             key={item.id}
                                                             className={cn(
-                                                                "px-4 py-3 flex gap-3 items-center transition-colors",
-                                                                item.isDelivered && "opacity-30"
+                                                                "p-4 flex gap-4 transition-all duration-300",
+                                                                item.isDelivered && "opacity-40"
                                                             )}
                                                         >
                                                             {/* Left stripe */}
                                                             <div className={cn(
                                                                 "w-1 rounded-full shrink-0 self-stretch",
-                                                                item.isDelivered ? "bg-zinc-700" : "bg-amber-500"
+                                                                item.isDelivered ? "bg-zinc-600" : "bg-amber-500"
                                                             )} />
 
                                                             {/* Content */}
                                                             <div className="flex-1 min-w-0">
                                                                 <h4 className={cn(
-                                                                    "font-bold text-base leading-tight",
+                                                                    "font-bold text-base leading-tight mb-0.5",
                                                                     item.isDelivered ? "line-through text-zinc-500" : "text-white"
                                                                 )}>
                                                                     {item.dish?.name || 'Piatto'}
                                                                 </h4>
-                                                                <p className="text-sm text-zinc-500 mt-0.5">
-                                                                    x{item.quantity}
-                                                                    <span className="mx-1.5 text-zinc-700">·</span>
-                                                                    <span className={minutesAgo > 5 ? "text-red-400 font-medium" : "text-zinc-400"}>{minutesAgo}min fa</span>
+                                                                <p className="text-xs text-zinc-500 mb-1">
+                                                                    Quantità: <span className={item.isDelivered ? "text-zinc-600" : "text-white font-bold"}>{item.quantity}</span>
+                                                                    <span className="mx-2 text-zinc-700">·</span>
+                                                                    {new Date(item.created_at || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                                 </p>
                                                                 {item.note && (
-                                                                    <p className="text-sm text-amber-500/70 italic mt-1">"{item.note}"</p>
+                                                                    <p className="text-xs text-amber-500/70 italic">Note: {item.note}</p>
                                                                 )}
                                                             </div>
 
                                                             {/* Action button */}
                                                             <div className="flex flex-col justify-center shrink-0">
                                                                 {item.isDelivered ? (
-                                                                    <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center">
-                                                                        <Check size={18} weight="bold" className="text-zinc-500" />
+                                                                    <div className="h-11 w-11 rounded-full bg-zinc-700/40 flex items-center justify-center">
+                                                                        <Check size={20} weight="bold" className="text-zinc-500" />
                                                                     </div>
                                                                 ) : (
                                                                     <Button
-                                                                        className="h-10 w-10 rounded-full bg-amber-500 hover:bg-amber-400 text-black p-0"
+                                                                        className="h-11 w-11 rounded-full bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20 p-0"
                                                                         onClick={() => handleMarkAsDelivered(item.order_id, item.id)}
                                                                     >
-                                                                        <Check size={18} weight="bold" />
+                                                                        <Check size={20} weight="bold" />
                                                                     </Button>
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        )
-                                                    })}
+                                                    ))}
                                                 </div>
                                             </motion.div>
-                                            )
-                                        })}
+                                        ))}
                                     </AnimatePresence>
                                 )}
                             </div>
-
-                            {/* In Cucina Section — pending/in preparation items */}
-                            {(() => {
-                                const filteredPending = activityRoomFilter === 'all'
-                                    ? pendingItems
-                                    : pendingItems.filter(i => {
-                                        const table = tables.find(t => t.id === i.tableId)
-                                        return table?.room_id === activityRoomFilter
-                                    })
-
-                                // Group by table
-                                const grouped = new Map<string, typeof filteredPending>()
-                                filteredPending.forEach(item => {
-                                    const existing = grouped.get(item.tableId) || []
-                                    existing.push(item)
-                                    grouped.set(item.tableId, existing)
-                                })
-
-                                return filteredPending.length > 0 ? (
-                                    <div className="space-y-3">
-                                        <h3 className="text-xs font-bold uppercase tracking-widest text-blue-400 flex items-center gap-2">
-                                            <Clock size={16} weight="fill" />
-                                            In Cucina ({filteredPending.length} piatti)
-                                        </h3>
-                                        {Array.from(grouped.entries()).map(([tableId, items]) => (
-                                            <div key={tableId} className="rounded-xl border border-blue-500/15 bg-zinc-900/50 overflow-hidden">
-                                                <div className="px-4 py-2.5 flex items-center gap-2.5 border-b border-blue-500/10 bg-blue-500/5">
-                                                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold text-sm shrink-0">
-                                                        {items[0].tableName}
-                                                    </div>
-                                                    <p className="font-semibold text-sm text-blue-300">Tavolo {items[0].tableName}</p>
-                                                    {items[0].roomName && (
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500">{items[0].roomName}</span>
-                                                    )}
-                                                    <Badge variant="outline" className="ml-auto border-blue-500/30 text-blue-400 text-[10px]">
-                                                        {items.length} in preparazione
-                                                    </Badge>
-                                                </div>
-                                                <div className="divide-y divide-white/5">
-                                                    {items.map(item => (
-                                                        <div key={item.id} className="px-4 py-2.5 flex items-center gap-3">
-                                                            <div className="w-1 h-8 rounded-full bg-blue-500/40 shrink-0" />
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="font-medium text-sm text-zinc-300 truncate">{item.dish?.name || 'Piatto'}</p>
-                                                                <p className="text-[11px] text-zinc-600">
-                                                                    x{item.quantity} · {new Date(item.created_at || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                                    {item.status?.toUpperCase() === 'IN_PREPARATION' && <span className="ml-2 text-blue-400">In preparazione</span>}
-                                                                    {item.status?.toUpperCase() === 'PENDING' && <span className="ml-2 text-zinc-500">In attesa</span>}
-                                                                </p>
-                                                                {item.note && <p className="text-[11px] text-amber-500/50 italic mt-0.5">Note: {item.note}</p>}
-                                                            </div>
-                                                            <Clock size={16} className="text-blue-500/40 shrink-0 animate-spin" style={{ animationDuration: '3s' }} />
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : null
-                            })()}
-
-                            {/* Empty state when no activity at all */}
-                            {readyCount === 0 && pendingCount === 0 && assistanceRequests.length === 0 && (
-                                <div className="py-16 flex flex-col items-center justify-center text-zinc-600">
-                                    <CheckCircle size={56} className="mb-4 opacity-20" />
-                                    <p className="text-lg font-medium text-zinc-500">Nessuna attività</p>
-                                    <p className="text-sm text-zinc-600 mt-1">Tutti i piatti sono stati serviti</p>
-                                </div>
-                            )}
                         </div>
                     </motion.div>
                 )}
@@ -1559,7 +1568,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Table Management Modal */}
             <Dialog open={isTableModalOpen} onOpenChange={setIsTableModalOpen}>
-                <DialogContent className="sm:max-w-lg bg-zinc-950 border-white/10 text-zinc-100 p-0 overflow-hidden max-h-[85vh] rounded-2xl shadow-2xl outline-none">
+                <DialogContent className="sm:max-w-lg bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-0 overflow-hidden max-h-[85vh] rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
                     {selectedTable && (() => {
                         const session = sessions.find(s => s.table_id === selectedTable.id)
                         const tableOrders = session
@@ -1609,90 +1618,45 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                 <p className="text-xs text-zinc-500">In attesa di ordinare</p>
                                             </div>
                                         ) : (
-                                            <div className="space-y-2">
-                                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Ordini attivi</h4>
-                                                {tableOrders.map(order => {
-                                                    const items = order.items || []
-                                                    const readyCount = items.filter(i => i.status?.toUpperCase() === 'READY').length
-                                                    const servedCount = items.filter(i => i.status?.toUpperCase() === 'SERVED' || i.status?.toUpperCase() === 'DELIVERED').length
-                                                    const allServed = items.length > 0 && items.every(i => ['SERVED', 'DELIVERED'].includes(i.status?.toUpperCase() || ''))
-
-                                                    return (
-                                                    <div key={order.id} className="bg-zinc-900/80 border border-white/5 rounded-lg p-2.5">
-                                                        <div className="flex justify-between items-center mb-1.5">
-                                                            <Badge variant="outline" className={`text-[9px] h-5 ${
-                                                                allServed ? 'text-emerald-400 border-emerald-500/30' :
-                                                                readyCount > 0 ? 'text-amber-400 border-amber-500/30' :
+                                            <div className="space-y-3">
+                                                <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-3">Ordini attivi</h4>
+                                                {tableOrders.map(order => (
+                                                    <div key={order.id} className="bg-zinc-900/80 border border-white/5 rounded-xl p-4">
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <Badge variant="outline" className={`text-[10px] ${order.status?.toLowerCase() === 'ready' ? 'text-amber-400 border-amber-500/30' :
+                                                                order.status === 'served' ? 'text-emerald-400 border-emerald-500/30' :
                                                                     'text-blue-400 border-blue-500/30'
                                                                 }`}>
-                                                                {allServed ? 'Consegnato' :
-                                                                    readyCount > 0 ? `${readyCount} Pronti` :
-                                                                        'In Preparazione'}
+                                                                {order.status?.toLowerCase() === 'ready' ? 'Pronto' :
+                                                                    order.status === 'served' ? 'Servito' :
+                                                                        order.status === 'preparing' ? 'In Preparazione' : 'In Attesa'}
                                                             </Badge>
-                                                            <span className="text-[10px] text-zinc-500">
+                                                            <span className="text-xs text-zinc-500">
                                                                 {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                             </span>
                                                         </div>
-                                                        <div className="space-y-0.5">
-                                                            {items.map(item => {
-                                                                const isServed = ['SERVED', 'DELIVERED'].includes(item.status?.toUpperCase() || '')
-                                                                const isReady = item.status?.toUpperCase() === 'READY'
-                                                                return (
-                                                                <div key={item.id} className="flex justify-between items-center text-xs gap-1 py-0.5">
-                                                                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                                                        <span className={`font-bold shrink-0 text-[11px] ${isServed ? 'text-zinc-600' : 'text-amber-500'}`}>{item.quantity}x</span>
-                                                                        <span className={`truncate text-[12px] ${isServed ? 'text-zinc-500 line-through' : 'text-white'}`}>
+                                                        <div className="space-y-2">
+                                                            {order.items?.map(item => (
+                                                                <div key={item.id} className="flex justify-between items-center text-sm">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-amber-500 font-bold">{item.quantity}x</span>
+                                                                        <span className={item.status === 'served' ? 'text-zinc-500 line-through' : 'text-white'}>
                                                                             {item.dish?.name || 'Piatto'}
                                                                         </span>
-                                                                        {isReady && (
-                                                                            <span className="text-[7px] font-bold bg-amber-500 text-black px-1 py-px rounded shrink-0">PRONTO</span>
+                                                                        {item.status?.toLowerCase() === 'ready' && (
+                                                                            <Badge className="bg-amber-500 text-black text-[8px] px-1">PRONTO</Badge>
                                                                         )}
                                                                     </div>
-                                                                    <div className="flex items-center gap-1.5 shrink-0">
-                                                                        <span className="text-zinc-400 text-[11px]">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
-                                                                        {isReady && !isServed && (
-                                                                            <Button
-                                                                                size="sm"
-                                                                                className="h-6 w-6 p-0 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white"
-                                                                                onClick={() => handleMarkAsDelivered(order.id, item.id)}
-                                                                            >
-                                                                                <Check size={12} weight="bold" />
-                                                                            </Button>
-                                                                        )}
-                                                                    </div>
+                                                                    <span className="text-zinc-400">€{((item.dish?.price || 0) * item.quantity).toFixed(2)}</span>
                                                                 </div>
-                                                                )
-                                                            })}
+                                                            ))}
                                                         </div>
-                                                        <div className="mt-1.5 pt-1.5 border-t border-white/5 flex justify-between items-center">
-                                                            <span className="text-[10px] text-zinc-500">Subtotale</span>
-                                                            <span className="text-xs font-bold text-white">€{(order.total_amount || 0).toFixed(2)}</span>
+                                                        <div className="mt-3 pt-3 border-t border-white/5 flex justify-between">
+                                                            <span className="text-xs text-zinc-500">Subtotale</span>
+                                                            <span className="text-sm font-bold text-white">€{(order.total_amount || 0).toFixed(2)}</span>
                                                         </div>
-                                                        {readyCount > 0 && (
-                                                            <Button
-                                                                size="sm"
-                                                                className="w-full mt-1.5 h-7 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg"
-                                                                onClick={async () => {
-                                                                    const readyItems = items.filter(i => i.status?.toUpperCase() === 'READY')
-                                                                    const readyIds = readyItems.map(i => i.id)
-                                                                    await supabase.from('order_items').update({ status: 'SERVED' }).in('id', readyIds)
-                                                                    setActiveOrders(prev => prev.map(o => {
-                                                                        if (o.id === order.id) {
-                                                                            return { ...o, items: o.items?.map(i => readyIds.includes(i.id) ? { ...i, status: 'SERVED' } : i) }
-                                                                        }
-                                                                        return o
-                                                                    }))
-                                                                    readyIds.forEach(id => setJustDeliveredIds(prev => new Set([...prev, id])))
-                                                                    toast.success(`${readyCount} piatti consegnati`)
-                                                                }}
-                                                            >
-                                                                <Check size={12} weight="bold" className="mr-1" />
-                                                                Segna tutti Consegnati ({readyCount})
-                                                            </Button>
-                                                        )}
                                                     </div>
-                                                    )
-                                                })}
+                                                ))}
                                             </div>
                                         )}
                                     </div>
@@ -1740,24 +1704,21 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                             onClick={async () => {
                                                 if (!confirm(`Vuoi svuotare il tavolo ${selectedTable.number}? Gli ordini attivi verranno chiusi.`)) return
                                                 try {
-                                                    // Close all orders for this session directly in DB
-                                                    await supabase
-                                                        .from('orders')
-                                                        .update({ status: 'PAID', closed_at: new Date().toISOString() })
-                                                        .eq('table_session_id', session.id)
-                                                        .neq('status', 'PAID')
-                                                    // Mark all items as SERVED
-                                                    const { data: sOrdIds } = await supabase.from('orders').select('id').eq('table_session_id', session.id)
-                                                    if (sOrdIds && sOrdIds.length > 0) {
-                                                        await supabase.from('order_items').update({ status: 'SERVED' }).in('order_id', sOrdIds.map(o => o.id)).neq('status', 'SERVED')
+                                                    const sessionOrders = activeOrders.filter(o => o.table_session_id === session.id)
+                                                    if (sessionOrders.length > 0) {
+                                                        await supabase
+                                                            .from('orders')
+                                                            .update({ status: 'PAID' })
+                                                            .in('id', sessionOrders.map(o => o.id))
+                                                        const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
+                                                        if (allItemIds.length > 0) {
+                                                            await supabase.from('order_items').update({ status: 'SERVED' }).in('id', allItemIds)
+                                                        }
                                                     }
-                                                    const wName = user?.name || user?.username || 'Cameriere'
                                                     await DatabaseService.updateSession({
                                                         ...session,
                                                         status: 'CLOSED',
-                                                        closed_at: new Date().toISOString(),
-                                                        closed_by_name: wName,
-                                                        closed_by_role: 'waiter',
+                                                        closed_at: new Date().toISOString()
                                                     })
                                                     await DatabaseService.clearCart(session.id)
                                                     setSessions(prev => prev.filter(s => s.id !== session.id))
@@ -1841,7 +1802,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                 className="bg-zinc-900 border-zinc-800 h-12 text-lg text-center"
                             />
                         </div>
-                        {restaurant && getCurrentAyceSettings(restaurant).enabled && (
+                        {(() => { const wa = (restaurant as any)?.weekly_ayce; return wa ? !!wa.enabled : !!(restaurant?.all_you_can_eat?.enabled); })() && (
                             <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900/50 border border-white/5">
                                 <div>
                                     <p className="font-medium">AYCE (All You Can Eat)</p>
@@ -1889,78 +1850,346 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 </DialogContent>
             </Dialog>
 
-            {/* Management Dialog - Main Menu */}
-            <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
-                <DialogContent className="sm:max-w-lg w-[95vw] bg-zinc-950 border-zinc-800 text-zinc-100 p-0 overflow-hidden max-h-[85vh] flex flex-col">
-                    <DialogHeader className="p-6 pb-4 border-b border-white/5 bg-zinc-900/50 shrink-0">
-                        <DialogTitle className="text-xl font-bold flex items-center gap-3">
-                            <GearSix size={24} className="text-amber-500" />
-                            Gestione Tavoli e Sale
-                        </DialogTitle>
-                        <DialogDescription className="text-zinc-500">
-                            Aggiungi, modifica o elimina tavoli e sale
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <ScrollArea className="flex-1 max-h-[65vh] overflow-y-auto">
-                        <div className="p-4 space-y-6">
-                            {/* Tables Section */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Tavoli ({tables.length})</h3>
-                                    <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddTableDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
-                                        <Plus size={16} className="mr-1" /> Aggiungi
-                                    </Button>
-                                </div>
-                                <div className="space-y-2">
-                                    {tables.map(table => {
-                                        const room = rooms.find(r => r.id === table.room_id)
-                                        const session = sessions.find(s => s.table_id === table.id)
-                                        return (
-                                            <div key={table.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
-                                                <div>
-                                                    <span className="font-bold text-white">{table.number}</span>
-                                                    <span className="text-xs text-zinc-500 ml-2">{table.seats} posti</span>
-                                                    {room && <Badge variant="outline" className="ml-2 text-[10px] border-amber-500/30 text-amber-400">{room.name}</Badge>}
-                                                    {session && <Badge className="ml-2 text-[10px] bg-green-500/20 text-green-400 border-green-500/30">Attivo</Badge>}
-                                                </div>
-                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditTableDialog(table); }}>
-                                                    <Pencil size={16} />
-                                                </Button>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Rooms Section */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Sale ({rooms.length})</h3>
-                                    <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddRoomDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
-                                        <Plus size={16} className="mr-1" /> Aggiungi
-                                    </Button>
-                                </div>
-                                <div className="space-y-2">
-                                    {rooms.length === 0 ? (
-                                        <p className="text-sm text-zinc-600 text-center py-4">Nessuna sala configurata</p>
-                                    ) : rooms.map(room => {
-                                        const tablesInRoom = tables.filter(t => t.room_id === room.id).length
-                                        return (
-                                            <div key={room.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
-                                                <div>
-                                                    <span className="font-bold text-white">{room.name}</span>
-                                                    <span className="text-xs text-zinc-500 ml-2">{tablesInRoom} tavoli</span>
-                                                </div>
-                                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditRoomDialog(room); }}>
-                                                    <Pencil size={16} />
-                                                </Button>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
+            {/* Management Dialog - Tabbed (Tables/Menu/Bookings) */}
+            <Dialog open={isManageDialogOpen} onOpenChange={(open) => { setIsManageDialogOpen(open); if (!open) { setMenuSearch(''); setMenuCategoryFilter('all'); setShowAddBookingForm(false); } }}>
+                <DialogContent className="sm:max-w-xl w-[95vw] bg-zinc-950 border-zinc-800 text-zinc-100 p-0 overflow-hidden max-h-[85vh] flex flex-col">
+                    {/* Header with tabs */}
+                    <div className="shrink-0 border-b border-white/5">
+                        <DialogHeader className="p-5 pb-3">
+                            <DialogTitle className="text-xl font-bold flex items-center gap-3">
+                                <GearSix size={24} className="text-amber-500" />
+                                Gestione
+                            </DialogTitle>
+                            <DialogDescription className="text-zinc-500 sr-only">Gestisci tavoli, menu e prenotazioni</DialogDescription>
+                        </DialogHeader>
+                        <div className="flex px-5 gap-1">
+                            {[
+                                { key: 'tables' as const, label: 'Sale & Tavoli', icon: <House size={16} /> },
+                                { key: 'menu' as const, label: 'Menu', icon: <ForkKnife size={16} /> },
+                                { key: 'bookings' as const, label: 'Prenotazioni', icon: <CalendarCheck size={16} /> },
+                            ].map(tab => (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setManageTab(tab.key)}
+                                    className={cn(
+                                        'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors',
+                                        manageTab === tab.key
+                                            ? 'bg-zinc-900 text-amber-400 border-b-2 border-amber-500'
+                                            : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50'
+                                    )}
+                                >
+                                    {tab.icon} {tab.label}
+                                </button>
+                            ))}
                         </div>
+                    </div>
+
+                    <ScrollArea className="flex-1 max-h-[60vh] overflow-y-auto">
+                        <AnimatePresence mode="wait">
+                            {/* === TABLES & ROOMS TAB === */}
+                            {manageTab === 'tables' && (
+                                <motion.div key="tables" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-6">
+                                    {/* Tables */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Tavoli ({tables.length})</h3>
+                                            <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddTableDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
+                                                <Plus size={16} className="mr-1" /> Aggiungi
+                                            </Button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {tables.map(table => {
+                                                const room = rooms.find(r => r.id === table.room_id)
+                                                const session = sessions.find(s => s.table_id === table.id)
+                                                return (
+                                                    <div key={table.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="font-bold text-white">{table.number}</span>
+                                                            <span className="text-xs text-zinc-500">{table.seats} posti</span>
+                                                            {room && <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400">{room.name}</Badge>}
+                                                            {session && <Badge className="text-[10px] bg-green-500/20 text-green-400 border-green-500/30">Attivo</Badge>}
+                                                        </div>
+                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditTableDialog(table); }}>
+                                                            <Pencil size={16} />
+                                                        </Button>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                    {/* Rooms */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Sale ({rooms.length})</h3>
+                                            <Button size="sm" onClick={() => { setIsManageDialogOpen(false); setIsAddRoomDialogOpen(true); }} className="h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold">
+                                                <Plus size={16} className="mr-1" /> Aggiungi
+                                            </Button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {rooms.length === 0 ? (
+                                                <p className="text-sm text-zinc-600 text-center py-4">Nessuna sala configurata</p>
+                                            ) : rooms.map(room => {
+                                                const tablesInRoom = tables.filter(t => t.room_id === room.id).length
+                                                return (
+                                                    <div key={room.id} className="flex items-center justify-between p-3 bg-zinc-900/80 rounded-xl border border-white/5">
+                                                        <div>
+                                                            <span className="font-bold text-white">{room.name}</span>
+                                                            <span className="text-xs text-zinc-500 ml-2">{tablesInRoom} tavoli</span>
+                                                        </div>
+                                                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-500" onClick={() => { setIsManageDialogOpen(false); openEditRoomDialog(room); }}>
+                                                            <Pencil size={16} />
+                                                        </Button>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* === MENU TAB === */}
+                            {manageTab === 'menu' && (
+                                <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-4">
+                                    {/* Search + Filter */}
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                                            <Input
+                                                placeholder="Cerca piatto..."
+                                                value={menuSearch}
+                                                onChange={(e) => setMenuSearch(e.target.value)}
+                                                className="pl-9 bg-zinc-900/80 border-white/5 h-10"
+                                            />
+                                        </div>
+                                        <Select value={menuCategoryFilter} onValueChange={setMenuCategoryFilter}>
+                                            <SelectTrigger className="w-[140px] bg-zinc-900/80 border-white/5 h-10">
+                                                <SelectValue placeholder="Categoria" />
+                                            </SelectTrigger>
+                                            <SelectContent className="bg-zinc-950 border-zinc-800">
+                                                <SelectItem value="all">Tutte</SelectItem>
+                                                {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Dish List */}
+                                    <div className="space-y-1.5">
+                                        {filteredMenuDishes.length === 0 ? (
+                                            <p className="text-sm text-zinc-600 text-center py-8">Nessun piatto trovato</p>
+                                        ) : filteredMenuDishes.map(dish => {
+                                            const cat = categories.find(c => c.id === dish.category_id)
+                                            const isAvailable = dish.is_available !== false
+                                            return (
+                                                <div key={dish.id} className={cn(
+                                                    'flex items-center gap-3 p-3 rounded-xl border transition-colors',
+                                                    dish.is_active
+                                                        ? 'bg-zinc-900/80 border-white/5'
+                                                        : 'bg-zinc-900/30 border-white/3 opacity-50'
+                                                )}>
+                                                    {/* Dish image thumbnail */}
+                                                    {dish.image_url?.trim() && dish.image_url.startsWith('http') ? (
+                                                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-zinc-800">
+                                                            <img src={dish.image_url} alt="" className="w-full h-full object-cover" />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-10 h-10 rounded-lg shrink-0 bg-zinc-800/50 flex items-center justify-center">
+                                                            <ForkKnife size={16} className="text-zinc-600" />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Dish info */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={cn('font-medium truncate', dish.is_active ? 'text-white' : 'text-zinc-500')}>{dish.name}</span>
+                                                            {!isAvailable && <Badge className="text-[9px] bg-red-500/20 text-red-400 border-red-500/30 px-1.5">Esaurito</Badge>}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            {cat && <span className="text-[10px] text-zinc-600">{cat.name}</span>}
+                                                            <span className="text-xs text-amber-400 font-bold">€{dish.price.toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Controls */}
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        {/* Availability toggle (esaurito) */}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className={cn('h-8 w-8 p-0', isAvailable ? 'text-zinc-500 hover:text-red-400' : 'text-red-400 hover:text-green-400')}
+                                                            onClick={() => handleToggleDishAvailable(dish)}
+                                                            title={isAvailable ? 'Segna esaurito' : 'Segna disponibile'}
+                                                        >
+                                                            {isAvailable ? <CheckCircle size={16} /> : <X size={16} />}
+                                                        </Button>
+                                                        {/* Visibility toggle */}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className={cn('h-8 w-8 p-0', dish.is_active ? 'text-zinc-500 hover:text-amber-400' : 'text-amber-400/50 hover:text-amber-400')}
+                                                            onClick={() => handleToggleDishActive(dish)}
+                                                            title={dish.is_active ? 'Nascondi dal menu' : 'Mostra nel menu'}
+                                                        >
+                                                            {dish.is_active ? <Eye size={16} /> : <EyeSlash size={16} />}
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    <p className="text-[11px] text-zinc-600 text-center pt-2">
+                                        {dishes.filter(d => d.is_active).length} piatti visibili · {dishes.filter(d => !d.is_active).length} nascosti
+                                    </p>
+                                </motion.div>
+                            )}
+
+                            {/* === BOOKINGS TAB === */}
+                            {manageTab === 'bookings' && (
+                                <motion.div key="bookings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="p-4 space-y-4">
+                                    {/* Add booking button */}
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">
+                                            Oggi ({todayBookings.length})
+                                        </h3>
+                                        <Button
+                                            size="sm"
+                                            onClick={() => setShowAddBookingForm(!showAddBookingForm)}
+                                            className={showAddBookingForm ? 'h-8 bg-zinc-800 text-zinc-300' : 'h-8 bg-amber-500 hover:bg-amber-400 text-black font-bold'}
+                                        >
+                                            {showAddBookingForm ? <><X size={14} className="mr-1" /> Chiudi</> : <><Plus size={14} className="mr-1" /> Nuova</>}
+                                        </Button>
+                                    </div>
+
+                                    {/* Add booking form */}
+                                    <AnimatePresence>
+                                        {showAddBookingForm && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: 'auto', opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="p-4 rounded-xl bg-zinc-900/80 border border-amber-500/20 space-y-3">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div className="col-span-2">
+                                                            <Label className="text-xs text-zinc-500">Nome *</Label>
+                                                            <Input value={newBookingName} onChange={(e) => setNewBookingName(e.target.value)} placeholder="Nome cliente" className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Telefono</Label>
+                                                            <Input value={newBookingPhone} onChange={(e) => setNewBookingPhone(e.target.value)} placeholder="333..." className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Persone</Label>
+                                                            <Input type="number" min="1" value={newBookingGuests} onChange={(e) => setNewBookingGuests(e.target.value)} className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Data</Label>
+                                                            <Input type="date" value={newBookingDate} onChange={(e) => setNewBookingDate(e.target.value)} className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div>
+                                                            <Label className="text-xs text-zinc-500">Ora</Label>
+                                                            <Input type="time" value={newBookingTime} onChange={(e) => setNewBookingTime(e.target.value)} className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <Label className="text-xs text-zinc-500">Note</Label>
+                                                            <Input value={newBookingNotes} onChange={(e) => setNewBookingNotes(e.target.value)} placeholder="Note opzionali..." className="bg-black/30 border-white/5 h-9 mt-1" />
+                                                        </div>
+                                                    </div>
+                                                    <Button onClick={handleAddBooking} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-10">
+                                                        <Plus size={16} className="mr-1" /> Aggiungi Prenotazione
+                                                    </Button>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
+                                    {/* Today's bookings */}
+                                    <div className="space-y-2">
+                                        {todayBookings.length === 0 ? (
+                                            <p className="text-sm text-zinc-600 text-center py-6">Nessuna prenotazione per oggi</p>
+                                        ) : todayBookings.map(booking => {
+                                            const time = new Date(booking.date_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                                            const statusColors = {
+                                                confirmed: 'bg-green-500/15 text-green-400 border-green-500/30',
+                                                pending: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+                                                cancelled: 'bg-red-500/15 text-red-400 border-red-500/30',
+                                            }
+                                            return (
+                                                <div key={booking.id} className={cn(
+                                                    'p-3 rounded-xl border transition-colors',
+                                                    booking.status === 'cancelled' ? 'bg-zinc-900/30 border-white/3 opacity-50' : 'bg-zinc-900/80 border-white/5'
+                                                )}>
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-white">{booking.name}</span>
+                                                                <Badge className={cn('text-[10px] px-1.5', statusColors[booking.status as keyof typeof statusColors] || statusColors.pending)}>
+                                                                    {booking.status === 'confirmed' ? 'Confermata' : booking.status === 'cancelled' ? 'Annullata' : 'In attesa'}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+                                                                <span className="flex items-center gap-1"><Clock size={12} /> {time}</span>
+                                                                <span className="flex items-center gap-1"><Users size={12} /> {booking.guests}</span>
+                                                                {booking.phone && <span className="flex items-center gap-1"><Phone size={12} /> {booking.phone}</span>}
+                                                            </div>
+                                                            {booking.notes && <p className="text-[11px] text-zinc-600 mt-1 truncate">{booking.notes}</p>}
+                                                        </div>
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            {booking.status !== 'confirmed' && (
+                                                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-400 hover:bg-green-500/20" onClick={() => handleUpdateBookingStatus(booking, 'confirmed')} title="Conferma">
+                                                                    <Check size={14} />
+                                                                </Button>
+                                                            )}
+                                                            {booking.status !== 'cancelled' && (
+                                                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/20" onClick={() => handleUpdateBookingStatus(booking, 'cancelled')} title="Annulla">
+                                                                    <X size={14} />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+
+                                    {/* Upcoming bookings */}
+                                    {upcomingBookings.length > 0 && (
+                                        <div>
+                                            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 mb-3 mt-2">Prossime ({upcomingBookings.length})</h3>
+                                            <div className="space-y-2">
+                                                {upcomingBookings.map(booking => {
+                                                    const dt = new Date(booking.date_time)
+                                                    const dateStr = dt.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })
+                                                    const timeStr = dt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+                                                    return (
+                                                        <div key={booking.id} className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-xl border border-white/3">
+                                                            <div>
+                                                                <span className="font-medium text-white text-sm">{booking.name}</span>
+                                                                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-zinc-500">
+                                                                    <span>{dateStr} {timeStr}</span>
+                                                                    <span>· {booking.guests} pers.</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1">
+                                                                {booking.status === 'pending' && (
+                                                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-green-400 hover:bg-green-500/20" onClick={() => handleUpdateBookingStatus(booking, 'confirmed')}>
+                                                                        <Check size={14} />
+                                                                    </Button>
+                                                                )}
+                                                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:bg-red-500/20" onClick={() => handleUpdateBookingStatus(booking, 'cancelled')}>
+                                                                    <X size={14} />
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </ScrollArea>
 
                     <DialogFooter className="p-4 border-t border-white/5 shrink-0">
@@ -1971,7 +2200,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Add Table Dialog */}
             <Dialog open={isAddTableDialogOpen} onOpenChange={setIsAddTableDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Nuovo Tavolo</DialogTitle>
                     </DialogHeader>
@@ -2006,7 +2235,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Edit Table Dialog */}
             <Dialog open={isEditTableDialogOpen} onOpenChange={setIsEditTableDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Modifica Tavolo</DialogTitle>
                     </DialogHeader>
@@ -2044,7 +2273,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Add Room Dialog */}
             <Dialog open={isAddRoomDialogOpen} onOpenChange={setIsAddRoomDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Nuova Sala</DialogTitle>
                     </DialogHeader>
@@ -2063,7 +2292,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
             {/* Edit Room Dialog */}
             <Dialog open={isEditRoomDialogOpen} onOpenChange={setIsEditRoomDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
+                <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
                     <DialogHeader>
                         <DialogTitle className="text-xl font-bold">Modifica Sala</DialogTitle>
                     </DialogHeader>

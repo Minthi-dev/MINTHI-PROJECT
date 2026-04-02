@@ -7,7 +7,6 @@ export function DataInitializer() {
     useEffect(() => {
         const initializeData = async () => {
             try {
-                console.log('Initializing data...')
 
                 // 1. Check/Create Admin User FIRST (needed for restaurant owner_id)
                 let adminUserId: string
@@ -15,14 +14,11 @@ export function DataInitializer() {
                 const existingAdmin = users?.find(u => u.role === 'ADMIN' || u.email === 'admin@example.com')
 
                 if (existingAdmin) {
-                    console.log('Admin user already exists, updating credentials...')
                     adminUserId = existingAdmin.id
 
                     // Admin exists, do not force reset credentials.
                     // This allows the user to change their password/name without it being reverted.
-                    console.log('Admin user found, skipping credential reset.')
                 } else {
-                    console.log('Creating admin user...')
                     adminUserId = uuidv4()
                     const adminUser: User = {
                         id: adminUserId,
@@ -34,7 +30,6 @@ export function DataInitializer() {
                     }
                     try {
                         await DatabaseService.createUser(adminUser)
-                        console.log('Admin user created')
                     } catch (e) {
                         console.error('Error creating admin user', e)
                         const retryUsers = await DatabaseService.getUsers()
@@ -49,10 +44,8 @@ export function DataInitializer() {
                 const restaurants = await DatabaseService.getRestaurants()
 
                 if (restaurants && restaurants.length > 0) {
-                    console.log('Restaurant already exists')
                     restaurantId = restaurants[0].id
                 } else {
-                    console.log('Creating new restaurant...')
                     restaurantId = uuidv4()
                     const restaurant: Restaurant = {
                         id: restaurantId,
@@ -63,7 +56,6 @@ export function DataInitializer() {
                     }
                     try {
                         await DatabaseService.createRestaurant(restaurant)
-                        console.log('Restaurant created')
                     } catch (e) {
                         console.error('Error creating restaurant', e)
                         return
@@ -114,7 +106,6 @@ export function DataInitializer() {
                     })
                 }
 
-                console.log('Data initialization complete')
 
                 // Only reload if we actually created something new (simple heuristic: if we reached here without error)
                 // But to avoid loops, maybe don't reload automatically, or check a flag.

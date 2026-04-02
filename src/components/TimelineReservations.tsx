@@ -307,21 +307,28 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
         const minutes = parseInt(parts[1]) || 0
         const startMinutes = hours * 60 + minutes
 
-        // Use per-booking duration, or fall back to global setting
+        // Use per-booking duration or global default
         let duration = booking.duration || reservationDuration
 
-        // Find which service segment this booking falls into
-        const segment = timelineSegments.find(seg => startMinutes >= seg.startMin && startMinutes < seg.endMin)
-
+        // For "infinite" (9999), extend to end of closing time
         if (duration >= 9999) {
-          // "Fino a fine servizio" — extend to end of current segment
-          const segEnd = segment ? segment.endMin : (parseInt(closingTime.split(':')[0]) || 23) * 60
-          duration = Math.max(60, segEnd - startMinutes)
-        } else if (segment) {
-          // Clamp duration so it doesn't extend past the service segment (e.g. pranzo into cena)
-          const maxDuration = segment.endMin - startMinutes
-          if (duration > maxDuration) {
-            duration = maxDuration
+          const [cH, cM] = closingTime.split(':').map(Number)
+          const closingMinutes = cH * 60 + cM
+          duration = Math.max(60, closingMinutes - startMinutes)
+        }
+
+        // Cap duration to service segment boundary (lunch reservation can't extend into dinner)
+        if (serviceSegments && serviceSegments.length > 0) {
+          for (const seg of serviceSegments) {
+            const [sH, sM] = seg.start.split(':').map(Number)
+            const [eH, eM] = seg.end.split(':').map(Number)
+            const segStart = sH * 60 + sM
+            const segEnd = eH * 60 + eM
+            if (startMinutes >= segStart && startMinutes < segEnd) {
+              // Reservation starts in this segment — cap to segment end
+              duration = Math.min(duration, segEnd - startMinutes)
+              break
+            }
           }
         }
 
@@ -527,7 +534,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
         name: newReservation.name,
         phone: newReservation.phone,
         notes: newReservation.notes,
-        duration: newReservation.duration,
+        // duration: newReservation.duration // Not in DB schema yet, but logic is ready
       })
 
       toast.success('Prenotazione creata')
@@ -930,7 +937,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                           return (
                             <div
                               key={block.booking.id}
-                              className={`absolute top-2 bottom-2 rounded-md border border-white/20 px-2 flex flex-col justify-center overflow-hidden transition-all duration-300 hover:z-50 hover:scale-[1.03] hover:shadow-[0_20px_40px_rgba(0,0,0,0.8)] ${isCompleted ? 'opacity-40 grayscale scale-[0.98]' : 'shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] cursor-move'} ${draggedBookingId === block.booking.id ? 'opacity-20 grayscale scale-95 z-0' : ''}`}
+                              className={`absolute top-2 bottom-2 rounded-md border border-white/20 px-2 flex flex-col justify-center overflow-hidden transition-all duration-300 hover:z-50 hover:scale-[1.03] hover:shadow-[0_20px_40px_rgba(0,0,0,0.8)] ${isCompleted ? 'opacity-40 grayscale scale-[0.98]' : 'shadow-[0_10px_20px_-5px_rgba(0,0,0,0.5)] cursor-move'} ${draggedBookingId === block.booking.id ? 'opacity-20 border-dashed grayscale scale-95 z-0' : ''}`}
                               style={{
                                 left: `${getBlockStyle(block.startMinutes, block.duration).left}`,
                                 width: `${getBlockStyle(block.startMinutes, block.duration).width}`,
