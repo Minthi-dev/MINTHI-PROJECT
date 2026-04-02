@@ -155,6 +155,24 @@ export const DatabaseService = {
         if (error) throw error
     },
 
+    // Estrae il nome file da un URL Storage Supabase (es. "https://xxx.supabase.co/storage/v1/object/public/dishes/abc.webp" → "abc.webp")
+    _extractStorageFileName(url: string): string | null {
+        if (!url?.trim()) return null
+        const parts = url.split('/')
+        return parts[parts.length - 1] || null
+    },
+
+    // Elimina un file dallo Storage Supabase dato il suo URL pubblico
+    async _deleteStorageFile(url: string, bucket: string) {
+        const fileName = this._extractStorageFileName(url)
+        if (!fileName) return
+        try {
+            await supabase.storage.from(bucket).remove([fileName])
+        } catch (e) {
+            console.warn(`Could not delete ${bucket}/${fileName}`, e)
+        }
+    },
+
     async deleteRestaurant(restaurantId: string) {
         // 0. Recupera info ristorante per eliminare il logo e l'owner
         const { data: restaurant } = await supabase
@@ -163,7 +181,14 @@ export const DatabaseService = {
             .eq('id', restaurantId)
             .single()
 
-        // 1. Elimina dipendenze complesse (Order Items)
+        // 0b. Recupera immagini piatti per pulizia Storage
+        const { data: dishesWithImages } = await supabase
+            .from('dishes')
+            .select('image_url')
+            .eq('restaurant_id', restaurantId)
+            .not('image_url', 'is', null)
+
+        // 1. Elimina dipendenze complesse (Order Items — live + archivio)
         const { data: orders } = await supabase
             .from('orders')
             .select('id')
@@ -174,18 +199,53 @@ export const DatabaseService = {
             await supabase.from('order_items').delete().in('order_id', orderIds)
         }
 
-        // 2. Elimina TUTTE le tabelle dipendenti da restaurant_id (ordine: foglie → radice)
+        const { data: archivedOrders } = await supabase
+            .from('archived_orders')
+            .select('id')
+            .eq('restaurant_id', restaurantId)
+
+        if (archivedOrders && archivedOrders.length > 0) {
+            const archivedOrderIds = archivedOrders.map(o => o.id)
+            await supabase.from('archived_order_items').delete().in('order_id', archivedOrderIds)
+        }
+
+        // 2. Elimina cart_items delle sessioni del ristorante
+        const { data: sessions } = await supabase
+            .from('table_sessions')
+            .select('id')
+            .eq('restaurant_id', restaurantId)
+
+        if (sessions && sessions.length > 0) {
+            const sessionIds = sessions.map(s => s.id)
+            await supabase.from('cart_items').delete().in('session_id', sessionIds)
+        }
+
+        // 3. Elimina pin_attempts dei tavoli del ristorante
+        const { data: tables } = await supabase
+            .from('tables')
+            .select('id')
+            .eq('restaurant_id', restaurantId)
+
+        if (tables && tables.length > 0) {
+            const tableIds = tables.map(t => t.id)
+            await supabase.from('pin_attempts').delete().in('table_id', tableIds)
+        }
+
+        // 4. Elimina TUTTE le tabelle dipendenti da restaurant_id (ordine: foglie → radice)
         await supabase.from('waiter_activity_logs').delete().eq('restaurant_id', restaurantId)
         await supabase.from('restaurant_staff').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('subscription_payments').delete().eq('restaurant_id', restaurantId)
+        // Preserva subscription_payments per statistiche admin (sgancia dal ristorante)
+        await supabase.from('subscription_payments').update({ restaurant_id: null as any }).eq('restaurant_id', restaurantId)
         await supabase.from('restaurant_bonuses').delete().eq('restaurant_id', restaurantId)
         await supabase.from('restaurant_discounts').delete().eq('restaurant_id', restaurantId)
 
         await supabase.from('orders').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('archived_orders').delete().eq('restaurant_id', restaurantId)
+        await supabase.from('archived_table_sessions').delete().eq('restaurant_id', restaurantId)
         await supabase.from('table_sessions').delete().eq('restaurant_id', restaurantId)
         await supabase.from('bookings').delete().eq('restaurant_id', restaurantId)
 
-        // Custom menus (dishes dipende da custom_menu_dishes che dipende da custom_menus)
+        // Custom menus
         const { data: menus } = await supabase.from('custom_menus').select('id').eq('restaurant_id', restaurantId)
         if (menus && menus.length > 0) {
             const menuIds = menus.map(m => m.id)
@@ -199,23 +259,24 @@ export const DatabaseService = {
         await supabase.from('tables').delete().eq('restaurant_id', restaurantId)
         await supabase.from('rooms').delete().eq('restaurant_id', restaurantId)
 
-        // 3. Elimina logo dallo Storage se esiste
+        // 5. Elimina file dallo Storage (logo + immagini piatti)
         if (restaurant?.logo_url) {
-            try {
-                const urlParts = restaurant.logo_url.split('/')
-                const fileName = urlParts[urlParts.length - 1]
-
-                if (fileName) {
-                    await supabase.storage
-                        .from('logos')
-                        .remove([fileName])
+            await this._deleteStorageFile(restaurant.logo_url, 'logos')
+        }
+        if (dishesWithImages && dishesWithImages.length > 0) {
+            const fileNames = dishesWithImages
+                .map(d => this._extractStorageFileName(d.image_url))
+                .filter((f): f is string => !!f)
+            if (fileNames.length > 0) {
+                try {
+                    await supabase.storage.from('dishes').remove(fileNames)
+                } catch (e) {
+                    console.warn('Could not delete dish images from storage', e)
                 }
-            } catch (e) {
-                console.warn("Could not delete logo file", e)
             }
         }
 
-        // 4. Infine elimina il ristorante
+        // 6. Infine elimina il ristorante
         const { error } = await supabase
             .from('restaurants')
             .delete()
@@ -223,7 +284,7 @@ export const DatabaseService = {
 
         if (error) throw error
 
-        // 5. Tenta di eliminare l'utente proprietario (se esiste), MA NON SE È ADMIN
+        // 7. Tenta di eliminare l'utente proprietario (se esiste), MA NON SE È ADMIN
         if (restaurant?.owner_id) {
             try {
                 const { data: user } = await supabase.from('users').select('role').eq('id', restaurant.owner_id).single()
@@ -241,6 +302,20 @@ export const DatabaseService = {
 
     async nukeDatabase() {
         // ATTENZIONE: Ordine inverso di dipendenza per evitare errori di Foreign Key
+
+        // 0. Pulisci file Storage PRIMA di eliminare i record dal DB
+        try {
+            const { data: logoFiles } = await supabase.storage.from('logos').list()
+            if (logoFiles && logoFiles.length > 0) {
+                await supabase.storage.from('logos').remove(logoFiles.map(f => f.name))
+            }
+            const { data: dishFiles } = await supabase.storage.from('dishes').list()
+            if (dishFiles && dishFiles.length > 0) {
+                await supabase.storage.from('dishes').remove(dishFiles.map(f => f.name))
+            }
+        } catch (e) {
+            console.warn('Could not clean storage during reset', e)
+        }
 
         // 1. Dati volatili di sessione
         await supabase.from('pin_attempts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
@@ -541,6 +616,14 @@ export const DatabaseService = {
     },
 
     async updateDish(dish: Partial<Dish>) {
+        // Se l'immagine cambia, elimina la vecchia dallo Storage
+        if (dish.id && dish.image_url !== undefined) {
+            const { data: existing } = await supabase.from('dishes').select('image_url').eq('id', dish.id).single()
+            if (existing?.image_url && existing.image_url !== dish.image_url) {
+                await this._deleteStorageFile(existing.image_url, 'dishes')
+            }
+        }
+
         const payload: any = { ...dish }
         if (dish.excludeFromAllYouCanEat !== undefined) {
             payload.exclude_from_all_you_can_eat = dish.excludeFromAllYouCanEat
@@ -555,11 +638,19 @@ export const DatabaseService = {
     },
 
     async deleteDish(id: string) {
+        // Recupera image_url prima di eliminare per pulizia Storage
+        const { data: dish } = await supabase.from('dishes').select('image_url').eq('id', id).single()
+
         const { error } = await supabase
             .from('dishes')
             .delete()
             .eq('id', id)
         if (error) throw error
+
+        // Elimina immagine dallo Storage
+        if (dish?.image_url) {
+            await this._deleteStorageFile(dish.image_url, 'dishes')
+        }
     },
 
     // Tables

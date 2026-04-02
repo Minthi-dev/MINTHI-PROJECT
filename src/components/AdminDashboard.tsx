@@ -591,8 +591,15 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       setIsUploading(true)
       let finalLogoUrl = editingRestaurant.logo_url
       if (editLogoFile) {
+        const oldLogoUrl = editingRestaurant.logo_url
         const uploadedUrl = await handleLogoUpload(editLogoFile)
-        if (uploadedUrl) finalLogoUrl = uploadedUrl
+        if (uploadedUrl) {
+          finalLogoUrl = uploadedUrl
+          // Elimina vecchio logo dallo Storage
+          if (oldLogoUrl) {
+            DatabaseService._deleteStorageFile(oldLogoUrl, 'logos')
+          }
+        }
       }
 
       const updatedRestaurant = {
