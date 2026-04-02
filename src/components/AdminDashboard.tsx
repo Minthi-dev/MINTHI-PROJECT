@@ -254,7 +254,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [showDetailDialog, setShowDetailDialog] = useState(false)
   const [detailRestaurant, setDetailRestaurant] = useState<Restaurant | null>(null)
   const [detailUser, setDetailUser] = useState<User | null>(null)
-  const [detailPasswordVisible, setDetailPasswordVisible] = useState(false)
 
   // Visibility state for passwords
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({})
@@ -505,7 +504,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         name: newRestaurant.username,
         email: newRestaurant.email,
         password_hash: hashedPw,
-        raw_password: newRestaurant.password,
         role: 'OWNER',
       }
 
@@ -664,10 +662,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         // Hash password only if it was changed (non-bcrypt value)
         if (editingUser.password_hash && !editingUser.password_hash.startsWith('$2a$') && !editingUser.password_hash.startsWith('$2b$')) {
           userUpdate.password_hash = await hashPassword(editingUser.password_hash)
-          userUpdate.raw_password = editingUser.password_hash // Store plain text if it was updated
         } else {
           userUpdate.password_hash = editingUser.password_hash
-          userUpdate.raw_password = editingUser.raw_password // Keep original if not changed
         }
         await DatabaseService.updateUser(userUpdate)
       }
@@ -2357,7 +2353,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             onClick={() => {
                               setDetailRestaurant(restaurant)
                               setDetailUser(restaurantUser || null)
-                              setDetailPasswordVisible(false)
                               setShowDetailDialog(true)
                             }}
                             title="Vedi Tutti i Dati"
@@ -2497,17 +2492,9 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     </div>
                     <div>
                       <span className="text-zinc-500 text-xs">Password</span>
-                      <div className="flex items-center gap-2">
-                        <p className="text-amber-400 font-medium font-mono">
-                          {detailPasswordVisible ? (detailUser.raw_password || detailUser.password_hash?.substring(0, 8) + '...') : '••••••••'}
-                        </p>
-                        <button
-                          onClick={() => setDetailPasswordVisible(v => !v)}
-                          className="text-zinc-500 hover:text-white transition-colors"
-                        >
-                          {detailPasswordVisible ? <EyeSlash size={14} /> : <Eye size={14} />}
-                        </button>
-                      </div>
+                      <p className="text-zinc-400 font-medium text-xs">
+                        {detailUser.password_hash ? 'Password impostata' : 'Nessuna password'}
+                      </p>
                     </div>
                   </div>
                 </div>
