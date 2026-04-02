@@ -661,7 +661,7 @@ const PublicReservationPage = () => {
 
                 {/* FOOTER */}
                 <footer className="p-6 text-center">
-                    <p className="text-xs text-zinc-600 flex items-center justify-center gap-1.5">Powered by <img src="/minthi-logo.png" alt="MINTHI" className="h-3.5 w-auto inline-block opacity-50" /></p>
+                    <p className="text-xs text-zinc-600 flex items-center justify-center gap-1.5">Powered by <img src="/minthi-logo.png" alt="MINTHI" className="h-4 w-auto inline-block opacity-50" /></p>
                 </footer>
             </div>
 

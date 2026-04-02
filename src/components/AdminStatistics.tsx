@@ -686,7 +686,7 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
                     </CardContent>
                 </Card>
 
-                {/* Peak Hours Breakdown */}
+                {/* Peak Hours Breakdown — Bar Chart */}
                 <Card className="col-span-1 bg-zinc-900/40 backdrop-blur-3xl border border-white/5 rounded-3xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.9)] overflow-hidden">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-3 text-lg font-bold text-white">
@@ -694,22 +694,43 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-4 mt-4">
-                            {stats.peakHours.filter(h => h.count > 0 || [12, 13, 20, 21].includes(h.hour)).map((item) => {
-                                const max = Math.max(...stats.peakHours.map(i => i.count)) || 1
-                                return (
-                                    <div key={item.hour} className="flex items-center gap-4">
-                                        <span className="w-12 text-xs font-bold text-zinc-500 tabular-nums">{item.hour}:00</span>
-                                        <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden">
-                                            <div
-                                                className={`h-full rounded-full transition-all duration-700 ${item.count / max > 0.8 ? 'bg-amber-500' : 'bg-zinc-700'}`}
-                                                style={{ width: `${(item.count / max) * 100}%` }}
-                                            />
-                                        </div>
-                                        <span className="text-[10px] font-black text-zinc-400 w-6 text-right">{item.count}</span>
-                                    </div>
-                                )
-                            })}
+                        <div className="mt-2">
+                            <ResponsiveContainer width="100%" height={320}>
+                                <BarChart data={stats.peakHours} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                                    <XAxis
+                                        dataKey="hour"
+                                        tick={{ fill: '#52525b', fontSize: 10 }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tickFormatter={(h: number) => `${h}`}
+                                    />
+                                    <YAxis
+                                        tick={{ fill: '#52525b', fontSize: 10 }}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        allowDecimals={false}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: '#09090b',
+                                            borderRadius: '12px',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                            boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+                                        }}
+                                        itemStyle={{ color: '#fbbf24', fontWeight: 'bold' }}
+                                        labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
+                                        labelFormatter={(h: number) => `${String(h).padStart(2, '0')}:00`}
+                                        formatter={(value: number) => [`${value} ordini`, 'Ordini']}
+                                    />
+                                    <Bar
+                                        dataKey="count"
+                                        fill="#f59e0b"
+                                        radius={[4, 4, 0, 0]}
+                                        maxBarSize={20}
+                                    />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </div>
                     </CardContent>
                 </Card>

@@ -341,7 +341,7 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/70 backdrop-blur-2xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center">
-            <img src="/minthi-logo.png" alt="MINTHI" className="h-8 w-auto" />
+            <img src="/minthi-logo.png" alt="MINTHI" className="h-12 w-auto" />
           </div>
           <div className="hidden md:flex items-center gap-8 text-[13px] text-zinc-400">
             <a href="#funzioni" className="hover:text-white transition-colors duration-300">Funzionalità</a>

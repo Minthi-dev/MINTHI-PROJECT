@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -14,8 +14,9 @@ const supabase = createClient(
 );
 
 serve(async (req) => {
+    const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+        return new Response("ok", { headers: cors });
     }
 
     try {
@@ -31,7 +32,7 @@ serve(async (req) => {
 
             if (!priceConfig?.value) {
                 return new Response(JSON.stringify({ amount: 0, currency: "eur", product_id: null }), {
-                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    headers: { ...cors, "Content-Type": "application/json" },
                     status: 200,
                 });
             }
@@ -64,7 +65,7 @@ serve(async (req) => {
                 product_id: productId,
                 price_id: price.id,
             }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
                 status: 200,
             });
         }
@@ -73,7 +74,7 @@ serve(async (req) => {
             if (!amount_cents || amount_cents <= 0) {
                 return new Response(JSON.stringify({ error: "amount_cents non valido" }), {
                     status: 400,
-                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    headers: { ...cors, "Content-Type": "application/json" },
                 });
             }
 
@@ -87,7 +88,7 @@ serve(async (req) => {
             if (!productConfig?.value) {
                 return new Response(JSON.stringify({ error: "stripe_product_id non configurato. Vai prima su Gestione Prezzo e recupera i dati." }), {
                     status: 400,
-                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    headers: { ...cors, "Content-Type": "application/json" },
                 });
             }
 
@@ -120,19 +121,19 @@ serve(async (req) => {
                 priceId: newPrice.id,
                 amount: amountEur,
             }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
                 status: 200,
             });
         }
 
         return new Response(JSON.stringify({ error: "action non valida" }), {
             status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
         });
     } catch (error) {
         console.error("Errore stripe-manage-price:", error);
         return new Response(JSON.stringify({ error: error.message }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 500,
         });
     }

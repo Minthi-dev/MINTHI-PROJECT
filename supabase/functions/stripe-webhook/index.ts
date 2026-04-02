@@ -147,10 +147,24 @@ Deno.serve(async (req) => {
                         try {
                             const paidItemIds = JSON.parse(paidItemIdsRaw);
                             if (Array.isArray(paidItemIds) && paidItemIds.length > 0) {
-                                const { error: itemUpdateError } = await supabase
+                                // Validate items belong to orders in this session (same restaurant)
+                                const { data: validItems } = await supabase
                                     .from("order_items")
-                                    .update({ status: "PAID" })
-                                    .in("id", paidItemIds);
+                                    .select("id, order_id, orders!inner(table_session_id)")
+                                    .in("id", paidItemIds)
+                                    .eq("orders.table_session_id", sessionId);
+
+                                const validIds = (validItems || []).map((i: any) => i.id);
+                                if (validIds.length !== paidItemIds.length) {
+                                    console.warn(`[WEBHOOK] ${paidItemIds.length - validIds.length} order_items non appartengono alla sessione ${sessionId}, ignorati`);
+                                }
+
+                                const { error: itemUpdateError } = validIds.length > 0
+                                    ? await supabase
+                                        .from("order_items")
+                                        .update({ status: "PAID" })
+                                        .in("id", validIds)
+                                    : { error: null };
 
                                 if (itemUpdateError) {
                                     console.error(`[WEBHOOK] Errore aggiornamento order_items a PAID:`, itemUpdateError);

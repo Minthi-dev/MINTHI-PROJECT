@@ -307,13 +307,29 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
         const minutes = parseInt(parts[1]) || 0
         const startMinutes = hours * 60 + minutes
 
-        // Use configurable duration from settings
-        // For "infinite" (9999), extend to end of closing time
+        // Use per-booking duration or global default
         let duration = booking.duration || reservationDuration
+
+        // For "infinite" (9999), extend to end of closing time
         if (duration >= 9999) {
           const [cH, cM] = closingTime.split(':').map(Number)
           const closingMinutes = cH * 60 + cM
           duration = Math.max(60, closingMinutes - startMinutes)
+        }
+
+        // Cap duration to service segment boundary (lunch reservation can't extend into dinner)
+        if (serviceSegments && serviceSegments.length > 0) {
+          for (const seg of serviceSegments) {
+            const [sH, sM] = seg.start.split(':').map(Number)
+            const [eH, eM] = seg.end.split(':').map(Number)
+            const segStart = sH * 60 + sM
+            const segEnd = eH * 60 + eM
+            if (startMinutes >= segStart && startMinutes < segEnd) {
+              // Reservation starts in this segment — cap to segment end
+              duration = Math.min(duration, segEnd - startMinutes)
+              break
+            }
+          }
         }
 
         return {

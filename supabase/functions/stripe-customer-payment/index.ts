@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -13,8 +13,9 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 serve(async (req) => {
+    const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+        return new Response("ok", { headers: cors });
     }
 
     try {
@@ -32,10 +33,10 @@ serve(async (req) => {
             paidOrderItemIds, // Array of order_item IDs when paying per-piatto
         } = await req.json();
 
-        if (!restaurantId || !orderIds || !items || items.length === 0) {
+        if (!isValidUUID(restaurantId) || !orderIds || !items || items.length === 0) {
             return new Response(
                 JSON.stringify({ error: "Parametri mancanti (restaurantId, orderIds, items)" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }
 
@@ -49,14 +50,14 @@ serve(async (req) => {
         if (!restaurant || !restaurant.enable_stripe_payments) {
             return new Response(
                 JSON.stringify({ error: "Pagamenti online non abilitati per questo ristorante" }),
-                { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }
 
         if (!restaurant.stripe_connect_account_id) {
             return new Response(
                 JSON.stringify({ error: "Il ristorante non ha ancora configurato l'account di pagamento per ricevere fondi" }),
-                { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }
 
@@ -77,7 +78,7 @@ serve(async (req) => {
         if (lineItems.length === 0) {
             return new Response(
                 JSON.stringify({ error: "Il totale da pagare tramite Stripe deve essere maggiore di 0€" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }
 
@@ -114,13 +115,13 @@ serve(async (req) => {
 
         return new Response(
             JSON.stringify({ sessionId: session.id, url: session.url }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+            { headers: { ...cors, "Content-Type": "application/json" }, status: 200 }
         );
     } catch (error) {
         console.error("Errore Stripe Customer Payment:", error);
         return new Response(
             JSON.stringify({ error: error.message }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
+            { headers: { ...cors, "Content-Type": "application/json" }, status: 500 }
         );
     }
 });

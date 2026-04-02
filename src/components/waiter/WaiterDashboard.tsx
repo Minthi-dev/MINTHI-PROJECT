@@ -934,7 +934,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
                 >
-                    <img src="/minthi-logo.png" alt="MINTHI" className="h-24 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
+                    <img src="/minthi-logo.png" alt="MINTHI" className="h-36 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
                 </motion.div>
 
                 <motion.div

@@ -623,7 +623,6 @@ const CustomerMenuBase = () => {
           } else {
             // Session query failed (RLS/network) but we have saved PIN - trust localStorage
             if (sessionPin && !isViewOnly) {
-              console.log('Session query failed but PIN exists in localStorage, trusting saved PIN')
               setIsAuthenticated(true)
             } else if (!isViewOnly) {
               setIsAuthenticated(false)
@@ -1007,6 +1006,7 @@ const CustomerMenuBase = () => {
         tableId={tableId}
         sessionId={sessionId!}
         activeSession={activeSession!}
+        onSessionUpdate={setActiveSession}
         isViewOnly={isViewOnly}
         isClosed={isClosed}
         isAuthenticated={isAuthenticated}
@@ -1020,7 +1020,7 @@ const CustomerMenuBase = () => {
 
 // Refactored Content Component to keep logic clean
 //  -- UPDATED INTERFACE to include auth and full restaurant --
-function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
+function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, onSessionUpdate, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, onSessionUpdate?: (session: TableSession) => void, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
   // Using passed props instead of resolving them
   const isWaiterMode = false // Or pass as prop if needed
 
@@ -1743,7 +1743,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           try {
             const freshSession = await DatabaseService.getSessionById(sessionId)
             if (freshSession) {
-              setActiveSession(freshSession)
+              onSessionUpdate?.(freshSession)
               // Stop polling if paid_amount increased (webhook worked)
               const currentPaid = activeSession?.paid_amount || 0
               if ((freshSession.paid_amount || 0) > currentPaid) {

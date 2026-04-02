@@ -102,7 +102,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
     date: '',
     time: '',
     guests: 1,
-    notes: ''
+    notes: '',
+    duration: reservationDuration
   })
 
   // Move form state
@@ -143,7 +144,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
       date: date,
       time: time.substring(0, 5),
       guests: booking.guests,
-      notes: booking.notes || ''
+      notes: booking.notes || '',
+      duration: booking.duration || reservationDuration
     })
     setShowEditDialog(true)
   }
@@ -185,7 +187,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
           table_id: editForm.tableId,
           date_time: dateTime,
           guests: editForm.guests,
-          notes: editForm.notes.trim()
+          notes: editForm.notes.trim(),
+          duration: editForm.duration
         }
         await DatabaseService.updateBooking(updatedBooking)
         toast.success('Prenotazione modificata con successo')
@@ -199,6 +202,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
           date_time: dateTime,
           guests: editForm.guests,
           notes: editForm.notes.trim(),
+          duration: editForm.duration,
           status: 'CONFIRMED' // Default status
         }
 
@@ -565,7 +569,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                 date: selectedDate.toISOString().split('T')[0],
                 time: '20:00', // Default time
                 guests: 2,
-                notes: ''
+                notes: '',
+                duration: reservationDuration
               })
               setSelectedBooking(null) // Null indicates create mode
               setShowEditDialog(true)
@@ -664,7 +669,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
               </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2.5">
                 <Label htmlFor="edit-date" className="text-zinc-400">Data *</Label>
                 <div className="relative">
@@ -691,6 +696,9 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                   <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                 </div>
               </div>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2.5">
                 <Label htmlFor="edit-guests" className="text-zinc-400">Ospiti *</Label>
                 <div className="relative">
@@ -705,6 +713,28 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
                   />
                   <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
                 </div>
+              </div>
+              <div className="space-y-2.5">
+                <Label className="text-zinc-400">Durata</Label>
+                <Select
+                  value={String(editForm.duration)}
+                  onValueChange={(value) => setEditForm(prev => ({ ...prev, duration: parseInt(value) }))}
+                >
+                  <SelectTrigger className="bg-zinc-900 border-zinc-800">
+                    <div className="flex items-center gap-2">
+                      <Clock size={16} className="text-zinc-500" />
+                      <SelectValue placeholder="Durata" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-zinc-800">
+                    <SelectItem value="60">1 ora</SelectItem>
+                    <SelectItem value="90">1h 30min</SelectItem>
+                    <SelectItem value="120">2 ore</SelectItem>
+                    <SelectItem value="150">2h 30min</SelectItem>
+                    <SelectItem value="180">3 ore</SelectItem>
+                    <SelectItem value="240">4 ore</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -15,8 +15,9 @@ function couponName(percentOff: number, duration: string, durationMonths?: numbe
 }
 
 serve(async (req) => {
+    const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+        return new Response("ok", { headers: cors });
     }
 
     try {
@@ -25,7 +26,7 @@ serve(async (req) => {
         if (!percent_off || !duration) {
             return new Response(JSON.stringify({ error: "Mancano percent_off o duration" }), {
                 status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
             });
         }
 
@@ -44,7 +45,7 @@ serve(async (req) => {
 
         if (existingCoupon) {
             return new Response(JSON.stringify({ couponId: existingCoupon.id }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
                 status: 200,
             });
         }
@@ -62,13 +63,13 @@ serve(async (req) => {
         const coupon = await stripe.coupons.create(couponParams);
 
         return new Response(JSON.stringify({ couponId: coupon.id }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 200,
         });
     } catch (error) {
         console.error("Errore stripe-create-coupon:", error);
         return new Response(JSON.stringify({ error: error.message }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 500,
         });
     }

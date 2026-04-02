@@ -341,7 +341,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         name: newRestaurant.username,
         email: newRestaurant.email,
         password_hash: hashedPw,
-        raw_password: newRestaurant.password,
         role: 'OWNER',
       }
 
@@ -493,10 +492,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         // Hash password only if it was changed (non-bcrypt value)
         if (editingUser.password_hash && !editingUser.password_hash.startsWith('$2a$') && !editingUser.password_hash.startsWith('$2b$')) {
           userUpdate.password_hash = await hashPassword(editingUser.password_hash)
-          userUpdate.raw_password = editingUser.password_hash // Store plain text if it was updated
         } else {
           userUpdate.password_hash = editingUser.password_hash
-          userUpdate.raw_password = editingUser.raw_password // Keep original if not changed
         }
         await DatabaseService.updateUser(userUpdate)
       }
@@ -553,7 +550,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <img src="/minthi-logo.png" alt="MINTHI" className="h-10 w-auto" />
+              <img src="/minthi-logo.png" alt="MINTHI" className="h-14 w-auto" />
               <div>
                 <h1 className="text-xl font-bold text-white">Amministrazione</h1>
                 <p className="text-xs font-bold text-amber-500/70 tracking-[0.2em] uppercase">Control Panel</p>
@@ -1861,15 +1858,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     <div>
                       <span className="text-zinc-500 text-xs">Password</span>
                       <div className="flex items-center gap-2">
-                        <p className="text-amber-400 font-medium font-mono">
-                          {detailPasswordVisible ? (detailUser.raw_password || detailUser.password_hash?.substring(0, 8) + '...') : '••••••••'}
-                        </p>
-                        <button
-                          onClick={() => setDetailPasswordVisible(v => !v)}
-                          className="text-zinc-500 hover:text-white transition-colors"
-                        >
-                          {detailPasswordVisible ? <EyeSlash size={14} /> : <Eye size={14} />}
-                        </button>
+                        <p className="text-zinc-400 font-medium font-mono">••••••••</p>
                       </div>
                     </div>
                   </div>

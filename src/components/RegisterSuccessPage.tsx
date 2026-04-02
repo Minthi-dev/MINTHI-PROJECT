@@ -173,7 +173,7 @@ export default function RegisterSuccessPage() {
           transition={{ delay: 0.7 }}
           className="text-zinc-600 text-xs uppercase tracking-[0.3em]"
         >
-          <img src="/minthi-logo.png" alt="MINTHI" className="h-6 w-auto inline-block mr-2" /> sistema gestione ristorante
+          <img src="/minthi-logo.png" alt="MINTHI" className="h-9 w-auto inline-block mr-2" /> sistema gestione ristorante
         </motion.p>
       </motion.div>
     </div>

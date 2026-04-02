@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
 
 const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const stripe = new Stripe(stripeKey, {
@@ -15,17 +15,18 @@ const supabase = createClient(
 );
 
 serve(async (req) => {
+    const cors = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
 
   try {
     const { restaurantId } = await req.json();
 
-    if (!restaurantId) {
+    if (!isValidUUID(restaurantId)) {
       return new Response(JSON.stringify({ error: "restaurantId richiesto" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -38,14 +39,14 @@ serve(async (req) => {
     if (dbError || !restaurant) {
       return new Response(JSON.stringify({ error: "Ristorante non trovato" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
     if (!restaurant.stripe_connect_account_id) {
       return new Response(JSON.stringify({ error: "L'account non ha Stripe Connect" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
@@ -61,14 +62,14 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ enabled: account.charges_enabled === true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
       status: 200,
     });
 
   } catch (error: any) {
     console.error("Errore Stripe Connect Refresh:", error.message, error.stack);
     return new Response(JSON.stringify({ error: error.message || "Errore interno" }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
       status: 500,
     });
   }

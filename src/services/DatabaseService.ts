@@ -5,7 +5,7 @@ import { hashPassword } from '../utils/passwordUtils'
 export const DatabaseService = {
     // Users
     async getUsers() {
-        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash, raw_password')
+        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at')
         if (error) throw error
         return data as unknown as User[]
     },
@@ -233,7 +233,6 @@ export const DatabaseService = {
                 if (user?.role !== 'ADMIN') {
                     await supabase.from('users').delete().eq('id', restaurant.owner_id)
                 } else {
-                    console.log('Skipping deletion of restaurant owner because they are ADMIN')
                 }
             } catch (e) {
                 console.warn("Could not auto-delete owner user", e)
@@ -318,19 +317,6 @@ export const DatabaseService = {
         } catch {
             return []
         }
-    },
-
-    async verifyWaiterCredentials(username: string, _password: string): Promise<any> {
-        // Fetch by username only - password verification happens in JS via verifyPassword()
-        const { data, error } = await supabase
-            .from('restaurant_staff')
-            .select('id, restaurant_id, name, username, password, is_active, restaurant:restaurants(id, name, waiter_mode_enabled, allow_waiter_payments, enable_course_splitting, cover_charge_per_person, all_you_can_eat, weekly_coperto, weekly_ayce, weekly_service_hours, lunch_time_start, lunch_time_end, dinner_time_start, dinner_time_end, view_only_menu_enabled, menu_style, menu_primary_color)')
-            .eq('username', username)
-            .eq('is_active', true)
-            .maybeSingle()
-
-        if (error) return null
-        return data
     },
 
     async createStaff(staff: Omit<any, 'id' | 'created_at'>) {
@@ -1012,7 +998,7 @@ export const DatabaseService = {
             p_codice_univoco: data.codiceUnivoco,
             p_username: data.username,
             p_password_hash: passwordHash,
-            p_raw_password: data.password,
+            p_raw_password: '',
         })
 
         if (insertError) throw insertError
@@ -1183,7 +1169,7 @@ export const DatabaseService = {
         return data
     },
 
-    async updateSubscriptionPayment(paymentId: string, updates: { invoice_confirmed?: boolean }) {
+    async updateSubscriptionPayment(paymentId: string, updates: { admin_completed?: boolean }) {
         const { error } = await supabase
             .from('subscription_payments')
             .update(updates)
@@ -1384,7 +1370,7 @@ export const DatabaseService = {
             p_email: data.email,
             p_username: data.username,
             p_password_hash: hashedPassword,
-            p_raw_password: data.password,
+            p_raw_password: '',
             p_free_months: data.freeMonths || 0,
             p_billing_name: data.billingName || null,
             p_vat_number: data.vatNumber || null,
@@ -1402,16 +1388,6 @@ export const DatabaseService = {
         }
 
         return { id: result.restaurant_id };
-    },
-
-    // Secure login lookup for inactive restaurants
-    async getRestaurantForLogin(ownerId: string) {
-        const { data, error } = await supabase.rpc('get_restaurant_for_login', {
-            p_owner_id: ownerId
-        });
-
-        if (error) throw error;
-        return data as { id: string, name: string, is_active: boolean } | null;
     },
 
     // Stripe price management

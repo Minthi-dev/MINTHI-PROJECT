@@ -69,10 +69,8 @@ export default function DemoGuidePanel({
   }, [step, groups])
 
   const goTo = useCallback((idx: number) => {
-    console.log('goTo called with idx:', idx)
     const s = steps[idx]
     if (!s) return
-    console.log('goTo: setting step to', idx, 'tab:', s.tab)
     setCurrentStep(idx)
     setActiveTab(s.tab)
     if (s.subTab && setSettingsSubTab) {
@@ -81,7 +79,6 @@ export default function DemoGuidePanel({
   }, [steps, setCurrentStep, setActiveTab, setSettingsSubTab])
 
   const handleNext = () => {
-    console.log('handleNext called, currentStep:', currentStep, 'isLast:', isLast)
     if (isLast) onExit()
     else goTo(currentStep + 1)
   }

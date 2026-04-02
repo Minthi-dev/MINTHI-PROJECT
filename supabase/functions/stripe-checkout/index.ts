@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -8,17 +8,18 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
 });
 
 serve(async (req) => {
+    const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: corsHeaders });
+        return new Response("ok", { headers: cors });
     }
 
     try {
         const { priceId, restaurantId, pendingRegistrationId, successUrl, cancelUrl, couponId } = await req.json();
 
-        if (!priceId || (!restaurantId && !pendingRegistrationId)) {
+        if (!priceId || (!isValidUUID(restaurantId) && !isValidUUID(pendingRegistrationId))) {
             return new Response(JSON.stringify({ error: "Mancano parametri: priceId e (restaurantId o pendingRegistrationId)" }), {
                 status: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...cors, "Content-Type": "application/json" },
             });
         }
 
@@ -42,13 +43,13 @@ serve(async (req) => {
         });
 
         return new Response(JSON.stringify({ sessionId: session.id, url: session.url }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 200,
         });
     } catch (error) {
         console.error("Errore Stripe Checkout:", error);
         return new Response(JSON.stringify({ error: error.message }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json" },
             status: 500,
         });
     }

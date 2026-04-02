@@ -436,7 +436,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               const diffHours = (now.getTime() - lastUpdate) / (1000 * 60 * 60)
 
               if (diffHours >= 24) {
-                console.log('Manual menu active for > 24h, resetting.')
                 await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
                 lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
                 return
@@ -512,7 +511,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             mealType: currentMealType,
             day: scheduleDay
           }
-          console.log(`Applied scheduled menu: ${match.custom_menu_id} for ${currentMealType} on day ${scheduleDay}`)
         }
       } catch (err) {
         console.error("Error in menu scheduler:", err)
@@ -1940,7 +1938,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
           >
-            <img src="/minthi-logo.png" alt="MINTHI" className="h-24 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
+            <img src="/minthi-logo.png" alt="MINTHI" className="h-36 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
           </motion.div>
 
           <motion.div
@@ -2001,7 +1999,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               ) : (
                 <div className="flex items-center gap-4 flex-1">
                   <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-zinc-900/50 border border-amber-500/20 flex items-center justify-center overflow-hidden shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]">
-                    <img src="/minthi-logo.png" alt="MINTHI" className="w-full h-full object-contain p-1" />
+                    <img src="/minthi-logo.png" alt="MINTHI" className="w-full h-full object-contain p-0.5" />
                   </div>
                   <div className="overflow-hidden flex-1 min-w-0">
                     <h1 className="font-medium text-base text-zinc-100 tracking-tight leading-none truncate">{currentRestaurant?.name || 'MINTHI'}</h1>

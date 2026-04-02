@@ -10,7 +10,6 @@ export interface User {
     name?: string
     username?: string
     password_hash?: string
-    raw_password?: string
     role: UserRole
     created_at?: string
     restaurant_id?: string
@@ -332,7 +331,7 @@ export interface SubscriptionPayment {
     period_start?: string
     period_end?: string
     created_at?: string
-    invoice_confirmed?: boolean
+    admin_completed?: boolean
 }
 
 export interface RestaurantBonus {
