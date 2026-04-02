@@ -10,12 +10,6 @@ export const DatabaseService = {
         return data as unknown as User[]
     },
 
-    async getUsersFull() {
-        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at, password_hash, raw_password')
-        if (error) throw error
-        return data as unknown as User[]
-    },
-
     async createUser(user: Partial<User>) {
         const { error } = await supabase.from('users').insert(user)
         if (error) throw error
