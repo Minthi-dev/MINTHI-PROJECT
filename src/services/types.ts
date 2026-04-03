@@ -80,6 +80,7 @@ export interface Restaurant {
     codice_univoco?: string
     analytics_password_hash?: string
     demo_completed?: boolean
+    setup_completed?: boolean
     is_active?: boolean
     subscription_cancel_at?: string
 }

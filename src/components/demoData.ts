@@ -145,6 +145,49 @@ export const APP_FEATURES: FeatureSummary[] = [
 ]
 
 // ── Guide Steps ──────────────────────────────────────────────────────────────
+export interface FeatureSection {
+  id: string
+  tab: string
+  color: string
+  icon: string
+  title: string
+  features: string[]
+  firstStepIndex: number
+}
+
+export const FEATURE_SECTIONS: FeatureSection[] = [
+  {
+    id: 'orders', tab: 'orders', color: 'amber', icon: 'ClockCounterClockwise',
+    title: 'Gestione Ordini', firstStepIndex: 1,
+    features: ['Ordini in tempo reale', 'Gestione stati piatti', 'Suddivisione portate'],
+  },
+  {
+    id: 'tables', tab: 'tables', color: 'emerald', icon: 'MapPin',
+    title: 'Tavoli e Sale', firstStepIndex: 3,
+    features: ['QR code per ogni tavolo', 'Organizzazione per sale', 'Sessioni clienti'],
+  },
+  {
+    id: 'menu', tab: 'menu', color: 'sky', icon: 'BookOpen',
+    title: 'Menu Digitale', firstStepIndex: 7,
+    features: ['Categorie e piatti', 'Foto e allergeni', 'Export PDF'],
+  },
+  {
+    id: 'reservations', tab: 'reservations', color: 'violet', icon: 'Calendar',
+    title: 'Prenotazioni', firstStepIndex: 11,
+    features: ['Prenotazioni online', 'Timeline visuale', 'Gestione tavoli'],
+  },
+  {
+    id: 'analytics', tab: 'analytics', color: 'rose', icon: 'ChartBar',
+    title: 'Analitiche', firstStepIndex: 12,
+    features: ['Incassi e statistiche', 'Piatti più venduti', 'Report orari'],
+  },
+  {
+    id: 'settings', tab: 'settings', color: 'zinc', icon: 'Gear',
+    title: 'Impostazioni', firstStepIndex: 13,
+    features: ['Coperto e AYCE', 'Camerieri e staff', 'Pagamenti Stripe'],
+  },
+]
+
 export interface DemoGuideStep {
   id: string
   tab: string
@@ -154,6 +197,8 @@ export interface DemoGuideStep {
   highlightSelector?: string  // CSS selector for SpotlightOverlay — omit to show page without darkening
   subTab?: string             // for settings sub-tabs
   isSummary?: boolean         // true for the welcome summary page (rendered differently)
+  phase?: string              // 'summary' for the welcome step
+  group?: string              // navigation group name
 }
 
 export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
