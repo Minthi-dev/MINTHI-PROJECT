@@ -1,13 +1,12 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DatabaseService } from '../services/DatabaseService'
-import { Order, TableSession, Restaurant } from '../services/types'
+import { Restaurant } from '../services/types'
 import { ChartBar, Money, ShoppingCart, Users, Clock, Fire, Calendar, TrendUp, Storefront, Eye, Funnel, Check, UsersThree, Receipt, CurrencyEur, CaretDown } from '@phosphor-icons/react'
-import { format, isWithinInterval, startOfDay, endOfDay, parseISO, eachDayOfInterval, isSameDay, subDays } from 'date-fns'
-import { Badge } from '@/components/ui/badge'
+import { format, parseISO, subDays } from 'date-fns'
 import { it } from 'date-fns/locale'
+import { Badge } from '@/components/ui/badge'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -168,136 +167,78 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
         const fetchStats = async () => {
             try {
                 setLoading(true)
-                const [ordersResult, allSessions, restaurants] = await Promise.all([
-                    DatabaseService.getAllOrders({ pageSize: 5000 }),
-                    DatabaseService.getAllTableSessions(),
-                    DatabaseService.getRestaurants()
-                ])
-                const allOrders = ordersResult.data
 
+                // Load restaurants list first (needed for filter init and cumulative chart)
+                const { data: restaurantsData } = await supabase
+                    .from('restaurants')
+                    .select('id, name, created_at, subscription_status')
+                    .order('name')
+
+                const restaurants = (restaurantsData || []) as Restaurant[]
                 setAllRestaurants(restaurants)
-                // Initialize selection to all if empty
+
+                const activeRestaurantIds = selectedRestaurantIds.length > 0
+                    ? selectedRestaurantIds
+                    : restaurants.map(r => r.id)
+
                 if (selectedRestaurantIds.length === 0) {
                     setSelectedRestaurantIds(restaurants.map(r => r.id))
                 }
 
                 const dateRange = getAdminDateRange(dateFilter, customStartDate, customEndDate)
-                const start = startOfDay(dateRange.start)
-                const end = endOfDay(dateRange.end)
 
-                // Get active restaurant filter (all if none selected)
-                const activeRestaurantIds = selectedRestaurantIds.length > 0
-                    ? selectedRestaurantIds
-                    : restaurants.map(r => r.id)
-
-                // 1. Filtered Data (by date AND restaurant)
-                const filteredOrders = allOrders.filter(o => {
-                    if (!o.created_at) return false
-                    if (!activeRestaurantIds.includes(o.restaurant_id)) return false
-                    try {
-                        const date = parseISO(o.created_at)
-                        return isWithinInterval(date, { start, end })
-                    } catch { return false }
+                // Call server-side RPC — replaces loading 5000 orders in browser
+                const { data: rpcData, error: rpcError } = await supabase.rpc('get_admin_stats', {
+                    p_start_date: dateRange.start.toISOString(),
+                    p_end_date: dateRange.end.toISOString(),
+                    p_restaurant_ids: selectedRestaurantIds.length > 0 ? selectedRestaurantIds : null
                 })
 
-                const filteredSessions = allSessions.filter(s => {
-                    const dateStr = s.created_at || s.opened_at
-                    if (!dateStr) return false
-                    if (!activeRestaurantIds.includes(s.restaurant_id)) return false
-                    try {
-                        const date = parseISO(dateStr)
-                        return isWithinInterval(date, { start, end })
-                    } catch { return false }
-                })
+                if (rpcError) throw rpcError
 
-                // 2. Basic Calculations
-                const paidOrders = filteredOrders.filter(o => o.status === 'PAID')
-                const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
-                const totalOrders = filteredOrders.length
-                const activeOrders = filteredOrders.filter(o => o.status === 'OPEN').length
-                const totalSessions = filteredSessions.length
-                const totalRestaurants = restaurants.length
-                const activeSessions = allSessions.filter(s => s.status === 'OPEN').length
-
-                // 3. Averages
+                const d = rpcData as any
+                const totalRevenue = Number(d.totalRevenue) || 0
+                const totalOrders = Number(d.totalOrders) || 0
+                const paidOrders = Number(d.paidOrders) || 0
                 const activeRestaurantCount = activeRestaurantIds.length
                 const avgRevenuePerRestaurant = activeRestaurantCount > 0 ? totalRevenue / activeRestaurantCount : 0
                 const avgOrdersPerRestaurant = activeRestaurantCount > 0 ? totalOrders / activeRestaurantCount : 0
-                const avgOrderValue = paidOrders.length > 0 ? totalRevenue / paidOrders.length : 0
+                const avgOrderValue = paidOrders > 0 ? totalRevenue / paidOrders : 0
 
-                // 4. Customer count by session
-                const totalCustomers = filteredSessions.reduce((sum, s) => sum + (s.customer_count || 1), 0)
-
-                // 5. Rankings (with IDs for impersonation)
-                const restaurantMap = new Map<string, { id: string; name: string; revenue: number; orders: number; customers: number }>()
-
-                // Initialize all restaurants
-                restaurants.filter(r => activeRestaurantIds.includes(r.id)).forEach(r => {
-                    restaurantMap.set(r.id, { id: r.id, name: r.name, revenue: 0, orders: 0, customers: 0 })
-                })
-
-                filteredOrders.forEach(order => {
-                    const restaurantId = order.restaurant_id
-                    const restaurantName = order.restaurant?.name || restaurants.find(r => r.id === restaurantId)?.name || 'Sconosciuto'
-                    const current = restaurantMap.get(restaurantId) || { id: restaurantId, name: restaurantName, revenue: 0, orders: 0, customers: 0 }
-
-                    if (order.status === 'PAID') {
-                        current.revenue += (order.total_amount || 0)
-                    }
-                    current.orders += 1
-                    restaurantMap.set(restaurantId, current)
-                })
-
-                // Add customer counts from sessions
-                filteredSessions.forEach(session => {
-                    const current = restaurantMap.get(session.restaurant_id)
-                    if (current) {
-                        current.customers += (session.customer_count || 1)
-                    }
-                })
-
-                const revenueByRestaurant = Array.from(restaurantMap.values())
-                    .sort((a, b) => b.revenue - a.revenue)
-
-                // 6. Peak Hours
-                const hoursMap = new Array(24).fill(0)
-                filteredOrders.forEach(order => {
-                    if (order.created_at) {
-                        try {
-                            const hour = new Date(order.created_at).getHours()
-                            hoursMap[hour]++
-                        } catch { }
-                    }
-                })
-                const peakHours = hoursMap.map((count, hour) => ({ hour, count }))
-
-                // 7. Growth Tracking (with revenue)
-                const days = eachDayOfInterval({ start, end })
-                const growthData = days.map(day => {
-                    const cumulativeRes = restaurants.filter(r => r.created_at && parseISO(r.created_at) <= endOfDay(day)).length
-                    const dailyOrders = filteredOrders.filter(o => o.created_at && isSameDay(parseISO(o.created_at), day))
-                    const dailyRevenue = dailyOrders.filter(o => o.status === 'PAID').reduce((sum, o) => sum + (o.total_amount || 0), 0)
+                // Map daily growth: add cumulative restaurant count (requires all restaurants)
+                const growthData = (d.dailyGrowth || []).map((row: any) => {
+                    const dayDate = parseISO(row.date)
+                    const cumulativeRes = restaurants.filter(r => r.created_at && parseISO(r.created_at) <= dayDate).length
                     return {
-                        date: format(day, 'dd MMM', { locale: it }),
+                        date: format(dayDate, 'dd MMM', { locale: it }),
                         restaurants: cumulativeRes,
-                        orders: dailyOrders.length,
-                        revenue: dailyRevenue
+                        orders: Number(row.orders) || 0,
+                        revenue: Number(row.revenue) || 0
                     }
                 })
 
                 setStats({
                     totalRevenue,
                     totalOrders,
-                    totalCustomers,
-                    activeOrders,
-                    totalRestaurants,
-                    activeSessions,
+                    totalCustomers: Number(d.totalCustomers) || 0,
+                    activeOrders: Number(d.activeOrders) || 0,
+                    totalRestaurants: Number(d.totalRestaurants) || 0,
+                    activeSessions: Number(d.activeSessions) || 0,
                     avgRevenuePerRestaurant,
                     avgOrdersPerRestaurant,
                     avgOrderValue,
-                    totalSessions,
-                    revenueByRestaurant,
-                    peakHours,
+                    totalSessions: Number(d.totalSessions) || 0,
+                    revenueByRestaurant: (d.revenueByRestaurant || []).map((r: any) => ({
+                        id: r.id,
+                        name: r.name,
+                        revenue: Number(r.revenue) || 0,
+                        orders: Number(r.orders) || 0,
+                        customers: Number(r.customers) || 0,
+                    })),
+                    peakHours: (d.peakHours || []).map((h: any) => ({
+                        hour: Number(h.hour),
+                        count: Number(h.count) || 0,
+                    })),
                     growthData
                 })
             } catch (error) {

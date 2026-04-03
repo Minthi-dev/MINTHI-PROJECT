@@ -154,12 +154,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [exportMenuTitle, setExportMenuTitle] = useState('')
   const [exportExcludedDishes, setExportExcludedDishes] = useState<string[]>([])
   const [exportPreviewData, setExportPreviewData] = useState<{ title: string, subtitle?: string, sections: { id: string, title: string, dishes: Dish[] }[] } | null>(null)
-  const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
+  // Realtime: tables, sessions, bookings (cambiano spesso, aggiornamenti immediati richiesti)
+  // Polling: dishes, categories, rooms, restaurants (cambiano raramente — risparmio canali realtime)
+  const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId }, undefined, undefined, { realtimeEnabled: false, pollIntervalMs: 30000 })
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
-  const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
+  const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId }, undefined, undefined, { realtimeEnabled: false, pollIntervalMs: 60000 })
   const [bookings, , refreshBookings, setBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
   const [sessions, , refreshSessions, setSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
-  const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
+  const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId }, undefined, undefined, { realtimeEnabled: false, pollIntervalMs: 60000 })
 
   // Ref so stopDemo can call fetchOrders
   const fetchOrdersRef = useRef<(() => void) | null>(null)
@@ -236,7 +238,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }, [showExportMenuDialog, restaurantId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
+  const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId }, undefined, undefined, { realtimeEnabled: false, pollIntervalMs: 30000 })
   const currentRestaurant = restaurants?.[0]
 
   // Discount banner

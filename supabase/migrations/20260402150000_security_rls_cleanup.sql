@@ -20,6 +20,7 @@ GRANT SELECT ON public.users_safe TO anon, authenticated;
 
 -- Anon should only INSERT pending registrations, not read them
 -- (service_role ALL policy already exists for webhook processing)
+DROP POLICY IF EXISTS "anon_no_select_pending" ON public.pending_registrations;
 CREATE POLICY "anon_no_select_pending" ON public.pending_registrations
     AS RESTRICTIVE FOR SELECT TO anon USING (false);
 
@@ -31,6 +32,7 @@ CREATE POLICY "anon_no_select_pending" ON public.pending_registrations
 DROP POLICY IF EXISTS "Anyone can update registration_tokens" ON public.registration_tokens;
 
 -- Only allow updating uses count and used status (not token value or discount params)
+DROP POLICY IF EXISTS "tokens_update_usage_only" ON public.registration_tokens;
 CREATE POLICY "tokens_update_usage_only" ON public.registration_tokens
     FOR UPDATE TO public
     USING (true)
@@ -46,10 +48,12 @@ DROP POLICY IF EXISTS "Admins can update app_config" ON public.app_config;
 
 -- Recreate with the same access (needed by admin dashboard via anon key)
 -- but add a check that key is not empty
+DROP POLICY IF EXISTS "app_config_insert" ON public.app_config;
 CREATE POLICY "app_config_insert" ON public.app_config
     FOR INSERT TO public
     WITH CHECK (key IS NOT NULL AND key != '');
 
+DROP POLICY IF EXISTS "app_config_update" ON public.app_config;
 CREATE POLICY "app_config_update" ON public.app_config
     FOR UPDATE TO public
     USING (true)
@@ -62,6 +66,7 @@ CREATE POLICY "app_config_update" ON public.app_config
 -- The existing bookings_insert_public allows any insert.
 -- Add requirement that restaurant_id must exist.
 DROP POLICY IF EXISTS "bookings_insert_public" ON public.bookings;
+DROP POLICY IF EXISTS "bookings_insert_validated" ON public.bookings;
 CREATE POLICY "bookings_insert_validated" ON public.bookings
     FOR INSERT TO public
     WITH CHECK (
@@ -80,6 +85,7 @@ CREATE POLICY "bookings_insert_validated" ON public.bookings
 DROP POLICY IF EXISTS "order_items_update" ON public.order_items;
 
 -- Create a replacement that allows UPDATE but requires valid status transitions
+DROP POLICY IF EXISTS "order_items_update_safe" ON public.order_items;
 CREATE POLICY "order_items_update_safe" ON public.order_items
     FOR UPDATE TO anon, authenticated
     USING (true)
@@ -97,6 +103,7 @@ CREATE POLICY "order_items_update_safe" ON public.order_items
 DROP POLICY IF EXISTS "orders_delete" ON public.orders;
 
 -- Allow delete only for OPEN orders (not paid/cancelled ones)
+DROP POLICY IF EXISTS "orders_delete_safe" ON public.orders;
 CREATE POLICY "orders_delete_safe" ON public.orders
     FOR DELETE TO anon, authenticated
     USING (status = 'OPEN');
@@ -107,6 +114,7 @@ CREATE POLICY "orders_delete_safe" ON public.orders
 
 DROP POLICY IF EXISTS "orders_update" ON public.orders;
 
+DROP POLICY IF EXISTS "orders_update_safe" ON public.orders;
 CREATE POLICY "orders_update_safe" ON public.orders
     FOR UPDATE TO anon, authenticated
     USING (true)
@@ -132,21 +140,27 @@ ALTER TABLE public.archived_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.archived_table_sessions ENABLE ROW LEVEL SECURITY;
 
 -- Allow read access (for reporting) but restrict writes to service_role
+DROP POLICY IF EXISTS "archived_items_select" ON public.archived_order_items;
 CREATE POLICY "archived_items_select" ON public.archived_order_items
     FOR SELECT TO anon, authenticated USING (true);
 
+DROP POLICY IF EXISTS "archived_orders_select" ON public.archived_orders;
 CREATE POLICY "archived_orders_select" ON public.archived_orders
     FOR SELECT TO anon, authenticated USING (true);
 
+DROP POLICY IF EXISTS "archived_sessions_select" ON public.archived_table_sessions;
 CREATE POLICY "archived_sessions_select" ON public.archived_table_sessions
     FOR SELECT TO anon, authenticated USING (true);
 
 -- Service role can do everything (for archival process)
+DROP POLICY IF EXISTS "archived_items_service" ON public.archived_order_items;
 CREATE POLICY "archived_items_service" ON public.archived_order_items
     FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "archived_orders_service" ON public.archived_orders;
 CREATE POLICY "archived_orders_service" ON public.archived_orders
     FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "archived_sessions_service" ON public.archived_table_sessions;
 CREATE POLICY "archived_sessions_service" ON public.archived_table_sessions
     FOR ALL TO service_role USING (true) WITH CHECK (true);

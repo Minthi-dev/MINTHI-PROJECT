@@ -51,5 +51,6 @@ ALTER TABLE public.order_items ADD CONSTRAINT order_items_status_check
 
 -- Also fix archived_order_items constraint to match
 ALTER TABLE public.archived_order_items DROP CONSTRAINT IF EXISTS order_items_status_check;
+ALTER TABLE public.archived_order_items DROP CONSTRAINT IF EXISTS archived_order_items_status_check;
 ALTER TABLE public.archived_order_items ADD CONSTRAINT archived_order_items_status_check
     CHECK (status IN ('PENDING', 'IN_PREPARATION', 'READY', 'SERVED', 'DELIVERED', 'PAID', 'CANCELLED'));

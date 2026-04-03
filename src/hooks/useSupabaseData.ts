@@ -6,7 +6,11 @@ export function useSupabaseData<T>(
     initialData: T[] = [],
     filter?: { column: string; value: string },
     mapper?: (item: any) => T,
-    orderBy?: { column: string; ascending: boolean }
+    orderBy?: { column: string; ascending: boolean },
+    options?: {
+        realtimeEnabled?: boolean  // default true; set false to use polling instead
+        pollIntervalMs?: number    // polling interval when realtimeEnabled=false (default 30000ms)
+    }
 ) {
     const [data, setData] = useState<T[]>(initialData)
     const [loading, setLoading] = useState(true)
@@ -48,14 +52,22 @@ export function useSupabaseData<T>(
     }, [tableName, filter?.column, filter?.value, orderBy?.column, orderBy?.ascending])
 
     useEffect(() => {
-        // Skip subscription if filter value is missing
+        // Skip if filter value is missing
         if (filter && !filter.value) return
 
         fetchData()
 
+        const realtimeEnabled = options?.realtimeEnabled !== false // default true
+        const pollIntervalMs = options?.pollIntervalMs ?? 30000
+
+        if (!realtimeEnabled) {
+            // Polling mode: fetch on interval instead of opening a realtime channel
+            const pollTimer = setInterval(fetchData, pollIntervalMs)
+            return () => clearInterval(pollTimer)
+        }
+
         // Debounce: accumulate rapid events and do a single full refetch
         let debounceTimer: ReturnType<typeof setTimeout> | undefined
-        // Track pending events so single-event updates can still be applied inline
         let pendingEvents: Array<{ eventType: string; new: any; old: any }> = []
 
         // Realtime subscription — channel name unico per istanza
@@ -81,14 +93,11 @@ export function useSupabaseData<T>(
                         const events = pendingEvents
                         pendingEvents = []
 
-                        // If multiple events arrived within the window, do a full refetch
-                        // to avoid losing any INSERT/UPDATE/DELETE in the batch
                         if (events.length > 1) {
                             fetchData()
                             return
                         }
 
-                        // Single event — apply inline for lower latency
                         const evt = events[0]
                         if (!evt) return
                         const currentMapper = mapperRef.current
@@ -107,7 +116,6 @@ export function useSupabaseData<T>(
                                 if (exists) {
                                     return prev.map((item: any) => (item.id === (evt.new as any).id ? updatedItem : item))
                                 }
-                                // Item not in state yet (was previously invisible due to RLS) — add it
                                 return [...prev, updatedItem]
                             })
                         } else if (evt.eventType === 'DELETE') {
@@ -122,7 +130,7 @@ export function useSupabaseData<T>(
             if (debounceTimer) clearTimeout(debounceTimer)
             supabase.removeChannel(channel)
         }
-    }, [tableName, filter?.column, filter?.value, fetchData])
+    }, [tableName, filter?.column, filter?.value, fetchData, options?.realtimeEnabled, options?.pollIntervalMs])
 
     return [data, loading, fetchData, setData] as const
 }
