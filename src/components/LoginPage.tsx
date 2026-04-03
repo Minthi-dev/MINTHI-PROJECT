@@ -1,13 +1,15 @@
 import { motion } from 'framer-motion'
+import { verifyPassword } from '../utils/passwordUtils'
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { supabase } from '../lib/supabase'
+import { v4 as uuidv4 } from 'uuid'
+import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
-import { User } from '../services/types'
+import { User, Table } from '../services/types'
 import { Users, Eye, EyeSlash } from '@phosphor-icons/react'
 import { Checkbox } from '@/components/ui/checkbox'
 
@@ -45,7 +47,7 @@ export default function LoginPage({ onLogin }: Props) {
   }, [searchParams, setSearchParams])
 
   const handleAdminLogin = async () => {
-    // Rate limiting check (client-side, server also has its own)
+    // Rate limiting check
     if (lockoutUntil && new Date() < lockoutUntil) {
       const remainingMs = lockoutUntil.getTime() - Date.now()
       const remainingMin = Math.ceil(remainingMs / 60000)
@@ -56,65 +58,159 @@ export default function LoginPage({ onLogin }: Props) {
     setIsLoading(true)
 
     try {
-      const { data, error } = await supabase.functions.invoke('login', {
-        body: { username, password }
-      })
+      const users = await DatabaseService.getUsers()
 
-      // Parse server error message (non-2xx responses)
-      let serverError: string | null = null
-      if (error) {
-        try { serverError = JSON.parse(error.message)?.error } catch { /* ignore */ }
-        serverError = serverError || data?.error || error.message
-      } else if (data?.error) {
-        serverError = data.error
+      // Check for username or email match
+      let user: User | null = null
+      for (const u of users) {
+        const nameMatch = u.name?.toLowerCase() === username.toLowerCase()
+        const emailMatch = u.email?.toLowerCase() === username.toLowerCase()
+        if (nameMatch || emailMatch) {
+          const passwordMatch = await verifyPassword(password, u.password_hash || '')
+          if (passwordMatch) {
+            user = u
+            break
+          }
+        }
       }
 
-      if (serverError) {
-        if (serverError.includes('Troppi tentativi')) {
+      // Check for Custom Waiter Credentials from restaurant_staff
+      if (!user) {
+        const staffCredentials = await DatabaseService.verifyWaiterCredentials(username, password)
+        if (staffCredentials && staffCredentials.restaurant) {
+          // Verify password in JS against stored hash
+          const staffPasswordMatch = await verifyPassword(password, staffCredentials.password || '')
+          if (staffPasswordMatch) {
+            const targetRestaurant = staffCredentials.restaurant
+            if (targetRestaurant.is_active === false) {
+              toast.error("Ristorante temporaneamente sospeso. Contatta l'amministrazione.")
+              setIsLoading(false)
+              return
+            }
+
+            // Successful Custom Waiter Login
+            const waiterUser: User = {
+              id: staffCredentials.id, // Use staff ID for analytics
+              name: staffCredentials.name,
+              email: staffCredentials.username + '@local',
+              role: 'STAFF',
+              restaurant_id: targetRestaurant.id
+            }
+
+            localStorage.setItem('minthi_user', JSON.stringify(waiterUser))
+            onLogin(waiterUser)
+            toast.success(`Benvenuto ${staffCredentials.name} - ${targetRestaurant.name}`)
+            setIsLoading(false)
+            return
+          }
+        }
+      }
+
+      // Check for Legacy Waiter Login (format: restaurantSlug_cameriere)
+      if (!user && username.includes('_cameriere')) {
+        const restaurants = await DatabaseService.getRestaurants()
+        const [slug] = username.split('_cameriere')
+
+        const targetRestaurant = restaurants.find(r =>
+          r.name.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase()
+        )
+
+        if (targetRestaurant && targetRestaurant.waiter_mode_enabled) {
+          // Check if restaurant is active
+          if (targetRestaurant.isActive === false) {
+            toast.error('Ristorante temporaneamente sospeso. Contatta l\'amministrazione.')
+            setIsLoading(false)
+            return
+          }
+
+          if (await verifyPassword(password, targetRestaurant.waiter_password || '')) {
+            // Successful Waiter Login
+            const waiterUser: User = {
+              id: uuidv4(),
+              name: 'Cameriere',
+              email: `waiter@${slug}.local`,
+              role: 'STAFF',
+              restaurant_id: targetRestaurant.id
+            }
+
+            // Always persist session to localStorage
+            localStorage.setItem('minthi_user', JSON.stringify(waiterUser))
+
+            onLogin(waiterUser)
+            toast.success(`Benvenuto Staff - ${targetRestaurant.name}`)
+            setIsLoading(false)
+            return
+          }
+        }
+      }
+
+      // Reset contatore tentativi in caso di match utente trovato
+      if (user) setLoginAttempts(0)
+
+      if (user) {
+        // If user is OWNER, we might want to fetch their restaurant here to ensure it exists
+        if (user.role === 'OWNER') {
+          const userRestaurant = await DatabaseService.getRestaurantForLogin(user.id)
+          if (!userRestaurant) {
+            toast.error('Nessun ristorante associato a questo account.')
+            setIsLoading(false)
+            return
+          }
+
+          // Check if restaurant is active
+          if (userRestaurant.is_active === false) {
+            toast.error('Il tuo ristorante è stato temporaneamente sospeso. Contatta l\'assistenza.')
+            setIsLoading(false)
+            return
+          }
+
+          // Attach restaurant_id to the user object
+          const userWithRestaurant = { ...user, restaurant_id: userRestaurant.id }
+
+          // Always persist session to localStorage
+          localStorage.setItem('minthi_user', JSON.stringify(userWithRestaurant))
+
+          onLogin(userWithRestaurant)
+          toast.success(`Benvenuto, ${userRestaurant.name}`)
+          return
+        }
+
+        // Always persist session to localStorage
+        localStorage.setItem('minthi_user', JSON.stringify(user))
+
+        onLogin(user)
+        toast.success(`Benvenuto ${user.name || 'Utente'}`)
+      } else {
+        const newAttempts = loginAttempts + 1
+        setLoginAttempts(newAttempts)
+        if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
           const lockout = new Date(Date.now() + LOCKOUT_DURATION_MS)
           setLockoutUntil(lockout)
-          toast.error(serverError)
-        } else if (serverError === 'Credenziali non valide') {
-          const newAttempts = loginAttempts + 1
-          setLoginAttempts(newAttempts)
-          if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
-            const lockout = new Date(Date.now() + LOCKOUT_DURATION_MS)
-            setLockoutUntil(lockout)
-            setLoginAttempts(0)
-            toast.error('Troppi tentativi falliti. Account bloccato per 5 minuti.')
-          } else {
-            toast.error(`Credenziali non valide (${newAttempts}/${MAX_LOGIN_ATTEMPTS} tentativi)`)
-          }
+          setLoginAttempts(0)
+          toast.error('Troppi tentativi falliti. Account bloccato per 5 minuti.')
         } else {
-          toast.error(serverError)
+          toast.error(`Credenziali non valide (${newAttempts}/${MAX_LOGIN_ATTEMPTS} tentativi)`)
         }
-        return
       }
-
-      // Successful login
-      const user: User = data.user
-      setLoginAttempts(0)
-
-      localStorage.setItem('minthi_user', JSON.stringify(user))
-      onLogin(user)
-      toast.success(data.restaurant_name
-        ? `Benvenuto, ${data.restaurant_name}`
-        : `Benvenuto ${user.name || 'Utente'}`)
     } catch (error: any) {
+      console.error('Login error:', error)
+      // Provide more specific error messages based on error type
       if (error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
         toast.error('Errore di connessione al server. Verifica la tua connessione internet.')
       } else if (error.message?.includes('ERR_NAME_NOT_RESOLVED')) {
         toast.error('Server non raggiungibile. Contatta il supporto.')
       } else {
-        toast.error(error.message || 'Errore durante il login. Riprova.')
+        toast.error('Errore durante il login. Riprova.')
       }
     } finally {
       setIsLoading(false)
     }
   }
 
+  // Keyboard handling is done globally in main.tsx via focusin event
+
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-black text-amber-50 p-4 font-sans selection:bg-amber-500/30 overflow-hidden relative">
+    <div id="login-container" className="min-h-[100dvh] flex flex-col items-center justify-center bg-black text-amber-50 p-4 font-sans selection:bg-amber-500/30 overflow-y-auto relative fixed inset-0" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Subtle Gold Ambient Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
@@ -165,10 +261,20 @@ export default function LoginPage({ onLogin }: Props) {
             initial={{ scale: 0, rotate: -20 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
-            className="mb-6"
+            className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 mb-6 shadow-[0_0_30px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md"
           >
-            <img src="/minthi-logo.png" alt="MINTHI" className="h-32 w-auto mx-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
+            <svg xmlns="http://www.000webhost.com" viewBox="0 0 256 256" width="36" height="36" fill="currentColor">
+              <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
+            </svg>
           </motion.div>
+          <motion.h1
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1"
+          >
+            min<span className="font-bold text-emerald-400">thi</span>
+          </motion.h1>
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -266,7 +372,7 @@ export default function LoginPage({ onLogin }: Props) {
           transition={{ delay: 0.6 }}
           className="text-center text-[10px] text-zinc-700 mt-12 uppercase tracking-widest"
         >
-          <img src="/minthi-logo.png" alt="MINTHI" className="h-5 w-auto inline-block opacity-30" />
+          Secured by MINTHI Systems
         </motion.p>
         <motion.p
           initial={{ opacity: 0 }}

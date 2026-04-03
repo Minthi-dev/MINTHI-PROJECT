@@ -17,7 +17,7 @@ import { Badge } from './ui/badge'
 import { Separator } from './ui/separator'
 import { ScrollArea } from './ui/scroll-area'
 import { Textarea } from './ui/textarea'
-import { hashPassword } from '../utils/passwordUtils'
+import { hashPassword, verifyPassword } from '../utils/passwordUtils'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import {
@@ -57,7 +57,12 @@ import {
   Sparkle,
   DotsSixVertical,
   Tag,
-  CreditCard
+  CreditCard,
+  Camera,
+  ImageSquare,
+  Lock,
+  LockOpen,
+  ShieldCheck
 } from '@phosphor-icons/react'
 import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -106,6 +111,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [activeSection, setActiveSection] = useState('orders')
   const [pendingAutoOrderTableId, setPendingAutoOrderTableId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('orders')
+
+  // Analytics password gate
+  const [analyticsUnlocked, setAnalyticsUnlocked] = useState(false)
+  const [showAnalyticsPasswordDialog, setShowAnalyticsPasswordDialog] = useState(false)
+  const [showAnalyticsSetupDialog, setShowAnalyticsSetupDialog] = useState(false)
+  const [showAnalyticsManageDialog, setShowAnalyticsManageDialog] = useState(false)
+  const [analyticsPasswordInput, setAnalyticsPasswordInput] = useState('')
+  const [analyticsNewPassword, setAnalyticsNewPassword] = useState('')
+  const [analyticsConfirmPassword, setAnalyticsConfirmPassword] = useState('')
+  const [analyticsPasswordVisible, setAnalyticsPasswordVisible] = useState(false)
+  const [analyticsPasswordError, setAnalyticsPasswordError] = useState('')
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
   const [tableSearchTerm, setTableSearchTerm] = useState('')
@@ -135,6 +151,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [availableCustomMenus, setAvailableCustomMenus] = useState<any[]>([])
   const [selectedCustomMenuId, setSelectedCustomMenuId] = useState<string>('')
   const [isExportingMenu, setIsExportingMenu] = useState(false)
+  const [exportMenuTitle, setExportMenuTitle] = useState('')
+  const [exportExcludedDishes, setExportExcludedDishes] = useState<string[]>([])
   const [exportPreviewData, setExportPreviewData] = useState<{ title: string, subtitle?: string, sections: { id: string, title: string, dishes: Dish[] }[] } | null>(null)
   const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
   const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
@@ -205,14 +223,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }, [categories])
 
-  // Fetch custom menus when dialog opens
+  // Fetch custom menus and auto-select all categories when dialog opens
   useEffect(() => {
     if (showExportMenuDialog && restaurantId) {
       DatabaseService.getAllCustomMenus(restaurantId)
         .then(menus => setAvailableCustomMenus(menus || []))
         .catch(console.error)
+      // Auto-select all categories
+      setExportSelectedCategories(restaurantCategories.map(c => c.id))
+      setExportMenuTitle('')
+      setExportExcludedDishes([])
     }
-  }, [showExportMenuDialog, restaurantId])
+  }, [showExportMenuDialog, restaurantId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
   const currentRestaurant = restaurants?.[0]
@@ -228,14 +250,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }, [restaurantId])
 
   // First-access detection: show demo guide + setup wizard on first login
+  // First-access detection: show demo guide only if restaurant hasn't completed it (DB field)
   useEffect(() => {
-    if (!restaurantId) return
+    if (!restaurantId || !currentRestaurant) return
+    // Check DB field first (shared across all devices)
+    if (currentRestaurant.demo_completed) return
+    // Fallback: also check localStorage for backward compat
     const key = `minthi_guide_done_${restaurantId}`
-    if (!localStorage.getItem(key)) {
-      // First access: auto-start demo guide
-      setShowDemoGuide(true)
-    }
-  }, [restaurantId])
+    if (localStorage.getItem(key)) return
+    // First access: auto-start demo guide
+    setShowDemoGuide(true)
+  }, [restaurantId, currentRestaurant])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
   // Aliases: when demo is active (either first-access or manual restart), use demo data
@@ -320,77 +345,98 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   useEffect(() => {
     if (!restaurantId) return
 
+    const SUPPRESSION_KEY = 'minthi_menu_suppressed'
+
+    const parseTime = (t: string) => {
+      if (!t) return 0
+      const [h, m] = t.split(':').map(Number)
+      return h * 60 + (m || 0)
+    }
+
+    const isSuppressed = (): boolean => {
+      const raw = localStorage.getItem(SUPPRESSION_KEY)
+      if (!raw) return false
+      try {
+        const { expiresAt } = JSON.parse(raw)
+        if (Date.now() < new Date(expiresAt).getTime()) return true
+        localStorage.removeItem(SUPPRESSION_KEY)
+        return false
+      } catch { localStorage.removeItem(SUPPRESSION_KEY); return false }
+    }
+
+    const getCurrentMealInfo = () => {
+      const now = new Date()
+      const dayOfWeek = now.getDay()
+      const currentMinutes = now.getHours() * 60 + now.getMinutes()
+
+      // Before 6 AM = still previous day's service
+      const LATE_NIGHT_CUTOFF = 6 * 60
+      let effectiveDay = dayOfWeek
+      let checkTime = currentMinutes
+      if (currentMinutes < LATE_NIGHT_CUTOFF) {
+        effectiveDay = (dayOfWeek + 6) % 7
+        checkTime = currentMinutes + 24 * 60
+      }
+
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+      const dayName = dayNames[effectiveDay]
+      let currentMealType: string | null = null
+      let mealEndMinutes: number | null = null
+
+      const wsHours = currentRestaurant?.weekly_service_hours
+      if (wsHours?.useWeeklySchedule && wsHours.schedule?.[dayName]) {
+        const daySchedule = wsHours.schedule[dayName]
+        if (daySchedule.lunch?.enabled) {
+          const lStart = parseTime(daySchedule.lunch.start)
+          const lEnd = parseTime(daySchedule.lunch.end)
+          if (checkTime >= lStart && checkTime < lEnd) {
+            currentMealType = 'lunch'
+            mealEndMinutes = lEnd
+          }
+        }
+        if (daySchedule.dinner?.enabled) {
+          const dStart = parseTime(daySchedule.dinner.start)
+          const dEnd = parseTime(daySchedule.dinner.end)
+          // Dinner can cross midnight
+          const effectiveEnd = dEnd > dStart ? dEnd : dEnd + 24 * 60
+          if (checkTime >= dStart && checkTime < effectiveEnd) {
+            currentMealType = 'dinner'
+            mealEndMinutes = effectiveEnd
+          }
+        }
+      } else {
+        // Fallback to legacy times
+        const lunchStart = parseTime(lunchTimeStart)
+        const dinnerStart = parseTime(dinnerTimeStart)
+        if (lunchStart > 0 && dinnerStart > 0) {
+          if (checkTime >= lunchStart && checkTime < dinnerStart) {
+            currentMealType = 'lunch'
+            mealEndMinutes = dinnerStart
+          } else if (checkTime >= dinnerStart) {
+            currentMealType = 'dinner'
+            mealEndMinutes = 24 * 60 + 6 * 60 // until 6 AM next day
+          }
+        } else if (lunchStart > 0 && checkTime >= lunchStart) {
+          currentMealType = 'lunch'
+          mealEndMinutes = dinnerStart > 0 ? dinnerStart : 18 * 60
+        } else if (dinnerStart > 0 && checkTime >= dinnerStart) {
+          currentMealType = 'dinner'
+          mealEndMinutes = 24 * 60 + 6 * 60
+        }
+      }
+
+      return { effectiveDay, currentMealType, mealEndMinutes, now }
+    }
+
     const checkAndApplySchedules = async () => {
       try {
-        const now = new Date()
-        const dayOfWeek = now.getDay() // 0 = Sunday
-        const currentTime = now.getHours() * 60 + now.getMinutes() // Minutes from midnight
+        const { effectiveDay, currentMealType, now } = getCurrentMealInfo()
 
-        // Parse time strings (e.g., "12:00") to minutes
-        const parseTime = (t: string) => {
-          if (!t) return 0
-          const [h, m] = t.split(':').map(Number)
-          return h * 60 + m
-        }
+        // 1. Check suppression FIRST — if manually deactivated, do nothing
+        if (isSuppressed()) return
 
-        // Improved Logic for "Restaurant Day"
-        const LATE_NIGHT_CUTOFF = 6 * 60 // 06:00 AM
-
-        let effectiveDay = dayOfWeek
-        let checkTime = currentTime
-
-        if (currentTime < LATE_NIGHT_CUTOFF) {
-          effectiveDay = (dayOfWeek + 6) % 7
-          checkTime = currentTime + (24 * 60)
-        }
-
-        // Determine current meal type using weekly_service_hours if available
-        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-        const dayName = dayNames[effectiveDay]
-        let currentMealType: string | null = null
-
-        const wsHours = currentRestaurant?.weekly_service_hours
-        if (wsHours?.useWeeklySchedule && wsHours.schedule?.[dayName]) {
-          const daySchedule = wsHours.schedule[dayName]
-          if (daySchedule.lunch?.enabled) {
-            const lStart = parseTime(daySchedule.lunch.start)
-            const lEnd = parseTime(daySchedule.lunch.end)
-            if (checkTime >= lStart && checkTime < lEnd) currentMealType = 'lunch'
-          }
-          if (daySchedule.dinner?.enabled) {
-            const dStart = parseTime(daySchedule.dinner.start)
-            const dEnd = parseTime(daySchedule.dinner.end)
-            if (checkTime >= dStart && (dEnd > dStart ? checkTime < dEnd : true)) currentMealType = 'dinner'
-          }
-        } else {
-          // Fallback to legacy lunchTimeStart/dinnerTimeStart
-          const lunchStart = parseTime(lunchTimeStart)
-          const dinnerStart = parseTime(dinnerTimeStart)
-          if (lunchStart > 0 && dinnerStart > 0) {
-            if (lunchStart < dinnerStart) {
-              if (checkTime >= lunchStart && checkTime < dinnerStart) currentMealType = 'lunch'
-              else if (checkTime >= dinnerStart) currentMealType = 'dinner'
-            } else {
-              currentMealType = checkTime >= lunchStart ? 'lunch' : 'dinner'
-            }
-          } else if (lunchStart > 0) {
-            if (checkTime >= lunchStart) currentMealType = 'lunch'
-          } else if (dinnerStart > 0) {
-            if (checkTime >= dinnerStart) currentMealType = 'dinner'
-          }
-        }
-
-        // Valid schedule day is the effective day
-        const scheduleDay = effectiveDay
-        const { data: allSchedules } = await supabase
-          .from('custom_menu_schedules')
-          .select('custom_menu_id, custom_menus!inner(restaurant_id)')
-          .eq('is_active', true)
-          .eq('day_of_week', scheduleDay)
-          .eq('custom_menus.restaurant_id', restaurantId)
-
-        if (!allSchedules || allSchedules.length === 0) {
-          // No schedules found - reset to full menu if a scheduled menu was active
+        // 2. Not in any meal service? Reset to full menu if a scheduled one was active
+        if (!currentMealType) {
           if (lastScheduledMenuRef.current.menuId) {
             await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
@@ -398,15 +444,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
-        // Get full schedule details
+        // 3. Query schedules for this day
         const { data: schedules } = await supabase
           .from('custom_menu_schedules')
-          .select('id, custom_menu_id, day_of_week, meal_type, start_time, end_time, is_active')
+          .select('id, custom_menu_id, meal_type, custom_menus!inner(restaurant_id)')
           .eq('is_active', true)
-          .eq('day_of_week', scheduleDay)
-          .in('custom_menu_id', allSchedules.map(s => s.custom_menu_id))
+          .eq('day_of_week', effectiveDay)
+          .eq('custom_menus.restaurant_id', restaurantId)
 
         if (!schedules || schedules.length === 0) {
+          // No schedules for today — reset if a scheduled menu was active
           if (lastScheduledMenuRef.current.menuId) {
             await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
@@ -414,61 +461,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
-        // Find matching schedule: prefer exact meal match, then 'all'
+        // 4. Find matching schedule: exact meal type > 'all'
         const exactMatch = schedules.find(s => s.meal_type === currentMealType)
         const allMatch = schedules.find(s => s.meal_type === 'all')
         const match = exactMatch || allMatch
 
         if (!match) {
-          // No matching schedule for current meal type
-
-          // Check if there's a stale manual menu (> 24 hours)
-          const { data: activeMenus } = await supabase
-            .from('custom_menus')
-            .select('updated_at')
-            .eq('restaurant_id', restaurantId)
-            .eq('is_active', true)
-
-          if (activeMenus && activeMenus.length > 0) {
-            const activeMenu = activeMenus[0]
-            if (activeMenu.updated_at) {
-              const lastUpdate = new Date(activeMenu.updated_at).getTime()
-              const diffHours = (now.getTime() - lastUpdate) / (1000 * 60 * 60)
-
-              if (diffHours >= 24) {
-                await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
-                lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
-                return
-              }
-            }
-          }
-
-          // EARLY SUPPRESSION CHECK:
-          // If we manually deactivated a scheduled menu, suppression lasts until end of current meal service.
-          const suppressionKey = 'minthi_menu_suppressed'
-          const suppression = localStorage.getItem(suppressionKey)
-          let isSuppressedForNow = false;
-          if (suppression) {
-            try {
-              const sup = JSON.parse(suppression)
-              const expiresAt = sup.expiresAt ? new Date(sup.expiresAt).getTime() : 0
-              if (now.getTime() < expiresAt) {
-                isSuppressedForNow = true;
-              } else {
-                localStorage.removeItem(suppressionKey)
-              }
-            } catch { localStorage.removeItem(suppressionKey) }
-          }
-
-          if (isSuppressedForNow) {
-            // We have actively suppressed the custom menu until service ends.
-            // DO NOT process any new schedule activations.
-            if (lastScheduledMenuRef.current.menuId) {
-              lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
-            }
-            return // Skip applying any new schedule
-          }
-
+          // Schedules exist for today but not for this meal — reset
           if (lastScheduledMenuRef.current.menuId) {
             await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
@@ -476,30 +475,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
-        // EARLY SUPPRESSION CHECK FOR MULTIPLE MENUS:
-        const suppressionKey2 = 'minthi_menu_suppressed'
-        const suppression2 = localStorage.getItem(suppressionKey2)
-        if (suppression2) {
-          try {
-            const sup = JSON.parse(suppression2)
-            const expiresAt = sup.expiresAt ? new Date(sup.expiresAt).getTime() : 0
-            if (now.getTime() < expiresAt) {
-              return
-            } else {
-              localStorage.removeItem(suppressionKey2)
-            }
-          } catch { localStorage.removeItem(suppressionKey2) }
-        }
-
+        // 5. Already applied this exact menu for this meal+day? Skip
         if (
           lastScheduledMenuRef.current.menuId === match.custom_menu_id &&
           lastScheduledMenuRef.current.mealType === currentMealType &&
-          lastScheduledMenuRef.current.day === scheduleDay
+          lastScheduledMenuRef.current.day === effectiveDay
         ) {
-          // Already applied, no change needed
           return
         }
-        // Apply the scheduled menu
+
+        // 6. Apply the scheduled menu
         const { error } = await supabase.rpc('apply_custom_menu', {
           p_restaurant_id: restaurantId,
           p_menu_id: match.custom_menu_id
@@ -509,16 +494,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           lastScheduledMenuRef.current = {
             menuId: match.custom_menu_id,
             mealType: currentMealType,
-            day: scheduleDay
+            day: effectiveDay
           }
         }
       } catch (err) {
-        console.error("Error in menu scheduler:", err)
+        console.error('Menu scheduler error:', err)
       }
     }
 
-    const interval = setInterval(checkAndApplySchedules, 60 * 1000) // Every minute
-    checkAndApplySchedules() // Run immediately
+    const interval = setInterval(checkAndApplySchedules, 60 * 1000)
+    checkAndApplySchedules()
 
     return () => clearInterval(interval)
   }, [restaurantId, lunchTimeStart, dinnerTimeStart])
@@ -533,7 +518,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       let dataToExport: { title: string, subtitle?: string, sections: { id: string, title: string, dishes: Dish[] }[] }
 
       if (exportMode === 'full') {
-        const selectedCats = categories.filter(c => exportSelectedCategories.includes(c.id))
+        const selectedCats = restaurantCategories.filter(c => exportSelectedCategories.includes(c.id))
         if (selectedCats.length === 0) {
           toast.error('Seleziona almeno una categoria')
           toast.dismiss(toastId)
@@ -541,12 +526,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         }
 
         dataToExport = {
-          title: restaurantName,
-          subtitle: 'Menu alla Carta',
+          title: exportMenuTitle.trim() || restaurantName,
+          subtitle: exportMenuTitle.trim() ? restaurantName : 'Menu alla Carta',
           sections: selectedCats.map(c => ({
             id: c.id,
             title: c.name,
-            dishes: restaurantDishes.filter(d => d.category_id === c.id && d.is_active)
+            dishes: restaurantDishes.filter(d => d.category_id === c.id && d.is_active && !exportExcludedDishes.includes(d.id))
           })).filter(s => s.dishes.length > 0)
         }
       } else {
@@ -563,14 +548,24 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
 
+        // Group custom menu dishes by category
+        const customDishes = menuDetails.dishes.map((d: any) => d.dish).filter((d: any) => !!d)
+        const groupedByCategory = new Map<string, Dish[]>()
+        for (const dish of customDishes) {
+          const catId = dish.category_id || 'uncategorized'
+          if (!groupedByCategory.has(catId)) groupedByCategory.set(catId, [])
+          groupedByCategory.get(catId)!.push(dish)
+        }
+
+        const customSections = Array.from(groupedByCategory.entries()).map(([catId, catDishes]) => {
+          const cat = categories.find(c => c.id === catId)
+          return { id: catId, title: cat?.name || '', dishes: catDishes }
+        })
+
         dataToExport = {
-          title: menuDetails.name,
-          subtitle: 'Menu Speciale',
-          sections: [{
-            id: 'custom',
-            title: '',
-            dishes: menuDetails.dishes.map((d: any) => d.dish).filter((d: any) => !!d)
-          }]
+          title: exportMenuTitle.trim() || menuDetails.name,
+          subtitle: exportMenuTitle.trim() ? menuDetails.name : restaurantName,
+          sections: customSections
         }
       }
 
@@ -689,26 +684,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             }
           )
           // Also play notification sound
-          if (soundEnabledRef.current) {
-            soundManager.play(selectedSoundRef.current)
-          }
-        } else if (newNotes !== oldNotes && newNotes.includes('Pagamento')) {
-          // Fallback if paid_amount wasn't updated but notes were (e.g. some split logic scenario)
-          const tableObj = restaurantTablesRef.current?.find((t: any) => t.id === payload.new.table_id)
-          const tableNumber = tableObj?.number || '?'
-          toast.success(
-            `Nuova notifica di pagamento: Tavolo ${tableNumber}`,
-            {
-              duration: 10000,
-              action: tableObj ? {
-                label: 'Vedi Conto',
-                onClick: () => {
-                  setSelectedTableForActions(tableObj)
-                  setShowTableBillDialog(true)
-                }
-              } : undefined
-            }
-          )
           if (soundEnabledRef.current) {
             soundManager.play(selectedSoundRef.current)
           }
@@ -835,6 +810,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [allergenInput, setAllergenInput] = useState('')
   const [showTableQrDialog, setShowTableQrDialog] = useState(false)
   const [isGeneratingTableQrPdf, setIsGeneratingTableQrPdf] = useState(false)
+  const [gridPrintRoomFilter, setGridPrintRoomFilter] = useState<string | null>(null)
+  const [showGridRoomDialog, setShowGridRoomDialog] = useState(false)
   const [showTableBillDialog, setShowTableBillDialog] = useState(false)
   const [selectedTableForActions, setSelectedTableForActions] = useState<Table | null>(null)
   // Confirmation dialog state for close/pay/empty table
@@ -868,6 +845,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [copertoEnabled, setCopertoEnabled] = useState(false)
   const [copertoPrice, setCopertoPrice] = useState<number | string>(0)
   const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(false)
+  const [courseSuggestionsEnabled, setCourseSuggestionsEnabled] = useState(false)
   const [reservationDuration, setReservationDuration] = useState(120)
 
   // Weekly schedule state
@@ -944,6 +922,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       setWaiterPassword('')
       setRestaurantName(currentRestaurant.name || '')
       setCourseSplittingEnabled(currentRestaurant.enable_course_splitting || false)
+      setCourseSuggestionsEnabled((currentRestaurant as any).enable_course_suggestions || false)
 
       // Schedule Times
       if (currentRestaurant.lunch_time_start) setLunchTimeStart(currentRestaurant.lunch_time_start)
@@ -1188,6 +1167,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     await DatabaseService.updateRestaurant({ id: restaurantId, enable_course_splitting: enabled })
   }
 
+  const updateCourseSuggestions = async (enabled: boolean) => {
+    if (demoGuard()) return
+    setCourseSuggestionsEnabled(enabled)
+    if (!restaurantId) return
+    await DatabaseService.updateRestaurant({ id: restaurantId, enable_course_suggestions: enabled } as any)
+    refreshRestaurants()
+    toast.success(enabled ? 'Suggerimenti portate attivati' : 'Suggerimenti portate disattivati')
+  }
+
   const updateReservationDuration = async (minutes: number) => {
     if (demoGuard()) return
     setReservationDuration(minutes)
@@ -1207,13 +1195,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }).filter(order => {
       // Must have items
       if (!order.items || order.items.length === 0) return false
-
-      // Hide orders where ALL items are delivered (waiter marked as consegnato)
-      const allDelivered = order.items.every(i =>
-        i.status?.toLowerCase() === 'delivered'
-      )
-      if (allDelivered) return false
-
       return true
     })
   }, [orders, dishes, selectedKitchenCategories])
@@ -1247,8 +1228,39 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString()
 
+  const handleDownloadGridPdf = async (roomId: string | null) => {
+    setGridPrintRoomFilter(roomId)
+    setShowGridRoomDialog(false)
+    // Allow state to update before generating
+    await new Promise(r => setTimeout(r, 100))
+    const toastId = toast.loading('Generazione PDF Griglia Tavoli...')
+    try {
+      const element = document.getElementById('tables-grid-print-view')
+      if (element) {
+        element.style.display = 'block'
+        const roomName = roomId ? rooms?.find(r => r.id === roomId)?.name || 'sala' : 'tutte'
+        await generatePdfFromElement('tables-grid-print-view', {
+          fileName: `Tavoli_QR_${roomName}_${restaurantSlug}.pdf`,
+          scale: 2,
+          backgroundColor: '#FFFFFF',
+          orientation: 'portrait'
+        })
+        element.style.display = 'none'
+        toast.success('PDF scaricato!')
+      }
+    } catch (e) {
+      console.error(e)
+      toast.error('Errore generazione PDF')
+    } finally {
+      toast.dismiss(toastId)
+    }
+  }
+
   const generateQrCode = (tableId: string) => {
-    return `${window.location.origin}/client/table/${tableId}`
+    // Use VITE_APP_URL for Capacitor/native apps, fallback to window.location.origin for web
+    const envUrl = import.meta.env.VITE_APP_URL
+    const baseUrl = envUrl ? envUrl.replace(/\/$/, '') : window.location.origin
+    return `${baseUrl}/client/table/${tableId}`
   }
 
   const handleCreateTable = () => {
@@ -1313,13 +1325,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       }
 
       try {
-        await DatabaseService.closeSession(openSession.id)
+        await DatabaseService.closeSession(openSession.id, 'Dashboard', 'owner')
         if (markPaid) {
           const payMethod = (openSession.paid_amount || 0) > 0 ? 'stripe' : 'cash'
           await DatabaseService.markOrdersPaidForSession(openSession.id, payMethod)
         } else {
-          // FIX: If just emptying the table (not paid), cancel all active orders
-          // so they don't count as "Active" in analytics.
           await DatabaseService.cancelSessionOrders(openSession.id)
         }
 
@@ -1583,6 +1593,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setNewDish({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], ayce_max_orders_per_person: null })
         setAllergenInput('')
         setIsAddItemDialogOpen(false)
+        refreshDishes()
         toast.success('Piatto aggiunto al menu')
       })
       .catch((error) => {
@@ -1682,6 +1693,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setAllergenInput('')
         toast.success('Piatto modificato')
       })
+      .catch((error) => {
+        console.error('Error updating dish:', error)
+        toast.error('Errore durante la modifica del piatto')
+      })
   }
 
   const handleCancelDishEdit = () => {
@@ -1762,6 +1777,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setShowInlineCatCreate(false)
       }
       setInlineCatName('')
+      refreshCategories()
       toast.success('Categoria creata')
     } catch {
       toast.error('Errore creazione categoria')
@@ -1806,7 +1822,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     DatabaseService.createCategory(newCategoryObj)
       .then(() => {
         setNewCategory('')
+        refreshCategories()
         toast.success('Categoria aggiunta')
+      })
+      .catch((error) => {
+        console.error('Error creating category:', error)
+        toast.error('Errore durante la creazione della categoria')
       })
   }
 
@@ -1814,6 +1835,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     if (demoGuard()) return
     DatabaseService.deleteCategory(categoryId)
       .then(() => toast.success('Categoria eliminata'))
+      .catch((error) => {
+        console.error('Error deleting category:', error)
+        toast.error('Errore durante l\'eliminazione della categoria')
+      })
   }
 
   const handleEditCategory = (category: Category) => {
@@ -1841,6 +1866,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setEditingCategory(null)
         setEditCategoryName('')
         toast.success('Categoria modificata')
+      })
+      .catch((error) => {
+        console.error('Error updating category:', error)
+        toast.error('Errore durante la modifica della categoria')
       })
   }
 
@@ -1924,7 +1953,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
         {/* Ambient Background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
+          <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full opacity-40" />
         </div>
 
         <motion.div
@@ -1934,12 +1963,24 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           className="relative z-10 flex flex-col items-center gap-6"
         >
           <motion.div
-            initial={{ scale: 0, rotate: -20 }}
-            animate={{ scale: 1, rotate: 0 }}
+            initial={{ rotate: -20 }}
+            animate={{ rotate: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
+            className="w-24 h-24 rounded-full bg-zinc-900 border border-emerald-500/20 text-emerald-400 flex items-center justify-center"
           >
-            <img src="/minthi-logo.png" alt="MINTHI" className="h-36 w-auto drop-shadow-[0_0_25px_rgba(52,211,153,0.3)]" />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="48" height="48" fill="currentColor">
+              <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
+            </svg>
           </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1"
+          >
+            min<span className="font-bold text-emerald-400">thi</span>
+          </motion.h1>
 
           <motion.div
             initial={{ opacity: 0 }}
@@ -1964,11 +2005,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   return (
-    <div className="flex h-screen w-full bg-black text-amber-50 font-sans overflow-hidden selection:bg-amber-500/30 relative">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 bg-black">
-        <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-amber-500/[0.02] rounded-full blur-[150px]" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] bg-amber-500/[0.02] rounded-full blur-[150px]" />
-      </div>
+    <div className="fixed inset-0 flex bg-black text-amber-50 font-sans overflow-hidden selection:bg-amber-500/30" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', paddingLeft: 'env(safe-area-inset-left, 0px)', paddingRight: 'env(safe-area-inset-right, 0px)' }}>
+      {/* Solid black background — no blur effects for iOS performance */}
 
       {/* Sidebar Toggle Button - Inline, does not overlap content */}
 
@@ -1976,11 +2014,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       <AnimatePresence mode="wait">
         {isSidebarOpen && (
           <motion.aside
-            initial={{ width: 0, opacity: 0, x: -50 }}
-            animate={{ width: 272, opacity: 1, x: 0 }}
-            exit={{ width: 0, opacity: 0, x: -50 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="h-full bg-zinc-950/80 backdrop-blur-3xl border-r border-white/[0.03] flex flex-col flex-shrink-0 z-40 relative shadow-[20px_0_50px_rgba(0,0,0,0.5)] overflow-hidden"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 272, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="h-full bg-zinc-950 border-r border-white/[0.03] flex flex-col flex-shrink-0 z-40 relative shadow-xl overflow-hidden"
           >
             <div className="p-6 border-b border-white/5 flex items-center justify-between gap-4 min-w-[272px]">
               {currentRestaurant?.logo_url ? (
@@ -1998,8 +2036,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </div>
               ) : (
                 <div className="flex items-center gap-4 flex-1">
-                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-zinc-900/50 border border-amber-500/20 flex items-center justify-center overflow-hidden shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]">
-                    <img src="/minthi-logo.png" alt="MINTHI" className="w-full h-full object-contain p-0.5" />
+                  <div className="flex-shrink-0 p-2.5 bg-zinc-900/50 border border-amber-500/20 rounded-xl text-amber-500 shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]">
+                    <ChefHat size={24} />
                   </div>
                   <div className="overflow-hidden flex-1 min-w-0">
                     <h1 className="font-medium text-base text-zinc-100 tracking-tight leading-none truncate">{currentRestaurant?.name || 'MINTHI'}</h1>
@@ -2022,14 +2060,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
             <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto min-w-[272px]">
               {[
-                { id: 'orders', label: 'Ordini', icon: Clock },
                 { id: 'tables', label: 'Tavoli', icon: MapPin },
                 { id: 'menu', label: 'Menu', icon: BookOpen },
+                { id: 'orders', label: 'Ordini', icon: Clock },
                 { id: 'reservations', label: 'Prenotazioni', icon: Calendar },
                 { id: 'analytics', label: 'Analitiche', icon: ChartBar },
               ].map((item) => (
                 <Button
                   key={item.id}
+                  data-tour={`nav-${item.id}`}
                   variant="ghost"
                   className={`w-full justify-start h-12 px-4 rounded-xl transition-all duration-300 group relative overflow-hidden ${activeTab === item.id
                     // Active State: Minimal & Elegant
@@ -2039,6 +2078,23 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     }`}
                   onClick={() => {
                     const section = item.id
+                    // Analytics password gate
+                    if (section === 'analytics' && !analyticsUnlocked) {
+                      const hasPassword = !!currentRestaurant?.analytics_password_hash
+                      if (hasPassword) {
+                        setAnalyticsPasswordInput('')
+                        setAnalyticsPasswordError('')
+                        setAnalyticsPasswordVisible(false)
+                        setShowAnalyticsPasswordDialog(true)
+                      } else {
+                        setAnalyticsNewPassword('')
+                        setAnalyticsConfirmPassword('')
+                        setAnalyticsPasswordVisible(false)
+                        setShowAnalyticsSetupDialog(true)
+                      }
+                      setIsSidebarOpen(false)
+                      return
+                    }
                     setActiveTab(section)
                     setActiveSection(section)
                     // Auto collapsing logic
@@ -2046,7 +2102,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   }}
                 >
                   {activeTab === item.id && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.8)]" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-none" />
                   )}
                   <item.icon
                     size={22}
@@ -2063,7 +2119,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               ))}
             </nav>
 
-            <div className="p-3 border-t border-white/5 bg-black/20 min-w-[272px] flex flex-col gap-1">
+            <div className="p-3 pb-4 border-t border-white/5 bg-black/20 min-w-[272px] flex flex-col gap-1 shrink-0">
               <Button
                 variant="ghost"
                 onClick={() => {
@@ -2078,7 +2134,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   }`}
               >
                 {activeTab === 'settings' && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.8)]" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-amber-500 shadow-none" />
                 )}
                 <Gear size={20} weight={activeTab === 'settings' ? 'fill' : 'regular'} className={`mr-3 transition-colors flex-shrink-0 ${activeTab === 'settings' ? 'text-amber-500' : 'text-zinc-600 group-hover:text-zinc-400'}`} />
                 <span className="text-sm tracking-wide">Impostazioni</span>
@@ -2097,7 +2153,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
+      <main className={`flex-1 flex flex-col min-w-0 overflow-hidden relative z-10 ${isDemoActive ? 'pt-10' : ''}`}>
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 scroll-smooth scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
           {/* Inline sidebar toggle — never overlaps content */}
           <AnimatePresence>
@@ -2130,7 +2186,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 transition={{ duration: 0.3 }}
                 className="mb-4"
               >
-                <div className="flex items-center gap-3 p-4 bg-amber-950/40 border border-amber-500/30 rounded-2xl backdrop-blur-sm shadow-lg shadow-amber-950/20">
+                <div className="flex items-center gap-3 p-4 bg-amber-950/40 border border-amber-500/30 rounded-2xl shadow-lg">
                   <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
                     <CreditCard className="text-amber-400" weight="duotone" size={20} />
                   </div>
@@ -2171,7 +2227,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 transition={{ duration: 0.3 }}
                 className="mb-4"
               >
-                <div className="flex items-center gap-3 p-4 bg-red-950/60 border border-red-500/40 rounded-2xl backdrop-blur-sm shadow-lg shadow-red-950/20">
+                <div className="flex items-center gap-3 p-4 bg-red-950/60 border border-red-500/40 rounded-2xl shadow-lg">
                   <WarningCircle className="text-red-400 shrink-0" weight="fill" size={24} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-red-300 text-sm">Pagamento abbonamento non andato a buon fine</p>
@@ -2198,7 +2254,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci gli ordini in tempo reale</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div data-tour="orders-view-toggle" className="flex bg-black/60 p-1.5 rounded-2xl mr-2 border border-white/5 shadow-2xl shadow-black/80 backdrop-blur-3xl">
+                  <div className="flex bg-black/60 p-1.5 rounded-2xl mr-2 border border-white/5 shadow-2xl shadow-black/80 ">
                     <Button
                       variant={kitchenViewMode === 'table' ? 'default' : 'ghost'}
                       size="sm"
@@ -2220,7 +2276,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   {/* Category Filter */}
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button data-tour="orders-filter-btn" variant={selectedKitchenCategories.length > 0 ? "default" : "outline"} size="sm" className="mr-2 h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300">
+                      <Button variant={selectedKitchenCategories.length > 0 ? "default" : "outline"} size="sm" className="mr-2 h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60  text-zinc-300">
                         <Funnel size={16} className={`mr-2 ${selectedKitchenCategories.length > 0 ? 'text-amber-500' : ''}`} />
                         Filtra
                         {selectedKitchenCategories.length > 0 && (
@@ -2262,7 +2318,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     </PopoverContent>
                   </Popover>
 
-                  <div data-tour="orders-zoom" className="flex items-center gap-1 bg-black/50 p-1 rounded-xl mr-2 border border-white/10 backdrop-blur-sm">
+                  <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl mr-2 border border-white/10 ">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2284,8 +2340,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
 
 
-                  <Select data-tour="orders-sort" value={orderSortMode} onValueChange={(value: 'oldest' | 'newest') => setOrderSortMode(value)}>
-                    <SelectTrigger className="w-[140px] h-10 bg-black/60 border-white/5 text-zinc-300 shadow-2xl shadow-black/80 rounded-xl backdrop-blur-3xl focus:ring-0">
+                  <Select value={orderSortMode} onValueChange={(value: 'oldest' | 'newest') => setOrderSortMode(value)}>
+                    <SelectTrigger className="w-[140px] h-10 bg-black/60 border-white/5 text-zinc-300 shadow-2xl shadow-black/80 rounded-xl  focus:ring-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-zinc-950 border-zinc-900 text-zinc-100 rounded-xl">
@@ -2295,7 +2351,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   </Select>
 
                   <Button
-                    data-tour="orders-history-btn"
                     variant={showOrderHistory ? "default" : "outline"}
                     size="sm"
                     onClick={() => setShowOrderHistory(!showOrderHistory)}
@@ -2362,12 +2417,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     dishes={restaurantDishes}
                     selectedCategoryIds={selectedKitchenCategories}
                     viewMode={kitchenViewMode}
-                    // columns={kitchenColumns} // Removed in favor of responsive grid
                     onCompleteDish={handleCompleteDish}
                     onDeliverDish={handleDeliverDish}
                     onCompleteOrder={handleCompleteOrder}
                     sessions={activeSessions}
                     zoom={kitchenZoom}
+                    waiterModeEnabled={waiterModeEnabled}
                   />
                 )}
             </TabsContent >
@@ -2380,13 +2435,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Gestisci la sala e i tavoli</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <div data-tour="tables-search" className="relative">
+                  <div className="relative">
                     <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
                     <Input
                       placeholder="Cerca tavolo..."
                       value={tableSearchTerm}
                       onChange={(e) => setTableSearchTerm(e.target.value)}
-                      className="pl-9 h-10 w-[180px] lg:w-[230px] bg-background/50 backdrop-blur-sm"
+                      className="pl-9 h-10 w-[180px] lg:w-[230px] bg-background/50 "
                     />
                   </div>
                   <Button data-tour="add-table-btn" onClick={() => setShowCreateTableDialog(true)} size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow">
@@ -2399,26 +2454,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     variant="outline"
                     size="sm"
                     className="h-10 shadow-sm hover:shadow-md transition-shadow border-dashed border-zinc-700 hover:border-amber-500 hover:text-amber-500"
-                    onClick={async () => {
-                      const toastId = toast.loading('Generazione PDF Griglia Tavoli...')
-                      try {
-                        const element = document.getElementById('tables-grid-print-view')
-                        if (element) {
-                          element.style.display = 'block'
-                          await generatePdfFromElement('tables-grid-print-view', {
-                            fileName: `Tavoli_Griglia_${restaurantSlug}.pdf`,
-                            scale: 2,
-                            backgroundColor: '#FFFFFF',
-                            orientation: 'portrait'
-                          })
-                          element.style.display = 'none'
-                          toast.success('PDF scaricato!')
-                        }
-                      } catch (e) {
-                        console.error(e)
-                        toast.error('Errore generazione PDF')
-                      } finally {
-                        toast.dismiss(toastId)
+                    onClick={() => {
+                      // If there are rooms, show selection dialog
+                      if (rooms && rooms.length > 0) {
+                        setGridPrintRoomFilter(null)
+                        setShowGridRoomDialog(true)
+                      } else {
+                        // No rooms, download all
+                        handleDownloadGridPdf(null)
                       }
                     }}
                   >
@@ -2428,7 +2471,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button data-tour="tables-view-sort" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow bg-muted/50 border-white/10 hover:border-amber-500/50 hover:text-amber-500">
+                      <Button variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow bg-muted/50 border-white/10 hover:border-amber-500/50 hover:text-amber-500">
                         <SlidersHorizontal size={16} className="mr-2" />
                         Vista & Ordine
                       </Button>
@@ -2496,7 +2539,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button data-tour="tables-history-btn" type="button" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow relative">
+                      <Button type="button" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow relative">
                         <ClockCounterClockwise size={16} className="mr-2" />
                         Storico
                         {(() => {
@@ -2669,6 +2712,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                           <span>{openDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}{closeDate ? ` - ${closeDate.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
                                           {duration > 0 && <span className="text-zinc-600">({duration}min)</span>}
                                           {session.customer_count && <span className="text-zinc-600">{session.customer_count} cop.</span>}
+                                          {session.closed_by_name && (
+                                            <span className="text-zinc-500 italic">
+                                              Chiuso da: <span className={session.closed_by_role === 'waiter' ? 'text-blue-400' : 'text-amber-400'}>{session.closed_by_name}</span>
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
                                     </div>
@@ -2816,7 +2864,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                 <Dialog open={showRoomDialog} onOpenChange={setShowRoomDialog}>
                   <DialogTrigger asChild>
-                    <Button data-tour="tables-room-mgmt" variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors">
+                    <Button data-tour="rooms-btn" variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors">
                       <MapPin size={16} />
                       Gestisci Sale
                     </Button>
@@ -3257,7 +3305,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         }
                                         try {
                                           await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                          await DatabaseService.closeSession(session.id);
+                                          await DatabaseService.closeSession(session.id, 'Dashboard', 'owner');
                                           await DatabaseService.markOrdersPaidForSession(session.id, 'stripe');
                                           toast.success('Scontrino confermato e tavolo chiuso!');
                                           refreshSessions();
@@ -3302,7 +3350,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               )}
                             </div>
 
-                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-background/90 backdrop-blur-md p-1 rounded-lg border border-border/30 shadow-lg">
+                            <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 bg-background/90  p-1 rounded-lg border border-border/30 shadow-lg">
                               <Button variant="ghost" size="icon" className="h-6 w-6 hover:bg-muted" onClick={(e) => { e.stopPropagation(); handleEditTable(table); }}>
                                 <PencilSimple size={12} />
                               </Button>
@@ -3328,28 +3376,49 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </div>
               </div>
 
-              <div className="bg-zinc-950/50 backdrop-blur-md rounded-2xl border border-white/[0.05] p-6">
+              <div className="bg-zinc-950/50  rounded-2xl border border-white/[0.05] p-6">
                 {(() => {
+                  // Check if service hours are configured
+                  const hasConfiguredHours = weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule && Object.values(weeklyServiceHours.schedule).some((day: any) => day?.lunch?.enabled || day?.dinner?.enabled);
+
+                  if (!hasConfiguredHours) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <Clock size={48} className="text-zinc-600 mb-4" />
+                        <h3 className="text-xl font-semibold text-zinc-300 mb-2">
+                          Orari di servizio non configurati
+                        </h3>
+                        <p className="text-zinc-500 mb-6 max-w-md">
+                          Per utilizzare le prenotazioni, configura prima gli orari di servizio (pranzo e/o cena) nella sezione Impostazioni → Prenotazioni.
+                        </p>
+                        <button
+                          onClick={() => setActiveTab('settings')}
+                          className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-6 py-2.5 rounded-xl transition-colors"
+                        >
+                          Vai alle Impostazioni
+                        </button>
+                      </div>
+                    );
+                  }
+
                   const serviceSegments: { label: string; start: string; end: string }[] = [];
 
-                  if (weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule) {
-                    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                    const dayName = days[selectedDate.getDay()];
-                    const daySchedule = weeklyServiceHours.schedule[dayName];
+                  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                  const dayName = days[selectedDate.getDay()];
+                  const daySchedule = weeklyServiceHours.schedule[dayName];
 
-                    if (daySchedule) {
-                      const lunch = daySchedule.lunch;
-                      const dinner = daySchedule.dinner;
-                      if (lunch?.enabled) {
-                        serviceSegments.push({ label: 'Pranzo', start: lunch.start || lunchTimeStart || '12:00', end: lunch.end || '15:00' });
-                      }
-                      if (dinner?.enabled) {
-                        serviceSegments.push({ label: 'Cena', start: dinner.start || dinnerTimeStart || '19:00', end: dinner.end || '23:00' });
-                      }
+                  if (daySchedule) {
+                    const lunch = daySchedule.lunch;
+                    const dinner = daySchedule.dinner;
+                    if (lunch?.enabled) {
+                      serviceSegments.push({ label: 'Pranzo', start: lunch.start || lunchTimeStart || '12:00', end: lunch.end || '15:00' });
+                    }
+                    if (dinner?.enabled) {
+                      serviceSegments.push({ label: 'Cena', start: dinner.start || dinnerTimeStart || '19:00', end: dinner.end || '23:00' });
                     }
                   }
 
-                  // Fallback: single continuous range
+                  // Fallback for days without specific schedule
                   if (serviceSegments.length === 0) {
                     serviceSegments.push({ label: 'Servizio', start: lunchTimeStart || '12:00', end: '23:00' });
                   }
@@ -3387,7 +3456,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 <div className="flex gap-2">
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button data-tour="menu-custom-menus" variant="outline" className="border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-500 text-zinc-400">
+                      <Button variant="outline" className="border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-500 text-zinc-400">
                         <Sparkle size={16} className="mr-2 text-amber-500" />
                         Menu Personalizzati
                       </Button>
@@ -3402,33 +3471,59 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         dishes={dishes || []}
                         categories={categories || []}
                         onDishesChange={refreshDishes}
+                        weeklyServiceHours={weeklyServiceHours}
+                        onGoToSettings={() => {
+                          setActiveTab('settings')
+                          setActiveSection('settings')
+                          // Close dialog by clicking outside
+                          const closeBtn = document.querySelector('[data-radix-collection-item]') as HTMLElement
+                          closeBtn?.click()
+                        }}
                         onMenuDeactivated={() => {
                           // Suppress the scheduler until the END of the current meal service
                           const now = new Date()
                           const currentMinutes = now.getHours() * 60 + now.getMinutes()
-                          const lunchMin = lunchTimeStart ? parseInt(lunchTimeStart.split(':')[0]) * 60 + parseInt(lunchTimeStart.split(':')[1]) : 0
-                          const dinnerMin = dinnerTimeStart ? parseInt(dinnerTimeStart.split(':')[0]) * 60 + parseInt(dinnerTimeStart.split(':')[1]) : 0
+                          const parseT = (t: string) => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
 
-                          // Calculate when the current meal service ends
-                          let endMinutes: number
-                          if (dinnerMin > 0 && currentMinutes >= dinnerMin) {
-                            // Currently in dinner service → suppress until next day 06:00
-                            endMinutes = 24 * 60 + 6 * 60 // next day 06:00
-                          } else if (lunchMin > 0 && currentMinutes >= lunchMin && dinnerMin > 0) {
-                            // Currently in lunch service → suppress until dinner starts
-                            endMinutes = dinnerMin
-                          } else if (lunchMin > 0 && currentMinutes >= lunchMin) {
-                            // Only lunch configured → suppress until 18:00 or end of day
-                            endMinutes = 18 * 60
-                          } else {
-                            // Outside service hours → suppress for 4 hours
-                            endMinutes = currentMinutes + 4 * 60
+                          let endMinutes: number | null = null
+
+                          // Use weekly_service_hours if available
+                          const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+                          const wsH = currentRestaurant?.weekly_service_hours
+                          const checkTime = currentMinutes < 360 ? currentMinutes + 24 * 60 : currentMinutes
+                          const effDay = currentMinutes < 360 ? (now.getDay() + 6) % 7 : now.getDay()
+                          const dayName = dayNames[effDay]
+
+                          if (wsH?.useWeeklySchedule && wsH.schedule?.[dayName]) {
+                            const ds = wsH.schedule[dayName]
+                            if (ds.lunch?.enabled) {
+                              const lS = parseT(ds.lunch.start), lE = parseT(ds.lunch.end)
+                              if (checkTime >= lS && checkTime < lE) endMinutes = lE
+                            }
+                            if (ds.dinner?.enabled) {
+                              const dS = parseT(ds.dinner.start), dE = parseT(ds.dinner.end)
+                              const effEnd = dE > dS ? dE : dE + 24 * 60
+                              if (checkTime >= dS && checkTime < effEnd) endMinutes = effEnd
+                            }
                           }
 
-                          // Convert endMinutes to an actual Date
+                          // Fallback to legacy times
+                          if (endMinutes === null) {
+                            const lunchMin = parseT(lunchTimeStart)
+                            const dinnerMin = parseT(dinnerTimeStart)
+                            if (dinnerMin > 0 && checkTime >= dinnerMin) {
+                              endMinutes = 24 * 60 + 6 * 60
+                            } else if (lunchMin > 0 && checkTime >= lunchMin && dinnerMin > 0) {
+                              endMinutes = dinnerMin
+                            } else if (lunchMin > 0 && checkTime >= lunchMin) {
+                              endMinutes = 18 * 60
+                            } else {
+                              endMinutes = currentMinutes + 4 * 60
+                            }
+                          }
+
                           const expiresAt = new Date(now)
                           if (endMinutes >= 24 * 60) {
-                            // Next day
                             expiresAt.setDate(expiresAt.getDate() + 1)
                             expiresAt.setHours(Math.floor((endMinutes - 24 * 60) / 60), (endMinutes - 24 * 60) % 60, 0, 0)
                           } else {
@@ -3436,7 +3531,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           }
 
                           localStorage.setItem('minthi_menu_suppressed', JSON.stringify({ expiresAt: expiresAt.toISOString() }))
-                          // Also clear the lastScheduledMenuRef so it doesn't think it's already applied
                           lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
                         }}
                       />
@@ -3445,7 +3539,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog open={showExportMenuDialog} onOpenChange={setShowExportMenuDialog}>
                     <DialogTrigger asChild>
-                      <Button data-tour="menu-export" variant="outline" className="border-zinc-700 hover:border-amber-500 hover:text-amber-500">
+                      <Button data-tour="export-menu-btn" variant="outline" className="border-zinc-700 hover:border-amber-500 hover:text-amber-500">
                         <DownloadSimple size={16} className="mr-2" />
                         Esporta Menu
                       </Button>
@@ -3459,6 +3553,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       </DialogHeader>
 
                       <div className="space-y-6 py-4">
+                        {/* Nome menu per la stampa */}
+                        <div className="space-y-2">
+                          <Label className="text-zinc-300">Nome del Menu <span className="text-zinc-500 text-xs">(opzionale, appare in alto nel PDF)</span></Label>
+                          <Input
+                            value={exportMenuTitle}
+                            onChange={(e) => setExportMenuTitle(e.target.value)}
+                            placeholder={restaurantName}
+                            className="bg-black/20 border-zinc-800 focus:border-amber-500"
+                          />
+                        </div>
+
                         <RadioGroup value={exportMode} onValueChange={(v: 'full' | 'custom') => setExportMode(v)} className="grid grid-cols-2 gap-4">
                           <div>
                             <RadioGroupItem value="full" id="export-full" className="peer sr-only" />
@@ -3499,32 +3604,78 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   variant="ghost"
                                   size="sm"
                                   className="h-auto py-1 text-xs text-amber-500"
-                                  onClick={() => setExportSelectedCategories(categories.map(c => c.id))}
+                                  onClick={() => setExportSelectedCategories(restaurantCategories.map(c => c.id))}
                                 >
                                   Seleziona Tutte
                                 </Button>
                               </div>
                             </div>
-                            <ScrollArea className="h-[200px] pr-4">
-                              <div className="space-y-2">
-                                {restaurantCategories.map(cat => (
-                                  <div key={cat.id} className="flex items-center space-x-2 p-2 rounded hover:bg-zinc-900/50">
-                                    <Checkbox
-                                      id={`cat-${cat.id}`}
-                                      checked={exportSelectedCategories.includes(cat.id)}
-                                      onCheckedChange={(checked) => {
-                                        if (checked) {
-                                          setExportSelectedCategories([...exportSelectedCategories, cat.id])
-                                        } else {
-                                          setExportSelectedCategories(exportSelectedCategories.filter(id => id !== cat.id))
-                                        }
-                                      }}
-                                    />
-                                    <Label htmlFor={`cat-${cat.id}`} className="flex-1 cursor-pointer font-normal text-zinc-300">
-                                      {cat.name}
-                                    </Label>
-                                  </div>
-                                ))}
+                            <p className="text-xs text-zinc-500 mb-2">Clicca su una categoria per scegliere i singoli piatti.</p>
+                            <ScrollArea className="h-[280px] pr-4">
+                              <div className="space-y-1.5">
+                                {restaurantCategories.map(cat => {
+                                  const catDishes = restaurantDishes.filter(d => d.category_id === cat.id && d.is_active)
+                                  const isCatSelected = exportSelectedCategories.includes(cat.id)
+                                  const excludedInCat = catDishes.filter(d => exportExcludedDishes.includes(d.id)).length
+                                  const includedCount = catDishes.length - excludedInCat
+                                  return (
+                                    <div key={cat.id} className={`rounded-lg border ${isCatSelected ? 'border-amber-500/30 bg-amber-500/5' : 'border-zinc-800/50'} overflow-hidden`}>
+                                      <div className="flex items-center space-x-2 p-2.5 hover:bg-zinc-900/50 cursor-pointer"
+                                        onClick={() => {
+                                          if (isCatSelected && catDishes.length > 0) {
+                                            const el = document.getElementById(`dishes-${cat.id}`)
+                                            if (el) el.classList.toggle('hidden')
+                                          }
+                                        }}
+                                      >
+                                        <Checkbox
+                                          id={`cat-${cat.id}`}
+                                          checked={isCatSelected}
+                                          onCheckedChange={(checked) => {
+                                            if (checked) {
+                                              setExportSelectedCategories([...exportSelectedCategories, cat.id])
+                                              setExportExcludedDishes(prev => prev.filter(id => !catDishes.some(d => d.id === id)))
+                                            } else {
+                                              setExportSelectedCategories(exportSelectedCategories.filter(id => id !== cat.id))
+                                            }
+                                          }}
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <Label htmlFor={`cat-${cat.id}`} className="flex-1 cursor-pointer font-medium text-zinc-200 text-sm" onClick={(e) => e.preventDefault()}>
+                                          {cat.name}
+                                        </Label>
+                                        {isCatSelected && catDishes.length > 0 && (
+                                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${excludedInCat > 0 ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                                            {includedCount}/{catDishes.length}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {isCatSelected && catDishes.length > 0 && (
+                                        <div id={`dishes-${cat.id}`} className="hidden border-t border-zinc-800/50 bg-black/20 px-3 py-2 space-y-0.5">
+                                          {catDishes.map(dish => (
+                                            <div key={dish.id} className="flex items-center space-x-2 py-1.5 px-2 rounded hover:bg-zinc-900/30">
+                                              <Checkbox
+                                                id={`dish-${dish.id}`}
+                                                checked={!exportExcludedDishes.includes(dish.id)}
+                                                onCheckedChange={(checked) => {
+                                                  if (checked) {
+                                                    setExportExcludedDishes(prev => prev.filter(id => id !== dish.id))
+                                                  } else {
+                                                    setExportExcludedDishes(prev => [...prev, dish.id])
+                                                  }
+                                                }}
+                                              />
+                                              <Label htmlFor={`dish-${dish.id}`} className="flex-1 cursor-pointer font-normal text-zinc-400 text-xs">
+                                                {dish.name}
+                                              </Label>
+                                              <span className="text-xs text-zinc-600">{'\u20AC'}{dish.price.toFixed(2)}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </ScrollArea>
                           </div>
@@ -3643,11 +3794,33 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         </div>
                         <div className="space-y-2">
                           <Label>Foto Piatto</Label>
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => handleImageChange(e)}
-                          />
+                          {newDish.image ? (
+                            <div className="relative group rounded-xl overflow-hidden border border-zinc-800 w-full h-32">
+                              <img src={newDish.image} alt="Preview" className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                <label className="cursor-pointer bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors">
+                                  <Camera size={14} /> Cambia
+                                  <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e)} />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (newDish.image?.startsWith('blob:')) URL.revokeObjectURL(newDish.image)
+                                    setNewDish(prev => ({ ...prev, image: '', imageFile: undefined }))
+                                  }}
+                                  className="bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                                >
+                                  <Trash size={14} /> Elimina
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label className="cursor-pointer flex flex-col items-center justify-center h-28 rounded-xl border-2 border-dashed border-zinc-700 hover:border-amber-500/50 bg-zinc-900/30 hover:bg-amber-500/5 transition-all">
+                              <ImageSquare size={28} className="text-zinc-600 mb-1" />
+                              <span className="text-xs text-zinc-500">Clicca per aggiungere foto</span>
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e)} />
+                            </label>
+                          )}
                         </div>
                         <div className="space-y-2">
                           <Label>Allergeni (separati da virgola)</Label>
@@ -3699,7 +3872,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button variant="outline">
+                      <Button data-tour="categories-btn" variant="outline">
                         <List size={16} className="mr-2" />
                         Categorie
                       </Button>
@@ -3715,7 +3888,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         <Button
                           className="w-full h-11 border-dashed border-zinc-700 hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-500 text-zinc-400 font-bold"
                           variant="outline"
-                          data-tour="add-category-btn"
                           onClick={() => { setNewCategory(''); setShowNewCategoryPopup(true); }}
                         >
                           <Plus size={16} className="mr-2" />
@@ -3735,9 +3907,27 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                 <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary cursor-grab">
                                   <DotsSixVertical size={16} weight="bold" />
                                 </div>
-                                <span className="font-medium">{cat.name}</span>
+                                <span className={`font-medium ${cat.is_active === false ? 'text-zinc-600 line-through' : ''}`}>{cat.name}</span>
+                                {cat.is_active === false && <span className="text-[10px] text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded ml-1">OFF</span>}
                               </div>
                               <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`h-8 w-8 ${cat.is_active === false ? 'text-zinc-600' : 'text-emerald-500'}`}
+                                  title={cat.is_active === false ? 'Categoria disattivata — clicca per riattivare' : 'Categoria attiva — clicca per disattivare'}
+                                  onClick={async () => {
+                                    if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
+                                    const newActive = cat.is_active === false ? true : false
+                                    try {
+                                      await DatabaseService.updateCategory({ id: cat.id, is_active: newActive })
+                                      refreshCategories()
+                                      toast.success(newActive ? 'Categoria riattivata' : 'Categoria disattivata')
+                                    } catch { toast.error('Errore aggiornamento categoria') }
+                                  }}
+                                >
+                                  {cat.is_active === false ? <EyeSlash size={16} /> : <Eye size={16} />}
+                                </Button>
                                 <Button
                                   variant="secondary"
                                   size="icon"
@@ -3836,7 +4026,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0' }}
                                 />
                                 <div className="absolute top-2 right-2">
-                                  <span className="px-2 py-1 bg-zinc-950/90 backdrop-blur-sm rounded-full text-amber-400 font-bold text-xs shadow-lg">
+                                  <span className="px-2 py-1 bg-zinc-950/90  rounded-full text-amber-400 font-bold text-xs shadow-lg">
                                     €{dish.price.toFixed(2)}
                                   </span>
                                 </div>
@@ -4008,6 +4198,31 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </div>
               </div>
               {(() => {
+                const hasConfiguredHours = weeklyServiceHours?.useWeeklySchedule &&
+                  weeklyServiceHours.schedule &&
+                  Object.values(weeklyServiceHours.schedule).some((day: any) =>
+                    day?.lunch?.enabled || day?.dinner?.enabled
+                  );
+
+                if (!hasConfiguredHours) {
+                  return (
+                    <div className="flex-1 flex items-center justify-center py-20">
+                      <div className="text-center max-w-md space-y-4">
+                        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
+                          <Clock size={32} className="text-amber-500" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-white">Orari di servizio non configurati</h3>
+                        <p className="text-zinc-400 text-sm leading-relaxed">
+                          Per gestire le prenotazioni, configura prima gli orari di servizio settimanali in <strong className="text-zinc-300">Impostazioni → Generali → Orari di Servizio</strong>.
+                        </p>
+                        <Button variant="outline" className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10" onClick={() => setActiveTab('settings')}>
+                          Vai alle Impostazioni
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 const serviceSegments: { label: string; start: string; end: string }[] = [];
 
                 if (weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule) {
@@ -4063,6 +4278,32 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 completedOrders={pastOrders}
                 restaurantName={restaurantName}
                 restaurantId={restaurantId || ''}
+                passwordButton={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300 hover:text-amber-500 hover:border-amber-500/30 gap-2"
+                    onClick={() => {
+                      setAnalyticsNewPassword('')
+                      setAnalyticsConfirmPassword('')
+                      setAnalyticsPasswordError('')
+                      setAnalyticsPasswordVisible(false)
+                      setShowAnalyticsManageDialog(true)
+                    }}
+                  >
+                    {currentRestaurant?.analytics_password_hash ? (
+                      <>
+                        <Lock size={16} />
+                        Modifica password
+                      </>
+                    ) : (
+                      <>
+                        <LockOpen size={16} />
+                        Configura password analitiche
+                      </>
+                    )}
+                  </Button>
+                }
               />
             </TabsContent >
 
@@ -4070,7 +4311,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             <TabsContent value="settings" className="m-0 h-full p-4 md:p-6 outline-none data-[state=inactive]:hidden overflow-y-auto">
               <SettingsView
                 restaurantName={restaurantName}
-                setRestaurantName={setRestaurantName}
+                setRestaurantName={(name: string) => { setRestaurantName(name); setRestaurantNameDirty(true) }}
                 restaurantNameDirty={restaurantNameDirty}
                 saveRestaurantName={saveRestaurantName}
 
@@ -4133,6 +4374,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 showCookingTimes={showCookingTimes}
                 setShowCookingTimes={updateShowCookingTimes}
 
+                courseSuggestionsEnabled={courseSuggestionsEnabled}
+                setCourseSuggestionsEnabled={setCourseSuggestionsEnabled}
+                updateCourseSuggestions={updateCourseSuggestions}
+
                 copertoPrice={copertoPrice}
                 setCopertoPrice={updateCopertoPrice}
 
@@ -4174,7 +4419,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   if (isDemoActive) { toast.info('Demo — le modifiche non vengono salvate.'); return }
                   setWeeklyAyce(schedule)
                   if (restaurantId) {
-                    DatabaseService.updateRestaurant({ id: restaurantId, weekly_ayce: schedule })
+                    DatabaseService.updateRestaurant({
+                      id: restaurantId,
+                      weekly_ayce: schedule,
+                      all_you_can_eat: {
+                        enabled: schedule.enabled,
+                        pricePerPerson: schedule.defaultPrice || 0,
+                        maxOrders: schedule.defaultMaxOrders || 0
+                      }
+                    })
                   }
                 }}
                 weeklyServiceHours={weeklyServiceHours}
@@ -4354,6 +4607,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       ))}
                     </SelectContent>
                   </Select>
+                  <button
+                    type="button"
+                    onClick={() => { setShowCreateTableDialog(false); setShowAddRoomDialog(true) }}
+                    className="text-xs text-amber-500 hover:text-amber-400 font-medium flex items-center gap-1 transition-colors"
+                  >
+                    <Plus size={12} /> Crea Nuova Sala
+                  </button>
                 </div>
                 <Button onClick={handleCreateTable} className="w-full">Crea Tavolo</Button>
               </div>
@@ -4362,7 +4622,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
           {/* Edit Table Dialog */}
           <Dialog open={!!editingTable} onOpenChange={(open) => { if (!open) setEditingTable(null) }}>
-            <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] outline-none">
+            <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl outline-none">
               <DialogHeader>
                 <DialogTitle>Modifica Tavolo</DialogTitle>
                 <DialogDescription>
@@ -4436,7 +4696,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           </Dialog>
 
           <Dialog open={showQrDialog} onOpenChange={(open) => setShowQrDialog(open)}>
-            <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] flex flex-col items-center text-center outline-none">
+            <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl flex flex-col items-center text-center outline-none">
               <DialogHeader>
                 <DialogTitle>Tavolo Attivato!</DialogTitle>
                 <DialogDescription>
@@ -4585,13 +4845,33 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </div>
                 <div className="space-y-2">
                   <Label>Foto Piatto</Label>
-                  <div className="space-y-2">
-                    <Input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleImageChange(e, true)}
-                    />
-                  </div>
+                  {editDishData.image ? (
+                    <div className="relative group rounded-xl overflow-hidden border border-zinc-800 w-full h-32">
+                      <img src={editDishData.image} alt="Preview" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                        <label className="cursor-pointer bg-white/10 hover:bg-white/20 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors">
+                          <Camera size={14} /> Cambia
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e, true)} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (editDishData.image?.startsWith('blob:')) URL.revokeObjectURL(editDishData.image)
+                            setEditDishData(prev => ({ ...prev, image: '', imageFile: undefined }))
+                          }}
+                          className="bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                        >
+                          <Trash size={14} /> Elimina
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer flex flex-col items-center justify-center h-28 rounded-xl border-2 border-dashed border-zinc-700 hover:border-amber-500/50 bg-zinc-900/30 hover:bg-amber-500/5 transition-all">
+                      <ImageSquare size={28} className="text-zinc-600 mb-1" />
+                      <span className="text-xs text-zinc-500">Clicca per aggiungere foto</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e, true)} />
+                    </label>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Allergeni (separati da virgola)</Label>
@@ -4639,7 +4919,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           </Dialog >
 
           <Dialog open={showTableQrDialog} onOpenChange={(open) => setShowTableQrDialog(open)}>
-            <DialogContent className="sm:max-w-md bg-zinc-950/90 backdrop-blur-2xl border-white/10 text-zinc-100 p-6 rounded-[2rem] shadow-[0_0_50px_-12px_rgba(0,0,0,0.8)] flex flex-col items-center text-center outline-none">
+            <DialogContent className="sm:max-w-md bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl flex flex-col items-center text-center outline-none">
               <DialogHeader>
                 <DialogTitle>QR Code & PIN - {selectedTableForActions?.number}</DialogTitle>
                 <DialogDescription>
@@ -4700,108 +4980,95 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 </Button>
               </div>
 
-              {/* Hidden content for PDF generation */}
-              <div id="table-qr-pdf-content" style={{ display: 'none', position: 'fixed', top: '-9999px', width: '210mm', minHeight: '297mm', backgroundColor: '#FFFFFF' }}>
+              {/* Hidden content for PDF generation — Elegant gala style */}
+              <div id="table-qr-pdf-content" style={{ display: 'none', position: 'fixed', top: '-9999px', width: '210mm', height: '297mm', backgroundColor: '#FFFFFF' }}>
                 <div style={{
                   width: '100%',
-                  height: '100%',
+                  height: '297mm',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '20mm',
                   backgroundColor: '#FFFFFF',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
                 }}>
-                  {/* Single Elegant Card */}
+                  {/* Unified Card Design (Hugs content with ample bottom space) */}
                   <div style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #e4e4e7',
-                    borderRadius: '12px',
-                    padding: '50px 40px',
+                    border: '0.5px solid #e4e4e7',
+                    borderRadius: '8px',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '32px',
                     color: '#000000',
-                    width: '120mm',
-                    maxWidth: '100%'
+                    boxSizing: 'border-box',
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    backgroundColor: '#FFFFFF',
+                    padding: '12mm 16mm 24mm 16mm',
                   }}>
-                    {/* Thin decorative line */}
-                    <div style={{ width: '40px', height: '2px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                    {/* Restaurant Name */}
+                    <p style={{ fontSize: '18px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
+                      {currentRestaurant?.name || 'Ristorante'}
+                    </p>
 
-                    {/* Table Name */}
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        margin: '0 0 10px 0',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.35em',
-                        color: '#000000',
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
-                      }}>
-                        TAVOLO
-                      </p>
-                      <h1 style={{
-                        fontSize: '72px',
-                        lineHeight: '1.2',
-                        fontWeight: '400',
-                        margin: 0,
-                        color: '#000000',
-                        fontFamily: 'Georgia, "Times New Roman", serif'
-                      }}>
-                        {selectedTableForActions?.number}
-                      </h1>
-                    </div>
+                    {/* Table Number - Exact mathematical center interpolated from visual tests */}
+                    <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-8mm 0 14mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                      {selectedTableForActions?.number}
+                    </p>
 
                     {/* CTA */}
-                    <p style={{
-                      fontSize: '10px',
-                      fontWeight: '700',
-                      margin: 0,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.2em',
-                      color: '#000000',
-                      fontFamily: 'system-ui, -apple-system, sans-serif',
-                      textAlign: 'center'
-                    }}>
+                    <p style={{ fontSize: '11px', fontWeight: '500', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
                       {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                     </p>
 
+                    {/* Divider */}
+                    <div style={{ width: '30px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '5mm 0' }} />
+
                     {/* QR Code */}
-                    <div style={{ padding: '8px', border: '1px solid #e4e4e7', borderRadius: '8px' }}>
-                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={200} />
+                    <div style={{ padding: '2mm', border: '0.5px solid #e4e4e7', borderRadius: '4px' }}>
+                      <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={130} />
                     </div>
 
-                    {/* Restaurant Name */}
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        margin: 0,
-                        color: '#000000',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.25em',
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
-                      }}>
-                        {currentRestaurant?.name || 'Ristorante'}
-                      </p>
-                    </div>
-
-                    {/* Thin decorative line */}
-                    <div style={{ width: '40px', height: '2px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                    {/* Pin info */}
+                    <p style={{ fontSize: '9px', fontWeight: '500', margin: '5mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
+                      Il pin è fornito dal personale di sala
+                    </p>
                   </div>
                 </div>
               </div>
-
-
 
               <p style={{ fontSize: '11px', color: '#3f3f46', letterSpacing: '1px' }}>MINTHI</p>
             </DialogContent>
           </Dialog>
 
           {/* Confirmation Dialog for Close/Pay/Empty */}
+          {/* Room Selection for QR Grid Download */}
+          <Dialog open={showGridRoomDialog} onOpenChange={setShowGridRoomDialog}>
+            <DialogContent className="sm:max-w-sm bg-zinc-950 border-zinc-800 text-zinc-100">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-bold text-white">Scarica QR Tavoli</DialogTitle>
+                <DialogDescription className="text-zinc-400">Scegli quale sala scaricare o scarica tutti i tavoli.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 py-2">
+                <Button
+                  className="w-full h-11 justify-start text-left bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-white font-medium"
+                  onClick={() => handleDownloadGridPdf(null)}
+                >
+                  Tutte le Sale
+                </Button>
+                {rooms?.map(room => (
+                  <Button
+                    key={room.id}
+                    variant="outline"
+                    className="w-full h-11 justify-start text-left border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 text-zinc-300 hover:text-white"
+                    onClick={() => handleDownloadGridPdf(room.id)}
+                  >
+                    {room.name}
+                  </Button>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
             <AlertDialogContent className="bg-zinc-950 border-zinc-800 text-white">
               <AlertDialogHeader>
@@ -4866,8 +5133,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         zIndex: -1,
         width: '210mm',
         minHeight: '297mm',
-        backgroundColor: '#09090b',
-        color: '#ffffff',
+        backgroundColor: '#ffffff',
+        color: '#18181b',
         padding: '40px 50px',
         fontFamily: 'Georgia, serif',
         boxSizing: 'border-box'
@@ -4883,7 +5150,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               <p style={{ color: '#d97706', fontSize: '18px', letterSpacing: '0.15em', fontWeight: 300, marginTop: '10px' }}>{exportPreviewData.subtitle}</p>
             )
           }
-          <p style={{ color: '#d97706', fontSize: '12px', fontStyle: 'italic', letterSpacing: '0.2em', fontWeight: 300, marginTop: '15px', opacity: 0.8 }}>Fine Dining Experience</p>
         </div>
 
         {/* Categories & Dishes */}
@@ -4891,9 +5157,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           {
             exportPreviewData ? (
               exportPreviewData.sections.map(section => (
-                <div key={section.id} style={{ marginBottom: '20px', pageBreakInside: 'avoid' }}>
+                <div key={section.id} style={{ marginBottom: '20px' }}>
                   {section.title && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                    <div className="break-inside-avoid" style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
                       <h2 style={{ fontSize: '22px', fontWeight: 300, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.15em', whiteSpace: 'nowrap' }}>{section.title}</h2>
                       <div style={{ height: '1px', flex: 1, background: 'linear-gradient(to right, rgba(217,119,6,0.4), transparent)' }}></div>
                     </div>
@@ -4901,10 +5167,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     {section.dishes.map(dish => (
-                      <div key={dish.id} style={{ display: 'flex', gap: '15px', alignItems: 'flex-start', pageBreakInside: 'avoid' }}>
-                        {dish.image_url?.trim() && dish.image_url.startsWith('http') && (
-                          <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)' }}>
-                            <img src={dish.image_url} alt={dish.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div key={dish.id} className="break-inside-avoid" style={{ display: 'flex', gap: '15px', alignItems: 'flex-start' }}>
+                        {dish.image_url?.trim() && (
+                          <div style={{ width: '60px', height: '60px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(0,0,0,0.1)', position: 'relative', backgroundColor: '#f4f4f5' }}>
+                            <img src={dish.image_url} alt={dish.name} style={{ width: '60px', height: '60px', objectFit: 'cover', display: 'block' }} />
                           </div>
                         )}
                         <div style={{ flex: 1 }}>
@@ -4932,11 +5198,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           <p style={{ color: '#52525b', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.2em', margin: 0 }}>
             {currentRestaurant?.address || ''} {currentRestaurant?.address && currentRestaurant?.phone ? '•' : ''} {currentRestaurant?.phone || ''}
           </p>
-          <p style={{ color: '#3f3f46', fontSize: '9px', marginTop: '8px', letterSpacing: '0.1em' }}>Powered by Minthi</p>
+          {/* Footer - no branding */}
         </div>
       </div>
 
-      {/* HIDDEN GRID PRINT VIEW FOR TABLES - 4 BLOCKS PER PAGE */}
+      {/* HIDDEN GRID PRINT VIEW FOR TABLES - 4 BLOCKS PER PAGE — Elegant gala style */}
       <div id="tables-grid-print-view" style={{
         display: 'none',
         position: 'fixed',
@@ -4947,104 +5213,74 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         color: '#000000',
         fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
-        {/* Generate pages with exactly 4 tables each */}
         {
-          Array.from({ length: Math.ceil(restaurantTables.length / 4) }).map((_, pageIndex) => {
-            const pageTables = restaurantTables.slice(pageIndex * 4, (pageIndex + 1) * 4)
-            return (
-              <div key={pageIndex} style={{
-                width: '210mm',
-                height: '297mm',
-                padding: '10mm',
-                backgroundColor: '#FFFFFF',
-                boxSizing: 'border-box',
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gridTemplateRows: '1fr 1fr',
-                gap: '8mm',
-                pageBreakAfter: pageIndex < Math.ceil(restaurantTables.length / 4) - 1 ? 'always' : 'auto'
-              }}>
-                {
-                  pageTables.map((table) => (
+          (() => {
+            const tablesToPrint = gridPrintRoomFilter
+              ? restaurantTables.filter(t => t.room_id === gridPrintRoomFilter)
+              : restaurantTables
+            return Array.from({ length: Math.ceil(tablesToPrint.length / 4) }).map((_, pageIndex) => {
+              const pageTables = tablesToPrint.slice(pageIndex * 4, (pageIndex + 1) * 4)
+              return (
+                <div key={pageIndex} style={{
+                  width: '210mm',
+                  height: '297mm',
+                  padding: '8mm',
+                  backgroundColor: '#FFFFFF',
+                  boxSizing: 'border-box',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gridTemplateRows: '1fr 1fr',
+                  gap: '6mm',
+                  pageBreakAfter: pageIndex < Math.ceil(tablesToPrint.length / 4) - 1 ? 'always' : 'auto'
+                }}>
+                  {pageTables.map((table) => (
                     <div key={table.id} style={{
                       backgroundColor: '#FFFFFF',
-                      border: '1px solid #e4e4e7',
-                      borderRadius: '10px',
-                      padding: '8mm',
+                      border: '0.5px solid #e4e4e7',
+                      borderRadius: '8px',
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '5mm', // Increased gap
                       color: '#000000',
-                      boxSizing: 'border-box'
+                      boxSizing: 'border-box',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      margin: 'auto',
+                      padding: '12mm 16mm 24mm 16mm',
                     }}>
-                      {/* Decorative line */}
-                      <div style={{ width: '24px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
-
-                      {/* Table Name */}
-                      <div style={{ textAlign: 'center' }}>
-                        <p style={{
-                          fontSize: '9px',
-                          fontWeight: '700',
-                          margin: '0 0 6px 0',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.35em',
-                          color: '#000000',
-                          fontFamily: 'system-ui, -apple-system, sans-serif'
-                        }}>
-                          TAVOLO
-                        </p>
-                        <h1 style={{
-                          fontSize: '48px',
-                          lineHeight: '1.2',
-                          fontWeight: '400',
-                          margin: 0,
-                          color: '#000000',
-                          fontFamily: 'Georgia, "Times New Roman", serif'
-                        }}>
-                          {table.number}
-                        </h1>
-                      </div>
-
-                      <p style={{
-                        fontSize: '7px',
-                        fontWeight: '700',
-                        margin: 0,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.2em',
-                        color: '#000000',
-                        fontFamily: 'system-ui, -apple-system, sans-serif',
-                        textAlign: 'center'
-                      }}>
-                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
-                      </p>
-                      {/* QR Code */}
-                      < div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        <QRCodeGenerator value={generateQrCode(table.id)} size={140} />
-                      </div>
-
                       {/* Restaurant Name */}
-                      <p style={{
-                        fontSize: '8px',
-                        fontWeight: '700',
-                        margin: 0,
-                        color: '#000000',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.25em',
-                        fontFamily: 'system-ui, -apple-system, sans-serif',
-                        textAlign: 'center'
-                      }}>
+                      <p style={{ fontSize: '18px', fontWeight: '400', margin: 0, color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.25em', textAlign: 'center' }}>
                         {currentRestaurant?.name || 'Ristorante'}
                       </p>
 
-                      {/* Decorative line */}
-                      <div style={{ width: '24px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                      {/* Table Number - Exact mathematical center interpolated from visual tests */}
+                      <p style={{ fontSize: '90px', lineHeight: '1', fontWeight: '300', margin: '-8mm 0 14mm 0', padding: 0, color: '#18181b', textAlign: 'center' }}>
+                        {table.number}
+                      </p>
+
+                      {/* CTA */}
+                      <p style={{ fontSize: '11px', fontWeight: '500', margin: 0, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#3f3f46', textAlign: 'center' }}>
+                        {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
+                      </p>
+
+                      {/* Divider */}
+                      <div style={{ width: '30px', height: '0.5px', backgroundColor: '#c4c4c8', margin: '5mm 0' }} />
+
+                      {/* QR Code */}
+                      <div style={{ padding: '2mm', border: '0.5px solid #e4e4e7', borderRadius: '4px' }}>
+                        <QRCodeGenerator value={generateQrCode(table.id)} size={130} />
+                      </div>
+
+                      {/* Pin info */}
+                      <p style={{ fontSize: '9px', fontWeight: '500', margin: '5mm 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#a1a1aa', textAlign: 'center' }}>
+                        Il pin è fornito dal personale di sala
+                      </p>
                     </div>
                   ))}
-              </div>
-            )
-          })
+                </div>
+              )
+            })
+          })()
         }
       </div>
 
@@ -5058,14 +5294,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             setShowDemoGuide(false)
             setDemoMode(false)
             setActiveTab('orders')
-            // Mark guide as done
+            // Mark guide as done — DB field (shared across devices) + localStorage fallback
             if (restaurantId) {
               localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
               localStorage.setItem(tourKey, '1')
+              supabase.from('restaurants').update({ demo_completed: true }).eq('id', restaurantId).then(null, console.error)
             }
             // Always start setup wizard after first demo — user needs to configure
             const setupDone = restaurantId ? localStorage.getItem(`minthi_setup_done_${restaurantId}`) : null
-            if (!setupDone) {
+            const setupDoneDb = currentRestaurant?.setup_completed
+            if (!setupDone && !setupDoneDb) {
               setShowSetupWizard(true)
             }
           }}
@@ -5084,13 +5322,224 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             setShowSetupWizard(false)
             if (restaurantId) {
               localStorage.setItem(`minthi_setup_done_${restaurantId}`, 'true')
+              supabase.from('restaurants').update({ setup_completed: true }).eq('id', restaurantId).then(null, console.error)
             }
           }}
           tablesCount={restaurantTables.length}
           dishesCount={restaurantDishes.length}
           categoriesCount={restaurantCategories.length}
+          setSettingsSubTab={(tab) => {
+            const trigger = document.querySelector(`[data-settings-tab="${tab}"]`) as HTMLElement
+            trigger?.click()
+          }}
         />
       )}
+
+      {/* Analytics Password — Full-Screen Password Entry */}
+      {showAnalyticsPasswordDialog && (
+        <div className="fixed inset-0 z-50 bg-zinc-950 flex items-center justify-center">
+          <div className="w-full max-w-sm mx-auto px-6 space-y-6 text-center">
+            <div className="space-y-2">
+              <Lock size={32} className="text-amber-500 mx-auto" />
+              <h2 className="text-xl font-semibold text-zinc-100">Accesso Analitiche</h2>
+              <p className="text-zinc-400 text-sm">Inserisci la password per accedere</p>
+            </div>
+            <div className="space-y-4">
+              <div className="relative">
+                <Input
+                  type={analyticsPasswordVisible ? 'text' : 'password'}
+                  value={analyticsPasswordInput}
+                  onChange={e => { setAnalyticsPasswordInput(e.target.value); setAnalyticsPasswordError('') }}
+                  placeholder="Password..."
+                  className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
+                  onKeyDown={async e => {
+                    if (e.key === 'Enter' && analyticsPasswordInput) {
+                      const ok = await verifyPassword(analyticsPasswordInput, currentRestaurant?.analytics_password_hash || '')
+                      if (ok) {
+                        setAnalyticsUnlocked(true)
+                        setShowAnalyticsPasswordDialog(false)
+                        setActiveTab('analytics')
+                        setActiveSection('analytics')
+                      } else {
+                        setAnalyticsPasswordError('Password errata')
+                      }
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              {analyticsPasswordError && (
+                <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
+              )}
+              <Button
+                className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                onClick={async () => {
+                  const ok = await verifyPassword(analyticsPasswordInput, currentRestaurant?.analytics_password_hash || '')
+                  if (ok) {
+                    setAnalyticsUnlocked(true)
+                    setShowAnalyticsPasswordDialog(false)
+                    setActiveTab('analytics')
+                    setActiveSection('analytics')
+                  } else {
+                    setAnalyticsPasswordError('Password errata')
+                  }
+                }}
+                disabled={!analyticsPasswordInput}
+              >
+                Accedi
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full h-10 text-zinc-500 hover:text-zinc-300"
+                onClick={() => setShowAnalyticsPasswordDialog(false)}
+              >
+                Annulla
+              </Button>
+            </div>
+            <p className="text-zinc-600 text-xs pt-4">Per assistenza: +39 351 7570155</p>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Password — First Time Setup (full-screen) */}
+      {showAnalyticsSetupDialog && (
+        <div className="fixed inset-0 z-50 bg-zinc-950 flex items-center justify-center">
+          <div className="w-full max-w-sm mx-auto px-6 space-y-6 text-center">
+            <div className="space-y-2">
+              <ShieldCheck size={32} className="text-amber-500 mx-auto" />
+              <h2 className="text-xl font-semibold text-zinc-100">Proteggi le Analitiche</h2>
+              <p className="text-zinc-400 text-sm">Imposta una password per impedire ai cuochi di vedere le analitiche. Puoi farlo anche dopo.</p>
+            </div>
+            <div className="space-y-4">
+              <div className="relative">
+                <Input
+                  type={analyticsPasswordVisible ? 'text' : 'password'}
+                  value={analyticsNewPassword}
+                  onChange={e => setAnalyticsNewPassword(e.target.value)}
+                  placeholder="Nuova password..."
+                  className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              {analyticsPasswordError && (
+                <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
+              )}
+              <Button
+                className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                onClick={async () => {
+                  if (analyticsNewPassword.length < 4) {
+                    setAnalyticsPasswordError('La password deve avere almeno 4 caratteri')
+                    return
+                  }
+                  const hashed = await hashPassword(analyticsNewPassword)
+                  await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', restaurantId)
+                  await refreshRestaurants()
+                  setAnalyticsUnlocked(true)
+                  setShowAnalyticsSetupDialog(false)
+                  setActiveTab('analytics')
+                  setActiveSection('analytics')
+                  toast.success('Password analitiche impostata')
+                }}
+                disabled={!analyticsNewPassword}
+              >
+                Imposta Password
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full h-10 text-zinc-400 hover:text-zinc-200"
+                onClick={() => {
+                  setAnalyticsUnlocked(true)
+                  setShowAnalyticsSetupDialog(false)
+                  setActiveTab('analytics')
+                  setActiveSection('analytics')
+                }}
+              >
+                Salta per ora
+              </Button>
+            </div>
+            <p className="text-zinc-600 text-xs pt-4">Per assistenza: +39 351 7570155</p>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Password — Manage Dialog (change/remove) */}
+      <Dialog open={showAnalyticsManageDialog} onOpenChange={setShowAnalyticsManageDialog}>
+        <DialogContent className="sm:max-w-sm bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Gear size={22} className="text-amber-500" />
+              Gestisci Password Analitiche
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="relative">
+              <Input
+                type={analyticsPasswordVisible ? 'text' : 'password'}
+                value={analyticsNewPassword}
+                onChange={e => setAnalyticsNewPassword(e.target.value)}
+                placeholder="Nuova password..."
+                className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              >
+                {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+            {analyticsPasswordError && (
+              <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
+            )}
+            <Button
+              className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+              onClick={async () => {
+                if (analyticsNewPassword.length < 4) {
+                  setAnalyticsPasswordError('La password deve avere almeno 4 caratteri')
+                  return
+                }
+                const hashed = await hashPassword(analyticsNewPassword)
+                await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', restaurantId)
+                await refreshRestaurants()
+                setShowAnalyticsManageDialog(false)
+                toast.success('Password analitiche aggiornata')
+              }}
+              disabled={!analyticsNewPassword}
+            >
+              Salva Nuova Password
+            </Button>
+            {currentRestaurant?.analytics_password_hash && (
+              <Button
+                variant="ghost"
+                className="w-full h-10 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                onClick={async () => {
+                  await supabase.from('restaurants').update({ analytics_password_hash: null }).eq('id', restaurantId)
+                  await refreshRestaurants()
+                  setShowAnalyticsManageDialog(false)
+                  toast.success('Password analitiche rimossa')
+                }}
+              >
+                Rimuovi Password
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { getCorsHeaders, isValidUUID } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyApiKey, validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const stripe = new Stripe(stripeKey, {
@@ -15,26 +16,30 @@ const supabase = createClient(
 );
 
 serve(async (req) => {
-    const cors = getCorsHeaders(req);
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === "OPTIONS") {
-        return new Response("ok", { headers: cors });
+        return new Response("ok", { headers: corsHeaders });
     }
+
+    const authError = verifyApiKey(req, corsHeaders);
+    if (authError) return authError;
 
     try {
         if (!stripeKey) {
             console.error("STRIPE_SECRET_KEY non configurata");
             return new Response(JSON.stringify({ error: "Configurazione Stripe mancante. Contatta l'assistenza." }), {
                 status: 500,
-                headers: { ...cors, "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
 
         const { restaurantId, returnUrl } = await req.json();
 
-        if (!isValidUUID(restaurantId)) {
+        if (!restaurantId) {
             return new Response(JSON.stringify({ error: "restaurantId richiesto" }), {
                 status: 400,
-                headers: { ...cors, "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
 
@@ -48,9 +53,12 @@ serve(async (req) => {
             console.error("DB error:", dbError?.message);
             return new Response(JSON.stringify({ error: "Ristorante non trovato" }), {
                 status: 400,
-                headers: { ...cors, "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
+
+        const origin = req.headers.get("origin") || "https://minthi.it";
+        const safeReturnUrl = validateRedirectUrl(returnUrl, origin);
 
         let accountId = restaurant.stripe_connect_account_id;
 
@@ -63,7 +71,7 @@ serve(async (req) => {
                 if (account.charges_enabled && account.details_submitted) {
                     const loginLink = await stripe.accounts.createLoginLink(accountId);
                     return new Response(JSON.stringify({ accountId, url: loginLink.url }), {
-                        headers: { ...cors, "Content-Type": "application/json" },
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
                         status: 200,
                     });
                 }
@@ -71,13 +79,13 @@ serve(async (req) => {
                 // Account exists but not fully set up — create Account Link to complete
                 const accountLink = await stripe.accountLinks.create({
                     account: accountId,
-                    refresh_url: returnUrl || req.headers.get("origin") || "https://localhost",
-                    return_url: returnUrl || req.headers.get("origin") || "https://localhost",
+                    refresh_url: safeReturnUrl,
+                    return_url: safeReturnUrl,
                     type: "account_onboarding",
                 });
 
                 return new Response(JSON.stringify({ accountId, url: accountLink.url }), {
-                    headers: { ...cors, "Content-Type": "application/json" },
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
                     status: 200,
                 });
             } catch (retrieveErr: any) {
@@ -89,7 +97,6 @@ serve(async (req) => {
 
         // Crea nuovo account Express
         try {
-            // Validate email before passing to Stripe
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             const validEmail = restaurant.email && emailRegex.test(restaurant.email) ? restaurant.email : undefined;
 
@@ -112,7 +119,7 @@ serve(async (req) => {
             }
             return new Response(JSON.stringify({ error: userMsg }), {
                 status: 500,
-                headers: { ...cors, "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
 
@@ -129,19 +136,19 @@ serve(async (req) => {
         // Crea Account Link per l'onboarding
         const accountLink = await stripe.accountLinks.create({
             account: accountId!,
-            refresh_url: returnUrl || req.headers.get("origin") || "https://localhost",
-            return_url: returnUrl || req.headers.get("origin") || "https://localhost",
+            refresh_url: safeReturnUrl,
+            return_url: safeReturnUrl,
             type: "account_onboarding",
         });
 
         return new Response(JSON.stringify({ accountId, url: accountLink.url }), {
-            headers: { ...cors, "Content-Type": "application/json" },
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 200,
         });
     } catch (error: any) {
         console.error("Errore Stripe Connect generico:", error.message, error.stack);
         return new Response(JSON.stringify({ error: error.message || "Errore interno" }), {
-            headers: { ...cors, "Content-Type": "application/json" },
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 500,
         });
     }
