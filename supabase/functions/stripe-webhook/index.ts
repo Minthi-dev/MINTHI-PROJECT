@@ -13,15 +13,17 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+// Webhook CORS: Stripe sends webhooks server-to-server, no browser origin.
+// Allow stripe-signature header for webhook verification.
+const webhookCorsHeaders = {
+    "Access-Control-Allow-Origin": "https://minthi.it",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature",
+};
+
 serve(async (req) => {
     // Handle CORS preflight
     if (req.method === "OPTIONS") {
-        return new Response("ok", {
-            headers: {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature",
-            },
-        });
+        return new Response("ok", { headers: webhookCorsHeaders });
     }
 
     try {

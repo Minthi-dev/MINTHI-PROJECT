@@ -1693,6 +1693,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setAllergenInput('')
         toast.success('Piatto modificato')
       })
+      .catch((error) => {
+        console.error('Error updating dish:', error)
+        toast.error('Errore durante la modifica del piatto')
+      })
   }
 
   const handleCancelDishEdit = () => {
@@ -1821,12 +1825,20 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         refreshCategories()
         toast.success('Categoria aggiunta')
       })
+      .catch((error) => {
+        console.error('Error creating category:', error)
+        toast.error('Errore durante la creazione della categoria')
+      })
   }
 
   const handleDeleteCategory = (categoryId: string) => {
     if (demoGuard()) return
     DatabaseService.deleteCategory(categoryId)
       .then(() => toast.success('Categoria eliminata'))
+      .catch((error) => {
+        console.error('Error deleting category:', error)
+        toast.error('Errore durante l\'eliminazione della categoria')
+      })
   }
 
   const handleEditCategory = (category: Category) => {
@@ -1854,6 +1866,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         setEditingCategory(null)
         setEditCategoryName('')
         toast.success('Categoria modificata')
+      })
+      .catch((error) => {
+        console.error('Error updating category:', error)
+        toast.error('Errore durante la modifica della categoria')
       })
   }
 
@@ -5282,7 +5298,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             if (restaurantId) {
               localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
               localStorage.setItem(tourKey, '1')
-              supabase.from('restaurants').update({ demo_completed: true }).eq('id', restaurantId).then(() => {})
+              supabase.from('restaurants').update({ demo_completed: true }).eq('id', restaurantId).then(null, console.error)
             }
             // Always start setup wizard after first demo — user needs to configure
             const setupDone = restaurantId ? localStorage.getItem(`minthi_setup_done_${restaurantId}`) : null
@@ -5306,7 +5322,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             setShowSetupWizard(false)
             if (restaurantId) {
               localStorage.setItem(`minthi_setup_done_${restaurantId}`, 'true')
-              supabase.from('restaurants').update({ setup_completed: true }).eq('id', restaurantId).then(() => {})
+              supabase.from('restaurants').update({ setup_completed: true }).eq('id', restaurantId).then(null, console.error)
             }
           }}
           tablesCount={restaurantTables.length}

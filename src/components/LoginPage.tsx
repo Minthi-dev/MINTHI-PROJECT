@@ -82,7 +82,7 @@ export default function LoginPage({ onLogin }: Props) {
           const staffPasswordMatch = await verifyPassword(password, staffCredentials.password || '')
           if (staffPasswordMatch) {
             const targetRestaurant = staffCredentials.restaurant
-            if (targetRestaurant.isActive === false) {
+            if (targetRestaurant.is_active === false) {
               toast.error("Ristorante temporaneamente sospeso. Contatta l'amministrazione.")
               setIsLoading(false)
               return

@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyApiKey, validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const stripe = new Stripe(stripeKey, {
@@ -15,9 +16,14 @@ const supabase = createClient(
 );
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === "OPTIONS") {
         return new Response("ok", { headers: corsHeaders });
     }
+
+    const authError = verifyApiKey(req, corsHeaders);
+    if (authError) return authError;
 
     try {
         if (!stripeKey) {
@@ -51,6 +57,9 @@ serve(async (req) => {
             });
         }
 
+        const origin = req.headers.get("origin") || "https://minthi.it";
+        const safeReturnUrl = validateRedirectUrl(returnUrl, origin);
+
         let accountId = restaurant.stripe_connect_account_id;
 
         // Se l'account esiste, verifica che sia valido
@@ -70,8 +79,8 @@ serve(async (req) => {
                 // Account exists but not fully set up — create Account Link to complete
                 const accountLink = await stripe.accountLinks.create({
                     account: accountId,
-                    refresh_url: returnUrl || req.headers.get("origin") || "https://localhost",
-                    return_url: returnUrl || req.headers.get("origin") || "https://localhost",
+                    refresh_url: safeReturnUrl,
+                    return_url: safeReturnUrl,
                     type: "account_onboarding",
                 });
 
@@ -88,7 +97,6 @@ serve(async (req) => {
 
         // Crea nuovo account Express
         try {
-            // Validate email before passing to Stripe
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             const validEmail = restaurant.email && emailRegex.test(restaurant.email) ? restaurant.email : undefined;
 
@@ -128,8 +136,8 @@ serve(async (req) => {
         // Crea Account Link per l'onboarding
         const accountLink = await stripe.accountLinks.create({
             account: accountId!,
-            refresh_url: returnUrl || req.headers.get("origin") || "https://localhost",
-            return_url: returnUrl || req.headers.get("origin") || "https://localhost",
+            refresh_url: safeReturnUrl,
+            return_url: safeReturnUrl,
             type: "account_onboarding",
         });
 

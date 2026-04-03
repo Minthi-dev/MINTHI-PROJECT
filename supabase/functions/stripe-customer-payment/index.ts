@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyApiKey, validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -13,9 +14,14 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === "OPTIONS") {
         return new Response("ok", { headers: corsHeaders });
     }
+
+    const authError = verifyApiKey(req, corsHeaders);
+    if (authError) return authError;
 
     try {
         const {
@@ -60,7 +66,7 @@ serve(async (req) => {
             );
         }
 
-        // Crea le line items per Stripe, escludendo elementi con prezzo 0 (come piatti AYCE se costo è coperto in origine)
+        // Crea le line items per Stripe, escludendo elementi con prezzo 0
         const lineItems = items
             .filter((item: { name: string; price: number; quantity: number }) => item.price > 0)
             .map((item: { name: string; price: number; quantity: number }) => ({
@@ -69,7 +75,7 @@ serve(async (req) => {
                     product_data: {
                         name: item.name,
                     },
-                    unit_amount: Math.round(item.price * 100), // Stripe usa centesimi
+                    unit_amount: Math.round(item.price * 100),
                 },
                 quantity: item.quantity,
             }));
@@ -81,20 +87,20 @@ serve(async (req) => {
             );
         }
 
-        // Array of orderIds might exceed 500 chars if the customer has many separated orders in the session.
         const orderIdsStr = JSON.stringify(orderIds);
         const safeOrderIdsMetadata = orderIdsStr.length > 500 ? "multiple_orders_overflow" : orderIdsStr;
 
-        // Crea la sessione di checkout con Direct Charge — i fondi vanno direttamente sul conto del ristorante
-        // Il secondo argomento { stripeAccount } crea la sessione sull'account connesso (Direct Charge)
-        // I soldi NON passano mai dal conto MINTHI
+        const origin = req.headers.get("origin") || "https://minthi.it";
+        const defaultSuccessUrl = `${origin}/client/table/${tableId}?payment=success`;
+        const defaultCancelUrl = `${origin}/client/table/${tableId}?payment=cancelled`;
+
         const session = await stripe.checkout.sessions.create(
             {
                 payment_method_types: ["card"],
                 mode: "payment",
                 line_items: lineItems,
-                success_url: successUrl || `${req.headers.get("origin")}/client/table/${tableId}?payment=success`,
-                cancel_url: cancelUrl || `${req.headers.get("origin")}/client/table/${tableId}?payment=cancelled`,
+                success_url: validateRedirectUrl(successUrl, defaultSuccessUrl),
+                cancel_url: validateRedirectUrl(cancelUrl, defaultCancelUrl),
                 metadata: {
                     paymentType: "customer_order",
                     restaurantId,

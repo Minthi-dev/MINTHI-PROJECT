@@ -1,7 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyApiKey } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -20,9 +21,14 @@ function couponName(percentOff: number, duration: string, durationMonths?: numbe
 }
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === "OPTIONS") {
         return new Response("ok", { headers: corsHeaders });
     }
+
+    const authError = verifyApiKey(req, corsHeaders);
+    if (authError) return authError;
 
     try {
         const { restaurantId, discountPercent, discountDuration, discountDurationMonths, reason, grantedBy } = await req.json();

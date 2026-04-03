@@ -397,13 +397,25 @@ export const DatabaseService = {
         // Fetch by username only - password verification happens in JS via verifyPassword()
         const { data, error } = await supabase
             .from('restaurant_staff')
-            .select('id, restaurant_id, name, username, password, is_active, restaurant:restaurants(id, name, waiter_mode_enabled, allow_waiter_payments, enable_course_splitting, cover_charge_per_person, all_you_can_eat, weekly_coperto, weekly_ayce, weekly_service_hours, lunch_time_start, lunch_time_end, dinner_time_start, dinner_time_end, view_only_menu_enabled, menu_style, menu_primary_color)')
+            .select('id, restaurant_id, name, username, password, is_active, restaurant:restaurants(id, name, is_active, waiter_mode_enabled, allow_waiter_payments, enable_course_splitting, cover_charge_per_person, all_you_can_eat, weekly_coperto, weekly_ayce, weekly_service_hours, lunch_time_start, lunch_time_end, dinner_time_start, dinner_time_end, view_only_menu_enabled, menu_style, menu_primary_color)')
             .eq('username', username)
             .eq('is_active', true)
             .maybeSingle()
 
         if (error) return null
         return data
+    },
+
+    async verifyStaffSession(staffId: string): Promise<boolean> {
+        const { data, error } = await supabase
+            .from('restaurant_staff')
+            .select('id, is_active, restaurant:restaurants(is_active)')
+            .eq('id', staffId)
+            .maybeSingle()
+
+        if (error || !data) return false
+        const restaurant = data.restaurant as any
+        return data.is_active === true && restaurant?.is_active !== false
     },
 
     async createStaff(staff: Omit<any, 'id' | 'created_at'>) {
@@ -718,6 +730,9 @@ export const DatabaseService = {
     },
 
     async closeSession(sessionId: string, closedByName?: string, closedByRole?: string) {
+        // Pulisci cart_items (carrello non confermato) prima di chiudere la sessione
+        await supabase.from('cart_items').delete().eq('session_id', sessionId)
+
         const { error } = await supabase
             .from('table_sessions')
             .update({

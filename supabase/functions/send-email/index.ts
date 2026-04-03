@@ -1,10 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { getCorsHeaders } from "../_shared/cors.ts"
+import { verifyApiKey } from "../_shared/auth.ts"
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || "re_BxHs15R4_5DGLqzQ6sSxwdUzQSDvmc6hF"
-
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+if (!RESEND_API_KEY) {
+    console.error('RESEND_API_KEY environment variable is not set')
 }
 
 interface EmailRequest {
@@ -15,10 +15,15 @@ interface EmailRequest {
 }
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req)
+
     // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
+
+    const authError = verifyApiKey(req, corsHeaders)
+    if (authError) return authError
 
     try {
         const { to, subject, html, text }: EmailRequest = await req.json()

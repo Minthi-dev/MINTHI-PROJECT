@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
-import { corsHeaders } from "../_shared/cors.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyApiKey, validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -8,9 +9,14 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
 });
 
 serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
+
     if (req.method === "OPTIONS") {
         return new Response("ok", { headers: corsHeaders });
     }
+
+    const authError = verifyApiKey(req, corsHeaders);
+    if (authError) return authError;
 
     try {
         const { priceId, restaurantId, pendingRegistrationId, successUrl, cancelUrl, couponId } = await req.json();
@@ -21,6 +27,8 @@ serve(async (req) => {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
+
+        const origin = req.headers.get("origin") || "https://minthi.it";
 
         // Metadati: distingue registrazione nuova (pending) da ristorante esistente
         const metadata: Record<string, string> = { paymentType: "subscription" };
@@ -34,8 +42,8 @@ serve(async (req) => {
             payment_method_types: ["card"],
             mode: "subscription",
             line_items: [{ price: priceId, quantity: 1 }],
-            success_url: successUrl || `${req.headers.get("origin")}/register-success`,
-            cancel_url: cancelUrl || `${req.headers.get("origin")}/register-cancelled`,
+            success_url: validateRedirectUrl(successUrl, `${origin}/register-success`),
+            cancel_url: validateRedirectUrl(cancelUrl, `${origin}/register-cancelled`),
             metadata,
             client_reference_id: pendingRegistrationId || restaurantId,
             ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),

@@ -4,6 +4,7 @@ import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-rou
 import { Toaster } from 'sonner'
 import { SessionProvider } from './context/SessionContext'
 import { supabase } from './lib/supabase'
+import { DatabaseService } from './services/DatabaseService'
 
 import { lazyImportRetry } from './utils/lazyImportRetry'
 
@@ -120,6 +121,14 @@ const AppContent = () => {
             .then(({ data }) => {
               if (!data || data.role !== parsedUser.role) {
                 // Role mismatch or user deleted — force logout
+                localStorage.removeItem('minthi_user')
+                setUser(null)
+              }
+            })
+        } else if (parsedUser.role === 'STAFF') {
+          DatabaseService.verifyStaffSession(parsedUser.id)
+            .then((valid) => {
+              if (!valid) {
                 localStorage.removeItem('minthi_user')
                 setUser(null)
               }
