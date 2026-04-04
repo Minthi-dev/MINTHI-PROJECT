@@ -1965,24 +1965,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           className="relative z-10 flex flex-col items-center gap-6"
         >
           <motion.div
-            initial={{ rotate: -20 }}
-            animate={{ rotate: 0 }}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
             transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
-            className="w-24 h-24 rounded-full bg-zinc-900 border border-emerald-500/20 text-emerald-400 flex items-center justify-center"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="48" height="48" fill="currentColor">
-              <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
-            </svg>
+            <img
+              src="/minthi-logo.png"
+              alt="MINTHI"
+              className="h-20 w-auto drop-shadow-[0_0_30px_rgba(52,211,153,0.25)]"
+            />
           </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1"
-          >
-            min<span className="font-bold text-emerald-400">thi</span>
-          </motion.h1>
 
           <motion.div
             initial={{ opacity: 0 }}
@@ -4280,6 +4272,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 completedOrders={pastOrders}
                 restaurantName={restaurantName}
                 restaurantId={restaurantId || ''}
+                weeklyServiceHours={weeklyServiceHours}
                 passwordButton={
                   <Button
                     variant="outline"

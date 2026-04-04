@@ -25,6 +25,7 @@ interface AnalyticsChartsProps {
   restaurantName?: string
   restaurantId?: string
   passwordButton?: React.ReactNode
+  weeklyServiceHours?: any
 }
 
 type DateFilter = 'today' | 'yesterday' | 'week' | '2weeks' | 'month' | '3months' | 'custom'
@@ -68,7 +69,7 @@ interface HourlyData {
 
 type FilteredOrder = Order & { filteredItems?: OrderItem[]; filteredAmount?: number }
 
-export default function AnalyticsCharts({ orders, completedOrders, dishes, categories, restaurantName = 'Ristorante', restaurantId, passwordButton }: AnalyticsChartsProps) {
+export default function AnalyticsCharts({ orders, completedOrders, dishes, categories, restaurantName = 'Ristorante', restaurantId, passwordButton, weeklyServiceHours }: AnalyticsChartsProps) {
   const [dateFilter, setDateFilter] = useState<DateFilter>('week')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
@@ -76,7 +77,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
 
   // Tabs State (using strings for active tab)
   const [activeTab, setActiveTab] = useState('overview') // 'overview' | 'waiters'
-  const [waiterChartMetric, setWaiterChartMetric] = useState<'waiters' | 'ordersPerHour' | 'avgWait'>('waiters')
+  const [waiterChartMetric, setWaiterChartMetric] = useState<'waiters' | 'ordersPerHour' | 'avgWait' | 'pranzoVsCena'>('waiters')
 
   // Staff and Logs State
   const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
@@ -558,13 +559,27 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     function restaurant_hours_per_day() { return 8 }
 
     // Daily metrics for combined chart
-    const dailyMetrics: { date: string; waiters: number; ordersPerHour: number; avgWait: number }[] = []
+    // Determine lunch/dinner hour cutoffs from service hours config or defaults
+    const getLunchDinnerCutoff = (dayIndex: number): { lunchStart: number; lunchEnd: number; dinnerStart: number; dinnerEnd: number } => {
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+      const dayName = dayNames[dayIndex]
+      const daySchedule = weeklyServiceHours?.schedule?.[dayName]
+      const lunchStartH = parseInt(daySchedule?.lunch?.start?.split(':')[0] ?? '11')
+      const lunchEndH = parseInt(daySchedule?.lunch?.end?.split(':')[0] ?? '15')
+      const dinnerStartH = parseInt(daySchedule?.dinner?.start?.split(':')[0] ?? '18')
+      const dinnerEndH = parseInt(daySchedule?.dinner?.end?.split(':')[0] ?? '23')
+      return { lunchStart: lunchStartH, lunchEnd: lunchEndH, dinnerStart: dinnerStartH, dinnerEnd: dinnerEndH }
+    }
+
+    const dailyMetrics: { date: string; waiters: number; ordersPerHour: number; avgWait: number; pranzo: number; cena: number }[] = []
     const days = Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)))
     const isSingleDay = days === 1 || dateFilter === 'today' || dateFilter === 'yesterday'
 
     for (let i = 0; i < days; i++) {
       const dayStart = start + (i * 24 * 60 * 60 * 1000)
       const dayEnd = dayStart + (24 * 60 * 60 * 1000)
+      const dayDate = new Date(dayStart)
+      const { lunchStart, lunchEnd, dinnerStart, dinnerEnd } = getLunchDinnerCutoff(dayDate.getDay())
 
       const dayLogs = waiterLogs.filter(log => {
         const logTime = new Date(log.created_at || Date.now()).getTime()
@@ -580,10 +595,22 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
         return t >= dayStart && t < dayEnd
       })
 
-      // Orders per waiter per hour (assuming ~8 service hours per day)
-      const serviceHours = 8
+      // Split orders by pranzo/cena
+      const lunchOrders = dayOrders.filter(o => {
+        const h = new Date(o.created_at).getHours()
+        return h >= lunchStart && h < lunchEnd
+      })
+      const dinnerOrders = dayOrders.filter(o => {
+        const h = new Date(o.created_at).getHours()
+        return h >= dinnerStart && h <= dinnerEnd
+      })
+
+      // Orders per waiter per hour (using actual active service hours)
+      const lunchHours = Math.max(1, lunchEnd - lunchStart)
+      const dinnerHours = Math.max(1, dinnerEnd - dinnerStart)
+      const totalServiceHours = lunchHours + dinnerHours
       const ordPerWH = dayActiveWaiters > 0
-        ? Math.round((dayOrders.length / dayActiveWaiters / serviceHours) * 10) / 10
+        ? Math.round((dayOrders.length / dayActiveWaiters / totalServiceHours) * 10) / 10
         : 0
 
       // Avg wait time this day
@@ -599,12 +626,13 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       })
       const dayAvgWait = dayWaitCount > 0 ? Math.round(dayWaitMs / dayWaitCount / 60000) : 0
 
-      const date = new Date(dayStart)
       dailyMetrics.push({
-        date: isSingleDay ? 'Oggi' : date.toLocaleDateString('it-IT', { month: 'short', day: 'numeric' }),
+        date: isSingleDay ? 'Oggi' : dayDate.toLocaleDateString('it-IT', { month: 'short', day: 'numeric' }),
         waiters: dayActiveWaiters,
         ordersPerHour: ordPerWH,
-        avgWait: dayAvgWait
+        avgWait: dayAvgWait,
+        pranzo: lunchOrders.length,
+        cena: dinnerOrders.length,
       })
     }
 
@@ -616,7 +644,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       avgOrdersPerWaiterHour,
       dailyMetrics
     }
-  }, [waiterLogs, staffList, allOrders, start, end, dateFilter])
+  }, [waiterLogs, staffList, allOrders, start, end, dateFilter, weeklyServiceHours])
 
   return (
     <>
@@ -1297,23 +1325,24 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                   <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
                     <ChartLine size={20} className="text-amber-500" /> Andamento Camerieri
                   </CardTitle>
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 flex-wrap">
                     {([
                       { key: 'waiters' as const, label: 'Camerieri Attivi', color: 'emerald' },
-                      { key: 'ordersPerHour' as const, label: 'Ordini/Cam/Ora', color: 'amber' },
-                      { key: 'avgWait' as const, label: 'Tempo Attesa', color: 'violet' }
+                      { key: 'ordersPerHour' as const, label: 'Piatti/Cam/Ora', color: 'amber' },
+                      { key: 'avgWait' as const, label: 'Attesa Media', color: 'violet' },
+                      { key: 'pranzoVsCena' as const, label: 'Pranzo vs Cena', color: 'blue' },
                     ]).map(opt => (
                       <button
                         key={opt.key}
-                        onClick={() => setWaiterChartMetric(opt.key)}
+                        onClick={() => setWaiterChartMetric(opt.key as any)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${waiterChartMetric === opt.key
-                          ? `bg-${opt.color}-500/20 text-${opt.color}-400 border border-${opt.color}-500/30`
+                          ? 'border'
                           : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50 hover:text-zinc-300'
                         }`}
                         style={waiterChartMetric === opt.key ? {
-                          backgroundColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.2)' : opt.color === 'amber' ? 'rgba(245,158,11,0.2)' : 'rgba(139,92,246,0.2)',
-                          color: opt.color === 'emerald' ? '#34d399' : opt.color === 'amber' ? '#fbbf24' : '#a78bfa',
-                          borderColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.3)' : opt.color === 'amber' ? 'rgba(245,158,11,0.3)' : 'rgba(139,92,246,0.3)'
+                          backgroundColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.2)' : opt.color === 'amber' ? 'rgba(245,158,11,0.2)' : opt.color === 'violet' ? 'rgba(139,92,246,0.2)' : 'rgba(59,130,246,0.2)',
+                          color: opt.color === 'emerald' ? '#34d399' : opt.color === 'amber' ? '#fbbf24' : opt.color === 'violet' ? '#a78bfa' : '#60a5fa',
+                          borderColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.3)' : opt.color === 'amber' ? 'rgba(245,158,11,0.3)' : opt.color === 'violet' ? 'rgba(139,92,246,0.3)' : 'rgba(59,130,246,0.3)'
                         } : {}}
                       >
                         {opt.label}
@@ -1324,34 +1353,48 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               </CardHeader>
               <CardContent className="pt-6">
                 <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={waiterStats.dailyMetrics} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0.4} />
-                        <stop offset="95%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dx={-10} allowDecimals={waiterChartMetric !== 'waiters'} />
-                    <Tooltip
-                      contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
-                      itemStyle={{ color: waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6', fontWeight: 'bold' }}
-                      labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
-                      formatter={(value: number) => waiterChartMetric === 'avgWait' ? `${value} min` : value}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey={waiterChartMetric}
-                      name={waiterChartMetric === 'waiters' ? 'Camerieri Attivi' : waiterChartMetric === 'ordersPerHour' ? 'Ordini/Cam/Ora' : 'Tempo Attesa (min)'}
-                      stroke={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'}
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorMetric)"
-                      activeDot={{ r: 6, strokeWidth: 0, fill: '#fff' }}
-                      isAnimationActive={false}
-                    />
-                  </AreaChart>
+                  {waiterChartMetric === 'pranzoVsCena' ? (
+                    <BarChart data={waiterStats.dailyMetrics} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dx={-10} allowDecimals={false} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
+                        labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
+                      />
+                      <Bar dataKey="pranzo" name="Pranzo" fill="#f59e0b" radius={[4,4,0,0]} maxBarSize={28} />
+                      <Bar dataKey="cena" name="Cena" fill="#8b5cf6" radius={[4,4,0,0]} maxBarSize={28} />
+                    </BarChart>
+                  ) : (
+                    <AreaChart data={waiterStats.dailyMetrics} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0.4} />
+                          <stop offset="95%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dx={-10} allowDecimals={waiterChartMetric !== 'waiters'} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
+                        itemStyle={{ color: waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6', fontWeight: 'bold' }}
+                        labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
+                        formatter={(value: number) => waiterChartMetric === 'avgWait' ? [`${value} min`, 'Attesa Media'] : value}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey={waiterChartMetric}
+                        name={waiterChartMetric === 'waiters' ? 'Camerieri Attivi' : waiterChartMetric === 'ordersPerHour' ? 'Piatti/Cam/Ora' : 'Attesa Media (min)'}
+                        stroke={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'}
+                        strokeWidth={3}
+                        fillOpacity={1}
+                        fill="url(#colorMetric)"
+                        activeDot={{ r: 6, strokeWidth: 0, fill: '#fff' }}
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
+                  )}
                 </ResponsiveContainer>
               </CardContent>
             </Card>
@@ -1375,10 +1418,10 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                       <thead>
                         <tr className="border-b border-white/5">
                           <th className="text-left px-6 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Cameriere</th>
-                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Piatti Serviti</th>
-                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Tavoli Assistiti</th>
-                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Attività/Ora</th>
-                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Ore Attive</th>
+                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider" title="Piatti consegnati al tavolo">Piatti Consegnati</th>
+                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider" title="Campanelle / assistenze risolte">Assistenze</th>
+                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider" title="(Piatti consegnati + Assistenze) / Ore attive">Azioni/Ora</th>
+                          <th className="text-center px-4 py-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider" title="Tempo tra prima e ultima attività registrata nel periodo">Ore Turno</th>
                         </tr>
                       </thead>
                       <tbody>

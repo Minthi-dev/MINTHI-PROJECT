@@ -239,8 +239,8 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                                 )}
                                                             </div>
 
-                                                            {/* Action button: Completa → Consegnato → Done */}
-                                                            {isItemReady && !isItemDone ? (
+                                                            {/* Action button: Completa → Consegnato → scompare */}
+                                                            {isItemDone ? null : isItemReady ? (
                                                                 <Button
                                                                     size="icon"
                                                                     variant="default"
@@ -253,15 +253,9 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                             ) : (
                                                                 <Button
                                                                     size="icon"
-                                                                    variant={isItemDone || isDelivered ? "ghost" : "default"}
-                                                                    className={cn(
-                                                                        "h-11 w-11 rounded-xl flex-shrink-0 ml-3 transition-all duration-500",
-                                                                        isItemDone || isDelivered
-                                                                            ? "text-zinc-800 bg-transparent"
-                                                                            : "bg-amber-500 hover:bg-amber-400 text-black shadow-[0_10px_20px_-10px_rgba(245,158,11,0.5)] active:scale-90"
-                                                                    )}
-                                                                    onClick={() => !isItemDone && !isDelivered && onCompleteDish(item.orderId, item.id)}
-                                                                    disabled={isItemDone || isDelivered}
+                                                                    variant="default"
+                                                                    className="h-11 w-11 rounded-xl flex-shrink-0 ml-3 bg-amber-500 hover:bg-amber-400 text-black shadow-[0_10px_20px_-10px_rgba(245,158,11,0.5)] active:scale-90"
+                                                                    onClick={() => onCompleteDish(item.orderId, item.id)}
                                                                 >
                                                                     <Check weight="bold" className="h-5 w-5" />
                                                                 </Button>
@@ -372,8 +366,8 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                         <div className="font-bold text-xl text-zinc-500 whitespace-nowrap">
                                                             {formatTime(timeDiff)}
                                                         </div>
-                                                        {/* READY → show green Consegnato button */}
-                                                        {isItemReady && !isItemDone ? (
+                                                        {/* READY → show green Consegnato button, DONE → nothing */}
+                                                        {isItemDone ? null : isItemReady ? (
                                                             <Button
                                                                 size="icon"
                                                                 variant="default"
@@ -386,15 +380,9 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                         ) : (
                                                             <Button
                                                                 size="icon"
-                                                                variant={isItemDone || isDelivered ? "ghost" : "default"}
-                                                                className={cn(
-                                                                    "h-12 w-12 rounded-lg flex-shrink-0",
-                                                                    isItemDone || isDelivered
-                                                                        ? "text-zinc-600"
-                                                                        : "bg-zinc-800 hover:bg-zinc-700 text-white border border-white/5"
-                                                                )}
-                                                                onClick={() => !isItemDone && !isDelivered && onCompleteDish(order.id, item.id)}
-                                                                disabled={isItemDone || isDelivered}
+                                                                variant="default"
+                                                                className="h-12 w-12 rounded-lg flex-shrink-0 bg-zinc-800 hover:bg-zinc-700 text-white border border-white/5"
+                                                                onClick={() => onCompleteDish(order.id, item.id)}
                                                             >
                                                                 <Check weight="bold" className="h-6 w-6" />
                                                             </Button>

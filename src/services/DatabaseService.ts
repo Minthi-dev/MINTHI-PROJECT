@@ -678,7 +678,7 @@ export const DatabaseService = {
     async getTables(restaurantId: string) {
         const { data, error } = await supabase
             .from('tables')
-            .select('id, number, restaurant_id, token, pin, seats, room_id, created_at, is_active, last_assistance_request')
+            .select('id, number, restaurant_id, token, seats, room_id, created_at, is_active, last_assistance_request')
             .eq('restaurant_id', restaurantId)
         if (error) throw error
         return data as Table[]

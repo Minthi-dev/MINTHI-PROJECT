@@ -344,6 +344,11 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
 
   const reservationBlocks = getReservationBlocks()
 
+  // Returns true if `minutes` falls within any service segment (not in a gap)
+  const isInSegment = (minutes: number) => {
+    return timelineSegments.some(seg => minutes >= seg.startMin && minutes < seg.endMin)
+  }
+
   // Sort tables based on selected filter
   const sortedTables = [...restaurantTables].sort((a, b) => {
     if (tableSortBy === 'name') {
@@ -444,8 +449,14 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
       // Standard hover behavior when not dragging
       const rawMinutes = getPointerMinutesFromX(e.clientX, e.currentTarget as HTMLElement);
       const roundedMinutes = Math.round(rawMinutes / 15) * 15
-      const snappedTime = minutesToTime(roundedMinutes)
 
+      // Don't show ghost preview in gap between segments
+      if (timelineSegments.length > 1 && !isInSegment(roundedMinutes)) {
+        setHoveredSlot(null)
+        return
+      }
+
+      const snappedTime = minutesToTime(roundedMinutes)
       setHoveredSlot({
         tableId,
         time: snappedTime,
@@ -731,31 +742,26 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                     </div>
                   ))}
 
-                  {/* Segment Separators (Labels) */}
-                  {timelineSegments.map((seg, i) => {
-                    // don't draw separator text for first segment start if there's only one, 
-                    // but rather show labels centrally or distinctly if multiple
-                    if (timelineSegments.length > 1) {
-                      let accBefore = 0;
-                      for (let j = 0; j < i; j++) accBefore += timelineSegments[j].duration;
-                      const leftStart = (accBefore / totalDurationSafe) * 100;
-                      const leftEnd = ((accBefore + seg.duration) / totalDurationSafe) * 100;
-                      const labelWidth = leftEnd - leftStart;
+                  {/* Segment labels centered in each segment */}
+                  {timelineSegments.length > 1 && timelineSegments.map((seg, i) => {
+                    let accBefore = 0;
+                    for (let j = 0; j < i; j++) accBefore += timelineSegments[j].duration;
+                    const leftStart = (accBefore / totalDurationSafe) * 100;
+                    const leftEnd = ((accBefore + seg.duration) / totalDurationSafe) * 100;
+                    const labelWidth = leftEnd - leftStart;
 
-                      return (
-                        <div
-                          key={'seg-label-' + i}
-                          className="absolute bottom-2 text-xs font-bold uppercase tracking-[0.2em] text-amber-400 flex justify-center items-center pointer-events-none"
-                          style={{ left: `${leftStart}%`, width: `${labelWidth}%` }}
-                        >
-                          <span className="bg-zinc-950/80 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-[0_0_15px_rgba(0,0,0,0.5)] flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]"></span>
-                            {seg.label}
-                          </span>
-                        </div>
-                      )
-                    }
-                    return null;
+                    return (
+                      <div
+                        key={'seg-label-' + i}
+                        className="absolute bottom-2 text-xs font-bold uppercase tracking-[0.2em] text-amber-400 flex justify-center items-center pointer-events-none"
+                        style={{ left: `${leftStart}%`, width: `${labelWidth}%` }}
+                      >
+                        <span className="bg-zinc-950/80 px-4 py-1.5 rounded-full backdrop-blur-md border border-amber-500/20 shadow-[0_0_15px_rgba(0,0,0,0.5)] flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]"></span>
+                          {seg.label}
+                        </span>
+                      </div>
+                    )
                   })}
                 </div>
               </div>
@@ -886,24 +892,33 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
                         );
                       })()}
 
-                      {/* SEGMENT SEPARATORS/GAPS */}
+                      {/* SEGMENT SEPARATORS/GAPS — visual band between pranzo and cena */}
                       <div className="absolute inset-0 pointer-events-none">
-                        {timelineSegments.length > 1 && timelineSegments.map((seg, i) => {
-                          if (i === 0) return null;
-                          let accBefore = 0;
-                          for (let j = 0; j < i; j++) accBefore += timelineSegments[j].duration;
-                          const gapPos = (accBefore / totalDurationSafe) * 100;
-
-                          return (
-                            <div
-                              key={'gap-' + i}
-                              className="absolute top-0 bottom-0 w-8 -ml-4 flex justify-center opacity-100 z-20 pointer-events-none"
-                              style={{ left: `${gapPos}%` }}
-                            >
-                              <div className="w-[2px] h-full bg-gradient-to-b from-transparent via-amber-500/50 to-transparent shadow-[0_0_15px_rgba(245,158,11,0.5)]"></div>
-                            </div>
-                          )
-                        })}
+                        {timelineSegments.length > 1 && (() => {
+                          const gaps: React.ReactElement[] = []
+                          let accBefore = 0
+                          for (let i = 0; i < timelineSegments.length - 1; i++) {
+                            accBefore += timelineSegments[i].duration
+                            const gapStart = timelineSegments[i].endMin
+                            const gapEnd = timelineSegments[i + 1].startMin
+                            const gapMinutes = Math.max(0, gapEnd - gapStart)
+                            const gapLeftPct = (accBefore / totalDurationSafe) * 100
+                            // Compute visual width of gap relative to total active duration
+                            // (gap minutes are not in totalDurationSafe, so show as a fixed visual stripe)
+                            const stripeWidth = gapMinutes > 0 ? 20 : 10 // px
+                            gaps.push(
+                              <div
+                                key={'gap-' + i}
+                                className="absolute top-0 bottom-0 z-20 flex items-center justify-center"
+                                style={{ left: `calc(${gapLeftPct}% - ${stripeWidth / 2}px)`, width: `${stripeWidth}px` }}
+                              >
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-800/70 to-transparent border-x border-zinc-700/50"></div>
+                                <span className="relative z-10 text-[8px] font-bold uppercase tracking-widest text-zinc-600 rotate-90 whitespace-nowrap">chiuso</span>
+                              </div>
+                            )
+                          }
+                          return gaps
+                        })()}
                       </div>
 
                       {/* GRID LINES (Absolute) */}

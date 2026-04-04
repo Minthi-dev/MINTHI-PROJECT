@@ -281,11 +281,10 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         e?.stopPropagation()
         const { error } = await supabase.rpc('apply_custom_menu', { p_restaurant_id: restaurantId, p_menu_id: menuId })
         if (!error) {
-            await supabase.from('custom_menus').update({ updated_at: new Date().toISOString() }).eq('id', menuId)
             toast.success('Menù Attivato!')
-            fetchCustomMenus()
+            await fetchCustomMenus()
             onDishesChange()
-            if (selectedMenu) setSelectedMenu({ ...selectedMenu, is_active: true })
+            if (selectedMenu) setSelectedMenu(prev => prev ? { ...prev, is_active: prev.id === menuId } : prev)
         } else {
             toast.error('Errore attivazione')
         }
@@ -295,11 +294,12 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         const { error } = await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
         if (!error) {
             toast.success('Menu Completo Ripristinato')
-            fetchCustomMenus()
+            await fetchCustomMenus()
             onDishesChange()
-            if (onMenuDeactivated) {
-                onMenuDeactivated()
-            }
+            if (selectedMenu) setSelectedMenu(prev => prev ? { ...prev, is_active: false } : prev)
+            if (onMenuDeactivated) onMenuDeactivated()
+        } else {
+            toast.error('Errore disattivazione')
         }
     }
 
@@ -341,33 +341,8 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         })
     }, [categories, dishes, dishSearch])
 
-    // Guard: require service hours before showing custom menus UI
-    if (!serviceHoursConfigured) {
-        return (
-            <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center max-w-lg space-y-6">
-                    <div className="w-20 h-20 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
-                        <Clock size={40} className="text-amber-500" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-white">Configura gli Orari di Servizio</h3>
-                    <p className="text-zinc-300 text-base leading-relaxed">
-                        Per utilizzare i menu personalizzati, devi prima configurare gli orari di servizio settimanali nelle Impostazioni.
-                    </p>
-                    <p className="text-zinc-400 text-sm">
-                        Gli orari definiscono quando attivare automaticamente pranzo e cena, permettendo ai menu personalizzati di funzionare correttamente.
-                    </p>
-                    {onGoToSettings && (
-                        <Button
-                            onClick={onGoToSettings}
-                            className="bg-amber-600 hover:bg-amber-700 text-white px-6 h-11 text-base"
-                        >
-                            Vai alle Impostazioni
-                        </Button>
-                    )}
-                </div>
-            </div>
-        )
-    }
+    // Soft warning banner if service hours not configured (non-blocking)
+    const serviceHoursWarning = !serviceHoursConfigured && onGoToSettings
 
 
     // --- VIEW: LIST ---
@@ -423,6 +398,16 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {serviceHoursWarning && (
+                        <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-sm text-amber-300">
+                            <Info size={18} className="flex-shrink-0 mt-0.5 text-amber-400" />
+                            <div>
+                                Per attivare i menu automaticamente per pranzo/cena, configura gli{' '}
+                                <button onClick={onGoToSettings} className="underline font-semibold hover:text-amber-200">Orari di Servizio</button>
+                                {' '}nelle Impostazioni. Puoi comunque attivare/disattivare i menu manualmente.
+                            </div>
+                        </div>
+                    )}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between pb-2">
                             <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">I Tuoi Menu</h4>
