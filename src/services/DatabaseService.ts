@@ -563,7 +563,7 @@ export const DatabaseService = {
     async getTables(restaurantId: string) {
         const { data, error } = await supabase
             .from('tables')
-            .select('id, number, restaurant_id, token, pin, seats, room_id, created_at, is_active, last_assistance_request')
+            .select('id, number, restaurant_id, token, seats, room_id, created_at, is_active, last_assistance_request')
             .eq('restaurant_id', restaurantId)
         if (error) throw error
         return data as Table[]
@@ -1412,15 +1412,24 @@ export const DatabaseService = {
         const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
             body: { action: 'get' }
         })
-        if (error) throw new Error(data?.error || error.message)
-        return data
+        if (error) {
+            // On non-2xx, data may contain the actual error message
+            const msg = typeof data === 'object' && data?.error ? data.error : error.message
+            console.error('getStripePriceDetails error:', msg, data)
+            throw new Error(msg)
+        }
+        return data ?? { amount: 0, currency: 'eur', product_id: null, price_id: null }
     },
 
     async createStripePrice(amountCents: number): Promise<{ priceId: string, amount: number }> {
         const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
             body: { action: 'create', amount_cents: amountCents }
         })
-        if (error) throw new Error(data?.error || error.message)
+        if (error) {
+            const msg = typeof data === 'object' && data?.error ? data.error : error.message
+            console.error('createStripePrice error:', msg, data)
+            throw new Error(msg)
+        }
         return data
     },
 

@@ -42,7 +42,17 @@ serve(async (req) => {
                 });
             }
 
-            const price = await stripe.prices.retrieve(priceConfig.value);
+            let price;
+            try {
+                price = await stripe.prices.retrieve(priceConfig.value);
+            } catch (stripeErr: any) {
+                // Price ID no longer valid in Stripe — clear stale config and return zero
+                console.error("Stripe price not found:", priceConfig.value, stripeErr.message);
+                return new Response(JSON.stringify({ amount: 0, currency: "eur", product_id: null, price_id: null, error_detail: "Prezzo Stripe non trovato. Ricrea il prezzo." }), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    status: 200,
+                });
+            }
             const productId = typeof price.product === "string" ? price.product : price.product?.id;
 
             // Salva product_id in app_config se non presente
