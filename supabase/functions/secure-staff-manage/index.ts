@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { hash as bcryptHash } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "https://esm.sh/bcryptjs@2.4.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const supabase = createClient(
@@ -91,7 +91,7 @@ serve(async (req) => {
                 const payload = { ...data };
                 // Hash password server-side
                 if (payload.password) {
-                    payload.password = await bcryptHash(payload.password);
+                    payload.password = bcrypt.hashSync(payload.password);
                 }
                 const { error } = await supabase.from("restaurant_staff").insert(payload);
                 if (error) {
@@ -113,7 +113,7 @@ serve(async (req) => {
                 const payload = { ...data };
                 // Hash password server-side if provided
                 if (payload.password) {
-                    payload.password = await bcryptHash(payload.password);
+                    payload.password = bcrypt.hashSync(payload.password);
                 }
                 // Don't allow changing restaurant_id
                 delete payload.restaurant_id;

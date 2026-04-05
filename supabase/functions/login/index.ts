@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { compare as bcryptCompare } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "https://esm.sh/bcryptjs@2.4.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const supabase = createClient(
@@ -8,10 +8,10 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-async function verifyBcrypt(plaintext: string, storedHash: string): Promise<boolean> {
+function verifyPassword(plaintext: string, storedHash: string): boolean {
     if (!storedHash) return false;
     if (storedHash.startsWith("$2a$") || storedHash.startsWith("$2b$")) {
-        return await bcryptCompare(plaintext, storedHash);
+        return bcrypt.compareSync(plaintext, storedHash);
     }
     return false;
 }
@@ -42,14 +42,13 @@ serve(async (req) => {
 
         const trimmedUsername = username.trim().toLowerCase();
 
-        // 1. Check users table (ADMIN / OWNER) - filter by name then email (case-insensitive)
+        // 1. Check users table (ADMIN / OWNER) - by name then email (case-insensitive)
         let { data: matchedUsers, error: usersError } = await supabase
             .from("users")
             .select("id, email, name, role, password_hash")
             .ilike("name", trimmedUsername)
             .limit(1);
 
-        // If no match by name, try by email
         if (!matchedUsers || matchedUsers.length === 0) {
             const { data, error } = await supabase
                 .from("users")
@@ -70,9 +69,8 @@ serve(async (req) => {
 
         const u = matchedUsers?.[0];
         if (u) {
-            const passwordMatch = await verifyBcrypt(password, u.password_hash || "");
+            const passwordMatch = verifyPassword(password, u.password_hash || "");
             if (passwordMatch) {
-                // For OWNER, fetch restaurant
                 let restaurant_id: string | null = null;
                 let restaurant_name: string | null = null;
 
@@ -98,13 +96,7 @@ serve(async (req) => {
 
                 return new Response(
                     JSON.stringify({
-                        user: {
-                            id: u.id,
-                            name: u.name,
-                            email: u.email,
-                            role: u.role,
-                            restaurant_id,
-                        },
+                        user: { id: u.id, name: u.name, email: u.email, role: u.role, restaurant_id },
                         restaurant_name,
                     }),
                     { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
@@ -112,7 +104,7 @@ serve(async (req) => {
             }
         }
 
-        // 2. Check restaurant_staff (custom waiter credentials) — case-insensitive
+        // 2. Check restaurant_staff — case-insensitive username
         const { data: staffList } = await supabase
             .from("restaurant_staff")
             .select("id, restaurant_id, name, username, password, is_active, restaurant:restaurants(id, name, waiter_mode_enabled, is_active)")
@@ -123,7 +115,7 @@ serve(async (req) => {
         const staffData = staffList?.[0];
 
         if (staffData && staffData.password) {
-            const staffMatch = await verifyBcrypt(password, staffData.password);
+            const staffMatch = verifyPassword(password, staffData.password);
             if (staffMatch) {
                 const rest = staffData.restaurant as any;
                 if (rest?.is_active === false) {
@@ -149,7 +141,7 @@ serve(async (req) => {
             }
         }
 
-        // 3. Check legacy waiter login (slug_cameriere)
+        // 3. Legacy waiter login (slug_cameriere)
         if (trimmedUsername.includes("_cameriere")) {
             const [slug] = trimmedUsername.split("_cameriere");
             const { data: restaurants } = await supabase
@@ -169,7 +161,7 @@ serve(async (req) => {
                     );
                 }
 
-                const waiterMatch = await verifyBcrypt(password, target.waiter_password);
+                const waiterMatch = verifyPassword(password, target.waiter_password);
                 if (waiterMatch) {
                     return new Response(
                         JSON.stringify({
@@ -188,7 +180,6 @@ serve(async (req) => {
             }
         }
 
-        // Failed login
         return new Response(
             JSON.stringify({ error: "Credenziali non valide" }),
             { status: 401, headers: { ...cors, "Content-Type": "application/json" } }

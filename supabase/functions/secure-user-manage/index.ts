@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { hash as bcryptHash } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import bcrypt from "https://esm.sh/bcryptjs@2.4.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const supabase = createClient(
@@ -28,7 +28,7 @@ serve(async (req) => {
                 if (!data) return json({ error: "data richiesto" }, 400);
                 const payload = { ...data };
                 if (payload.password) {
-                    payload.password_hash = await bcryptHash(payload.password);
+                    payload.password_hash = bcrypt.hashSync(payload.password);
                     delete payload.password;
                 }
                 const { error } = await supabase.from("users").insert(payload);
@@ -41,7 +41,7 @@ serve(async (req) => {
                 const payload = { ...data };
                 delete payload.id;
                 if (payload.password) {
-                    payload.password_hash = await bcryptHash(payload.password);
+                    payload.password_hash = bcrypt.hashSync(payload.password);
                     delete payload.password;
                 }
                 const { error } = await supabase.from("users").update(payload).eq("id", id);
