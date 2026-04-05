@@ -20,8 +20,12 @@ export const DatabaseService = {
     },
 
     async createUser(user: Partial<User>) {
-        const { error } = await supabase.from('users').insert(user)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-user-manage', {
+            body: { userId, action: 'create', data: user }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione utente')
     },
 
     // Restaurants
@@ -296,19 +300,21 @@ export const DatabaseService = {
     },
 
     async updateUser(user: Partial<User>) {
-        const { error } = await supabase
-            .from('users')
-            .update(user)
-            .eq('id', user.id)
-        if (error) throw error
+        const callerId = _getCurrentUserId()
+        if (!callerId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-user-manage', {
+            body: { userId: callerId, action: 'update', targetUserId: user.id, data: user }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento utente')
     },
 
-    async deleteUser(userId: string) {
-        const { error } = await supabase
-            .from('users')
-            .delete()
-            .eq('id', userId)
-        if (error) throw error
+    async deleteUser(targetUserId: string) {
+        const callerId = _getCurrentUserId()
+        if (!callerId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-user-manage', {
+            body: { userId: callerId, action: 'delete', targetUserId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione utente')
     },
 
     // Staff
@@ -493,25 +499,31 @@ export const DatabaseService = {
     },
 
     async createCategory(category: Partial<Category>) {
-        const { data, error } = await supabase.from('categories').insert(category).select().single()
-        if (error) throw error
-        return data as Category
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
+            body: { userId, restaurantId: category.restaurant_id, action: 'create_category', data: category }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione categoria')
+        return (data?.data || category) as Category
     },
 
     async updateCategory(category: Partial<Category>) {
-        const { error } = await supabase
-            .from('categories')
-            .update(category)
-            .eq('id', category.id)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
+            body: { userId, action: 'update_category', targetId: category.id, data: category }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento categoria')
     },
 
     async deleteCategory(categoryId: string) {
-        const { error } = await supabase
-            .from('categories')
-            .delete()
-            .eq('id', categoryId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
+            body: { userId, action: 'delete_category', targetId: categoryId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione categoria')
     },
 
     // Dishes
@@ -528,36 +540,40 @@ export const DatabaseService = {
     },
 
     async createDish(dish: Partial<Dish>) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
         const payload: any = { ...dish }
         if (dish.excludeFromAllYouCanEat !== undefined) {
             payload.exclude_from_all_you_can_eat = dish.excludeFromAllYouCanEat
         }
         delete payload.excludeFromAllYouCanEat
-
-        const { error } = await supabase.from('dishes').insert(payload)
-        if (error) throw error
+        const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
+            body: { userId, restaurantId: dish.restaurant_id, action: 'create_dish', data: payload }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione piatto')
     },
 
     async updateDish(dish: Partial<Dish>) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
         const payload: any = { ...dish }
         if (dish.excludeFromAllYouCanEat !== undefined) {
             payload.exclude_from_all_you_can_eat = dish.excludeFromAllYouCanEat
         }
         delete payload.excludeFromAllYouCanEat
-
-        const { error } = await supabase
-            .from('dishes')
-            .update(payload)
-            .eq('id', dish.id)
-        if (error) throw error
+        const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
+            body: { userId, action: 'update_dish', targetId: dish.id, data: payload }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento piatto')
     },
 
     async deleteDish(id: string) {
-        const { error } = await supabase
-            .from('dishes')
-            .delete()
-            .eq('id', id)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
+            body: { userId, action: 'delete_dish', targetId: id }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione piatto')
     },
 
     // Tables
@@ -580,25 +596,31 @@ export const DatabaseService = {
     },
 
     async createTable(table: Partial<Table>) {
-        const { data, error } = await supabase.from('tables').insert(table).select().single()
-        if (error) throw error
-        return data as Table
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-table-manage', {
+            body: { userId, restaurantId: table.restaurant_id, action: 'create', data: table }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione tavolo')
+        return (data?.data || table) as Table
     },
 
     async updateTable(tableId: string, updates: Partial<Table>) {
-        const { error } = await supabase
-            .from('tables')
-            .update(updates)
-            .eq('id', tableId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-table-manage', {
+            body: { userId, action: 'update', targetId: tableId, data: updates }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento tavolo')
     },
 
     async deleteTable(id: string) {
-        const { error } = await supabase
-            .from('tables')
-            .delete()
-            .eq('id', id)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-table-manage', {
+            body: { userId, action: 'delete', targetId: id }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione tavolo')
     },
 
     // Sessions
@@ -652,25 +674,21 @@ export const DatabaseService = {
     },
 
     async markOrdersPaidForSession(sessionId: string, paymentMethod: string = 'cash') {
-        const { error } = await supabase
-            .from('orders')
-            .update({ status: 'PAID', payment_method: paymentMethod, closed_at: new Date().toISOString() })
-            .eq('table_session_id', sessionId)
-            .neq('status', 'PAID')
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-order-manage', {
+            body: { userId, action: 'mark_paid_session', sessionId, paymentMethod }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore pagamento ordini')
     },
 
     async cancelSessionOrders(sessionId: string) {
-        const { error } = await supabase
-            .from('orders')
-            .update({ status: 'CANCELLED', closed_at: new Date().toISOString() })
-            .eq('table_session_id', sessionId)
-            .neq('status', 'PAID') // Don't cancel already paid orders
-            .neq('status', 'COMPLETED') // Optional: decide if completed orders should be cancelled. User said "annullarsi", so likely yes if they are still "active" in some way, but usually COMPLETED means served. 
-        // However, "Active Orders" usually implies PENDING/IN_PREPARATION/READY/SERVED. 
-        // If we "Empty Table", we assume everything is wiped.
-        // Let's cancel everything that isn't PAID.
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-order-manage', {
+            body: { userId, action: 'cancel_session', sessionId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore cancellazione ordini')
     },
 
     // Orders
@@ -1285,11 +1303,12 @@ export const DatabaseService = {
     // Mark orders as paid via stripe
     async markOrdersPaidStripe(orderIds: string[]) {
         if (orderIds.length === 0) return
-        const { error } = await supabase
-            .from('orders')
-            .update({ status: 'PAID', payment_method: 'stripe', closed_at: new Date().toISOString() })
-            .in('id', orderIds)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-order-manage', {
+            body: { userId, action: 'mark_paid_stripe', orderIds }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore pagamento ordini Stripe')
     },
 
     // App Config (global settings)

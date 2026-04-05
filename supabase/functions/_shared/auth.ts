@@ -52,3 +52,51 @@ export function validateRedirectUrl(url: string | undefined | null, fallback: st
     }
     return fallback
 }
+
+/**
+ * Verifies user access to a restaurant.
+ * Checks users table (ADMIN/OWNER) and restaurant_staff (STAFF).
+ */
+export async function verifyAccess(
+    supabase: any,
+    userId: string,
+    restaurantId?: string
+): Promise<{
+    valid: boolean;
+    role: string | null;
+    isAdmin: boolean;
+    isOwner: boolean;
+    isStaff: boolean;
+    staffRestaurantId?: string;
+}> {
+    const deny = { valid: false, role: null, isAdmin: false, isOwner: false, isStaff: false };
+
+    // 1. Check users table (ADMIN / OWNER)
+    const { data: user } = await supabase
+        .from("users").select("id, role").eq("id", userId).maybeSingle();
+
+    if (user) {
+        if (user.role === "ADMIN") {
+            return { valid: true, role: "ADMIN", isAdmin: true, isOwner: false, isStaff: false };
+        }
+        if (restaurantId) {
+            const { data: rest } = await supabase
+                .from("restaurants").select("owner_id").eq("id", restaurantId).maybeSingle();
+            if (rest && rest.owner_id === userId) {
+                return { valid: true, role: "OWNER", isAdmin: false, isOwner: true, isStaff: false };
+            }
+        }
+        return { ...deny, role: user.role };
+    }
+
+    // 2. Check restaurant_staff (STAFF)
+    const { data: staff } = await supabase
+        .from("restaurant_staff").select("id, restaurant_id, is_active")
+        .eq("id", userId).eq("is_active", true).maybeSingle();
+
+    if (staff && (!restaurantId || staff.restaurant_id === restaurantId)) {
+        return { valid: true, role: "STAFF", isAdmin: false, isOwner: false, isStaff: true, staffRestaurantId: staff.restaurant_id };
+    }
+
+    return deny;
+}
