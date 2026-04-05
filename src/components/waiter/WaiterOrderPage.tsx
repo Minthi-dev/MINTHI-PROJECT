@@ -294,7 +294,10 @@ const WaiterOrderPage = () => {
                     course_number: courseNum,
                 }))
 
-                const { error: itemsError } = await supabase.from('order_items').insert(dbItems)
+                const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                const { error: itemsError } = await supabase.functions.invoke('secure-order-items', {
+                    body: { userId: uid, restaurantId: restaurant.id, action: 'insert_items', data: { items: dbItems } }
+                })
                 if (itemsError) throw itemsError
             }
 
@@ -327,7 +330,10 @@ const WaiterOrderPage = () => {
                         course_number: courseNum,
                     }))
 
-                    const { error: itemsError } = await supabase.from('order_items').insert(dbItems)
+                    const uid2 = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                    const { error: itemsError } = await supabase.functions.invoke('secure-order-items', {
+                        body: { userId: uid2, restaurantId: restaurant.id, action: 'insert_items', data: { items: dbItems } }
+                    })
                     if (itemsError) throw itemsError
                 }
             }

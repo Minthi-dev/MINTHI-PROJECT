@@ -845,7 +845,10 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                                   className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 rounded-xl text-xs font-medium"
                                   onClick={async () => {
                                     try {
-                                      await supabase.from('subscription_payments').update({ admin_completed: true }).eq('id', payment.id)
+                                      const userId = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                                      await supabase.functions.invoke('secure-admin-action', {
+                                        body: { userId, action: 'toggle_payment_status', targetId: payment.id, data: { admin_completed: true } }
+                                      })
                                       setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: true } : p))
                                       toast.success('Fattura completata')
                                     } catch { toast.error('Errore') }
@@ -862,7 +865,10 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                                   className="h-9 px-3 text-zinc-500 hover:bg-zinc-800 rounded-xl text-xs"
                                   onClick={async () => {
                                     try {
-                                      await supabase.from('subscription_payments').update({ admin_completed: false }).eq('id', payment.id)
+                                      const userId = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                                      await supabase.functions.invoke('secure-admin-action', {
+                                        body: { userId, action: 'toggle_payment_status', targetId: payment.id, data: { admin_completed: false } }
+                                      })
                                       setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: false } : p))
                                       toast.success('Fattura riaperta')
                                     } catch { toast.error('Errore') }

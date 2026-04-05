@@ -92,27 +92,31 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         if (restaurantId) fetchCustomMenus()
     }, [restaurantId])
 
+    const _getUserId = (): string | null => {
+        try {
+            const saved = localStorage.getItem('minthi_user')
+            if (saved) return JSON.parse(saved).id
+        } catch { /* ignore */ }
+        return null
+    }
+
     const handleCreateMenu = async () => {
         if (!newMenuName.trim()) return
+        const userId = _getUserId()
+        if (!userId) { toast.error('Non autenticato'); return }
 
-        const { data, error } = await supabase
-            .from('custom_menus')
-            .insert({
-                restaurant_id: restaurantId,
-                name: newMenuName.trim(),
-                is_active: false
-            })
-            .select()
-            .single()
+        const { data: result, error } = await supabase.functions.invoke('secure-custom-menu', {
+            body: { userId, restaurantId, action: 'create_menu', data: { name: newMenuName.trim() } }
+        })
 
-        if (error) {
+        if (error || !result?.data) {
             toast.error('Errore creazione menù')
         } else {
             toast.success('Menù creato')
             setNewMenuName('')
             setShowCreateDialog(false)
             fetchCustomMenus()
-            if (data) openEditor(data)
+            openEditor(result.data)
         }
     }
 
@@ -130,8 +134,12 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
             setEditingName(false)
             return
         }
+        const userId = _getUserId()
+        if (!userId) { toast.error('Non autenticato'); return }
         const newName = editNameValue.trim()
-        const { error } = await supabase.from('custom_menus').update({ name: newName }).eq('id', selectedMenu.id)
+        const { error } = await supabase.functions.invoke('secure-custom-menu', {
+            body: { userId, restaurantId, action: 'update_menu', targetId: selectedMenu.id, data: { name: newName } }
+        })
         if (!error) {
             setSelectedMenu({ ...selectedMenu, name: newName })
             setCustomMenus(prev => prev.map(m => m.id === selectedMenu.id ? { ...m, name: newName } : m))
@@ -172,27 +180,29 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         }
     }
 
-    // Persist schedule changes to DB
+    // Persist schedule changes to DB via edge function
     const saveSchedules = async () => {
         if (!selectedMenu) return
+        const userId = _getUserId()
+        if (!userId) throw new Error('Non autenticato')
+
         const currentKeys = schedules.map(s => `${s.day_of_week}-${s.meal_type}`)
         const initialKeys = initialSchedules.map(s => `${s.day_of_week}-${s.meal_type}`)
 
-        // Schedules to add (in current but not in initial)
         const toAdd = schedules.filter(s => !initialKeys.includes(`${s.day_of_week}-${s.meal_type}`))
-        // Schedules to remove (in initial but not in current)
         const toRemove = initialSchedules.filter(s => !currentKeys.includes(`${s.day_of_week}-${s.meal_type}`))
 
-        for (const s of toRemove) {
-            await supabase.from('custom_menu_schedules').delete().eq('id', s.id)
-        }
-        for (const s of toAdd) {
-            await supabase.from('custom_menu_schedules').insert({
-                custom_menu_id: selectedMenu.id,
-                day_of_week: s.day_of_week,
-                meal_type: s.meal_type,
-                is_active: true
+        if (toAdd.length > 0 || toRemove.length > 0) {
+            const { error } = await supabase.functions.invoke('secure-custom-menu', {
+                body: {
+                    userId, restaurantId, action: 'save_schedules', targetId: selectedMenu.id,
+                    data: {
+                        toRemoveIds: toRemove.map(s => s.id),
+                        toAdd: toAdd.map(s => ({ day_of_week: s.day_of_week, meal_type: s.meal_type }))
+                    }
+                }
             })
+            if (error) throw error
         }
     }
 
@@ -265,8 +275,12 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
     const handleDeleteMenu = async (menuId: string, e: React.MouseEvent) => {
         e.stopPropagation()
         if (!confirm('Eliminare questo menù?')) return
+        const userId = _getUserId()
+        if (!userId) { toast.error('Non autenticato'); return }
 
-        const { error } = await supabase.from('custom_menus').delete().eq('id', menuId)
+        const { error } = await supabase.functions.invoke('secure-custom-menu', {
+            body: { userId, restaurantId, action: 'delete_menu', targetId: menuId }
+        })
         if (!error) {
             toast.success('Menù eliminato')
             fetchCustomMenus()
@@ -274,6 +288,8 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                 setSelectedMenu(null)
                 setViewMode('list')
             }
+        } else {
+            toast.error('Errore eliminazione menù')
         }
     }
 

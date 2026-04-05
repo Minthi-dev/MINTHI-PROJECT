@@ -594,10 +594,13 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     .update({ status: 'PAID' })
                     .in('id', sessionOrders.map(o => o.id))
 
-                // Also ensure items are marked if we track them individually?
+                // Mark items via edge function
                 const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
                 if (allItemIds.length > 0) {
-                    await supabase.from('order_items').update({ status: markAsPaid ? 'PAID' : 'SERVED' }).in('id', allItemIds)
+                    const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                    await supabase.functions.invoke('secure-order-items', {
+                        body: { userId: uid, restaurantId, action: 'update_status', data: { itemIds: allItemIds, status: markAsPaid ? 'PAID' : 'SERVED' } }
+                    })
                 }
             }
 
@@ -1712,7 +1715,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                             .in('id', sessionOrders.map(o => o.id))
                                                         const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
                                                         if (allItemIds.length > 0) {
-                                                            await supabase.from('order_items').update({ status: 'SERVED' }).in('id', allItemIds)
+                                                            const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                                                            await supabase.functions.invoke('secure-order-items', {
+                                                                body: { userId: uid, restaurantId, action: 'update_status', data: { itemIds: allItemIds, status: 'SERVED' } }
+                                                            })
                                                         }
                                                     }
                                                     await DatabaseService.updateSession({

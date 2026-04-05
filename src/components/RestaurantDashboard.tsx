@@ -3015,14 +3015,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             return
                           }
                           try {
-                            const { data: newRoom, error } = await supabase.from('rooms').insert({
-                              restaurant_id: restaurantId,
-                              name: newRoomName.trim(),
-                              is_active: true
-                            }).select().single()
-                            if (error) {
+                            const userId = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                            const { data: roomResult, error } = await supabase.functions.invoke('secure-room-manage', {
+                              body: { userId, restaurantId, action: 'create', data: { name: newRoomName.trim(), is_active: true } }
+                            })
+                            const newRoom = roomResult?.data
+                            if (error || !newRoom) {
                               console.error('Room creation error:', error)
-                              toast.error(`Errore: ${error.message}`)
+                              toast.error(`Errore: ${roomResult?.error || error?.message || 'Errore creazione sala'}`)
                               return
                             }
                             // Assign selected tables to the new room

@@ -151,152 +151,48 @@ export const DatabaseService = {
     },
 
     async createRoom(room: Partial<any>) {
-        const { error } = await supabase.from('rooms').insert(room)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-room-manage', {
+            body: { userId, restaurantId: room.restaurant_id, action: 'create', data: room }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione sala')
     },
 
     async updateRoom(roomId: string, updates: Partial<any>) {
-        const { error } = await supabase
-            .from('rooms')
-            .update(updates)
-            .eq('id', roomId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-room-manage', {
+            body: { userId, action: 'update', targetId: roomId, data: updates }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento sala')
     },
 
     async deleteRoom(roomId: string) {
-        const { error } = await supabase
-            .from('rooms')
-            .update({ is_active: false })
-            .eq('id', roomId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-room-manage', {
+            body: { userId, action: 'delete', targetId: roomId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione sala')
     },
 
     async deleteRestaurant(restaurantId: string) {
-        // 0. Recupera info ristorante per eliminare il logo e l'owner
-        const { data: restaurant } = await supabase
-            .from('restaurants')
-            .select('logo_url, owner_id')
-            .eq('id', restaurantId)
-            .single()
-
-        // 1. Elimina dipendenze complesse (Order Items)
-        const { data: orders } = await supabase
-            .from('orders')
-            .select('id')
-            .eq('restaurant_id', restaurantId)
-
-        if (orders && orders.length > 0) {
-            const orderIds = orders.map(o => o.id)
-            await supabase.from('order_items').delete().in('order_id', orderIds)
-        }
-
-        // 2. Elimina TUTTE le tabelle dipendenti da restaurant_id (ordine: foglie → radice)
-        await supabase.from('waiter_activity_logs').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('restaurant_staff').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('subscription_payments').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('restaurant_bonuses').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('restaurant_discounts').delete().eq('restaurant_id', restaurantId)
-
-        await supabase.from('orders').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('table_sessions').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('bookings').delete().eq('restaurant_id', restaurantId)
-
-        // Custom menus (dishes dipende da custom_menu_dishes che dipende da custom_menus)
-        const { data: menus } = await supabase.from('custom_menus').select('id').eq('restaurant_id', restaurantId)
-        if (menus && menus.length > 0) {
-            const menuIds = menus.map(m => m.id)
-            await supabase.from('custom_menu_schedules').delete().in('custom_menu_id', menuIds)
-            await supabase.from('custom_menu_dishes').delete().in('custom_menu_id', menuIds)
-        }
-        await supabase.from('custom_menus').delete().eq('restaurant_id', restaurantId)
-
-        await supabase.from('dishes').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('categories').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('tables').delete().eq('restaurant_id', restaurantId)
-        await supabase.from('rooms').delete().eq('restaurant_id', restaurantId)
-
-        // 3. Elimina logo dallo Storage se esiste
-        if (restaurant?.logo_url) {
-            try {
-                const urlParts = restaurant.logo_url.split('/')
-                const fileName = urlParts[urlParts.length - 1]
-
-                if (fileName) {
-                    await supabase.storage
-                        .from('logos')
-                        .remove([fileName])
-                }
-            } catch (e) {
-                console.warn("Could not delete logo file", e)
-            }
-        }
-
-        // 4. Infine elimina il ristorante
-        const { error } = await supabase
-            .from('restaurants')
-            .delete()
-            .eq('id', restaurantId)
-
-        if (error) throw error
-
-        // 5. Tenta di eliminare l'utente proprietario (se esiste), MA NON SE È ADMIN
-        if (restaurant?.owner_id) {
-            try {
-                const { data: user } = await supabase.from('users').select('role').eq('id', restaurant.owner_id).single()
-
-                if (user?.role !== 'ADMIN') {
-                    await supabase.from('users').delete().eq('id', restaurant.owner_id)
-                } else {
-                }
-            } catch (e) {
-                console.warn("Could not auto-delete owner user", e)
-            }
-        }
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'delete_restaurant', restaurantId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione ristorante')
     },
 
     async nukeDatabase() {
-        // ATTENZIONE: Ordine inverso di dipendenza per evitare errori di Foreign Key
-
-        // 1. Dati volatili di sessione
-        await supabase.from('pin_attempts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('cart_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('order_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('orders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('table_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-        // 2. Sistema Menu Personalizzati
-        await supabase.from('custom_menu_schedules').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('custom_menu_dishes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('custom_menus').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-        // 3. Struttura Menu e Locale
-        await supabase.from('dishes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('categories').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('tables').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('rooms').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-        // 4. Logs e dati admin
-        await supabase.from('waiter_activity_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('subscription_payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('restaurant_bonuses').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('restaurant_discounts').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-        // 5. Staff e Ristoranti
-        await supabase.from('restaurant_staff').delete().neq('restaurant_id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('restaurants').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-        // 6. Registrazioni e tokens
-        await supabase.from('pending_registrations').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('registration_tokens').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-        // 7. Archivi
-        await supabase.from('archived_order_items').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('archived_orders').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-        await supabase.from('archived_table_sessions').delete().neq('id', '00000000-0000-0000-0000-000000000000')
-
-        // 8. Utenti (tranne ADMIN)
-        await supabase.from('users').delete().neq('role', 'ADMIN')
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'nuke_database' }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore nuke database')
     },
 
     async updateUser(user: Partial<User>) {

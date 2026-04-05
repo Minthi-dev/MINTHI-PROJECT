@@ -176,7 +176,6 @@ export interface Table {
     number: string
     restaurant_id: string
     token: string
-    pin?: string
     seats?: number
     room_id?: string
     created_at?: string
