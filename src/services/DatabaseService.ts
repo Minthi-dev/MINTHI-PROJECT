@@ -1482,4 +1482,55 @@ export const DatabaseService = {
             .eq('id', discountId)
         if (error) throw error
     },
+
+    // === Auth helpers (used by LoginPage and App.tsx) ===
+
+    async verifyWaiterCredentials(username: string, _password: string) {
+        // Find staff member by username, join their restaurant
+        const { data, error } = await supabase
+            .from('restaurant_staff')
+            .select('id, name, username, password, is_active, restaurant_id, restaurant:restaurants(id, name, is_active)')
+            .eq('username', username)
+            .eq('is_active', true)
+            .limit(1)
+            .maybeSingle()
+        if (error || !data) return null
+        // Return credentials for client-side bcrypt verification
+        return {
+            id: data.id,
+            name: data.name,
+            username: data.username,
+            password: data.password,
+            restaurant: data.restaurant as any
+        }
+    },
+
+    async getRestaurantForLogin(ownerId: string) {
+        // Use the existing server-side RPC (SECURITY DEFINER, no RLS bypass needed)
+        const { data, error } = await supabase.rpc('get_restaurant_for_login', { p_owner_id: ownerId })
+        if (error || !data) return null
+        return data as { id: string, name: string, is_active: boolean }
+    },
+
+    async verifyStaffSession(staffId: string): Promise<boolean> {
+        // Use server-side RPC to check if staff member still exists and is active
+        const { data, error } = await supabase.rpc('verify_staff_session', { p_staff_id: staffId })
+        if (error) return false
+        return !!data
+    },
+
+    // === Admin aggregation (server-side, no unbounded client queries) ===
+
+    async getSalesByRestaurant(): Promise<Record<string, number>> {
+        const { data, error } = await supabase.rpc('get_sales_by_restaurant')
+        if (error) {
+            console.error('getSalesByRestaurant error:', error)
+            return {}
+        }
+        const sales: Record<string, number> = {}
+        ;(data || []).forEach((row: any) => {
+            sales[row.restaurant_id] = row.total_sales || 0
+        })
+        return sales
+    },
 }

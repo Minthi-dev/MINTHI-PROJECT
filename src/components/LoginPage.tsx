@@ -1,17 +1,15 @@
 import { motion } from 'framer-motion'
-import { verifyPassword } from '../utils/passwordUtils'
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { v4 as uuidv4 } from 'uuid'
-import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
-import { User, Table } from '../services/types'
+import { User } from '../services/types'
 import { Users, Eye, EyeSlash } from '@phosphor-icons/react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { supabase } from '../lib/supabase'
 
 interface Props {
   onLogin: (user: User) => void
@@ -58,129 +56,16 @@ export default function LoginPage({ onLogin }: Props) {
     setIsLoading(true)
 
     try {
-      const users = await DatabaseService.getUsers()
+      // Server-side login: edge function handles admin, owner, staff, and legacy waiter auth
+      // Password verification happens server-side via bcrypt — no hashes sent to client
+      const { data, error } = await supabase.functions.invoke('login', {
+        body: { username: username.trim(), password }
+      })
 
-      // Check for username or email match
-      let user: User | null = null
-      for (const u of users) {
-        const nameMatch = u.name?.toLowerCase() === username.toLowerCase()
-        const emailMatch = u.email?.toLowerCase() === username.toLowerCase()
-        if (nameMatch || emailMatch) {
-          const passwordMatch = await verifyPassword(password, u.password_hash || '')
-          if (passwordMatch) {
-            user = u
-            break
-          }
-        }
-      }
+      if (error || !data?.user) {
+        // Parse error message from edge function response
+        const errorMsg = typeof data === 'object' && data?.error ? data.error : 'Credenziali non valide'
 
-      // Check for Custom Waiter Credentials from restaurant_staff
-      if (!user) {
-        const staffCredentials = await DatabaseService.verifyWaiterCredentials(username, password)
-        if (staffCredentials && staffCredentials.restaurant) {
-          // Verify password in JS against stored hash
-          const staffPasswordMatch = await verifyPassword(password, staffCredentials.password || '')
-          if (staffPasswordMatch) {
-            const targetRestaurant = staffCredentials.restaurant
-            if (targetRestaurant.is_active === false) {
-              toast.error("Ristorante temporaneamente sospeso. Contatta l'amministrazione.")
-              setIsLoading(false)
-              return
-            }
-
-            // Successful Custom Waiter Login
-            const waiterUser: User = {
-              id: staffCredentials.id, // Use staff ID for analytics
-              name: staffCredentials.name,
-              email: staffCredentials.username + '@local',
-              role: 'STAFF',
-              restaurant_id: targetRestaurant.id
-            }
-
-            localStorage.setItem('minthi_user', JSON.stringify(waiterUser))
-            onLogin(waiterUser)
-            toast.success(`Benvenuto ${staffCredentials.name} - ${targetRestaurant.name}`)
-            setIsLoading(false)
-            return
-          }
-        }
-      }
-
-      // Check for Legacy Waiter Login (format: restaurantSlug_cameriere)
-      if (!user && username.includes('_cameriere')) {
-        const restaurants = await DatabaseService.getRestaurants()
-        const [slug] = username.split('_cameriere')
-
-        const targetRestaurant = restaurants.find(r =>
-          r.name.toLowerCase().replace(/\s+/g, '-') === slug.toLowerCase()
-        )
-
-        if (targetRestaurant && targetRestaurant.waiter_mode_enabled) {
-          // Check if restaurant is active
-          if (targetRestaurant.isActive === false) {
-            toast.error('Ristorante temporaneamente sospeso. Contatta l\'amministrazione.')
-            setIsLoading(false)
-            return
-          }
-
-          if (await verifyPassword(password, targetRestaurant.waiter_password || '')) {
-            // Successful Waiter Login
-            const waiterUser: User = {
-              id: uuidv4(),
-              name: 'Cameriere',
-              email: `waiter@${slug}.local`,
-              role: 'STAFF',
-              restaurant_id: targetRestaurant.id
-            }
-
-            // Always persist session to localStorage
-            localStorage.setItem('minthi_user', JSON.stringify(waiterUser))
-
-            onLogin(waiterUser)
-            toast.success(`Benvenuto Staff - ${targetRestaurant.name}`)
-            setIsLoading(false)
-            return
-          }
-        }
-      }
-
-      // Reset contatore tentativi in caso di match utente trovato
-      if (user) setLoginAttempts(0)
-
-      if (user) {
-        // If user is OWNER, we might want to fetch their restaurant here to ensure it exists
-        if (user.role === 'OWNER') {
-          const userRestaurant = await DatabaseService.getRestaurantForLogin(user.id)
-          if (!userRestaurant) {
-            toast.error('Nessun ristorante associato a questo account.')
-            setIsLoading(false)
-            return
-          }
-
-          // Check if restaurant is active
-          if (userRestaurant.is_active === false) {
-            toast.error('Il tuo ristorante è stato temporaneamente sospeso. Contatta l\'assistenza.')
-            setIsLoading(false)
-            return
-          }
-
-          // Attach restaurant_id to the user object
-          const userWithRestaurant = { ...user, restaurant_id: userRestaurant.id }
-
-          // Always persist session to localStorage
-          localStorage.setItem('minthi_user', JSON.stringify(userWithRestaurant))
-
-          onLogin(userWithRestaurant)
-          toast.success(`Benvenuto, ${userRestaurant.name}`)
-          return
-        }
-
-        // Always persist session to localStorage
-        localStorage.setItem('minthi_user', JSON.stringify(user))
-
-        onLogin(user)
-        toast.success(`Benvenuto ${user.name || 'Utente'}`)
-      } else {
         const newAttempts = loginAttempts + 1
         setLoginAttempts(newAttempts)
         if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
@@ -189,8 +74,15 @@ export default function LoginPage({ onLogin }: Props) {
           setLoginAttempts(0)
           toast.error('Troppi tentativi falliti. Account bloccato per 5 minuti.')
         } else {
-          toast.error(`Credenziali non valide (${newAttempts}/${MAX_LOGIN_ATTEMPTS} tentativi)`)
+          toast.error(`${errorMsg} (${newAttempts}/${MAX_LOGIN_ATTEMPTS})`)
         }
+      } else {
+        // Login successful — store user and proceed
+        const loggedUser: User = data.user
+        setLoginAttempts(0)
+        localStorage.setItem('minthi_user', JSON.stringify(loggedUser))
+        onLogin(loggedUser)
+        toast.success(data.restaurant_name ? `Benvenuto, ${data.restaurant_name}` : `Benvenuto ${loggedUser.name || 'Utente'}`)
       }
     } catch (error: any) {
       console.error('Login error:', error)

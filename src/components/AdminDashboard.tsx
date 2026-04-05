@@ -130,22 +130,11 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     }
   }, [activeView])
 
-  // Fetch aggregated sales per restaurant (lightweight, no realtime subscription on ALL orders)
+  // Fetch aggregated sales per restaurant (server-side RPC, no unbounded client query)
   useEffect(() => {
-    const fetchSales = async () => {
-      const { data } = await supabase
-        .from('orders')
-        .select('restaurant_id, total_amount')
-        .eq('status', 'PAID')
-      if (data) {
-        const sales: Record<string, number> = {}
-        data.forEach((o: any) => {
-          sales[o.restaurant_id] = (sales[o.restaurant_id] || 0) + (o.total_amount || 0)
-        })
-        setSalesByRestaurant(sales)
-      }
-    }
-    fetchSales()
+    DatabaseService.getSalesByRestaurant()
+      .then(sales => setSalesByRestaurant(sales))
+      .catch(console.error)
   }, [restaurants])
   const [impersonatedRestaurantId, setImpersonatedRestaurantId] = useState<string | null>(null)
 
