@@ -78,7 +78,7 @@ const WaiterOrderPage = () => {
                 setLoading(true)
                 const { data: tableData } = await supabase
                     .from('tables')
-                    .select('*, restaurants(*)')
+                    .select('id, number, restaurant_id, token, seats, room_id, created_at, is_active, last_assistance_request, restaurants(*)')
                     .eq('id', tableId)
                     .single()
 
