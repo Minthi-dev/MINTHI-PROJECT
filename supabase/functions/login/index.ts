@@ -79,64 +79,73 @@ serve(async (req) => {
 
         const trimmedUsername = username.trim().toLowerCase();
 
-        // 1. Check users table (ADMIN / OWNER)
-        const { data: users, error: usersError } = await supabase
+        // 1. Check users table (ADMIN / OWNER) - filter by username, not load all
+        let { data: matchedUsers, error: usersError } = await supabase
             .from("users")
-            .select("id, email, name, role, password_hash");
+            .select("id, email, name, role, password_hash")
+            .ilike("name", trimmedUsername)
+            .limit(1);
+
+        // If no match by name, try by email
+        if (!matchedUsers || matchedUsers.length === 0) {
+            const { data, error } = await supabase
+                .from("users")
+                .select("id, email, name, role, password_hash")
+                .ilike("email", trimmedUsername)
+                .limit(1);
+            matchedUsers = data;
+            usersError = error;
+        }
 
         if (usersError) {
-            console.error("[LOGIN] Error fetching users:", usersError);
+            console.error("[LOGIN] Error fetching user:", usersError);
             return new Response(JSON.stringify({ error: "Errore interno" }), {
                 status: 500,
                 headers: { ...cors, "Content-Type": "application/json" },
             });
         }
 
-        for (const u of users || []) {
-            const nameMatch = u.name?.toLowerCase() === trimmedUsername;
-            const emailMatch = u.email?.toLowerCase() === trimmedUsername;
-            if (nameMatch || emailMatch) {
-                const passwordMatch = await verifyBcrypt(password, u.password_hash || "");
-                if (passwordMatch) {
-                    // For OWNER, fetch restaurant
-                    let restaurant_id: string | null = null;
-                    let restaurant_name: string | null = null;
-                    let restaurant_active = true;
+        const u = matchedUsers?.[0];
+        if (u) {
+            const passwordMatch = await verifyBcrypt(password, u.password_hash || "");
+            if (passwordMatch) {
+                // For OWNER, fetch restaurant
+                let restaurant_id: string | null = null;
+                let restaurant_name: string | null = null;
 
-                    if (u.role === "OWNER") {
-                        const { data: rest } = await supabase.rpc("get_restaurant_for_login", {
-                            p_owner_id: u.id,
-                        });
-                        if (!rest) {
-                            return new Response(
-                                JSON.stringify({ error: "Nessun ristorante associato a questo account." }),
-                                { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
-                            );
-                        }
-                        if (rest.is_active === false) {
-                            return new Response(
-                                JSON.stringify({ error: "Il tuo ristorante è stato temporaneamente sospeso." }),
-                                { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
-                            );
-                        }
-                        restaurant_id = rest.id;
-                        restaurant_name = rest.name;
+                if (u.role === "OWNER") {
+                    const { data: rest } = await supabase.rpc("get_restaurant_for_login", {
+                        p_owner_id: u.id,
+                    });
+                    if (!rest) {
+                        return new Response(
+                            JSON.stringify({ error: "Nessun ristorante associato a questo account." }),
+                            { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
+                        );
                     }
-
-                    return new Response(
-                        JSON.stringify({
-                            user: {
-                                id: u.id,
-                                name: u.name,
-                                email: u.email,
-                                role: u.role,
-                                restaurant_id,
-                            },
-                            restaurant_name,
-                        }),
-                        { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
-                    );
+                    if (rest.is_active === false) {
+                        return new Response(
+                            JSON.stringify({ error: "Il tuo ristorante è stato temporaneamente sospeso." }),
+                            { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
+                        );
+                    }
+                    restaurant_id = rest.id;
+                    restaurant_name = rest.name;
                 }
+
+                return new Response(
+                    JSON.stringify({
+                        user: {
+                            id: u.id,
+                            name: u.name,
+                            email: u.email,
+                            role: u.role,
+                            restaurant_id,
+                        },
+                        restaurant_name,
+                    }),
+                    { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
+                );
             }
         }
 

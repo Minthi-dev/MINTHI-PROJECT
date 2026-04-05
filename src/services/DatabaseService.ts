@@ -2,6 +2,15 @@ import { supabase } from '../lib/supabase'
 import { User, Restaurant, Category, Dish, Table, TableSession, Order, OrderItem, Booking, CartItem } from './types'
 import { hashPassword } from '../utils/passwordUtils'
 
+// Helper: get current logged-in user ID from localStorage
+function _getCurrentUserId(): string | null {
+    try {
+        const saved = localStorage.getItem('minthi_user')
+        if (saved) return JSON.parse(saved).id
+    } catch { /* ignore */ }
+    return null
+}
+
 export const DatabaseService = {
     // Users
     async getUsers() {
@@ -64,8 +73,12 @@ export const DatabaseService = {
         delete payload.waiter_mode_enabled
         delete payload.allow_waiter_payments
 
-        const { error } = await supabase.from('restaurants').insert(payload)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'create_restaurant', data: payload }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione ristorante')
     },
 
     async updateRestaurant(restaurant: Partial<Restaurant>) {
@@ -106,22 +119,19 @@ export const DatabaseService = {
             payload.allow_waiter_payments = restaurant.allow_waiter_payments
         }
 
-        const { error } = await supabase
-            .from('restaurants')
-            .update(payload)
-            .eq('id', restaurant.id)
-
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
+            body: { userId, restaurantId: restaurant.id, data: payload }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ristorante')
     },
 
-    async adminUpdateRestaurant(restaurantId: string, updates: Partial<any>, _adminUser: User) {
-        // Direct update - admin is already authenticated in the frontend
-        const { error } = await supabase
-            .from('restaurants')
-            .update(updates)
-            .eq('id', restaurantId)
-
-        if (error) throw error;
+    async adminUpdateRestaurant(restaurantId: string, updates: Partial<any>, adminUser: User) {
+        const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
+            body: { userId: adminUser.id, restaurantId, data: updates }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ristorante')
     },
 
     // Rooms
@@ -320,32 +330,32 @@ export const DatabaseService = {
     },
 
     async createStaff(staff: Omit<any, 'id' | 'created_at'>) {
-        const payload = { ...staff }
-        if (payload.password) {
-            payload.password = await hashPassword(payload.password)
-        }
-        const { error } = await supabase.from('restaurant_staff').insert(payload)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        // Password hashing happens server-side in the edge function
+        const { data, error } = await supabase.functions.invoke('secure-staff-manage', {
+            body: { userId, restaurantId: staff.restaurant_id, action: 'create', data: staff }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione staff')
     },
 
     async updateStaff(staffId: string, updates: Partial<any>) {
-        const payload = { ...updates }
-        if (payload.password) {
-            payload.password = await hashPassword(payload.password)
-        }
-        const { error } = await supabase
-            .from('restaurant_staff')
-            .update(payload)
-            .eq('id', staffId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        // Password hashing happens server-side in the edge function
+        const { data, error } = await supabase.functions.invoke('secure-staff-manage', {
+            body: { userId, action: 'update', staffId, data: updates }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento staff')
     },
 
     async deleteStaff(staffId: string) {
-        const { error } = await supabase
-            .from('restaurant_staff')
-            .delete()
-            .eq('id', staffId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-staff-manage', {
+            body: { userId, action: 'delete', staffId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione staff')
     },
 
     // Waiter Activity Logs
@@ -1079,11 +1089,12 @@ export const DatabaseService = {
 
     // Stripe - Toggle pagamenti clienti
     async toggleStripePayments(restaurantId: string, enabled: boolean) {
-        const { error } = await supabase
-            .from('restaurants')
-            .update({ enable_stripe_payments: enabled })
-            .eq('id', restaurantId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
+            body: { userId, restaurantId, data: { enable_stripe_payments: enabled } }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento pagamenti')
     },
 
     // Stripe - Billing Portal (gestisci abbonamento, scarica fatture, cambia metodo pagamento)
@@ -1156,11 +1167,12 @@ export const DatabaseService = {
 
     // Aggiorna dati fiscali del ristorante (P.IVA, ragione sociale)
     async updateRestaurantPaymentInfo(restaurantId: string, info: { vat_number?: string; billing_name?: string }) {
-        const { error } = await supabase
-            .from('restaurants')
-            .update(info)
-            .eq('id', restaurantId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
+            body: { userId, restaurantId, data: info }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento dati fiscali')
     },
 
     // Stripe Connect - Open Express Dashboard for payout management
@@ -1272,13 +1284,12 @@ export const DatabaseService = {
 
     // Mark orders as paid via stripe
     async markOrdersPaidStripe(orderIds: string[]) {
-        for (const id of orderIds) {
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: 'PAID', payment_method: 'stripe', closed_at: new Date().toISOString() })
-                .eq('id', id)
-            if (error) throw error
-        }
+        if (orderIds.length === 0) return
+        const { error } = await supabase
+            .from('orders')
+            .update({ status: 'PAID', payment_method: 'stripe', closed_at: new Date().toISOString() })
+            .in('id', orderIds)
+        if (error) throw error
     },
 
     // App Config (global settings)

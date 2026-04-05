@@ -206,7 +206,7 @@ serve(async (req) => {
                         console.log(`[WEBHOOK] ✅ Ristorante creato da pending registration ${pendingRegistrationId}:`, JSON.stringify(rpcResult));
                     } else if (restaurantId) {
                         // Ristorante esistente: aggiorna stato abbonamento
-                        await supabase
+                        const { error: activationError } = await supabase
                             .from("restaurants")
                             .update({
                                 stripe_customer_id: customerId,
@@ -216,6 +216,11 @@ serve(async (req) => {
                                 subscription_status: "active",
                             })
                             .eq("id", restaurantId);
+
+                        if (activationError) {
+                            console.error(`[WEBHOOK] ERRORE CRITICO attivazione ristorante ${restaurantId}:`, JSON.stringify(activationError));
+                            return new Response(JSON.stringify({ error: `Activation failed: ${activationError.message}` }), { status: 500, headers: webhookCorsHeaders });
+                        }
 
                         console.log(`[WEBHOOK] ✅ Ristorante ${restaurantId} attivato con abbonamento!`);
                     } else {

@@ -111,29 +111,31 @@ const AppContent = () => {
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser)
-        setUser(parsedUser)
-        setLoading(false)
 
-        // Server-side role validation: verify user still exists with claimed role
+        // Server-side role validation BEFORE granting access
         // This prevents localStorage manipulation attacks
-        if (parsedUser.role === 'ADMIN' || parsedUser.role === 'OWNER') {
-          supabase.from('users').select('id, role').eq('id', parsedUser.id).single()
-            .then(({ data }) => {
-              if (!data || data.role !== parsedUser.role) {
-                // Role mismatch or user deleted — force logout
-                localStorage.removeItem('minthi_user')
-                setUser(null)
-              }
-            })
-        } else if (parsedUser.role === 'STAFF') {
-          DatabaseService.verifyStaffSession(parsedUser.id)
-            .then((valid) => {
-              if (!valid) {
-                localStorage.removeItem('minthi_user')
-                setUser(null)
-              }
-            })
+        const validate = async () => {
+          try {
+            let valid = false
+            if (parsedUser.role === 'ADMIN' || parsedUser.role === 'OWNER') {
+              const { data } = await supabase.from('users').select('id, role').eq('id', parsedUser.id).single()
+              valid = !!(data && data.role === parsedUser.role)
+            } else if (parsedUser.role === 'STAFF') {
+              valid = await DatabaseService.verifyStaffSession(parsedUser.id)
+            }
+
+            if (valid) {
+              setUser(parsedUser)
+            } else {
+              localStorage.removeItem('minthi_user')
+            }
+          } catch {
+            localStorage.removeItem('minthi_user')
+          } finally {
+            setLoading(false)
+          }
         }
+        validate()
         return
       } catch (e) {
         localStorage.removeItem('minthi_user')
