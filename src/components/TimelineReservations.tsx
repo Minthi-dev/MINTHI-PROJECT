@@ -420,6 +420,12 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
     const rawMinutes = getPointerMinutesFromX(e.clientX, e.currentTarget as HTMLElement);
     const roundedMinutes = Math.round(rawMinutes / 15) * 15
 
+    // Block booking outside service segments (gap between lunch and dinner)
+    if (timelineSegments.length > 1 && !isInSegment(roundedMinutes)) {
+      toast.error('Non puoi prenotare fuori dagli orari di servizio')
+      return
+    }
+
     setDraftSlot({
       tableId,
       startMinutes: roundedMinutes,
@@ -497,6 +503,12 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
     const finalTime = minutesToTime(finalStartMinutes);
 
     setDraftSlot(null) // clear drag state immediately
+
+    // Block booking outside service segments
+    if (timelineSegments.length > 1 && !isInSegment(finalStartMinutes)) {
+      toast.error('Non puoi prenotare fuori dagli orari di servizio')
+      return
+    }
 
     if (hasConflict(finalTableId, finalTime, reservationDuration)) {
       toast.error('Orario già occupato')

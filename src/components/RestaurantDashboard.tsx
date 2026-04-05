@@ -17,7 +17,7 @@ import { Badge } from './ui/badge'
 import { Separator } from './ui/separator'
 import { ScrollArea } from './ui/scroll-area'
 import { Textarea } from './ui/textarea'
-import { hashPassword } from '../utils/passwordUtils'
+import { hashPassword, verifyPassword } from '../utils/passwordUtils'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import {
@@ -57,7 +57,10 @@ import {
   Sparkle,
   DotsSixVertical,
   Tag,
-  CreditCard
+  CreditCard,
+  Lock,
+  LockOpen,
+  ShieldCheck
 } from '@phosphor-icons/react'
 import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -109,6 +112,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
   const [tableSearchTerm, setTableSearchTerm] = useState('')
+
+  // Analytics password state
+  const [analyticsUnlocked, setAnalyticsUnlocked] = useState(false)
+  const [showAnalyticsPasswordDialog, setShowAnalyticsPasswordDialog] = useState(false)
+  const [analyticsNewPassword, setAnalyticsNewPassword] = useState('')
+  const [showAnalyticsSetupDialog, setShowAnalyticsSetupDialog] = useState(false)
+  const [showAnalyticsManageDialog, setShowAnalyticsManageDialog] = useState(false)
+  const [analyticsPasswordInput, setAnalyticsPasswordInput] = useState('')
+  const [analyticsConfirmPassword, setAnalyticsConfirmPassword] = useState('')
+  const [analyticsPasswordVisible, setAnalyticsPasswordVisible] = useState(false)
+  const [analyticsPasswordError, setAnalyticsPasswordError] = useState('')
 
   // Demo Guide & Setup Wizard state (first-access flow)
   const [showDemoGuide, setShowDemoGuide] = useState(false)
@@ -2061,6 +2075,23 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     }`}
                   onClick={() => {
                     const section = item.id
+                    // Analytics password gate
+                    if (section === 'analytics' && !analyticsUnlocked) {
+                      const hasPassword = !!currentRestaurant?.analytics_password_hash
+                      if (hasPassword) {
+                        setAnalyticsPasswordInput('')
+                        setAnalyticsPasswordError('')
+                        setAnalyticsPasswordVisible(false)
+                        setShowAnalyticsPasswordDialog(true)
+                      } else {
+                        setAnalyticsNewPassword('')
+                        setAnalyticsConfirmPassword('')
+                        setAnalyticsPasswordVisible(false)
+                        setShowAnalyticsSetupDialog(true)
+                      }
+                      setIsSidebarOpen(false)
+                      return
+                    }
                     setActiveTab(section)
                     setActiveSection(section)
                     // Auto collapsing logic
@@ -4085,6 +4116,33 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 completedOrders={pastOrders}
                 restaurantName={restaurantName}
                 restaurantId={restaurantId || ''}
+                weeklyServiceHours={weeklyServiceHours}
+                passwordButton={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300 hover:text-amber-500 hover:border-amber-500/30 gap-2"
+                    onClick={() => {
+                      setAnalyticsNewPassword('')
+                      setAnalyticsConfirmPassword('')
+                      setAnalyticsPasswordError('')
+                      setAnalyticsPasswordVisible(false)
+                      setShowAnalyticsManageDialog(true)
+                    }}
+                  >
+                    {currentRestaurant?.analytics_password_hash ? (
+                      <>
+                        <Lock size={16} />
+                        Modifica password
+                      </>
+                    ) : (
+                      <>
+                        <LockOpen size={16} />
+                        Configura password analitiche
+                      </>
+                    )}
+                  </Button>
+                }
               />
             </TabsContent >
 
@@ -5101,6 +5159,212 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           }}
         />
       )}
+
+      {/* Analytics Password — Full-Screen Password Entry */}
+      {showAnalyticsPasswordDialog && (
+        <div className="fixed inset-0 z-50 bg-zinc-950 flex items-center justify-center">
+          <div className="w-full max-w-sm mx-auto px-6 space-y-6 text-center">
+            <div className="space-y-2">
+              <Lock size={32} className="text-amber-500 mx-auto" />
+              <h2 className="text-xl font-semibold text-zinc-100">Accesso Analitiche</h2>
+              <p className="text-zinc-400 text-sm">Inserisci la password per accedere</p>
+            </div>
+            <div className="space-y-4">
+              <div className="relative">
+                <Input
+                  type={analyticsPasswordVisible ? 'text' : 'password'}
+                  value={analyticsPasswordInput}
+                  onChange={e => { setAnalyticsPasswordInput(e.target.value); setAnalyticsPasswordError('') }}
+                  placeholder="Password..."
+                  className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
+                  onKeyDown={async e => {
+                    if (e.key === 'Enter' && analyticsPasswordInput) {
+                      const ok = await verifyPassword(analyticsPasswordInput, currentRestaurant?.analytics_password_hash || '')
+                      if (ok) {
+                        setAnalyticsUnlocked(true)
+                        setShowAnalyticsPasswordDialog(false)
+                        setActiveTab('analytics')
+                        setActiveSection('analytics')
+                      } else {
+                        setAnalyticsPasswordError('Password errata')
+                      }
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              {analyticsPasswordError && (
+                <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
+              )}
+              <Button
+                className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                onClick={async () => {
+                  const ok = await verifyPassword(analyticsPasswordInput, currentRestaurant?.analytics_password_hash || '')
+                  if (ok) {
+                    setAnalyticsUnlocked(true)
+                    setShowAnalyticsPasswordDialog(false)
+                    setActiveTab('analytics')
+                    setActiveSection('analytics')
+                  } else {
+                    setAnalyticsPasswordError('Password errata')
+                  }
+                }}
+                disabled={!analyticsPasswordInput}
+              >
+                Accedi
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full h-10 text-zinc-500 hover:text-zinc-300"
+                onClick={() => setShowAnalyticsPasswordDialog(false)}
+              >
+                Annulla
+              </Button>
+            </div>
+            <p className="text-zinc-600 text-xs pt-4">Per assistenza: +39 351 7570155</p>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Password — First Time Setup (full-screen) */}
+      {showAnalyticsSetupDialog && (
+        <div className="fixed inset-0 z-50 bg-zinc-950 flex items-center justify-center">
+          <div className="w-full max-w-sm mx-auto px-6 space-y-6 text-center">
+            <div className="space-y-2">
+              <ShieldCheck size={32} className="text-amber-500 mx-auto" />
+              <h2 className="text-xl font-semibold text-zinc-100">Proteggi le Analitiche</h2>
+              <p className="text-zinc-400 text-sm">Imposta una password per impedire ai cuochi di vedere le analitiche. Puoi farlo anche dopo.</p>
+            </div>
+            <div className="space-y-4">
+              <div className="relative">
+                <Input
+                  type={analyticsPasswordVisible ? 'text' : 'password'}
+                  value={analyticsNewPassword}
+                  onChange={e => setAnalyticsNewPassword(e.target.value)}
+                  placeholder="Nuova password..."
+                  className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              {analyticsPasswordError && (
+                <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
+              )}
+              <Button
+                className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+                onClick={async () => {
+                  if (analyticsNewPassword.length < 4) {
+                    setAnalyticsPasswordError('La password deve avere almeno 4 caratteri')
+                    return
+                  }
+                  const hashed = await hashPassword(analyticsNewPassword)
+                  await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', restaurantId)
+                  refreshRestaurants()
+                  setAnalyticsUnlocked(true)
+                  setShowAnalyticsSetupDialog(false)
+                  setActiveTab('analytics')
+                  setActiveSection('analytics')
+                  toast.success('Password analitiche impostata')
+                }}
+                disabled={!analyticsNewPassword}
+              >
+                Imposta Password
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full h-10 text-zinc-400 hover:text-zinc-200"
+                onClick={() => {
+                  setAnalyticsUnlocked(true)
+                  setShowAnalyticsSetupDialog(false)
+                  setActiveTab('analytics')
+                  setActiveSection('analytics')
+                }}
+              >
+                Salta per ora
+              </Button>
+            </div>
+            <p className="text-zinc-600 text-xs pt-4">Per assistenza: +39 351 7570155</p>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Password — Manage Dialog (change/remove) */}
+      <Dialog open={showAnalyticsManageDialog} onOpenChange={setShowAnalyticsManageDialog}>
+        <DialogContent className="sm:max-w-sm bg-zinc-950 border-white/10 text-zinc-100 p-6 rounded-2xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Gear size={22} className="text-amber-500" />
+              Gestisci Password Analitiche
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="relative">
+              <Input
+                type={analyticsPasswordVisible ? 'text' : 'password'}
+                value={analyticsNewPassword}
+                onChange={e => setAnalyticsNewPassword(e.target.value)}
+                placeholder="Nuova password..."
+                className="h-12 text-base bg-zinc-900 border-white/10 pr-12"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setAnalyticsPasswordVisible(!analyticsPasswordVisible)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+              >
+                {analyticsPasswordVisible ? <EyeSlash size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+            {analyticsPasswordError && (
+              <p className="text-red-400 text-sm">{analyticsPasswordError}</p>
+            )}
+            <Button
+              className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
+              onClick={async () => {
+                if (analyticsNewPassword.length < 4) {
+                  setAnalyticsPasswordError('La password deve avere almeno 4 caratteri')
+                  return
+                }
+                const hashed = await hashPassword(analyticsNewPassword)
+                await supabase.from('restaurants').update({ analytics_password_hash: hashed }).eq('id', restaurantId)
+                refreshRestaurants()
+                setShowAnalyticsManageDialog(false)
+                toast.success('Password analitiche aggiornata')
+              }}
+              disabled={!analyticsNewPassword}
+            >
+              Salva Nuova Password
+            </Button>
+            {currentRestaurant?.analytics_password_hash && (
+              <Button
+                variant="ghost"
+                className="w-full h-10 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                onClick={async () => {
+                  await supabase.from('restaurants').update({ analytics_password_hash: null }).eq('id', restaurantId)
+                  refreshRestaurants()
+                  setShowAnalyticsManageDialog(false)
+                  toast.success('Password analitiche rimossa')
+                }}
+              >
+                Rimuovi Password
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Setup Wizard - assisted configuration */}
       {showSetupWizard && !isDemoActive && (
