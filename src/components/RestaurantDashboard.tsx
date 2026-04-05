@@ -1156,6 +1156,26 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }
 
+  // Course Suggestions State
+  const [optimisticCourseSuggestions, setOptimisticCourseSuggestions] = useState<boolean | null>(null)
+  const courseSuggestionsEnabled = optimisticCourseSuggestions ?? (currentRestaurant as any)?.enable_course_suggestions ?? false
+
+  const updateCourseSuggestions = async (enabled: boolean) => {
+    if (demoGuard()) return
+    setOptimisticCourseSuggestions(enabled)
+    if (!restaurantId) return
+    try {
+      await DatabaseService.updateRestaurant({
+        id: restaurantId,
+        enable_course_suggestions: enabled
+      } as any)
+      toast.success(enabled ? 'Suggerimenti portate attivati' : 'Suggerimenti portate disattivati')
+    } catch (error) {
+      console.error('Error updating course suggestions:', error)
+      toast.error('Errore durante l\'aggiornamento')
+      setOptimisticCourseSuggestions(null)
+    }
+  }
 
   // --- Handlers ---
   const updateRestaurantName = async (name: string) => {
@@ -4134,6 +4154,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                 showCookingTimes={showCookingTimes}
                 setShowCookingTimes={updateShowCookingTimes}
+
+                courseSuggestionsEnabled={courseSuggestionsEnabled}
+                setCourseSuggestionsEnabled={(val) => { setOptimisticCourseSuggestions(val) }}
+                updateCourseSuggestions={updateCourseSuggestions}
 
                 copertoPrice={copertoPrice}
                 setCopertoPrice={updateCopertoPrice}
