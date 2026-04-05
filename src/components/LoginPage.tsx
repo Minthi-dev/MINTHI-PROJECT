@@ -15,18 +15,12 @@ interface Props {
   onLogin: (user: User) => void
 }
 
-// Costanti per rate limiting login
-const MAX_LOGIN_ATTEMPTS = 5
-const LOCKOUT_DURATION_MS = 5 * 60 * 1000 // 5 minuti
-
 export default function LoginPage({ onLogin }: Props) {
   const [isLoading, setIsLoading] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
-  const [loginAttempts, setLoginAttempts] = useState(0)
-  const [lockoutUntil, setLockoutUntil] = useState<Date | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [paymentSuccess, setPaymentSuccess] = useState(false)
@@ -45,52 +39,32 @@ export default function LoginPage({ onLogin }: Props) {
   }, [searchParams, setSearchParams])
 
   const handleAdminLogin = async () => {
-    // Rate limiting check
-    if (lockoutUntil && new Date() < lockoutUntil) {
-      const remainingMs = lockoutUntil.getTime() - Date.now()
-      const remainingMin = Math.ceil(remainingMs / 60000)
-      toast.error(`Troppi tentativi falliti. Riprova tra ${remainingMin} minuto/i.`)
-      return
-    }
-
     setIsLoading(true)
 
     try {
-      // Server-side login: edge function handles admin, owner, staff, and legacy waiter auth
-      // Password verification happens server-side via bcrypt — no hashes sent to client
       const { data, error } = await supabase.functions.invoke('login', {
         body: { username: username.trim(), password }
       })
 
       if (error || !data?.user) {
-        // Parse error message from edge function response
-        const errorMsg = typeof data === 'object' && data?.error ? data.error : 'Credenziali non valide'
-
-        const newAttempts = loginAttempts + 1
-        setLoginAttempts(newAttempts)
-        if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
-          const lockout = new Date(Date.now() + LOCKOUT_DURATION_MS)
-          setLockoutUntil(lockout)
-          setLoginAttempts(0)
-          toast.error('Troppi tentativi falliti. Account bloccato per 5 minuti.')
-        } else {
-          toast.error(`${errorMsg} (${newAttempts}/${MAX_LOGIN_ATTEMPTS})`)
+        // Extract error message: try data.error, then error.message
+        let errorMsg = 'Credenziali non valide'
+        if (data?.error) {
+          errorMsg = data.error
+        } else if (error?.message && !error.message.includes('non-2xx')) {
+          errorMsg = error.message
         }
+        toast.error(errorMsg)
       } else {
-        // Login successful — store user and proceed
         const loggedUser: User = data.user
-        setLoginAttempts(0)
         localStorage.setItem('minthi_user', JSON.stringify(loggedUser))
         onLogin(loggedUser)
         toast.success(data.restaurant_name ? `Benvenuto, ${data.restaurant_name}` : `Benvenuto ${loggedUser.name || 'Utente'}`)
       }
     } catch (error: any) {
       console.error('Login error:', error)
-      // Provide more specific error messages based on error type
       if (error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
         toast.error('Errore di connessione al server. Verifica la tua connessione internet.')
-      } else if (error.message?.includes('ERR_NAME_NOT_RESOLVED')) {
-        toast.error('Server non raggiungibile. Contatta il supporto.')
       } else {
         toast.error('Errore durante il login. Riprova.')
       }

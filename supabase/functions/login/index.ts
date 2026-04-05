@@ -1,40 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { hash as bcryptHash, compare as bcryptCompare } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
+import { compare as bcryptCompare } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
-
-// Rate limiting: track failed attempts per IP
-const failedAttempts = new Map<string, { count: number; lastAttempt: number }>();
-const MAX_ATTEMPTS = 10;
-const LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
-
-function checkRateLimit(ip: string): { blocked: boolean; remaining: number } {
-    const now = Date.now();
-    const entry = failedAttempts.get(ip);
-    if (!entry) return { blocked: false, remaining: MAX_ATTEMPTS };
-    if (now - entry.lastAttempt > LOCKOUT_MS) {
-        failedAttempts.delete(ip);
-        return { blocked: false, remaining: MAX_ATTEMPTS };
-    }
-    if (entry.count >= MAX_ATTEMPTS) return { blocked: true, remaining: 0 };
-    return { blocked: false, remaining: MAX_ATTEMPTS - entry.count };
-}
-
-function recordFailedAttempt(ip: string) {
-    const now = Date.now();
-    const entry = failedAttempts.get(ip);
-    if (!entry) {
-        failedAttempts.set(ip, { count: 1, lastAttempt: now });
-    } else {
-        entry.count++;
-        entry.lastAttempt = now;
-    }
-}
 
 async function verifyBcrypt(plaintext: string, storedHash: string): Promise<boolean> {
     if (!storedHash) return false;
@@ -58,15 +30,6 @@ serve(async (req) => {
         });
     }
 
-    const ip = req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "unknown";
-    const rateCheck = checkRateLimit(ip);
-    if (rateCheck.blocked) {
-        return new Response(JSON.stringify({ error: "Troppi tentativi. Riprova tra 5 minuti." }), {
-            status: 429,
-            headers: { ...cors, "Content-Type": "application/json" },
-        });
-    }
-
     try {
         const { username, password } = await req.json();
 
@@ -79,7 +42,7 @@ serve(async (req) => {
 
         const trimmedUsername = username.trim().toLowerCase();
 
-        // 1. Check users table (ADMIN / OWNER) - filter by username, not load all
+        // 1. Check users table (ADMIN / OWNER) - filter by name then email (case-insensitive)
         let { data: matchedUsers, error: usersError } = await supabase
             .from("users")
             .select("id, email, name, role, password_hash")
@@ -149,13 +112,15 @@ serve(async (req) => {
             }
         }
 
-        // 2. Check restaurant_staff (custom waiter credentials)
-        const { data: staffData } = await supabase
+        // 2. Check restaurant_staff (custom waiter credentials) — case-insensitive
+        const { data: staffList } = await supabase
             .from("restaurant_staff")
             .select("id, restaurant_id, name, username, password, is_active, restaurant:restaurants(id, name, waiter_mode_enabled, is_active)")
-            .eq("username", trimmedUsername)
+            .ilike("username", trimmedUsername)
             .eq("is_active", true)
-            .maybeSingle();
+            .limit(1);
+
+        const staffData = staffList?.[0];
 
         if (staffData && staffData.password) {
             const staffMatch = await verifyBcrypt(password, staffData.password);
@@ -224,7 +189,6 @@ serve(async (req) => {
         }
 
         // Failed login
-        recordFailedAttempt(ip);
         return new Response(
             JSON.stringify({ error: "Credenziali non valide" }),
             { status: 401, headers: { ...cors, "Content-Type": "application/json" } }
