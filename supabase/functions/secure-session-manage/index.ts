@@ -45,6 +45,7 @@ serve(async (req) => {
                     restaurant_id: data.restaurant_id || targetRestaurantId,
                     table_id: data.table_id,
                     status: "OPEN",
+                    opened_at: data.opened_at || new Date().toISOString(),
                     session_pin: data.session_pin || null,
                     customer_count: data.customer_count || null,
                     coperto_enabled: data.coperto_enabled ?? null,

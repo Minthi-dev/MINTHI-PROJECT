@@ -165,7 +165,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     DatabaseService.getRooms(rId),
                     DatabaseService.getDishes(rId),
                     DatabaseService.getCategories(rId),
-                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled').eq('restaurant_id', rId).eq('status', 'OPEN'),
+                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled, paid_amount, receipt_issued, notes').eq('restaurant_id', rId).eq('status', 'OPEN'),
                     supabase.from('orders')
                         .select(`
                             id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
@@ -208,7 +208,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!restaurantId) return
         const { data: sess } = await supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled, paid_amount, receipt_issued, notes')
             .eq('restaurant_id', restaurantId)
             .eq('status', 'OPEN')
         if (sess) setSessions(sess as TableSession[])
