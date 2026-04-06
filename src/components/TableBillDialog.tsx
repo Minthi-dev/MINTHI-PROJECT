@@ -802,7 +802,6 @@ export default function TableBillDialog({
                                             className="flex-1 h-12 bg-green-600 hover:bg-green-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-green-500/20 disabled:opacity-40"
                                             disabled={paidPersons < customSplitCount}
                                             onClick={() => {
-                                                toast.success(`Tavolo ${table?.number} saldato alla romana`, { duration: 3000 })
                                                 onPaymentComplete()
                                             }}
                                         >
@@ -839,7 +838,6 @@ export default function TableBillDialog({
                                         <Button
                                             className="w-full h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xl rounded-2xl shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-2 px-6"
                                             onClick={() => {
-                                                toast.success(`Tavolo ${table?.number} saldato`, { duration: 3000 })
                                                 onPaymentComplete()
                                             }}
                                         >
@@ -850,7 +848,6 @@ export default function TableBillDialog({
                                         <Button
                                             className="w-full h-14 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xl rounded-2xl shadow-xl shadow-amber-500/20 flex items-center justify-between px-6"
                                             onClick={() => {
-                                                toast.success(`Tavolo ${table?.number} saldato`, { duration: 3000 })
                                                 onPaymentComplete()
                                             }}
                                             disabled={remainingAmount <= 0 && totalAmount <= 0}

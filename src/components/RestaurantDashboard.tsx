@@ -4806,44 +4806,45 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '32px',
+                    gap: '0',
                     color: '#000000',
                     width: '120mm',
                     maxWidth: '100%'
                   }}>
                     {/* Thin decorative line */}
-                    <div style={{ width: '40px', height: '2px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                    <div style={{ width: '40px', height: '2px', backgroundColor: '#d4d4d8', borderRadius: '1px', marginBottom: '28px' }} />
 
-                    {/* Table Name */}
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        margin: '0 0 10px 0',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.35em',
-                        color: '#000000',
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
-                      }}>
-                        TAVOLO
-                      </p>
-                      <h1 style={{
-                        fontSize: '72px',
-                        lineHeight: '1.2',
-                        fontWeight: '400',
-                        margin: 0,
-                        color: '#000000',
-                        fontFamily: 'Georgia, "Times New Roman", serif'
-                      }}>
-                        {selectedTableForActions?.number}
-                      </h1>
-                    </div>
+                    {/* TAVOLO label */}
+                    <p style={{
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      margin: '0 0 14px 0',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.35em',
+                      color: '#000000',
+                      fontFamily: 'system-ui, -apple-system, sans-serif'
+                    }}>
+                      TAVOLO
+                    </p>
+
+                    {/* Table Number */}
+                    <h1 style={{
+                      fontSize: '72px',
+                      lineHeight: '1',
+                      fontWeight: '400',
+                      margin: '0 0 14px 0',
+                      color: '#000000',
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      textAlign: 'center'
+                    }}>
+                      {selectedTableForActions?.number}
+                    </h1>
 
                     {/* CTA */}
                     <p style={{
                       fontSize: '10px',
                       fontWeight: '700',
-                      margin: 0,
+                      margin: '0 0 28px 0',
                       textTransform: 'uppercase',
                       letterSpacing: '0.2em',
                       color: '#000000',
@@ -4854,24 +4855,23 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     </p>
 
                     {/* QR Code */}
-                    <div style={{ padding: '8px', border: '1px solid #e4e4e7', borderRadius: '8px' }}>
+                    <div style={{ padding: '8px', border: '1px solid #e4e4e7', borderRadius: '8px', marginBottom: '28px' }}>
                       <QRCodeGenerator value={generateQrCode(selectedTableForActions?.id || '')} size={200} />
                     </div>
 
                     {/* Restaurant Name */}
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        margin: 0,
-                        color: '#000000',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.25em',
-                        fontFamily: 'system-ui, -apple-system, sans-serif'
-                      }}>
-                        {currentRestaurant?.name || 'Ristorante'}
-                      </p>
-                    </div>
+                    <p style={{
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      margin: '0 0 28px 0',
+                      color: '#000000',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.25em',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      textAlign: 'center'
+                    }}>
+                      {currentRestaurant?.name || 'Ristorante'}
+                    </p>
 
                     {/* Thin decorative line */}
                     <div style={{ width: '40px', height: '2px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
@@ -5059,42 +5059,44 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '5mm', // Increased gap
+                      gap: '0',
                       color: '#000000',
                       boxSizing: 'border-box'
                     }}>
                       {/* Decorative line */}
-                      <div style={{ width: '24px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px' }} />
+                      <div style={{ width: '24px', height: '1.5px', backgroundColor: '#d4d4d8', borderRadius: '1px', marginBottom: '4mm' }} />
 
-                      {/* Table Name */}
-                      <div style={{ textAlign: 'center' }}>
-                        <p style={{
-                          fontSize: '9px',
-                          fontWeight: '700',
-                          margin: '0 0 6px 0',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.35em',
-                          color: '#000000',
-                          fontFamily: 'system-ui, -apple-system, sans-serif'
-                        }}>
-                          TAVOLO
-                        </p>
-                        <h1 style={{
-                          fontSize: '48px',
-                          lineHeight: '1.2',
-                          fontWeight: '400',
-                          margin: 0,
-                          color: '#000000',
-                          fontFamily: 'Georgia, "Times New Roman", serif'
-                        }}>
-                          {table.number}
-                        </h1>
-                      </div>
+                      {/* TAVOLO label */}
+                      <p style={{
+                        fontSize: '9px',
+                        fontWeight: '700',
+                        margin: '0 0 2mm 0',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.35em',
+                        color: '#000000',
+                        fontFamily: 'system-ui, -apple-system, sans-serif'
+                      }}>
+                        TAVOLO
+                      </p>
 
+                      {/* Table Number */}
+                      <h1 style={{
+                        fontSize: '48px',
+                        lineHeight: '1',
+                        fontWeight: '400',
+                        margin: '0 0 2mm 0',
+                        color: '#000000',
+                        fontFamily: 'Georgia, "Times New Roman", serif',
+                        textAlign: 'center'
+                      }}>
+                        {table.number}
+                      </h1>
+
+                      {/* CTA */}
                       <p style={{
                         fontSize: '7px',
                         fontWeight: '700',
-                        margin: 0,
+                        margin: '0 0 4mm 0',
                         textTransform: 'uppercase',
                         letterSpacing: '0.2em',
                         color: '#000000',
@@ -5103,8 +5105,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       }}>
                         {viewOnlyMenuEnabled ? 'Scansiona per visualizzare il menù' : currentRestaurant?.enable_stripe_payments ? 'Scansiona per ordinare e pagare' : 'Scansiona per ordinare'}
                       </p>
+
                       {/* QR Code */}
-                      < div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ padding: '2mm', border: '1px solid #e4e4e7', borderRadius: '6px', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '4mm' }}>
                         <QRCodeGenerator value={generateQrCode(table.id)} size={140} />
                       </div>
 

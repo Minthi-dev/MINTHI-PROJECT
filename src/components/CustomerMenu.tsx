@@ -1463,6 +1463,9 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         course_number: targetCourse
       })
 
+      // Aggiorna cart locale subito (non affidarsi solo a Realtime per RPC)
+      await fetchCart()
+
       if (quantity > 0) {
         setIsCartAnimating(true)
         timersRef.current.push(setTimeout(() => setIsCartAnimating(false), 500))
