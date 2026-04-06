@@ -34,12 +34,11 @@ export const DatabaseService = {
         if (error) throw error
         return data.map((r: any) => ({
             ...r,
-            isActive: r.is_active, // Mappa is_active (DB) a isActive (Frontend)
+            isActive: r.is_active,
             allYouCanEat: r.all_you_can_eat,
             coverChargePerPerson: r.cover_charge_per_person,
             waiter_mode_enabled: r.waiter_mode_enabled,
             allow_waiter_payments: r.allow_waiter_payments,
-            waiter_password: r.waiter_password
         })) as Restaurant[]
     },
 
@@ -474,11 +473,16 @@ export const DatabaseService = {
 
     // Tables
     async updateSession(session: Partial<TableSession> & { id: string }) {
-        const { error } = await supabase
-            .from('table_sessions')
-            .update(session)
-            .eq('id', session.id)
-
+        const userId = _getCurrentUserId()
+        if (userId) {
+            const { id, ...rest } = session
+            const { data, error } = await supabase.functions.invoke('secure-session-manage', {
+                body: { userId, action: 'update', sessionId: id, data: rest }
+            })
+            if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento sessione')
+            return
+        }
+        const { error } = await supabase.from('table_sessions').update(session).eq('id', session.id)
         if (error) throw error
     },
 
@@ -533,39 +537,51 @@ export const DatabaseService = {
     },
 
     async createSession(session: Partial<TableSession>) {
-        const { data, error } = await supabase
-            .from('table_sessions')
-            .insert(session)
-            .select()
-            .single()
+        const userId = _getCurrentUserId()
+        if (userId) {
+            const { data, error } = await supabase.functions.invoke('secure-session-manage', {
+                body: { userId, action: 'create', restaurantId: session.restaurant_id, tableId: session.table_id, data: session }
+            })
+            if (error) throw new Error(data?.error || error?.message || 'Errore creazione sessione')
+            return (data?.data || session) as TableSession
+        }
+        // Customer path (no login) — direct insert scoped to table
+        const { data, error } = await supabase.from('table_sessions').insert(session).select().single()
         if (error) throw error
         return data as TableSession
     },
 
     async closeSession(sessionId: string, closedByName?: string, closedByRole?: string) {
-        const { error } = await supabase
-            .from('table_sessions')
-            .update({
-                status: 'CLOSED',
-                closed_at: new Date().toISOString(),
-                ...(closedByName ? { closed_by_name: closedByName } : {}),
-                ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+        const userId = _getCurrentUserId()
+        if (userId) {
+            const { data, error } = await supabase.functions.invoke('secure-session-manage', {
+                body: { userId, action: 'close', sessionId, data: { closed_by_name: closedByName, closed_by_role: closedByRole } }
             })
-            .eq('id', sessionId)
+            if (error) throw new Error(data?.error || error?.message || 'Errore chiusura sessione')
+            return
+        }
+        const { error } = await supabase.from('table_sessions').update({
+            status: 'CLOSED', closed_at: new Date().toISOString(),
+            ...(closedByName ? { closed_by_name: closedByName } : {}),
+            ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+        }).eq('id', sessionId)
         if (error) throw error
     },
 
     async closeAllOpenSessionsForTable(tableId: string, closedByName?: string, closedByRole?: string) {
-        const { error } = await supabase
-            .from('table_sessions')
-            .update({
-                status: 'CLOSED',
-                closed_at: new Date().toISOString(),
-                ...(closedByName ? { closed_by_name: closedByName } : {}),
-                ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+        const userId = _getCurrentUserId()
+        if (userId) {
+            const { data, error } = await supabase.functions.invoke('secure-session-manage', {
+                body: { userId, action: 'close_all_for_table', tableId, data: { closed_by_name: closedByName, closed_by_role: closedByRole } }
             })
-            .eq('table_id', tableId)
-            .eq('status', 'OPEN')
+            if (error) throw new Error(data?.error || error?.message || 'Errore chiusura sessioni')
+            return
+        }
+        const { error } = await supabase.from('table_sessions').update({
+            status: 'CLOSED', closed_at: new Date().toISOString(),
+            ...(closedByName ? { closed_by_name: closedByName } : {}),
+            ...(closedByRole ? { closed_by_role: closedByRole } : {}),
+        }).eq('table_id', tableId).eq('status', 'OPEN')
         if (error) throw error
     },
 
@@ -673,11 +689,12 @@ export const DatabaseService = {
     },
 
     async updateSessionReceiptIssued(sessionId: string, issued: boolean) {
-        const { error } = await supabase
-            .from('table_sessions')
-            .update({ receipt_issued: issued })
-            .eq('id', sessionId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-session-manage', {
+            body: { userId, action: 'update_receipt', sessionId, data: { receipt_issued: issued } }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ricevuta')
     },
 
     async getSessionOrderCount(sessionId: string) {
@@ -691,46 +708,51 @@ export const DatabaseService = {
     },
 
     async createOrder(order: Partial<Order>, items: Partial<OrderItem>[]) {
-        const { data: orderData, error: orderError } = await supabase
-            .from('orders')
-            .insert(order)
-            .select()
-            .single()
-
+        const userId = _getCurrentUserId()
+        const cleanItems = items.map(item => {
+            const { price_at_time, ...rest } = item as any
+            return rest
+        })
+        if (userId) {
+            const { data, error } = await supabase.functions.invoke('secure-order-manage', {
+                body: { userId, action: 'create_order', data: { order, items: cleanItems } }
+            })
+            if (error) throw new Error(data?.error || error?.message || 'Errore creazione ordine')
+            return data?.data || order
+        }
+        // Customer path — direct insert
+        const { data: orderData, error: orderError } = await supabase.from('orders').insert(order).select().single()
         if (orderError) throw orderError
         if (!orderData) throw new Error('Failed to create order')
-
-        const itemsWithOrderId = items.map(item => {
-            // Remove price_at_time if present, as it doesn't exist in the DB
-            const { price_at_time, ...rest } = item as any
-            return {
-                ...rest,
-                order_id: orderData.id
-            }
-        })
-
-        const { error: itemsError } = await supabase
-            .from('order_items')
-            .insert(itemsWithOrderId)
-
+        const itemsWithOrderId = cleanItems.map((item: any) => ({ ...item, order_id: orderData.id }))
+        const { error: itemsError } = await supabase.from('order_items').insert(itemsWithOrderId)
         if (itemsError) throw itemsError
-
         return orderData
     },
 
     async updateOrder(orderId: string, updates: Partial<Order>) {
-        const { error } = await supabase
-            .from('orders')
-            .update(updates)
-            .eq('id', orderId)
+        const userId = _getCurrentUserId()
+        if (userId) {
+            const { data, error } = await supabase.functions.invoke('secure-order-manage', {
+                body: { userId, action: 'update_order', orderId, data: updates }
+            })
+            if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ordine')
+            return
+        }
+        const { error } = await supabase.from('orders').update(updates).eq('id', orderId)
         if (error) throw error
     },
 
     async updateOrderItem(itemId: string, updates: Partial<OrderItem>) {
-        const { error } = await supabase
-            .from('order_items')
-            .update(updates)
-            .eq('id', itemId)
+        const userId = _getCurrentUserId()
+        if (userId) {
+            const { data, error } = await supabase.functions.invoke('secure-order-manage', {
+                body: { userId, action: 'update_order_item', itemId, data: updates }
+            })
+            if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento item')
+            return
+        }
+        const { error } = await supabase.from('order_items').update(updates).eq('id', itemId)
         if (error) throw error
     },
 
@@ -747,30 +769,39 @@ export const DatabaseService = {
     },
 
     async createBooking(booking: Partial<Booking>) {
-        const { data, error } = await supabase
-            .from('bookings')
-            .insert(booking)
-            .select()
-            .single()
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-booking-manage', {
+            body: { userId, action: 'create', restaurantId: booking.restaurant_id, data: booking }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione prenotazione')
+        return (data?.data || booking) as Booking
+    },
 
-        if (error) throw error
-        return data as Booking
+    async createPublicBooking(booking: Partial<Booking>) {
+        const { data, error } = await supabase.functions.invoke('secure-booking-manage', {
+            body: { action: 'create_public', data: booking }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione prenotazione')
+        return (data?.data || booking) as Booking
     },
 
     async updateBooking(booking: Partial<Booking>) {
-        const { error } = await supabase
-            .from('bookings')
-            .update(booking)
-            .eq('id', booking.id)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-booking-manage', {
+            body: { userId, action: 'update', bookingId: booking.id, data: booking }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento prenotazione')
     },
 
     async deleteBooking(bookingId: string) {
-        const { error } = await supabase
-            .from('bookings')
-            .delete()
-            .eq('id', bookingId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-booking-manage', {
+            body: { userId, action: 'delete', bookingId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione prenotazione')
     },
 
     // Cart (Realtime)
@@ -1113,19 +1144,21 @@ export const DatabaseService = {
     },
 
     async updateSubscriptionPayment(paymentId: string, updates: { admin_completed?: boolean }) {
-        const { error } = await supabase
-            .from('subscription_payments')
-            .update(updates)
-            .eq('id', paymentId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'update_subscription_payment', targetId: paymentId, data: updates }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento pagamento')
     },
 
     async deleteSubscriptionPayment(paymentId: string) {
-        const { error } = await supabase
-            .from('subscription_payments')
-            .delete()
-            .eq('id', paymentId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'delete_subscription_payment', targetId: paymentId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione pagamento')
     },
 
     // Admin - Restaurant bonuses
@@ -1148,52 +1181,40 @@ export const DatabaseService = {
         reason?: string,
         granted_by?: string,
     }) {
-        const expiresAt = new Date()
-        expiresAt.setMonth(expiresAt.getMonth() + bonus.free_months)
-
-        const { data, error } = await supabase
-            .from('restaurant_bonuses')
-            .insert({
-                ...bonus,
-                expires_at: expiresAt.toISOString(),
-                is_active: true,
-            })
-            .select()
-            .single()
-        if (error) throw error
-
-        // Riattiva il ristorante se era sospeso
-        await supabase
-            .from('restaurants')
-            .update({ is_active: true, suspension_reason: null })
-            .eq('id', bonus.restaurant_id)
-
-        return data
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'create_bonus', data: bonus }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione bonus')
+        return data?.data
     },
 
     async deactivateBonus(bonusId: string) {
-        const { error } = await supabase
-            .from('restaurant_bonuses')
-            .update({ is_active: false })
-            .eq('id', bonusId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'deactivate_bonus', targetId: bonusId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore disattivazione bonus')
     },
 
-    // Admin - Sospendi/Riattiva ristorante manualmente
     async suspendRestaurant(restaurantId: string, reason: string) {
-        const { error } = await supabase
-            .from('restaurants')
-            .update({ is_active: false, suspension_reason: reason })
-            .eq('id', restaurantId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'suspend_restaurant', restaurantId, data: { reason } }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore sospensione ristorante')
     },
 
     async reactivateRestaurant(restaurantId: string) {
-        const { error } = await supabase
-            .from('restaurants')
-            .update({ is_active: true, suspension_reason: null })
-            .eq('id', restaurantId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'reactivate_restaurant', restaurantId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore riattivazione ristorante')
     },
 
     // Mark orders as paid via stripe
@@ -1219,10 +1240,12 @@ export const DatabaseService = {
     },
 
     async setAppConfig(key: string, value: string) {
-        const { error } = await supabase
-            .from('app_config')
-            .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'set_app_config', data: { key, value } }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento config')
     },
 
     // Registration Tokens (onboarding)
@@ -1232,19 +1255,10 @@ export const DatabaseService = {
         discountDuration: string = 'once',
         discountDurationMonths?: number
     ): Promise<{ token: string, id: string }> {
-        // Controlla se esiste già un token con gli stessi parametri (non scaduto)
-        const { data: existing } = await supabase
-            .from('registration_tokens')
-            .select('id, token')
-            .eq('free_months', freeMonths)
-            .eq('discount_percent', discountPercent)
-            .eq('discount_duration', discountDuration)
-            .gt('expires_at', new Date().toISOString())
-            .maybeSingle()
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
 
-        if (existing) return existing
-
-        // Crea coupon Stripe se sconto > 0
+        // Create Stripe coupon first if discount > 0
         let stripeCouponId: string | null = null
         if (discountPercent > 0) {
             const { data: couponData, error: couponError } = await supabase.functions.invoke('stripe-create-coupon', {
@@ -1261,20 +1275,14 @@ export const DatabaseService = {
             }
         }
 
-        const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6)
-        const { data, error } = await supabase
-            .from('registration_tokens')
-            .insert({
-                token,
-                free_months: freeMonths,
-                discount_percent: discountPercent,
-                discount_duration: discountDuration,
-                stripe_coupon_id: stripeCouponId
-            })
-            .select('id, token')
-            .single()
-        if (error) throw error
-        return data
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: {
+                userId, action: 'create_registration_token',
+                data: { free_months: freeMonths, discount_percent: discountPercent, discount_duration: discountDuration, stripe_coupon_id: stripeCouponId }
+            }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione token')
+        return data?.data
     },
 
     async validateRegistrationToken(token: string) {
@@ -1291,11 +1299,12 @@ export const DatabaseService = {
     },
 
     async markTokenUsed(tokenId: string, restaurantId: string) {
-        const { error } = await supabase
-            .from('registration_tokens')
-            .update({ used: true, used_by_restaurant_id: restaurantId })
-            .eq('id', tokenId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'mark_token_used', targetId: tokenId, restaurantId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento token')
     },
 
     async registerRestaurant(data: {
@@ -1394,42 +1403,26 @@ export const DatabaseService = {
     },
 
     async dismissDiscountBanner(discountId: string) {
-        const { error } = await supabase
-            .from('restaurant_discounts')
-            .update({ banner_dismissed: true })
-            .eq('id', discountId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'dismiss_discount_banner', targetId: discountId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore dismiss banner')
     },
 
     async deactivateRestaurantDiscount(discountId: string) {
-        const { error } = await supabase
-            .from('restaurant_discounts')
-            .update({ is_active: false })
-            .eq('id', discountId)
-        if (error) throw error
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, action: 'deactivate_discount', targetId: discountId }
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore disattivazione sconto')
     },
 
     // === Auth helpers (used by LoginPage and App.tsx) ===
 
-    async verifyWaiterCredentials(username: string, _password: string) {
-        // Find staff member by username, join their restaurant
-        const { data, error } = await supabase
-            .from('restaurant_staff')
-            .select('id, name, username, password, is_active, restaurant_id, restaurant:restaurants(id, name, is_active)')
-            .eq('username', username)
-            .eq('is_active', true)
-            .limit(1)
-            .maybeSingle()
-        if (error || !data) return null
-        // Return credentials for client-side bcrypt verification
-        return {
-            id: data.id,
-            name: data.name,
-            username: data.username,
-            password: data.password,
-            restaurant: data.restaurant as any
-        }
-    },
+    // verifyWaiterCredentials removed — login is handled server-side by the login edge function
 
     async getRestaurantForLogin(ownerId: string) {
         // Use the existing server-side RPC (SECURITY DEFINER, no RLS bypass needed)

@@ -137,15 +137,15 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         const userId = _getUserId()
         if (!userId) { toast.error('Non autenticato'); return }
         const newName = editNameValue.trim()
-        const { error } = await supabase.functions.invoke('secure-custom-menu', {
+        const { data, error } = await supabase.functions.invoke('secure-custom-menu', {
             body: { userId, restaurantId, action: 'update_menu', targetId: selectedMenu.id, data: { name: newName } }
         })
-        if (!error) {
+        if (error || data?.error) {
+            toast.error(data?.error || 'Errore aggiornamento nome')
+        } else {
             setSelectedMenu({ ...selectedMenu, name: newName })
             setCustomMenus(prev => prev.map(m => m.id === selectedMenu.id ? { ...m, name: newName } : m))
             toast.success('Nome aggiornato')
-        } else {
-            toast.error('Errore aggiornamento nome')
         }
         setEditingName(false)
     }
@@ -193,7 +193,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         const toRemove = initialSchedules.filter(s => !currentKeys.includes(`${s.day_of_week}-${s.meal_type}`))
 
         if (toAdd.length > 0 || toRemove.length > 0) {
-            const { error } = await supabase.functions.invoke('secure-custom-menu', {
+            const { data: schedResult, error } = await supabase.functions.invoke('secure-custom-menu', {
                 body: {
                     userId, restaurantId, action: 'save_schedules', targetId: selectedMenu.id,
                     data: {
@@ -202,7 +202,7 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
                     }
                 }
             })
-            if (error) throw error
+            if (error || schedResult?.error) throw new Error(schedResult?.error || error?.message || 'Errore salvataggio schedules')
         }
     }
 
@@ -278,18 +278,18 @@ export default function CustomMenusManager({ restaurantId, dishes, categories, o
         const userId = _getUserId()
         if (!userId) { toast.error('Non autenticato'); return }
 
-        const { error } = await supabase.functions.invoke('secure-custom-menu', {
+        const { data, error } = await supabase.functions.invoke('secure-custom-menu', {
             body: { userId, restaurantId, action: 'delete_menu', targetId: menuId }
         })
-        if (!error) {
+        if (error || data?.error) {
+            toast.error(data?.error || 'Errore eliminazione menù')
+        } else {
             toast.success('Menù eliminato')
             fetchCustomMenus()
             if (selectedMenu?.id === menuId) {
                 setSelectedMenu(null)
                 setViewMode('list')
             }
-        } else {
-            toast.error('Errore eliminazione menù')
         }
     }
 

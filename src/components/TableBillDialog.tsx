@@ -252,6 +252,8 @@ export default function TableBillDialog({
             })
 
             // Process Database Updates
+            // Build operations for server-side execution
+            const operations: any[] = []
             for (const [originalId, countToPay] of selectedRealGroups.entries()) {
                 const itemWrapper = realItemsExpanded.find(i => i.originalId === originalId)
                 if (!itemWrapper || !itemWrapper.originalItem) continue
@@ -260,38 +262,26 @@ export default function TableBillDialog({
                 const currentQty = originalItem.quantity
 
                 if (countToPay >= currentQty) {
-                    // Paying the Full quantity of this item row -> Mark entire row PAID
-                    const { error } = await supabase
-                        .from('order_items')
-                        .update({ status: 'PAID' })
-                        .eq('id', originalId)
-                    if (error) throw error
+                    operations.push({ type: 'mark_paid', itemId: originalId })
                 } else {
-                    // Partial payment of a quantity row (e.g. paying 1 of 3 beers)
-                    // 1. Decrement original row
-                    const { error: updateError } = await supabase
-                        .from('order_items')
-                        .update({ quantity: currentQty - countToPay })
-                        .eq('id', originalId)
-
-                    if (updateError) throw updateError
-
-                    // 2. Insert new row for paid items
-                    // SANITIZATION FIX: Explicitly select fields
-                    const { error: insertError } = await supabase
-                        .from('order_items')
-                        .insert({
-                            order_id: originalItem.order_id,
-                            dish_id: originalItem.dish_id,
-                            course_number: originalItem.course_number,
-                            note: originalItem.note,
-                            quantity: countToPay,
-                            status: 'PAID'
-                        })
-
-                    if (insertError) throw insertError
+                    operations.push({
+                        type: 'split_and_pay',
+                        itemId: originalId,
+                        remainingQty: currentQty - countToPay,
+                        paidQty: countToPay,
+                        orderId: originalItem.order_id,
+                        dishId: originalItem.dish_id,
+                        courseNumber: originalItem.course_number,
+                        note: originalItem.note,
+                    })
                 }
             }
+
+            const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+            const { data: result, error: payError } = await supabase.functions.invoke('secure-order-manage', {
+                body: { userId: uid, action: 'pay_items', data: { operations } }
+            })
+            if (payError) throw new Error(result?.error || payError?.message || 'Errore pagamento')
 
             // Update UI State locally
             setPaidItemIds(prev => {
@@ -345,21 +335,11 @@ export default function TableBillDialog({
             const originalItem = matchingItem.originalItem
             const currentQty = originalItem.quantity || 1
 
-            if (currentQty > 1) {
-                // Decrement quantity by 1
-                const { error } = await supabase
-                    .from('order_items')
-                    .update({ quantity: currentQty - 1 })
-                    .eq('id', matchingItem.originalId)
-                if (error) throw error
-            } else {
-                // Cancel the entire item
-                const { error } = await supabase
-                    .from('order_items')
-                    .update({ status: 'CANCELLED' })
-                    .eq('id', matchingItem.originalId)
-                if (error) throw error
-            }
+            const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+            const { data: result, error: cancelErr } = await supabase.functions.invoke('secure-order-manage', {
+                body: { userId: uid, action: 'cancel_item', itemId: matchingItem.originalId, data: { decrement: currentQty > 1 } }
+            })
+            if (cancelErr) throw new Error(result?.error || cancelErr?.message || 'Errore rimozione')
 
             toast.success(`${itemName} rimosso dal conto`, {
                 duration: 3000,

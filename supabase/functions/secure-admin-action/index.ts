@@ -147,7 +147,6 @@ serve(async (req) => {
             }
 
             case "toggle_payment_status": {
-                // Toggle admin_completed on subscription_payments
                 if (!targetId || data?.admin_completed === undefined) {
                     return json({ error: "targetId e admin_completed richiesti" }, 400);
                 }
@@ -155,6 +154,129 @@ serve(async (req) => {
                     .from("subscription_payments")
                     .update({ admin_completed: data.admin_completed })
                     .eq("id", targetId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "suspend_restaurant": {
+                if (!restaurantId || !data?.reason) return json({ error: "restaurantId e reason richiesti" }, 400);
+                const { error } = await supabase
+                    .from("restaurants")
+                    .update({ is_active: false, suspension_reason: data.reason })
+                    .eq("id", restaurantId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "reactivate_restaurant": {
+                if (!restaurantId) return json({ error: "restaurantId richiesto" }, 400);
+                const { error } = await supabase
+                    .from("restaurants")
+                    .update({ is_active: true, suspension_reason: null })
+                    .eq("id", restaurantId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "create_bonus": {
+                if (!data?.restaurant_id || !data?.free_months) return json({ error: "restaurant_id e free_months richiesti" }, 400);
+                const expiresAt = new Date();
+                expiresAt.setMonth(expiresAt.getMonth() + data.free_months);
+                const { data: bonus, error } = await supabase
+                    .from("restaurant_bonuses")
+                    .insert({
+                        restaurant_id: data.restaurant_id,
+                        free_months: data.free_months,
+                        reason: data.reason || null,
+                        granted_by: data.granted_by || null,
+                        expires_at: expiresAt.toISOString(),
+                        is_active: true,
+                    })
+                    .select()
+                    .single();
+                if (error) return json({ error: error.message }, 500);
+                // Reactivate restaurant if suspended
+                await supabase.from("restaurants").update({ is_active: true, suspension_reason: null }).eq("id", data.restaurant_id);
+                return json({ success: true, data: bonus });
+            }
+
+            case "deactivate_bonus": {
+                if (!targetId) return json({ error: "targetId richiesto" }, 400);
+                const { error } = await supabase.from("restaurant_bonuses").update({ is_active: false }).eq("id", targetId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "set_app_config": {
+                if (!data?.key || data?.value === undefined) return json({ error: "key e value richiesti" }, 400);
+                const { error } = await supabase
+                    .from("app_config")
+                    .upsert({ key: data.key, value: data.value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "create_registration_token": {
+                const freeMonths = data?.free_months || 0;
+                const discountPercent = data?.discount_percent || 0;
+                const discountDuration = data?.discount_duration || "once";
+                const stripeCouponId = data?.stripe_coupon_id || null;
+
+                // Check if token with same params already exists
+                const { data: existing } = await supabase
+                    .from("registration_tokens")
+                    .select("id, token")
+                    .eq("free_months", freeMonths)
+                    .eq("discount_percent", discountPercent)
+                    .eq("discount_duration", discountDuration)
+                    .gt("expires_at", new Date().toISOString())
+                    .maybeSingle();
+                if (existing) return json({ success: true, data: existing });
+
+                const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
+                const { data: newToken, error } = await supabase
+                    .from("registration_tokens")
+                    .insert({ token, free_months: freeMonths, discount_percent: discountPercent, discount_duration: discountDuration, stripe_coupon_id: stripeCouponId })
+                    .select("id, token")
+                    .single();
+                if (error) return json({ error: error.message }, 500);
+                return json({ success: true, data: newToken });
+            }
+
+            case "mark_token_used": {
+                if (!targetId || !restaurantId) return json({ error: "targetId e restaurantId richiesti" }, 400);
+                const { error } = await supabase
+                    .from("registration_tokens")
+                    .update({ used: true, used_by_restaurant_id: restaurantId })
+                    .eq("id", targetId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "update_subscription_payment": {
+                if (!targetId || !data) return json({ error: "targetId e data richiesti" }, 400);
+                const { error } = await supabase.from("subscription_payments").update(data).eq("id", targetId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "delete_subscription_payment": {
+                if (!targetId) return json({ error: "targetId richiesto" }, 400);
+                const { error } = await supabase.from("subscription_payments").delete().eq("id", targetId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "deactivate_discount": {
+                if (!targetId) return json({ error: "targetId richiesto" }, 400);
+                const { error } = await supabase.from("restaurant_discounts").update({ is_active: false }).eq("id", targetId);
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+
+            case "dismiss_discount_banner": {
+                if (!targetId) return json({ error: "targetId richiesto" }, 400);
+                const { error } = await supabase.from("restaurant_discounts").update({ banner_dismissed: true }).eq("id", targetId);
                 if (error) return json({ error: error.message }, 500);
                 break;
             }

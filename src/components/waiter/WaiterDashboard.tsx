@@ -129,7 +129,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     const { data: staffData } = await supabase
                         .from('restaurant_staff')
                         .select('restaurant_id')
-                        .eq('user_id', user.id)
+                        .eq('id', user.id)
                         .single()
                     rId = staffData?.restaurant_id
                 }
@@ -169,7 +169,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     supabase.from('orders')
                         .select(`
                             id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
-                            items:order_items(id, quantity, status, note, course_number, created_at, ready_at,
+                            items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at,
                                 dish:dishes(id, name, price, category_id)
                             )
                         `)
@@ -381,7 +381,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             }, 0)
 
         const prevFilteredReady = prevReadyCountRef.current
-        if (filteredReadyCount > prevFilteredReady || (activityRoomFilter === 'all' && currentReadyCount > prevFilteredReady)) {
+        if (filteredReadyCount > prevFilteredReady) {
             soundManager.play('kitchen-bell')
             setTimeout(() => soundManager.play('success'), 400)
             toast.success('Ci sono piatti pronti da servire!', {
@@ -390,17 +390,16 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 style: { background: '#422006', border: '1px solid #f59e0b', color: '#fbbf24' }
             })
         }
+        // Always track latest count so notifications fire again when new items arrive
+        prevReadyCountRef.current = filteredReadyCount
 
         // Check for new Assistance Requests (filter by room if active)
         const filteredAssistanceCount = activityRoomFilter === 'all'
             ? currentAssistanceCount
-            : assistanceRequests.filter(t => {
-                const tableRoom = rooms.find(r => r.id === t.room_id)
-                return activityRoomFilter === 'all' || t.room_id === activityRoomFilter
-            }).length
+            : assistanceRequests.filter(t => t.room_id === activityRoomFilter).length
 
         const prevFilteredAssistance = prevAssistanceCountRef.current
-        if (filteredAssistanceCount > prevFilteredAssistance || (activityRoomFilter === 'all' && currentAssistanceCount > prevFilteredAssistance)) {
+        if (filteredAssistanceCount > prevFilteredAssistance) {
             soundManager.play('alert')
             setTimeout(() => soundManager.play('alert'), 500)
             setTimeout(() => soundManager.play('alert'), 1000)
@@ -410,9 +409,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 style: { background: '#450a0a', border: '1px solid #ef4444', color: '#fca5a5' }
             })
         }
-
-        prevReadyCountRef.current = currentReadyCount
-        prevAssistanceCountRef.current = currentAssistanceCount
+        // Always track latest count
+        prevAssistanceCountRef.current = filteredAssistanceCount
 
     }, [activeOrders, assistanceRequests, loading, activityRoomFilter, sessions, tables, rooms])
 
@@ -420,10 +418,12 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         // Track in justDeliveredIds for grey-out effect before group disappears
         setJustDeliveredIds(prev => new Set([...prev, itemId]))
 
-        await supabase
-            .from('order_items')
-            .update({ status: 'SERVED' })
-            .eq('id', itemId)
+        const uid = user?.id
+        if (uid) {
+            await supabase.functions.invoke('secure-order-items', {
+                body: { userId: uid, restaurantId, action: 'update_status', data: { itemIds: [itemId], status: 'SERVED' } }
+            })
+        }
 
         if (restaurantId && user?.role === 'STAFF') {
             DatabaseService.logWaiterActivity(restaurantId, user.id, 'DISH_DELIVERED', { orderId, itemId })

@@ -307,21 +307,24 @@ const PublicReservationPage = () => {
 
             const assignedTableId = suitableTables[0]?.id || null
 
-            const { error: insertError } = await supabase
-                .from("bookings")
-                .insert({
-                    restaurant_id: restaurant.id,
-                    table_id: assignedTableId,
-                    name: formData.name,
-                    phone: formData.phone,
-                    email: "",
-                    guests: formData.guests,
-                    date_time: format(bookingDate, "yyyy-MM-dd'T'HH:mm:ss"),
-                    notes: (formData.roomId ? `[Sala: ${rooms.find(r => r.id === formData.roomId)?.name}] ` : "") + formData.notes,
-                    status: "CONFIRMED"
-                })
+            const { data: bookingResult, error: insertError } = await supabase.functions.invoke('secure-booking-manage', {
+                body: {
+                    action: 'create_public',
+                    data: {
+                        restaurant_id: restaurant.id,
+                        table_id: assignedTableId,
+                        name: formData.name,
+                        phone: formData.phone,
+                        email: "",
+                        guests: formData.guests,
+                        date_time: format(bookingDate, "yyyy-MM-dd'T'HH:mm:ss"),
+                        notes: (formData.roomId ? `[Sala: ${rooms.find(r => r.id === formData.roomId)?.name}] ` : "") + formData.notes,
+                        status: "CONFIRMED"
+                    }
+                }
+            })
 
-            if (insertError) throw insertError
+            if (insertError || bookingResult?.error) throw new Error(bookingResult?.error || insertError?.message || 'Errore prenotazione')
 
             // 2. Success UI
             setStep(3)
