@@ -250,7 +250,6 @@ const WaiterOrderPage = () => {
                 const newSession = await DatabaseService.createSession({
                     table_id: table.id,
                     restaurant_id: restaurant.id,
-                    coperto: copertoInfo.price,
                     customer_count: table.seats || 2,
                     status: 'OPEN',
                     opened_at: new Date().toISOString(),

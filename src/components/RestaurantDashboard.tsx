@@ -2621,7 +2621,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           const closedSessions = sessions
                             .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId)
                             .filter(s => {
-                              const sessionDate = new Date(s.closed_at || s.created_at)
+                              const sessionDate = new Date(s.closed_at || s.opened_at)
                               if (tableHistoryDateFilter === 'today') {
                                 return sessionDate.toDateString() === now.toDateString()
                               } else if (tableHistoryDateFilter === 'week') {
@@ -2647,7 +2647,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               const sessionOrders = pastOrders.filter(o => o.table_session_id === session.id)
                               const totalAmount = sessionOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0)
                               const totalItems = sessionOrders.reduce((sum, o) => sum + (o.items?.length || 0), 0)
-                              const openDate = new Date(session.created_at)
+                              const openDate = new Date(session.opened_at)
                               const closeDate = session.closed_at ? new Date(session.closed_at) : null
                               const duration = closeDate ? Math.round((closeDate.getTime() - openDate.getTime()) / (1000 * 60)) : 0
                               return { session, table, sessionOrders, totalAmount, totalItems, openDate, closeDate, duration }
@@ -2661,7 +2661,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               if (tableHistoryPaymentFilter === 'cash') return !hasStripe
                               return true
                             })
-                            .sort((a, b) => new Date(b.session.closed_at || b.session.created_at).getTime() - new Date(a.session.closed_at || a.session.created_at).getTime())
+                            .sort((a, b) => new Date(b.session.closed_at || b.session.opened_at).getTime() - new Date(a.session.closed_at || a.session.opened_at).getTime())
 
                           if (closedSessions.length === 0) {
                             return (

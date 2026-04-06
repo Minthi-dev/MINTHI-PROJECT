@@ -51,9 +51,9 @@ export const DEMO_TABLES: Table[] = [
 
 // ── Sessions (open sessions for occupied tables) ─────────────────────────────
 export const DEMO_SESSIONS: TableSession[] = [
-  { id: 'demo-session-1', restaurant_id: RESTAURANT_ID, table_id: 'demo-table-1', status: 'OPEN', opened_at: now, created_at: now, session_pin: '4721', customer_count: 4 },
-  { id: 'demo-session-3', restaurant_id: RESTAURANT_ID, table_id: 'demo-table-3', status: 'OPEN', opened_at: now, created_at: now, session_pin: '8834', customer_count: 2 },
-  { id: 'demo-session-5', restaurant_id: RESTAURANT_ID, table_id: 'demo-table-5', status: 'OPEN', opened_at: now, created_at: now, session_pin: '2156', customer_count: 6, paid_amount: 45 },
+  { id: 'demo-session-1', restaurant_id: RESTAURANT_ID, table_id: 'demo-table-1', status: 'OPEN', opened_at: now, session_pin: '4721', customer_count: 4 },
+  { id: 'demo-session-3', restaurant_id: RESTAURANT_ID, table_id: 'demo-table-3', status: 'OPEN', opened_at: now, session_pin: '8834', customer_count: 2 },
+  { id: 'demo-session-5', restaurant_id: RESTAURANT_ID, table_id: 'demo-table-5', status: 'OPEN', opened_at: now, session_pin: '2156', customer_count: 6, paid_amount: 45 },
 ]
 
 // ── Order Items ──────────────────────────────────────────────────────────────

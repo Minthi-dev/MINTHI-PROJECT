@@ -165,7 +165,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     DatabaseService.getRooms(rId),
                     DatabaseService.getDishes(rId),
                     DatabaseService.getCategories(rId),
-                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled, paid_amount, receipt_issued, notes').eq('restaurant_id', rId).eq('status', 'OPEN'),
+                    supabase.from('table_sessions').select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled, paid_amount, receipt_issued, notes, updated_at, closed_by_name, closed_by_role').eq('restaurant_id', rId).eq('status', 'OPEN'),
                     supabase.from('orders')
                         .select(`
                             id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id,
@@ -208,7 +208,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         if (!restaurantId) return
         const { data: sess } = await supabase
             .from('table_sessions')
-            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, created_at, coperto, coperto_enabled, ayce_enabled, paid_amount, receipt_issued, notes')
+            .select('id, restaurant_id, table_id, status, opened_at, closed_at, session_pin, customer_count, coperto_enabled, ayce_enabled, paid_amount, receipt_issued, notes, updated_at, closed_by_name, closed_by_role')
             .eq('restaurant_id', restaurantId)
             .eq('status', 'OPEN')
         if (sess) setSessions(sess as TableSession[])
@@ -1128,36 +1128,37 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-zinc-950 p-4 md:p-6 pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
+        <div className="min-h-[100dvh] bg-zinc-950 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
             {/* Background Ambience */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-zinc-950 to-zinc-950 pointer-events-none" />
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none brightness-100 contrast-150 mix-blend-overlay"></div>
 
             {/* Header */}
-            <header className="sticky top-0 z-50 flex flex-col md:flex-row items-center justify-between mb-4 sm:mb-8 gap-3 bg-zinc-950/80 backdrop-blur-xl p-3 sm:p-4 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300">
-                <div className="flex items-center gap-3 sm:gap-5 w-full md:w-auto">
-                    <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10">
-                        <User size={22} weight="duotone" className="sm:hidden" />
-                        <User size={28} weight="duotone" className="hidden sm:block" />
-                    </div>
-                    <div>
-                        <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight">Gestione Sala</h1>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                            </span>
-                            <p className="text-xs sm:text-sm font-medium text-zinc-400">Sistema Attivo</p>
+            <header className="sticky top-0 z-50 flex flex-col gap-2 bg-zinc-950/80 backdrop-blur-xl pt-[max(0.75rem,env(safe-area-inset-top))] px-3 sm:px-4 pb-3 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300 mb-4 sm:mb-8">
+                {/* Top row: title + activity button */}
+                <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10">
+                            <User size={22} weight="duotone" className="sm:hidden" />
+                            <User size={26} weight="duotone" className="hidden sm:block" />
+                        </div>
+                        <div>
+                            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">Gestione Sala</h1>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                </span>
+                                <p className="text-xs font-medium text-zinc-400">Sistema Attivo</p>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
-                    {/* Activity Button - Ready items + Assistance requests */}
+                    {/* Activity Button */}
                     <Button
                         variant={(readyCount + assistanceRequests.length) > 0 ? "default" : "outline"}
                         size="sm"
-                        className={`md:mr-4 h-10 px-4 rounded-xl font-bold transition-all shadow-lg ${(readyCount + assistanceRequests.length) > 0
+                        className={`h-10 px-4 rounded-xl font-bold transition-all shadow-lg shrink-0 ${(readyCount + assistanceRequests.length) > 0
                             ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
                             : 'text-zinc-400 bg-zinc-900/50 border-white/5 hover:bg-zinc-800 hover:text-white'
                             }`}
@@ -1172,7 +1173,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         )}
                         Attività: {readyCount + assistanceRequests.length}
                     </Button>
+                </div>
 
+                {/* Bottom row: filters - all visible, no scroll */}
+                <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5">
                         <Button
                             variant="ghost"
@@ -1200,12 +1204,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </Button>
                     </div>
 
-                    <div className="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
-
                     {/* Room Filter */}
                     <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                        <SelectTrigger className="w-[140px] h-10 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl">
-                            <House size={16} className="mr-2 text-amber-500" />
+                        <SelectTrigger className="w-[130px] h-8 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl">
+                            <House size={14} className="mr-1.5 text-amber-500" />
                             <SelectValue placeholder="Sala" />
                         </SelectTrigger>
                         <SelectContent className="bg-zinc-950 border-zinc-800">
@@ -1217,29 +1219,40 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </SelectContent>
                     </Select>
 
-                    {/* Management Button */}
+                    {/* Refresh */}
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="text-zinc-400 hover:text-amber-500 hover:bg-amber-500/10 h-10 w-10 p-0 rounded-xl"
-                        onClick={() => setIsManageDialogOpen(true)}
+                        className="text-zinc-400 hover:text-amber-500 hover:bg-amber-500/10 h-8 w-8 p-0 rounded-lg"
+                        onClick={() => refreshData()}
                     >
-                        <GearSix size={20} weight="duotone" />
-                    </Button>
-
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-10 w-10 p-0 rounded-xl"
-                        onClick={onLogout}
-                    >
-                        <SignOut size={20} weight="duotone" />
+                        <ArrowsClockwise size={16} weight="bold" />
                     </Button>
                 </div>
             </header>
 
+            {/* Fixed bottom-left: Settings + Logout */}
+            <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-50 flex gap-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-zinc-900/90 backdrop-blur-xl border-white/10 text-zinc-400 hover:text-amber-500 hover:bg-zinc-800 h-11 w-11 p-0 rounded-xl shadow-lg"
+                    onClick={() => setIsManageDialogOpen(true)}
+                >
+                    <GearSix size={20} weight="duotone" />
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-zinc-900/90 backdrop-blur-xl border-white/10 text-red-400 hover:text-red-300 hover:bg-red-950/50 h-11 w-11 p-0 rounded-xl shadow-lg"
+                    onClick={onLogout}
+                >
+                    <SignOut size={20} weight="duotone" />
+                </Button>
+            </div>
+
             {/* Tables grouped by Room */}
-            <div className="relative z-10 space-y-8">
+            <div className="relative z-10 space-y-8 px-3 sm:px-4 md:px-6">
                 {(() => {
                     // Group tables by room
                     const roomIds = new Set(rooms.map(r => r.id))
@@ -1309,10 +1322,10 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: '100%' }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed inset-0 z-50 bg-zinc-950 flex flex-col"
+                        className="fixed inset-0 z-50 bg-zinc-950 flex flex-col pt-[env(safe-area-inset-top)]"
                     >
                         {/* Header */}
-                        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0 gap-3 flex-wrap">
+                        <div className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-zinc-900/50 backdrop-blur-md shrink-0 gap-3 flex-wrap pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
                             <div className="flex items-center gap-3">
                                 <Button
                                     variant="ghost"

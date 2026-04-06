@@ -199,13 +199,12 @@ export interface TableSession {
     closed_at?: string
     session_pin?: string
     customer_count?: number
-    created_at: string
-    coperto?: number
     coperto_enabled?: boolean
     ayce_enabled?: boolean
     receipt_issued?: boolean
     paid_amount?: number
     notes?: string
+    updated_at?: string
     closed_by_name?: string
     closed_by_role?: string
 }
