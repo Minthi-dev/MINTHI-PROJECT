@@ -485,23 +485,27 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       return logTime >= start && logTime <= end
     })
 
-    const waiterMap = new Map<string, { name: string; dishesDelivered: number; bellsResolved: number; firstActivity: number; lastActivity: number }>()
+    const waiterMap = new Map<string, { name: string; dishesDelivered: number; bellsResolved: number; dailySpans: Map<string, { first: number; last: number }> }>()
 
     staffList.forEach(staff => {
-      waiterMap.set(staff.id, { name: staff.name, dishesDelivered: 0, bellsResolved: 0, firstActivity: Infinity, lastActivity: 0 })
+      waiterMap.set(staff.id, { name: staff.name, dishesDelivered: 0, bellsResolved: 0, dailySpans: new Map() })
     })
 
     logsInPeriod.forEach(log => {
       if (!waiterMap.has(log.waiter_id)) return
       const entry = waiterMap.get(log.waiter_id)!
       const logTime = new Date(log.created_at || Date.now()).getTime()
+      const dayKey = new Date(log.created_at || Date.now()).toISOString().slice(0, 10)
       if (log.action_type === 'DISH_DELIVERED') {
         entry.dishesDelivered += 1
       } else if (log.action_type === 'BELL_RESOLVED') {
         entry.bellsResolved += 1
       }
-      entry.firstActivity = Math.min(entry.firstActivity, logTime)
-      entry.lastActivity = Math.max(entry.lastActivity, logTime)
+      // Track per-day first/last activity for accurate shift calculation
+      const daySpan = entry.dailySpans.get(dayKey) || { first: Infinity, last: 0 }
+      daySpan.first = Math.min(daySpan.first, logTime)
+      daySpan.last = Math.max(daySpan.last, logTime)
+      entry.dailySpans.set(dayKey, daySpan)
     })
 
     const rankings = Array.from(waiterMap.values()).sort((a, b) => b.dishesDelivered - a.dishesDelivered)
@@ -512,9 +516,13 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     // Calculate per-waiter table data
     const waiterTable = Array.from(waiterMap.entries()).map(([id, w]) => {
       const totalActivities = w.dishesDelivered + w.bellsResolved
-      const activeHours = w.lastActivity > w.firstActivity
-        ? Math.max(1, (w.lastActivity - w.firstActivity) / (1000 * 60 * 60))
-        : totalActivities > 0 ? 1 : 0
+      // Sum shift hours per day (first→last activity each day), minimum 0.5h per active day
+      let activeHours = 0
+      w.dailySpans.forEach(span => {
+        const dayHours = (span.last - span.first) / (1000 * 60 * 60)
+        activeHours += Math.max(0.5, dayHours) // min 30 min per active day
+      })
+      if (totalActivities > 0 && activeHours === 0) activeHours = 0.5
       return {
         id,
         name: w.name,
@@ -532,16 +540,30 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       return t >= start && t <= end
     })
 
-    // Avg wait time: use updated_at - created_at if available, or closed_at - created_at
+    // Avg wait time: use earliest item ready_at - order created_at (actual food prep time)
+    // Falls back to closed_at if no ready_at is available
     let totalWaitMs = 0
     let waitCount = 0
     ordersInPeriod.forEach(o => {
-      const endTime = o.closed_at ? new Date(o.closed_at).getTime() : o.updated_at ? new Date(o.updated_at).getTime() : 0
       const startTime = new Date(o.created_at).getTime()
+      // Find earliest ready_at from order items (when first dish was ready)
+      let endTime = 0
+      if (o.items && o.items.length > 0) {
+        const readyTimes = o.items
+          .filter((i: any) => i.ready_at)
+          .map((i: any) => new Date(i.ready_at).getTime())
+        if (readyTimes.length > 0) {
+          endTime = Math.min(...readyTimes)
+        }
+      }
+      // Fallback to closed_at if no ready_at available
+      if (!endTime && o.closed_at) {
+        endTime = new Date(o.closed_at).getTime()
+      }
       if (endTime > startTime) {
         const diff = endTime - startTime
-        // Only count reasonable wait times (under 4 hours)
-        if (diff < 4 * 60 * 60 * 1000) {
+        // Only count reasonable wait times (under 2 hours)
+        if (diff < 2 * 60 * 60 * 1000) {
           totalWaitMs += diff
           waitCount++
         }
@@ -549,14 +571,13 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     })
     const avgWaitMinutes = waitCount > 0 ? Math.round(totalWaitMs / waitCount / 60000) : 0
 
-    // Global avg orders per waiter per hour
-    const totalHoursInPeriod = Math.max(1, (end - start) / (1000 * 60 * 60))
+    // Global avg orders per waiter per service hour
+    const daysInPeriod = Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)))
+    const SERVICE_HOURS_PER_DAY = 8 // lunch + dinner estimate
+    const totalServiceHoursInPeriod = daysInPeriod * SERVICE_HOURS_PER_DAY
     const avgOrdersPerWaiterHour = totalActiveWaiters > 0
-      ? Math.round((ordersInPeriod.length / totalActiveWaiters / (totalHoursInPeriod / Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000))) * (restaurant_hours_per_day()))) * 10) / 10
+      ? Math.round((ordersInPeriod.length / totalActiveWaiters / totalServiceHoursInPeriod) * 10) / 10
       : 0
-
-    // Estimate restaurant service hours per day (lunch + dinner ~8h)
-    function restaurant_hours_per_day() { return 8 }
 
     // Daily metrics for combined chart
     // Determine lunch/dinner hour cutoffs from service hours config or defaults
@@ -613,13 +634,18 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
         ? Math.round((dayOrders.length / dayActiveWaiters / totalServiceHours) * 10) / 10
         : 0
 
-      // Avg wait time this day
+      // Avg wait time this day (use ready_at from items, fallback to closed_at)
       let dayWaitMs = 0
       let dayWaitCount = 0
       dayOrders.forEach(o => {
-        const et = o.closed_at ? new Date(o.closed_at).getTime() : o.updated_at ? new Date(o.updated_at).getTime() : 0
         const st = new Date(o.created_at).getTime()
-        if (et > st && (et - st) < 4 * 60 * 60 * 1000) {
+        let et = 0
+        if (o.items && o.items.length > 0) {
+          const readyTimes = o.items.filter((i: any) => i.ready_at).map((i: any) => new Date(i.ready_at).getTime())
+          if (readyTimes.length > 0) et = Math.min(...readyTimes)
+        }
+        if (!et && o.closed_at) et = new Date(o.closed_at).getTime()
+        if (et > st && (et - st) < 2 * 60 * 60 * 1000) {
           dayWaitMs += (et - st)
           dayWaitCount++
         }

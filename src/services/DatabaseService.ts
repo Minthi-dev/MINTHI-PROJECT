@@ -289,7 +289,7 @@ export const DatabaseService = {
             .select('id, restaurant_id, waiter_id, action_type, details, created_at, waiter:restaurant_staff(id, name, username)')
             .eq('restaurant_id', restaurantId)
             .order('created_at', { ascending: false })
-            .limit(500)
+            .limit(5000)
 
         if (startDate) query = query.gte('created_at', startDate)
         if (endDate) query = query.lte('created_at', endDate)
@@ -626,7 +626,7 @@ export const DatabaseService = {
             .from('orders')
             .select(`
                 id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method,
-                items:order_items(id, order_id, dish_id, quantity, status, note, course_number,
+                items:order_items(id, order_id, dish_id, quantity, status, note, course_number, ready_at,
                     dish:dishes(id, name, price)
                 )
             `)
