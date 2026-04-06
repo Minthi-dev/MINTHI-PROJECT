@@ -1321,7 +1321,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                       <ShoppingBag size={22} weight="duotone" />
                     </div>
                     <div>
-                      <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Ordini per Ora</p>
+                      <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Ritmo Ordini</p>
                       <p className="text-2xl font-black text-white tabular-nums mt-0.5">{waiterStats.avgOrdersPerWaiterHour}</p>
                     </div>
                   </div>
@@ -1354,7 +1354,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                   <div className="flex gap-1.5 flex-wrap">
                     {([
                       { key: 'waiters' as const, label: 'Camerieri Attivi', color: 'emerald' },
-                      { key: 'ordersPerHour' as const, label: 'Ordini per Ora', color: 'amber' },
+                      { key: 'ordersPerHour' as const, label: 'Ritmo Ordini', color: 'amber' },
                       { key: 'avgWait' as const, label: 'Attesa Media', color: 'violet' },
                       { key: 'pranzoVsCena' as const, label: 'Pranzo vs Cena', color: 'blue' },
                     ]).map(opt => (
@@ -1411,7 +1411,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                       <Area
                         type="monotone"
                         dataKey={waiterChartMetric}
-                        name={waiterChartMetric === 'waiters' ? 'Camerieri Attivi' : waiterChartMetric === 'ordersPerHour' ? 'Ordini per Ora' : 'Attesa Media (min)'}
+                        name={waiterChartMetric === 'waiters' ? 'Camerieri Attivi' : waiterChartMetric === 'ordersPerHour' ? 'Ritmo Ordini' : 'Attesa Media (min)'}
                         stroke={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'}
                         strokeWidth={3}
                         fillOpacity={1}
