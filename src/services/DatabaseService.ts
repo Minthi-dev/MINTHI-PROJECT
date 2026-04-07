@@ -627,7 +627,7 @@ export const DatabaseService = {
             .select(`
                 id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method,
                 items:order_items(id, order_id, dish_id, quantity, status, note, course_number, ready_at,
-                    dish:dishes(id, name, price)
+                    dish:dishes(id, name, price, category_id)
                 )
             `)
             .eq('restaurant_id', restaurantId)

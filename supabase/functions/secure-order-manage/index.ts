@@ -8,8 +8,8 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-const VALID_ORDER_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETED", "PAID", "CANCELLED"];
-const VALID_ITEM_STATUSES = ["PENDING", "PREPARING", "READY", "DELIVERED", "CANCELLED", "PAID"];
+const VALID_ORDER_STATUSES = ["OPEN", "PAID", "CANCELLED"];
+const VALID_ITEM_STATUSES = ["PENDING", "IN_PREPARATION", "READY", "SERVED", "DELIVERED", "PAID", "CANCELLED"];
 
 serve(async (req) => {
     const cors = getCorsHeaders(req);
@@ -44,6 +44,12 @@ serve(async (req) => {
             restaurantId = (item?.order as any)?.restaurant_id || null;
         } else if (data?.restaurant_id) {
             restaurantId = data.restaurant_id;
+        } else if (data?.order?.restaurant_id) {
+            restaurantId = data.order.restaurant_id;
+        } else if (data?.order?.table_session_id) {
+            const { data: sess } = await supabase
+                .from("table_sessions").select("restaurant_id").eq("id", data.order.table_session_id).maybeSingle();
+            restaurantId = sess?.restaurant_id || null;
         }
 
         if (!restaurantId) return json({ error: "Contesto ristorante non trovato" }, 404);

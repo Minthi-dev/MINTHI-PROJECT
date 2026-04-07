@@ -91,7 +91,7 @@ CREATE POLICY "order_items_update_safe" ON public.order_items
     USING (true)
     WITH CHECK (
         status IS NOT NULL
-        AND status IN ('PENDING', 'PREPARING', 'READY', 'DELIVERED', 'PAID', 'CANCELLED')
+        AND status IN ('PENDING', 'IN_PREPARATION', 'READY', 'SERVED', 'DELIVERED', 'PAID', 'CANCELLED')
     );
 
 -- ============================================
