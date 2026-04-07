@@ -77,7 +77,8 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
 
   // Tabs State (using strings for active tab)
   const [activeTab, setActiveTab] = useState('overview') // 'overview' | 'waiters'
-  const [waiterChartMetric, setWaiterChartMetric] = useState<'waiters' | 'ordersPerHour' | 'avgWait' | 'pranzoVsCena'>('waiters')
+  const [waiterChartMetric, setWaiterChartMetric] = useState<'waiters' | 'ordersPerHour' | 'avgWait'>('waiters')
+  const [mealFilter, setMealFilter] = useState<'all' | 'pranzo' | 'cena'>('all')
 
   // Staff and Logs State
   const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
@@ -199,6 +200,11 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     return { ...order, filteredItems, filteredAmount }
   }).filter(order => (order.filteredItems || []).length > 0)
 
+  // Apply meal filter (pranzo/cena)
+  const mealFilteredOrders: FilteredOrder[] = mealFilter === 'all'
+    ? categoryFilteredOrders
+    : categoryFilteredOrders.filter(order => classifyOrder(order) === mealFilter)
+
   // Pranzo/Cena classification helpers
   const classifyOrder = (order: Order): 'pranzo' | 'cena' | null => {
     const orderDate = new Date(order.created_at)
@@ -245,8 +251,8 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
 
   // Analytics calculations
   const analytics = useMemo(() => {
-    const totalOrders = categoryFilteredOrders.length
-    const totalRevenue = categoryFilteredOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0)
+    const totalOrders = mealFilteredOrders.length
+    const totalRevenue = mealFilteredOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0)
     const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
     const activeOrdersCount = orders.filter(order => order.status === 'OPEN').length
 
@@ -259,7 +265,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     for (let i = 0; i < days; i++) {
       const dayStart = start + (i * 24 * 60 * 60 * 1000)
       const dayEnd = dayStart + (24 * 60 * 60 * 1000)
-      const dayOrders = categoryFilteredOrders.filter(order => {
+      const dayOrders = mealFilteredOrders.filter(order => {
         const orderTime = new Date(order.created_at).getTime()
         return orderTime >= dayStart && orderTime < dayEnd
       })
@@ -279,7 +285,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     const categoryStats = categories
       .filter(category => activeCategoryIds.includes(category.id))
       .map(category => {
-        const categoryOrders = categoryFilteredOrders.flatMap(order =>
+        const categoryOrders = mealFilteredOrders.flatMap(order =>
           (order.filteredItems || []).filter(item => {
             const dish = dishes.find(d => d.id === item.dish_id)
             return dish?.category_id === category.id
@@ -305,7 +311,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     const dishStats = dishes
       .filter(dish => activeCategoryIds.includes(dish.category_id))
       .map(dish => {
-        const dishOrders = categoryFilteredOrders.flatMap(order =>
+        const dishOrders = mealFilteredOrders.flatMap(order =>
           (order.filteredItems || []).filter(item => item.dish_id === dish.id)
         )
 
@@ -324,8 +330,8 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       .slice(0, 50)
 
     // Pranzo / Cena split
-    const pranzoOrders = categoryFilteredOrders.filter(o => classifyOrder(o) === 'pranzo')
-    const cenaOrders = categoryFilteredOrders.filter(o => classifyOrder(o) === 'cena')
+    const pranzoOrders = mealFilteredOrders.filter(o => classifyOrder(o) === 'pranzo')
+    const cenaOrders = mealFilteredOrders.filter(o => classifyOrder(o) === 'cena')
     const pranzoRevenue = pranzoOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0)
     const cenaRevenue = cenaOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0)
     const pranzoAvgWait = calcAvgWait(pranzoOrders)
@@ -349,7 +355,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       pranzoAvgValue: pranzoOrders.length > 0 ? pranzoRevenue / pranzoOrders.length : 0,
       cenaAvgValue: cenaOrders.length > 0 ? cenaRevenue / cenaOrders.length : 0,
     }
-  }, [categoryFilteredOrders, orders, categories, dishes, dateFilter, start, end, activeCategoryIds, categoryMetric, weeklyServiceHours])
+  }, [mealFilteredOrders, orders, categories, dishes, dateFilter, start, end, activeCategoryIds, categoryMetric, weeklyServiceHours, mealFilter])
 
   // EXPORT ANALYTICS FUNCTION - VISUAL PDF
   const handleExportAnalytics = async () => {
@@ -824,6 +830,28 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                 />
               </div>
             )}
+
+            {/* Meal Filter */}
+            <div className="flex items-center bg-black/40 border border-white/10 rounded-lg p-0.5 h-10">
+              {([
+                { value: 'all' as const, label: 'Tutto' },
+                { value: 'pranzo' as const, label: 'Pranzo', icon: <Sun size={14} weight="fill" /> },
+                { value: 'cena' as const, label: 'Cena', icon: <Moon size={14} weight="fill" /> },
+              ]).map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setMealFilter(opt.value)}
+                  className={`flex items-center gap-1.5 px-3 h-full rounded-md text-xs font-bold transition-all ${
+                    mealFilter === opt.value
+                      ? opt.value === 'pranzo' ? 'bg-amber-500 text-black' : opt.value === 'cena' ? 'bg-indigo-500 text-white' : 'bg-zinc-700 text-white'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                >
+                  {opt.icon}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
 
             <Button
               variant="outline"
@@ -1433,19 +1461,18 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                       { key: 'waiters' as const, label: 'Camerieri Attivi', color: 'emerald' },
                       { key: 'ordersPerHour' as const, label: 'Ritmo Ordini', color: 'amber' },
                       { key: 'avgWait' as const, label: 'Attesa Media', color: 'violet' },
-                      { key: 'pranzoVsCena' as const, label: 'Pranzo vs Cena', color: 'blue' },
                     ]).map(opt => (
                       <button
                         key={opt.key}
-                        onClick={() => setWaiterChartMetric(opt.key as any)}
+                        onClick={() => setWaiterChartMetric(opt.key)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${waiterChartMetric === opt.key
                           ? 'border'
                           : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50 hover:text-zinc-300'
                         }`}
                         style={waiterChartMetric === opt.key ? {
-                          backgroundColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.2)' : opt.color === 'amber' ? 'rgba(245,158,11,0.2)' : opt.color === 'violet' ? 'rgba(139,92,246,0.2)' : 'rgba(59,130,246,0.2)',
-                          color: opt.color === 'emerald' ? '#34d399' : opt.color === 'amber' ? '#fbbf24' : opt.color === 'violet' ? '#a78bfa' : '#60a5fa',
-                          borderColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.3)' : opt.color === 'amber' ? 'rgba(245,158,11,0.3)' : opt.color === 'violet' ? 'rgba(139,92,246,0.3)' : 'rgba(59,130,246,0.3)'
+                          backgroundColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.2)' : opt.color === 'amber' ? 'rgba(245,158,11,0.2)' : 'rgba(139,92,246,0.2)',
+                          color: opt.color === 'emerald' ? '#34d399' : opt.color === 'amber' ? '#fbbf24' : '#a78bfa',
+                          borderColor: opt.color === 'emerald' ? 'rgba(16,185,129,0.3)' : opt.color === 'amber' ? 'rgba(245,158,11,0.3)' : 'rgba(139,92,246,0.3)'
                         } : {}}
                       >
                         {opt.label}
@@ -1456,48 +1483,34 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               </CardHeader>
               <CardContent className="pt-6">
                 <ResponsiveContainer width="100%" height={300}>
-                  {waiterChartMetric === 'pranzoVsCena' ? (
-                    <BarChart data={waiterStats.dailyMetrics} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dx={-10} allowDecimals={false} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
-                        labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
-                      />
-                      <Bar dataKey="pranzo" name="Pranzo" fill="#f59e0b" radius={[4,4,0,0]} maxBarSize={28} />
-                      <Bar dataKey="cena" name="Cena" fill="#8b5cf6" radius={[4,4,0,0]} maxBarSize={28} />
-                    </BarChart>
-                  ) : (
-                    <AreaChart data={waiterStats.dailyMetrics} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0.4} />
-                          <stop offset="95%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dx={-10} allowDecimals={waiterChartMetric !== 'waiters'} />
-                      <Tooltip
-                        contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
-                        itemStyle={{ color: waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6', fontWeight: 'bold' }}
-                        labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
-                        formatter={(value: number) => waiterChartMetric === 'avgWait' ? [`${value} min`, 'Attesa Media'] : value}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey={waiterChartMetric}
-                        name={waiterChartMetric === 'waiters' ? 'Camerieri Attivi' : waiterChartMetric === 'ordersPerHour' ? 'Ritmo Ordini' : 'Attesa Media (min)'}
-                        stroke={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'}
-                        strokeWidth={3}
-                        fillOpacity={1}
-                        fill="url(#colorMetric)"
-                        activeDot={{ r: 6, strokeWidth: 0, fill: '#fff' }}
-                        isAnimationActive={false}
-                      />
-                    </AreaChart>
-                  )}
+                  <AreaChart data={waiterStats.dailyMetrics} margin={{ top: 10, right: 30, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorMetricWaiter" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0.4} />
+                        <stop offset="95%" stopColor={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#71717a' }} dx={-10} allowDecimals={waiterChartMetric !== 'waiters'} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
+                      itemStyle={{ color: waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6', fontWeight: 'bold' }}
+                      labelStyle={{ color: '#a1a1aa', marginBottom: '8px' }}
+                      formatter={(value: number) => waiterChartMetric === 'avgWait' ? [`${value} min`, 'Attesa Media'] : value}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey={waiterChartMetric}
+                      name={waiterChartMetric === 'waiters' ? 'Camerieri Attivi' : waiterChartMetric === 'ordersPerHour' ? 'Ritmo Ordini' : 'Attesa Media (min)'}
+                      stroke={waiterChartMetric === 'waiters' ? '#10b981' : waiterChartMetric === 'ordersPerHour' ? '#f59e0b' : '#8b5cf6'}
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#colorMetricWaiter)"
+                      activeDot={{ r: 6, strokeWidth: 0, fill: '#fff' }}
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
