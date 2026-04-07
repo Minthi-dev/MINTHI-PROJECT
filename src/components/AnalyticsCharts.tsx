@@ -200,12 +200,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     return { ...order, filteredItems, filteredAmount }
   }).filter(order => (order.filteredItems || []).length > 0)
 
-  // Apply meal filter (pranzo/cena)
-  const mealFilteredOrders: FilteredOrder[] = mealFilter === 'all'
-    ? categoryFilteredOrders
-    : categoryFilteredOrders.filter(order => classifyOrder(order) === mealFilter)
-
-  // Pranzo/Cena classification helpers
+  // Pranzo/Cena classification helper (must be defined before mealFilteredOrders)
   const classifyOrder = (order: Order): 'pranzo' | 'cena' | null => {
     const orderDate = new Date(order.created_at)
     const orderHour = orderDate.getHours()
@@ -242,12 +237,22 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
   const calcAvgWait = (ordersSet: Order[]): number => {
     let totalMs = 0, count = 0
     ordersSet.forEach(o => {
-      const et = o.closed_at ? new Date(o.closed_at).getTime() : o.updated_at ? new Date(o.updated_at).getTime() : 0
       const st = new Date(o.created_at).getTime()
-      if (et > st && (et - st) < 4 * 60 * 60 * 1000) { totalMs += (et - st); count++ }
+      let et = 0
+      if (o.items && o.items.length > 0) {
+        const readyTimes = o.items.filter((i: any) => i.ready_at).map((i: any) => new Date(i.ready_at).getTime())
+        if (readyTimes.length > 0) et = Math.min(...readyTimes)
+      }
+      if (!et && o.closed_at) et = new Date(o.closed_at).getTime()
+      if (et > st && (et - st) < 2 * 60 * 60 * 1000) { totalMs += (et - st); count++ }
     })
     return count > 0 ? Math.round(totalMs / count / 60000) : 0
   }
+
+  // Apply meal filter (pranzo/cena)
+  const mealFilteredOrders: FilteredOrder[] = mealFilter === 'all'
+    ? categoryFilteredOrders
+    : categoryFilteredOrders.filter(order => classifyOrder(order) === mealFilter)
 
   // Analytics calculations
   const analytics = useMemo(() => {
