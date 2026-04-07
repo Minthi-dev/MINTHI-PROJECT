@@ -250,14 +250,6 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
     const activeOrdersCount = orders.filter(order => order.status === 'OPEN').length
 
-    // Pranzo / Cena split
-    const pranzoOrders = categoryFilteredOrders.filter(o => classifyOrder(o) === 'pranzo')
-    const cenaOrders = categoryFilteredOrders.filter(o => classifyOrder(o) === 'cena')
-    const pranzoRevenue = pranzoOrders.reduce((s, o) => s + (o.filteredAmount || o.total_amount || 0), 0)
-    const cenaRevenue = cenaOrders.reduce((s, o) => s + (o.filteredAmount || o.total_amount || 0), 0)
-    const pranzoAvgWait = calcAvgWait(pranzoOrders)
-    const cenaAvgWait = calcAvgWait(cenaOrders)
-
     // Daily data for charts
     const dailyData: DailyData[] = []
     const days = Math.max(1, Math.ceil((end - start) / (24 * 60 * 60 * 1000)))
