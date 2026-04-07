@@ -174,7 +174,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             )
                         `)
                         .eq('restaurant_id', rId)
-                        .in('status', ['OPEN', 'PAID', 'CANCELLED']),
+                        .in('status', ['OPEN', 'PENDING', 'PAID', 'CANCELLED']),
                     DatabaseService.getBookings(rId).catch(() => [] as Booking[])
                 ])
                 setTables(tbs)
@@ -226,7 +226,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 )
             `)
             .eq('restaurant_id', restaurantId)
-            .in('status', ['OPEN', 'PAID', 'CANCELLED'])
+            .in('status', ['OPEN', 'PENDING', 'PAID', 'CANCELLED'])
         if (ords) setActiveOrders(ords as unknown as Order[])
     }
 
@@ -312,7 +312,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         }
 
         // 2. Attesa Cibo (Waiting) - Has orders that are NOT fully served
-        const pendingOrders = sessionOrders.filter(o => ['OPEN', 'pending', 'preparing', 'ready'].includes(o.status))
+        const pendingOrders = sessionOrders.filter(o => ['OPEN', 'PENDING', 'pending', 'preparing', 'ready'].includes(o.status))
 
         if (pendingOrders.length > 0) {
             const oldestPending = pendingOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0]

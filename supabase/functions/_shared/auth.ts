@@ -11,10 +11,14 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
  * Returns null if valid, or a Response with 401 if invalid.
  */
 export function verifyApiKey(req: Request, corsHeaders: Record<string, string>): Response | null {
-    const authHeader = req.headers.get('authorization') || req.headers.get('apikey') || ''
-    const token = authHeader.replace('Bearer ', '')
+    // supabase.functions.invoke() sends the anon key in the 'apikey' header,
+    // and either the anon key (unauthenticated) or the user's access token
+    // (authenticated) in the 'Authorization' header. We accept the request
+    // if EITHER header carries the anon key.
+    const authToken = (req.headers.get('authorization') || '').replace('Bearer ', '')
+    const apiKeyToken = (req.headers.get('apikey') || '').replace('Bearer ', '')
 
-    if (!SUPABASE_ANON_KEY || token !== SUPABASE_ANON_KEY) {
+    if (!SUPABASE_ANON_KEY || (authToken !== SUPABASE_ANON_KEY && apiKeyToken !== SUPABASE_ANON_KEY)) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
             status: 401,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -8,7 +8,7 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-const VALID_ORDER_STATUSES = ["OPEN", "PAID", "CANCELLED"];
+const VALID_ORDER_STATUSES = ["OPEN", "PENDING", "PAID", "CANCELLED"];
 const VALID_ITEM_STATUSES = ["PENDING", "IN_PREPARATION", "READY", "SERVED", "DELIVERED", "PAID", "CANCELLED"];
 
 serve(async (req) => {
