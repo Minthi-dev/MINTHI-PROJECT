@@ -681,7 +681,8 @@ export const DatabaseService = {
     },
 
     async getPastOrders(restaurantId: string, limit = 500) {
-        const { data, error } = await supabase
+        // Query live orders
+        const { data: liveData, error: liveError } = await supabase
             .from('orders')
             .select(`
                 id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method,
@@ -693,8 +694,24 @@ export const DatabaseService = {
             .eq('status', 'PAID')
             .order('created_at', { ascending: false })
             .limit(limit)
-        if (error) throw error
-        return data as unknown as Order[]
+        if (liveError) throw liveError
+
+        // Query archived orders (no FK joins — items already archived flat)
+        const { data: archivedData, error: archiveError } = await supabase
+            .from('archived_orders')
+            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method')
+            .eq('restaurant_id', restaurantId)
+            .eq('status', 'PAID')
+            .order('created_at', { ascending: false })
+            .limit(limit)
+        if (archiveError) throw archiveError
+
+        // Merge, sort, and cap at limit
+        const archived = (archivedData || []).map(o => ({ ...o, items: [] }))
+        const merged = [...(liveData || []), ...archived]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, limit)
+        return merged as unknown as Order[]
     },
 
     async getAllOrders(options?: { page?: number; pageSize?: number; restaurantId?: string }) {

@@ -41,22 +41,30 @@ serve(async (req) => {
         }
 
         // Verifica che il ristorante abbia i pagamenti Stripe abilitati
-        const { data: restaurant } = await supabase
+        const { data: restaurant, error: restaurantError } = await supabase
             .from("restaurants")
-            .select("id, name, enable_stripe_payments, stripe_customer_id, stripe_connect_account_id, stripe_connect_enabled")
+            .select("id, name, enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled")
             .eq("id", restaurantId)
             .single();
 
-        if (!restaurant || !restaurant.enable_stripe_payments) {
+        if (restaurantError || !restaurant) {
+            console.error("Restaurant lookup error:", restaurantError);
             return new Response(
-                JSON.stringify({ error: "Pagamenti online non abilitati per questo ristorante" }),
-                { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
+                JSON.stringify({ error: "Ristorante non trovato" }),
+                { status: 404, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }
 
-        if (!restaurant.stripe_connect_account_id) {
+        if (!restaurant.enable_stripe_payments) {
             return new Response(
-                JSON.stringify({ error: "Il ristorante non ha ancora configurato l'account di pagamento per ricevere fondi" }),
+                JSON.stringify({ error: "Pagamenti online non abilitati per questo ristorante" }),
+                { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
+            );
+        }
+
+        if (!restaurant.stripe_connect_account_id || !restaurant.stripe_connect_enabled) {
+            return new Response(
+                JSON.stringify({ error: "Il ristorante non ha ancora completato la configurazione per ricevere pagamenti" }),
                 { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }

@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Area, AreaChart } from 'recharts'
-import { TrendUp, CurrencyEur, Users, ShoppingBag, Clock, ChartLine, CalendarBlank, List, CaretDown, Star, Package, TrendDown, Minus, Check, DownloadSimple, ArrowsLeftRight, ArrowUp, ArrowDown } from '@phosphor-icons/react'
+import { TrendUp, CurrencyEur, Users, ShoppingBag, Clock, ChartLine, CalendarBlank, List, CaretDown, Star, Package, TrendDown, Minus, Check, DownloadSimple, ArrowsLeftRight, ArrowUp, ArrowDown, Sun, Moon } from '@phosphor-icons/react'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { Order, Dish, Category, OrderItem, RestaurantStaff, WaiterActivityLog } from '../services/types'
@@ -24,6 +24,7 @@ interface AnalyticsChartsProps {
   categories: Category[]
   restaurantName?: string
   restaurantId?: string
+  weeklyServiceHours?: any
 }
 
 type DateFilter = 'today' | 'yesterday' | 'week' | '2weeks' | 'month' | '3months' | 'custom'
@@ -67,7 +68,7 @@ interface HourlyData {
 
 type FilteredOrder = Order & { filteredItems?: OrderItem[]; filteredAmount?: number }
 
-export default function AnalyticsCharts({ orders, completedOrders, dishes, categories, restaurantName = 'Ristorante', restaurantId }: AnalyticsChartsProps) {
+export default function AnalyticsCharts({ orders, completedOrders, dishes, categories, restaurantName = 'Ristorante', restaurantId, weeklyServiceHours }: AnalyticsChartsProps) {
   const [dateFilter, setDateFilter] = useState<DateFilter>('week')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
@@ -197,6 +198,50 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     return { ...order, filteredItems, filteredAmount }
   }).filter(order => (order.filteredItems || []).length > 0)
 
+  // Pranzo/Cena classification helpers
+  const classifyOrder = (order: Order): 'pranzo' | 'cena' | null => {
+    const orderDate = new Date(order.created_at)
+    const orderHour = orderDate.getHours()
+    const orderMinutes = orderHour * 60 + orderDate.getMinutes()
+
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const dayName = dayNames[orderDate.getDay()]
+
+    if (weeklyServiceHours?.useWeeklySchedule && weeklyServiceHours.schedule?.[dayName]) {
+      const daySchedule = weeklyServiceHours.schedule[dayName]
+      if (daySchedule.lunch?.enabled) {
+        const [lh, lm] = (daySchedule.lunch.start || '12:00').split(':').map(Number)
+        const [leh, lem] = (daySchedule.lunch.end || '15:00').split(':').map(Number)
+        const lStart = lh * 60 + (lm || 0)
+        const lEnd = leh * 60 + (lem || 0)
+        if (orderMinutes >= lStart && orderMinutes < lEnd) return 'pranzo'
+      }
+      if (daySchedule.dinner?.enabled) {
+        const [dh, dm] = (daySchedule.dinner.start || '19:00').split(':').map(Number)
+        const [deh, dem] = (daySchedule.dinner.end || '23:00').split(':').map(Number)
+        const dStart = dh * 60 + (dm || 0)
+        const dEnd = deh * 60 + (dem || 0)
+        if (orderMinutes >= dStart && (dEnd > dStart ? orderMinutes < dEnd : true)) return 'cena'
+      }
+      return null
+    }
+
+    // Fallback: before 16:00 = pranzo, after = cena
+    if (orderHour >= 11 && orderHour < 16) return 'pranzo'
+    if (orderHour >= 18 || orderHour < 2) return 'cena'
+    return null
+  }
+
+  const calcAvgWait = (ordersSet: Order[]): number => {
+    let totalMs = 0, count = 0
+    ordersSet.forEach(o => {
+      const et = o.closed_at ? new Date(o.closed_at).getTime() : o.updated_at ? new Date(o.updated_at).getTime() : 0
+      const st = new Date(o.created_at).getTime()
+      if (et > st && (et - st) < 4 * 60 * 60 * 1000) { totalMs += (et - st); count++ }
+    })
+    return count > 0 ? Math.round(totalMs / count / 60000) : 0
+  }
+
   // Analytics calculations
   const analytics = useMemo(() => {
     const totalOrders = categoryFilteredOrders.length
@@ -277,6 +322,14 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 50)
 
+    // Pranzo / Cena split
+    const pranzoOrders = categoryFilteredOrders.filter(o => classifyOrder(o) === 'pranzo')
+    const cenaOrders = categoryFilteredOrders.filter(o => classifyOrder(o) === 'cena')
+    const pranzoRevenue = pranzoOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0)
+    const cenaRevenue = cenaOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0)
+    const pranzoAvgWait = calcAvgWait(pranzoOrders)
+    const cenaAvgWait = calcAvgWait(cenaOrders)
+
     return {
       totalOrders,
       totalRevenue,
@@ -285,9 +338,17 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       dailyData,
       categoryStats,
       dishStats,
-      isSingleDay
+      isSingleDay,
+      pranzoOrders: pranzoOrders.length,
+      cenaOrders: cenaOrders.length,
+      pranzoRevenue,
+      cenaRevenue,
+      pranzoAvgWait,
+      cenaAvgWait,
+      pranzoAvgValue: pranzoOrders.length > 0 ? pranzoRevenue / pranzoOrders.length : 0,
+      cenaAvgValue: cenaOrders.length > 0 ? cenaRevenue / cenaOrders.length : 0,
     }
-  }, [categoryFilteredOrders, orders, categories, dishes, dateFilter, start, end, activeCategoryIds, categoryMetric])
+  }, [categoryFilteredOrders, orders, categories, dishes, dateFilter, start, end, activeCategoryIds, categoryMetric, weeklyServiceHours])
 
   // EXPORT ANALYTICS FUNCTION - VISUAL PDF
   const handleExportAnalytics = async () => {
@@ -607,15 +668,23 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       })
     }
 
+    // Pranzo/Cena wait time split
+    const pranzoOrdersW = ordersInPeriod.filter(o => classifyOrder(o) === 'pranzo')
+    const cenaOrdersW = ordersInPeriod.filter(o => classifyOrder(o) === 'cena')
+    const pranzoAvgWait = calcAvgWait(pranzoOrdersW)
+    const cenaAvgWait = calcAvgWait(cenaOrdersW)
+
     return {
       rankings,
       waiterTable,
       totalActiveWaiters,
       avgWaitMinutes,
       avgOrdersPerWaiterHour,
-      dailyMetrics
+      dailyMetrics,
+      pranzoAvgWait,
+      cenaAvgWait
     }
-  }, [waiterLogs, staffList, allOrders, start, end, dateFilter])
+  }, [waiterLogs, staffList, allOrders, start, end, dateFilter, weeklyServiceHours])
 
   return (
     <>
@@ -720,7 +789,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
           </TabsList>
 
           <TabsContent value="overview" className="space-y-8 focus:outline-none">
-            {/* Summary Cards - Enhanced Vibrant Design */}
+            {/* Summary Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card className="border-zinc-800/60 bg-gradient-to-br from-zinc-900/90 to-zinc-950/90 shadow-lg relative overflow-hidden group hover:border-amber-500/30 transition-all duration-300">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:bg-amber-500/10 transition-all"></div>
@@ -732,6 +801,12 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                     <div>
                       <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Ordini</p>
                       <p className="text-2xl font-bold text-white tracking-tight">{analytics.totalOrders}</p>
+                      {(analytics.pranzoOrders > 0 || analytics.cenaOrders > 0) && (
+                        <div className="flex items-center gap-2.5 mt-1.5">
+                          <span className="flex items-center gap-1 text-[10px] text-amber-400/80"><Sun size={10} weight="fill" />{analytics.pranzoOrders}</span>
+                          <span className="flex items-center gap-1 text-[10px] text-indigo-400/80"><Moon size={10} weight="fill" />{analytics.cenaOrders}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -747,6 +822,12 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                     <div>
                       <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Ricavi</p>
                       <p className="text-2xl font-bold text-amber-400 tracking-tight">€{analytics.totalRevenue.toFixed(0)}</p>
+                      {(analytics.pranzoRevenue > 0 || analytics.cenaRevenue > 0) && (
+                        <div className="flex items-center gap-2.5 mt-1.5">
+                          <span className="flex items-center gap-1 text-[10px] text-amber-400/80"><Sun size={10} weight="fill" />€{analytics.pranzoRevenue.toFixed(0)}</span>
+                          <span className="flex items-center gap-1 text-[10px] text-indigo-400/80"><Moon size={10} weight="fill" />€{analytics.cenaRevenue.toFixed(0)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -762,6 +843,12 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                     <div>
                       <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">Scontrino Medio</p>
                       <p className="text-2xl font-bold text-white tracking-tight">€{analytics.averageOrderValue.toFixed(2)}</p>
+                      {(analytics.pranzoAvgValue > 0 || analytics.cenaAvgValue > 0) && (
+                        <div className="flex items-center gap-2.5 mt-1.5">
+                          <span className="flex items-center gap-1 text-[10px] text-amber-400/80"><Sun size={10} weight="fill" />€{analytics.pranzoAvgValue.toFixed(0)}</span>
+                          <span className="flex items-center gap-1 text-[10px] text-indigo-400/80"><Moon size={10} weight="fill" />€{analytics.cenaAvgValue.toFixed(0)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -960,20 +1047,18 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               </Card>
             </div>
 
-            {/* REDESIGNED INVENTORY SECTION */}
-            <Card className="shadow-2xl border-none overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 ring-1 ring-white/5">
-              <CardHeader className="border-b border-white/5 pb-4 bg-black/20">
+            {/* INVENTORY SECTION */}
+            <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden backdrop-blur-sm">
+              <CardHeader className="border-b border-white/5 pb-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20 shadow-inner">
-                      <Package size={24} className="text-amber-500" weight="duotone" />
-                    </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-1 h-8 bg-amber-500 rounded-full"></div>
                     <div>
-                      <CardTitle className="text-xl font-bold text-white tracking-tight">
+                      <CardTitle className="text-lg font-semibold text-zinc-100">
                         Analisi Magazzino
                       </CardTitle>
-                      <p className="text-sm text-zinc-400 mt-1">
-                        Confronto vendite vs periodo precedente (2 anni)
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Vendite per piatto vs media storica
                       </p>
                     </div>
                   </div>
@@ -1046,23 +1131,19 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                   </div>
                 </div>
 
-                {/* Comparison Toggle & Controls */}
-                <div className="mt-4 pt-4 border-t border-white/5">
+                {/* Comparison Toggle */}
+                <div className="mt-3 pt-3 border-t border-white/5">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    {/* Toggle */}
                     <button
                       onClick={() => setMagCompareEnabled(!magCompareEnabled)}
-                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                         magCompareEnabled
-                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                          : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50 hover:text-zinc-300 hover:border-zinc-600'
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          : 'bg-zinc-800/50 text-zinc-500 border border-zinc-700/50 hover:text-zinc-300'
                       }`}
                     >
-                      <div className={`w-8 h-4.5 rounded-full relative transition-all ${magCompareEnabled ? 'bg-amber-500' : 'bg-zinc-700'}`}>
-                        <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-all ${magCompareEnabled ? 'left-[18px]' : 'left-0.5'}`}></div>
-                      </div>
-                      <ArrowsLeftRight size={14} weight="bold" />
-                      Confronta periodo
+                      <ArrowsLeftRight size={12} weight="bold" />
+                      Confronta
                     </button>
 
                     {/* Comparison mode selector (visible only when enabled) */}
@@ -1110,8 +1191,8 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
               </CardHeader>
 
               <CardContent className="p-0">
-                {/* Quick Stats Bar */}
-                <div className="grid grid-cols-4 gap-px bg-white/5 border-b border-white/5">
+                {/* Quick Stats */}
+                <div className="flex items-center gap-6 px-6 py-3 border-b border-white/5">
                   {(() => {
                     const portionsDelta = magCompareEnabled && inventoryData.compTotalPortions > 0
                       ? ((inventoryData.totalPortions - inventoryData.compTotalPortions) / inventoryData.compTotalPortions * 100)
@@ -1120,64 +1201,55 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                       ? ((inventoryData.currentTotalRevenue - inventoryData.compTotalRevenue) / inventoryData.compTotalRevenue * 100)
                       : null
 
-                    const stats = [
-                      {
-                        label: "Porzioni Vendute",
-                        value: inventoryData.totalPortions,
-                        icon: <Package size={16} weight="fill" className="text-blue-400" />,
-                        delta: portionsDelta
-                      },
-                      {
-                        label: "Piatti Analizzati",
-                        value: inventoryData.dishes.length,
-                        icon: <List size={16} weight="bold" className="text-zinc-400" />,
-                        delta: null
-                      },
-                      {
-                        label: "Giorni Analizzati",
-                        value: inventoryData.periodDays,
-                        icon: <CalendarBlank size={16} weight="fill" className="text-zinc-400" />,
-                        delta: null
-                      },
-                      {
-                        label: magCompareEnabled ? "Incasso Periodo" : "Piatti Attivi",
-                        value: magCompareEnabled
-                          ? `€${Math.round(inventoryData.currentTotalRevenue)}`
-                          : inventoryData.dishes.filter(d => d.periodQuantity > 0).length,
-                        icon: magCompareEnabled
-                          ? <CurrencyEur size={16} weight="fill" className="text-amber-400" />
-                          : <Check size={16} weight="bold" className="text-emerald-400" />,
-                        delta: revenueDelta
-                      },
-                    ]
-
-                    return stats.map((stat, i) => (
-                      <div key={i} className="p-4 flex flex-col items-center justify-center bg-zinc-900/50 hover:bg-zinc-900 transition-colors">
-                        <div className="flex items-center gap-2 mb-1 opacity-70">
-                          {stat.icon}
-                          <span className="text-[10px] uppercase font-bold text-zinc-400">{stat.label}</span>
+                    return (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Porzioni</span>
+                          <span className="text-sm font-bold text-white tabular-nums">{inventoryData.totalPortions}</span>
+                          {portionsDelta !== null && (
+                            <span className={`text-[10px] font-bold flex items-center gap-0.5 ${portionsDelta > 0 ? 'text-emerald-400' : portionsDelta < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>
+                              {portionsDelta > 0 ? <ArrowUp size={8} weight="bold" /> : portionsDelta < 0 ? <ArrowDown size={8} weight="bold" /> : null}
+                              {portionsDelta > 0 ? '+' : ''}{Math.round(portionsDelta * 10) / 10}%
+                            </span>
+                          )}
                         </div>
-                        <span className="text-xl font-bold text-white">{stat.value}</span>
-                        {stat.delta !== null && (
-                          <span className={`text-[10px] font-bold mt-0.5 flex items-center gap-0.5 ${
-                            stat.delta > 0 ? 'text-emerald-400' : stat.delta < 0 ? 'text-rose-400' : 'text-zinc-500'
-                          }`}>
-                            {stat.delta > 0 ? <ArrowUp size={10} weight="bold" /> : stat.delta < 0 ? <ArrowDown size={10} weight="bold" /> : null}
-                            {stat.delta > 0 ? '+' : ''}{Math.round(stat.delta * 10) / 10}% vs periodo
-                          </span>
+                        <div className="w-px h-4 bg-zinc-800"></div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Piatti</span>
+                          <span className="text-sm font-bold text-white tabular-nums">{inventoryData.dishes.length}</span>
+                        </div>
+                        <div className="w-px h-4 bg-zinc-800"></div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Giorni</span>
+                          <span className="text-sm font-bold text-white tabular-nums">{inventoryData.periodDays}</span>
+                        </div>
+                        {magCompareEnabled && (
+                          <>
+                            <div className="w-px h-4 bg-zinc-800"></div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Incasso</span>
+                              <span className="text-sm font-bold text-amber-400 tabular-nums">€{Math.round(inventoryData.currentTotalRevenue)}</span>
+                              {revenueDelta !== null && (
+                                <span className={`text-[10px] font-bold flex items-center gap-0.5 ${revenueDelta > 0 ? 'text-emerald-400' : revenueDelta < 0 ? 'text-rose-400' : 'text-zinc-500'}`}>
+                                  {revenueDelta > 0 ? <ArrowUp size={8} weight="bold" /> : revenueDelta < 0 ? <ArrowDown size={8} weight="bold" /> : null}
+                                  {revenueDelta > 0 ? '+' : ''}{Math.round(revenueDelta * 10) / 10}%
+                                </span>
+                              )}
+                            </div>
+                          </>
                         )}
-                      </div>
-                    ))
+                      </>
+                    )
                   })()}
                 </div>
 
                 {/* Table Header */}
-                <div className="grid grid-cols-12 gap-4 px-6 py-3 bg-zinc-950/30 border-b border-white/5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                <div className="grid grid-cols-12 gap-4 px-6 py-2.5 border-b border-white/5 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
                   <div className="col-span-4 pl-2">Piatto / Categoria</div>
                   <div className="col-span-2 text-center">Prezzo</div>
                   <div className="col-span-2 text-center">Vendite Tot.</div>
                   <div className="col-span-2 text-center">Media / GG</div>
-                  <div className="col-span-2 text-right pr-2">Trend (vs 2 Anni)</div>
+                  <div className="col-span-2 text-right pr-2">Trend</div>
                 </div>
 
                 {/* Scrollable List */}
@@ -1282,6 +1354,12 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                     <div>
                       <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Tempo Medio Attesa</p>
                       <p className="text-2xl font-black text-white tabular-nums mt-0.5">{waiterStats.avgWaitMinutes} <span className="text-sm text-zinc-500 font-medium">min</span></p>
+                      {(waiterStats.pranzoAvgWait > 0 || waiterStats.cenaAvgWait > 0) && (
+                        <div className="flex items-center gap-2.5 mt-1">
+                          <span className="flex items-center gap-1 text-[10px] text-amber-400/80"><Sun size={10} weight="fill" />{waiterStats.pranzoAvgWait}min</span>
+                          <span className="flex items-center gap-1 text-[10px] text-indigo-400/80"><Moon size={10} weight="fill" />{waiterStats.cenaAvgWait}min</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>

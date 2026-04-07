@@ -1812,6 +1812,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const handleDeleteCategory = (categoryId: string) => {
     if (demoGuard()) return
+    const cat = categories?.find(c => c.id === categoryId)
+    if (!confirm(`Eliminare la categoria "${cat?.name || 'questa categoria'}" e tutti i piatti associati?`)) return
     DatabaseService.deleteCategory(categoryId)
       .then(() => toast.success('Categoria eliminata'))
   }
@@ -4063,6 +4065,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 completedOrders={pastOrders}
                 restaurantName={restaurantName}
                 restaurantId={restaurantId || ''}
+                weeklyServiceHours={weeklyServiceHours}
               />
             </TabsContent >
 
