@@ -861,6 +861,25 @@ export function SettingsView({
                                     </div>
                                     <Separator className="bg-white/5" />
 
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                        <div>
+                                            <Label className="text-base text-amber-100">Consegna Automatica Piatti Pronti</Label>
+                                            <p className="text-sm text-amber-300/60">Quando un piatto è segnato come pronto in cucina, viene automaticamente considerato consegnato. I camerieri non ricevono la notifica.</p>
+                                        </div>
+                                        <Switch
+                                            checked={(restaurant as any)?.auto_deliver_ready_dishes ?? false}
+                                            onCheckedChange={async (checked) => {
+                                                try {
+                                                    await onUpdateRestaurant({ auto_deliver_ready_dishes: checked })
+                                                } catch (e) {
+                                                    console.error('Error updating auto_deliver_ready_dishes:', e)
+                                                }
+                                            }}
+                                            className="data-[state=checked]:bg-amber-500"
+                                        />
+                                    </div>
+                                    <Separator className="bg-white/5" />
+
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
                                             <Key size={20} className="text-amber-500" />

@@ -1742,8 +1742,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const handleCompleteDish = async (orderId: string, itemId: string, showToast = true) => {
     if (demoGuard()) return
-    // FIX: Set status to 'READY' (uppercase) so it is recognized as done by KitchenView
-    await updateOrderItemStatus(orderId, itemId, 'READY')
+    const autoDeliver = (currentRestaurant as any)?.auto_deliver_ready_dishes === true
+    const targetStatus = autoDeliver ? 'SERVED' : 'READY'
+
+    await updateOrderItemStatus(orderId, itemId, targetStatus)
 
     // Update local orders state immediately for UI refresh
     setOrders(prevOrders => prevOrders.map(order => {
@@ -1751,14 +1753,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         return {
           ...order,
           items: order.items?.map(item =>
-            item.id === itemId ? { ...item, status: 'READY' as const } : item
+            item.id === itemId ? { ...item, status: targetStatus as any } : item
           )
         }
       }
       return order
     }))
 
-    if (showToast) toast.success('Piatto pronto! Notifica inviata ai camerieri.')
+    if (showToast) {
+      toast.success(autoDeliver ? 'Piatto pronto e consegnato!' : 'Piatto pronto! Notifica inviata ai camerieri.')
+    }
   }
 
   const handleDeliverDish = async (orderId: string, itemId: string) => {

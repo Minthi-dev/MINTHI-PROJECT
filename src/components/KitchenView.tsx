@@ -239,18 +239,8 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                                 )}
                                                             </div>
 
-                                                            {/* Action button: Completa → Consegnato → scompare */}
-                                                            {isItemDone ? null : isItemReady ? (
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="default"
-                                                                    className="h-11 w-11 rounded-xl flex-shrink-0 ml-3 transition-all duration-500 bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_10px_20px_-10px_rgba(16,185,129,0.5)] active:scale-90"
-                                                                    onClick={() => onDeliverDish?.(item.orderId, item.id)}
-                                                                    title="Segna come consegnato"
-                                                                >
-                                                                    <Check weight="bold" className="h-5 w-5" />
-                                                                </Button>
-                                                            ) : (
+                                                            {/* Action button: Completa (only READY, no deliver from kitchen) */}
+                                                            {(isItemDone || isItemReady) ? null : (
                                                                 <Button
                                                                     size="icon"
                                                                     variant="default"
@@ -366,18 +356,8 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
                                                         <div className="font-bold text-xl text-zinc-500 whitespace-nowrap">
                                                             {formatTime(timeDiff)}
                                                         </div>
-                                                        {/* READY → show green Consegnato button, DONE → nothing */}
-                                                        {isItemDone ? null : isItemReady ? (
-                                                            <Button
-                                                                size="icon"
-                                                                variant="default"
-                                                                className="h-12 w-12 rounded-lg flex-shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_10px_20px_-10px_rgba(16,185,129,0.5)] active:scale-90"
-                                                                onClick={() => onDeliverDish?.(order.id, item.id)}
-                                                                title="Segna come consegnato"
-                                                            >
-                                                                <Check weight="bold" className="h-6 w-6" />
-                                                            </Button>
-                                                        ) : (
+                                                        {/* Action: only mark as READY, no deliver from kitchen */}
+                                                        {(isItemDone || isItemReady) ? null : (
                                                             <Button
                                                                 size="icon"
                                                                 variant="default"
