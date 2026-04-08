@@ -186,22 +186,8 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
 
   const activeCategoryIds = selectedCategories
 
-  const categoryFilteredOrders: FilteredOrder[] = dateFilteredOrders.map(order => {
-    const filteredItems = (order.items || []).filter((item: OrderItem) => {
-      const dish = dishes.find(d => d.id === item.dish_id)
-      return dish ? activeCategoryIds.includes(dish.category_id) : false
-    })
-
-    const filteredAmount = filteredItems.reduce((sum, item) => {
-      const dish = dishes.find(d => d.id === item.dish_id)
-      return sum + (dish?.price || 0) * item.quantity
-    }, 0)
-
-    return { ...order, filteredItems, filteredAmount }
-  }).filter(order => (order.filteredItems || []).length > 0)
-
-  // Pranzo/Cena classification helper (must be defined before mealFilteredOrders)
-  const classifyOrder = (order: Order): 'pranzo' | 'cena' | null => {
+  // Pranzo/Cena helpers — defined first so they're available everywhere
+  function classifyOrder(order: Order): 'pranzo' | 'cena' | null {
     const orderDate = new Date(order.created_at)
     const orderHour = orderDate.getHours()
     const orderMinutes = orderHour * 60 + orderDate.getMinutes()
@@ -228,13 +214,12 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
       return null
     }
 
-    // Fallback: before 16:00 = pranzo, after = cena
     if (orderHour >= 11 && orderHour < 16) return 'pranzo'
     if (orderHour >= 18 || orderHour < 2) return 'cena'
     return null
   }
 
-  const calcAvgWait = (ordersSet: Order[]): number => {
+  function calcAvgWait(ordersSet: Order[]): number {
     let totalMs = 0, count = 0
     ordersSet.forEach(o => {
       const st = new Date(o.created_at).getTime()
@@ -249,7 +234,21 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     return count > 0 ? Math.round(totalMs / count / 60000) : 0
   }
 
-  // Apply meal filter (pranzo/cena)
+  const categoryFilteredOrders: FilteredOrder[] = dateFilteredOrders.map(order => {
+    const filteredItems = (order.items || []).filter((item: OrderItem) => {
+      const dish = dishes.find(d => d.id === item.dish_id)
+      return dish ? activeCategoryIds.includes(dish.category_id) : false
+    })
+
+    const filteredAmount = filteredItems.reduce((sum, item) => {
+      const dish = dishes.find(d => d.id === item.dish_id)
+      return sum + (dish?.price || 0) * item.quantity
+    }, 0)
+
+    return { ...order, filteredItems, filteredAmount }
+  }).filter(order => (order.filteredItems || []).length > 0)
+
+  // Apply meal filter
   const mealFilteredOrders: FilteredOrder[] = mealFilter === 'all'
     ? categoryFilteredOrders
     : categoryFilteredOrders.filter(order => classifyOrder(order) === mealFilter)
