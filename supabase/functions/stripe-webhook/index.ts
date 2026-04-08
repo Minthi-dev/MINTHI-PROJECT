@@ -438,8 +438,10 @@ serve(async (req) => {
                     .single();
 
                 if (restaurant) {
+                    // Normalizziamo trialing → active: per noi un trial è un abbonamento attivo
+                    const normalizedStatus = subscription.status === 'trialing' ? 'active' : subscription.status;
                     const updates: Record<string, unknown> = {
-                        subscription_status: subscription.status,
+                        subscription_status: normalizedStatus,
                     };
 
                     if (subscription.cancel_at_period_end && subscription.cancel_at) {

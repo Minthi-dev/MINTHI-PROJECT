@@ -358,12 +358,23 @@ export function SettingsView({
     }
 
     // Calcola data prossimo pagamento dal periodo dell'ultima fattura pagata
+    // Se non ci sono pagamenti (trial attivo), mostra il 1° del prossimo mese
     const nextPaymentDate = (() => {
         const paid = subscriptionPayments.filter(p => p.status === 'paid' && p.period_end)
-        if (!paid.length) return null
-        const last = paid[0] // già ordinato per created_at desc
-        if (!last.period_end) return null
-        return new Date(last.period_end)
+        if (paid.length) {
+            const last = paid[0] // già ordinato per created_at desc
+            if (last.period_end) return new Date(last.period_end)
+        }
+        // Nessun pagamento ancora — trial attivo, primo addebito il 1° del prossimo mese
+        if (subscriptionInfo?.stripe_subscription_id) {
+            const now = new Date()
+            return new Date(Date.UTC(
+                now.getUTCMonth() === 11 ? now.getUTCFullYear() + 1 : now.getUTCFullYear(),
+                now.getUTCMonth() === 11 ? 0 : now.getUTCMonth() + 1,
+                1
+            ))
+        }
+        return null
     })()
 
     const handleSaveStaff = async () => {
@@ -1406,16 +1417,16 @@ export function SettingsView({
                                                 </div>
                                             </div>
                                             {/* Status */}
-                                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${subscriptionInfo.subscription_status === 'active' && !subscriptionInfo.subscription_cancel_at
+                                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at
                                                 ? 'bg-emerald-500/10 text-emerald-400'
-                                                : subscriptionInfo.subscription_status === 'active' && subscriptionInfo.subscription_cancel_at
+                                                : ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at
                                                     ? 'bg-amber-500/10 text-amber-500'
                                                     : subscriptionInfo.subscription_status === 'past_due'
                                                         ? 'bg-red-500/10 text-red-400'
                                                         : 'bg-zinc-800 text-zinc-400'
                                                 }`}>
-                                                {subscriptionInfo.subscription_status === 'active' && !subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
-                                                {subscriptionInfo.subscription_status === 'active' && subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-amber-400" />Annullato</>}
+                                                {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
+                                                {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-amber-400" />Annullato</>}
                                                 {subscriptionInfo.subscription_status === 'past_due' && <><WarningCircle weight="fill" size={16} />Pagamento fallito</>}
                                                 {subscriptionInfo.subscription_status === 'canceled' && 'Annullato'}
                                                 {!subscriptionInfo.subscription_status && 'Attivo'}
@@ -1482,7 +1493,7 @@ export function SettingsView({
                                         )}
 
                                         {/* Next billing — only when truly active and not cancelling */}
-                                        {nextPaymentDate && subscriptionInfo.subscription_status === 'active' && !subscriptionInfo.subscription_cancel_at && (
+                                        {nextPaymentDate && ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && (
                                             <div className="flex items-center gap-3 p-4 bg-black/20 rounded-xl mb-5">
                                                 <Clock size={20} className="text-zinc-500 shrink-0" />
                                                 <p className="text-sm text-zinc-400">

@@ -1880,7 +1880,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     {detailRestaurant.subscription_status && (
                       <div className="flex items-center gap-2">
                         <span className="text-zinc-500">Stato:</span>
-                        <span className="text-zinc-300 capitalize">{detailRestaurant.subscription_status}</span>
+                        <span className="text-zinc-300 capitalize">{detailRestaurant.subscription_status === 'trialing' ? 'active' : detailRestaurant.subscription_status}</span>
                       </div>
                     )}
                   </div>

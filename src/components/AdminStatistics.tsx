@@ -126,7 +126,7 @@ export default function AdminStatistics({ onImpersonate }: AdminStatisticsProps)
                 const restaurants = restaurantsResult.data || []
 
                 const totalEarned = payments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
-                const activeSubscriptions = restaurants.filter((r: any) => r.subscription_status === 'active').length
+                const activeSubscriptions = restaurants.filter((r: any) => ['active','trialing'].includes(r.subscription_status)).length
                 const activeDiscounts = discounts.filter((d: any) => d.is_active).length
                 const bonusMonthsGiven = bonuses.reduce((sum: number, b: any) => sum + (b.free_months || 0), 0)
 
