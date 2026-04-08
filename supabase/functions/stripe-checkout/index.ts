@@ -38,6 +38,20 @@ serve(async (req) => {
             metadata.restaurantId = restaurantId;
         }
 
+        // Prova gratuita fino al 1° del prossimo mese, poi addebito mensile il 1°.
+        // Dopo il trial, Stripe ancora il ciclo di fatturazione alla data di fine trial,
+        // quindi tutti gli addebiti successivi cadono il 1° del mese.
+        const now = new Date();
+        const firstOfNextMonth = new Date(Date.UTC(
+            now.getUTCMonth() === 11 ? now.getUTCFullYear() + 1 : now.getUTCFullYear(),
+            now.getUTCMonth() === 11 ? 0 : now.getUTCMonth() + 1,
+            1, 0, 0, 0
+        ));
+        const trialEndTimestamp = Math.floor(firstOfNextMonth.getTime() / 1000);
+
+        // Se oggi è il 1°, il trial_end sarebbe "adesso" → niente trial, addebito immediato
+        const isFirstOfMonth = now.getUTCDate() === 1;
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             mode: "subscription",
@@ -47,6 +61,7 @@ serve(async (req) => {
             metadata,
             client_reference_id: pendingRegistrationId || restaurantId,
             ...(couponId ? { discounts: [{ coupon: couponId }] } : {}),
+            ...(!isFirstOfMonth ? { subscription_data: { trial_end: trialEndTimestamp } } : {}),
         });
 
         return new Response(JSON.stringify({ sessionId: session.id, url: session.url }), {

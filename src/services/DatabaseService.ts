@@ -639,7 +639,7 @@ export const DatabaseService = {
         // Query archived orders (no FK joins — items already archived flat)
         const { data: archivedData, error: archiveError } = await supabase
             .from('archived_orders')
-            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method')
+            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id')
             .eq('restaurant_id', restaurantId)
             .eq('status', 'PAID')
             .order('created_at', { ascending: false })
@@ -1344,16 +1344,31 @@ export const DatabaseService = {
 
     // Stripe price management
     async getStripePriceDetails(): Promise<{ amount: number, currency: string, product_id: string | null, price_id: string | null }> {
-        const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
-            body: { action: 'get' }
-        })
-        if (error) {
-            // On non-2xx, data may contain the actual error message
-            const msg = typeof data === 'object' && data?.error ? data.error : error.message
-            console.error('getStripePriceDetails error:', msg, data)
-            throw new Error(msg)
+        const fallback = { amount: 0, currency: 'eur', product_id: null, price_id: null }
+        try {
+            const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
+                body: { action: 'get' }
+            })
+            if (error) {
+                // Edge function returned non-2xx — fall back to cached app_config values
+                console.warn('getStripePriceDetails: edge function unavailable, using cached config')
+                const [amountStr, priceId, productId] = await Promise.all([
+                    this.getAppConfig('stripe_price_amount'),
+                    this.getAppConfig('stripe_price_id'),
+                    this.getAppConfig('stripe_product_id'),
+                ])
+                return {
+                    amount: amountStr ? parseFloat(amountStr) : 0,
+                    currency: 'eur',
+                    product_id: productId,
+                    price_id: priceId,
+                }
+            }
+            return data ?? fallback
+        } catch (e) {
+            console.warn('getStripePriceDetails: unexpected error, returning defaults', e)
+            return fallback
         }
-        return data ?? { amount: 0, currency: 'eur', product_id: null, price_id: null }
     },
 
     async createStripePrice(amountCents: number): Promise<{ priceId: string, amount: number }> {

@@ -1571,7 +1571,8 @@ export function SettingsView({
                                     >
                                         Attiva Abbonamento
                                     </Button>
-                                    <p className="text-xs text-zinc-600 mt-3">Pagamenti sicuri gestiti da Stripe</p>
+                                    <p className="text-xs text-emerald-400/80 mt-3 font-medium">Prova gratuita fino al 1° del prossimo mese</p>
+                                    <p className="text-xs text-zinc-600 mt-1">Pagamenti sicuri gestiti da Stripe</p>
                                 </div>
                             </div>
                         )}

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { verifyApiKey, validateRedirectUrl } from "../_shared/auth.ts";
+import { validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -20,8 +20,11 @@ serve(async (req) => {
         return new Response("ok", { headers: corsHeaders });
     }
 
-    const authError = verifyApiKey(req, corsHeaders);
-    if (authError) return authError;
+    // No API key / JWT verification here: this is a public endpoint called by
+    // unauthenticated customers scanning a QR code.  The function validates
+    // the restaurant and its Stripe Connect configuration before creating a
+    // Checkout Session, so no sensitive action can be triggered without a
+    // legitimate restaurantId + enabled Stripe account.
 
     try {
         const {

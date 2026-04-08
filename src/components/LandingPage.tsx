@@ -740,7 +740,8 @@ export default function LandingPage() {
                     {token ? 'Registrati Gratis' : 'Inizia Ora'}
                   </button>
 
-                  <p className="text-zinc-600 text-xs mt-4">Disdici quando vuoi. Nessun vincolo.</p>
+                  <p className="text-emerald-400/80 text-xs mt-4 font-medium">Prova gratuita fino al 1° del prossimo mese. Il primo addebito avviene il 1° del mese.</p>
+                  <p className="text-zinc-600 text-xs mt-1">Disdici quando vuoi. Nessun vincolo.</p>
                 </div>
               </div>
             </div>

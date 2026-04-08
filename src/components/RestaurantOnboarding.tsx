@@ -441,9 +441,12 @@ export default function RestaurantOnboarding() {
                             </button>
 
                             {!tokenData?.free_months && (
-                                <p className="text-[10px] text-zinc-600 text-center mt-2 pb-[env(safe-area-inset-bottom)]">
-                                    Verrai reindirizzato a Stripe per il pagamento dell'abbonamento.
-                                </p>
+                                <div className="text-center mt-2 pb-[env(safe-area-inset-bottom)]">
+                                    <p className="text-[10px] text-emerald-400/80 font-medium">Prova gratuita fino al 1° del prossimo mese</p>
+                                    <p className="text-[10px] text-zinc-600 mt-0.5">
+                                        Verrai reindirizzato a Stripe per il pagamento dell'abbonamento.
+                                    </p>
+                                </div>
                             )}
                         </div>
                     </motion.div>
