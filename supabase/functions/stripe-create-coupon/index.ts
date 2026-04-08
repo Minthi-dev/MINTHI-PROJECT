@@ -1,12 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { verifyApiKey } from "../_shared/auth.ts";
+import { verifyAccess } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
     httpClient: Stripe.createFetchHttpClient(),
 });
+
+const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+);
 
 // Genera un nome univoco per il coupon basato sui parametri
 function couponName(percentOff: number, duration: string, durationMonths?: number): string {
@@ -22,11 +28,20 @@ serve(async (req) => {
         return new Response("ok", { headers: corsHeaders });
     }
 
-    const authError = verifyApiKey(req, corsHeaders);
-    if (authError) return authError;
-
     try {
-        const { percent_off, duration, duration_in_months } = await req.json();
+        const { userId, percent_off, duration, duration_in_months } = await req.json();
+
+        if (!userId) {
+            return new Response(JSON.stringify({ error: "Authentication required" }), {
+                status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+        const access = await verifyAccess(supabase, userId);
+        if (!access.valid || !access.isAdmin) {
+            return new Response(JSON.stringify({ error: "Non autorizzato — solo admin" }), {
+                status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
 
         if (!percent_off || !duration) {
             return new Response(JSON.stringify({ error: "Mancano percent_off o duration" }), {

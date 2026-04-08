@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { verifyApiKey } from "../_shared/auth.ts";
+import { verifyAccess } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2024-04-10" as any,
@@ -21,11 +21,22 @@ serve(async (req) => {
         return new Response("ok", { headers: corsHeaders });
     }
 
-    const authError = verifyApiKey(req, corsHeaders);
-    if (authError) return authError;
-
     try {
-        const { action, amount_cents } = await req.json();
+        const { action, amount_cents, userId } = await req.json();
+
+        // "set" action requires admin auth; "get" is read-only (admin panel only)
+        if (userId) {
+            const access = await verifyAccess(supabase, userId);
+            if (!access.valid || !access.isAdmin) {
+                return new Response(JSON.stringify({ error: "Non autorizzato — solo admin" }), {
+                    status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+                });
+            }
+        } else if (action === "set") {
+            return new Response(JSON.stringify({ error: "Authentication required" }), {
+                status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
 
         if (action === "get") {
             // Recupera prezzo corrente da Stripe

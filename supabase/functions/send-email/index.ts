@@ -1,11 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3"
 import { getCorsHeaders } from "../_shared/cors.ts"
-import { verifyApiKey } from "../_shared/auth.ts"
+import { verifyAccess } from "../_shared/auth.ts"
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 if (!RESEND_API_KEY) {
     console.error('RESEND_API_KEY environment variable is not set')
 }
+
+const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+)
 
 interface EmailRequest {
     to: string[];
@@ -22,11 +28,20 @@ serve(async (req) => {
         return new Response('ok', { headers: corsHeaders })
     }
 
-    const authError = verifyApiKey(req, corsHeaders)
-    if (authError) return authError
-
     try {
-        const { to, subject, html, text }: EmailRequest = await req.json()
+        const { userId, to, subject, html, text } = await req.json() as EmailRequest & { userId?: string }
+
+        if (!userId) {
+            return new Response(JSON.stringify({ error: "Authentication required" }), {
+                status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            })
+        }
+        const access = await verifyAccess(supabase, userId)
+        if (!access.valid) {
+            return new Response(JSON.stringify({ error: "Forbidden" }), {
+                status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            })
+        }
 
         if (!to || !subject || !html) {
             throw new Error("Missing required fields: to, subject, html")

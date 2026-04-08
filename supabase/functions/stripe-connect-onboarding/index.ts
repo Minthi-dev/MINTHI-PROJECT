@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
-import { verifyApiKey, validateRedirectUrl } from "../_shared/auth.ts";
+import { verifyAccess, validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripeKey = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const stripe = new Stripe(stripeKey, {
@@ -22,9 +22,6 @@ serve(async (req) => {
         return new Response("ok", { headers: corsHeaders });
     }
 
-    const authError = verifyApiKey(req, corsHeaders);
-    if (authError) return authError;
-
     try {
         if (!stripeKey) {
             console.error("STRIPE_SECRET_KEY non configurata");
@@ -34,11 +31,24 @@ serve(async (req) => {
             });
         }
 
-        const { restaurantId, returnUrl } = await req.json();
+        const { userId, restaurantId, returnUrl } = await req.json();
 
         if (!restaurantId) {
             return new Response(JSON.stringify({ error: "restaurantId richiesto" }), {
                 status: 400,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        if (!userId) {
+            return new Response(JSON.stringify({ error: "Authentication required" }), {
+                status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+        const access = await verifyAccess(supabase, userId, restaurantId);
+        if (!access.valid) {
+            return new Response(JSON.stringify({ error: "Forbidden" }), {
+                status: 403,
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }

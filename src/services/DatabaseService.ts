@@ -930,8 +930,10 @@ export const DatabaseService = {
 
     // Stripe - Abbonamento ristorante
     async createStripeSubscriptionCheckout(restaurantId: string, priceId: string) {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-checkout', {
             body: {
+                userId,
                 restaurantId,
                 priceId,
                 successUrl: `${window.location.origin}/?payment=success`,
@@ -1045,8 +1047,10 @@ export const DatabaseService = {
 
     // Stripe - Billing Portal (gestisci abbonamento, scarica fatture, cambia metodo pagamento)
     async createBillingPortalSession(restaurantId: string) {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-billing-portal', {
             body: {
+                userId,
                 restaurantId,
                 returnUrl: `${window.location.origin}/?section=settings`,
             }
@@ -1057,8 +1061,9 @@ export const DatabaseService = {
 
     // Stripe Connect - Crea account Express (senza redirect, per embedded onboarding)
     async createStripeConnectOnboarding(restaurantId: string, returnUrl?: string) {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-connect-onboarding', {
-            body: { restaurantId, returnUrl }
+            body: { userId, restaurantId, returnUrl }
         });
         if (error) {
             let errorMsg = 'Errore connessione Stripe';
@@ -1079,8 +1084,9 @@ export const DatabaseService = {
 
     // Stripe Connect - Aggiorna lo stato charges_enabled su richiesta
     async refreshStripeConnectStatus(restaurantId: string) {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-connect-refresh-status', {
-            body: { restaurantId }
+            body: { userId, restaurantId }
         });
         if (error) {
             console.error('Errore refresh stripe connect:', error)
@@ -1091,8 +1097,9 @@ export const DatabaseService = {
 
     // Stripe Connect - Crea Account Session per embedded components
     async createStripeAccountSession(restaurantId: string) {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-account-session', {
-            body: { restaurantId }
+            body: { userId, restaurantId }
         });
         if (error) {
             let errorMsg = 'Errore sessione account Stripe';
@@ -1123,8 +1130,9 @@ export const DatabaseService = {
 
     // Stripe Connect - Open Express Dashboard for payout management
     async openExpressDashboard(restaurantId: string) {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-express-dashboard', {
-            body: { restaurantId }
+            body: { userId, restaurantId }
         });
         if (error) throw new Error(data?.error || error.message || 'Errore apertura dashboard');
         return data as { url: string };
@@ -1264,6 +1272,7 @@ export const DatabaseService = {
         if (discountPercent > 0) {
             const { data: couponData, error: couponError } = await supabase.functions.invoke('stripe-create-coupon', {
                 body: {
+                    userId,
                     percent_off: discountPercent,
                     duration: discountDuration === 'once' || discountDuration === 'forever'
                         ? discountDuration
@@ -1373,8 +1382,9 @@ export const DatabaseService = {
     },
 
     async createStripePrice(amountCents: number): Promise<{ priceId: string, amount: number }> {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
-            body: { action: 'create', amount_cents: amountCents }
+            body: { action: 'create', amount_cents: amountCents, userId }
         })
         if (error) {
             const msg = typeof data === 'object' && data?.error ? data.error : error.message
@@ -1404,8 +1414,10 @@ export const DatabaseService = {
         reason?: string,
         grantedBy?: string,
     }) {
+        const userId = _getCurrentUserId()
         const { data, error } = await supabase.functions.invoke('stripe-apply-discount', {
             body: {
+                userId,
                 restaurantId: params.restaurantId,
                 discountPercent: params.discountPercent,
                 discountDuration: params.discountDuration,
