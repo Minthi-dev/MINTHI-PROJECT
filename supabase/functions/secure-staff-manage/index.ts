@@ -8,6 +8,18 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
+// Campi consentiti per creazione/aggiornamento staff — tutto il resto viene ignorato
+const ALLOWED_CREATE_FIELDS = ["restaurant_id", "name", "username", "password", "is_active", "role", "pin_code"];
+const ALLOWED_UPDATE_FIELDS = ["name", "username", "password", "is_active", "role", "pin_code"];
+
+function pickAllowed(data: Record<string, any>, allowed: string[]): Record<string, any> {
+    const result: Record<string, any> = {};
+    for (const key of allowed) {
+        if (key in data) result[key] = data[key];
+    }
+    return result;
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") {
@@ -88,7 +100,7 @@ serve(async (req) => {
                         { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
                     );
                 }
-                const payload = { ...data };
+                const payload = pickAllowed(data, ALLOWED_CREATE_FIELDS);
                 // Hash password server-side
                 if (payload.password) {
                     payload.password = bcrypt.hashSync(payload.password);
@@ -110,13 +122,11 @@ serve(async (req) => {
                         { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
                     );
                 }
-                const payload = { ...data };
+                const payload = pickAllowed(data, ALLOWED_UPDATE_FIELDS);
                 // Hash password server-side if provided
                 if (payload.password) {
                     payload.password = bcrypt.hashSync(payload.password);
                 }
-                // Don't allow changing restaurant_id
-                delete payload.restaurant_id;
 
                 const { error } = await supabase
                     .from("restaurant_staff")

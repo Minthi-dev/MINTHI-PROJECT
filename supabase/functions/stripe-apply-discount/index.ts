@@ -85,19 +85,21 @@ serve(async (req) => {
         }
 
         // Applica il coupon all'abbonamento Stripe esistente
+        // Usa 'discounts' (API 2024+), NON 'coupon' (deprecato)
         await stripe.subscriptions.update(restaurant.stripe_subscription_id, {
-            coupon: couponId,
-        });
+            discounts: [{ coupon: couponId }],
+        } as any);
 
         // Disattiva eventuali sconti precedenti in DB
-        await supabase
+        const { error: deactivateErr } = await supabase
             .from("restaurant_discounts")
             .update({ is_active: false })
             .eq("restaurant_id", restaurantId)
             .eq("is_active", true);
+        if (deactivateErr) console.error("[DISCOUNT] Errore disattivazione precedenti:", deactivateErr);
 
         // Salva il nuovo sconto
-        await supabase.from("restaurant_discounts").insert({
+        const { error: insertErr } = await supabase.from("restaurant_discounts").insert({
             restaurant_id: restaurantId,
             stripe_coupon_id: couponId,
             discount_percent: discountPercent,
@@ -109,7 +111,14 @@ serve(async (req) => {
             banner_dismissed: false,
         });
 
-        console.log(`Sconto ${discountPercent}% applicato a ristorante ${restaurantId}`);
+        if (insertErr) {
+            console.error("[DISCOUNT] Errore salvataggio sconto:", insertErr);
+            return new Response(JSON.stringify({ error: "Sconto applicato su Stripe ma errore nel salvataggio locale: " + insertErr.message }), {
+                status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        console.log(`[DISCOUNT] ✅ Sconto ${discountPercent}% applicato a ristorante ${restaurantId}`);
 
         return new Response(JSON.stringify({ success: true, couponId }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },

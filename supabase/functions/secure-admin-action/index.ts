@@ -255,7 +255,12 @@ serve(async (req) => {
 
             case "update_subscription_payment": {
                 if (!targetId || !data) return json({ error: "targetId e data richiesti" }, 400);
-                const { error } = await supabase.from("subscription_payments").update(data).eq("id", targetId);
+                // Solo campi consentiti
+                const allowedPaymentFields: Record<string, any> = {};
+                if (data.admin_completed !== undefined) allowedPaymentFields.admin_completed = data.admin_completed;
+                if (data.notes !== undefined) allowedPaymentFields.notes = data.notes;
+                if (Object.keys(allowedPaymentFields).length === 0) return json({ error: "Nessun campo valido da aggiornare" }, 400);
+                const { error } = await supabase.from("subscription_payments").update(allowedPaymentFields).eq("id", targetId);
                 if (error) return json({ error: error.message }, 500);
                 break;
             }
