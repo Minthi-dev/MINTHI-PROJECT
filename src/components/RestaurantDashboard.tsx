@@ -1742,7 +1742,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const handleCompleteDish = async (orderId: string, itemId: string, showToast = true) => {
     if (demoGuard()) return
-    const autoDeliver = (currentRestaurant as any)?.auto_deliver_ready_dishes === true
+    const autoDeliver = currentRestaurant?.auto_deliver_ready_dishes === true
     const targetStatus = autoDeliver ? 'SERVED' : 'READY'
 
     await updateOrderItemStatus(orderId, itemId, targetStatus)

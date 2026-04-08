@@ -179,6 +179,7 @@ export function SettingsView({
 }: SettingsViewProps) {
 
     const [stripePaymentsEnabled, setStripePaymentsEnabled] = useState(false)
+    const [autoDeliverReady, setAutoDeliverReady] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
     const [isStaffLoading, setIsStaffLoading] = useState(false)
     const [showStaffDialog, setShowStaffDialog] = useState(false)
@@ -241,11 +242,12 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
                 setStripePaymentsEnabled(data.enable_stripe_payments || false)
+                setAutoDeliverReady(data.auto_deliver_ready_dishes ?? false)
                 setSubscriptionInfo(data)
                 setVatNumber(data.vat_number || '')
                 setBillingName(data.billing_name || '')
@@ -867,10 +869,11 @@ export function SettingsView({
                                             <p className="text-sm text-amber-300/60">Quando un piatto è segnato come pronto in cucina, viene automaticamente considerato consegnato. I camerieri non ricevono la notifica.</p>
                                         </div>
                                         <Switch
-                                            checked={(restaurant as any)?.auto_deliver_ready_dishes ?? false}
+                                            checked={autoDeliverReady}
                                             onCheckedChange={async (checked) => {
                                                 try {
-                                                    await onUpdateRestaurant({ auto_deliver_ready_dishes: checked })
+                                                    await DatabaseService.updateRestaurant({ id: restaurantId, auto_deliver_ready_dishes: checked })
+                                                    setAutoDeliverReady(checked)
                                                 } catch (e) {
                                                     console.error('Error updating auto_deliver_ready_dishes:', e)
                                                 }

@@ -83,6 +83,7 @@ export interface Restaurant {
     setup_completed?: boolean
     is_active?: boolean
     subscription_cancel_at?: string
+    auto_deliver_ready_dishes?: boolean
 }
 
 export interface DayMealConfig {

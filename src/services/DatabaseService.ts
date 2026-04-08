@@ -95,7 +95,8 @@ export const DatabaseService = {
             'weekly_coperto', 'weekly_ayce', 'weekly_service_hours', 'waiter_password',
             'menu_style', 'menu_primary_color', 'view_only_menu_enabled',
             'enable_reservation_room_selection', 'enable_public_reservations',
-            'show_cooking_times', 'enable_course_suggestions'
+            'show_cooking_times', 'enable_course_suggestions',
+            'auto_deliver_ready_dishes'
         ]
 
         // Copia solo i campi presenti nell'oggetto input
