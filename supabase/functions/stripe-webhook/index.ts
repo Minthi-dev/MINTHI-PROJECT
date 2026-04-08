@@ -235,40 +235,101 @@ serve(async (req) => {
                 const customerId = invoice.customer;
 
                 // Salta fatture con amount = 0 (es. prime fatture di trial)
-                if ((invoice.amount_paid || 0) === 0) break;
+                if ((invoice.amount_paid || 0) === 0) {
+                    console.log(`[WEBHOOK] invoice.paid skipped: amount_paid=0 for invoice ${invoice.id}`);
+                    break;
+                }
 
-                const { data: restaurant } = await supabase
+                // Idempotenza: controlla se il pagamento è già stato registrato
+                const { data: existingPayment } = await supabase
+                    .from("subscription_payments")
+                    .select("id")
+                    .eq("stripe_invoice_id", invoice.id)
+                    .limit(1);
+
+                if (existingPayment && existingPayment.length > 0) {
+                    console.log(`[WEBHOOK] invoice.paid skipped: payment for invoice ${invoice.id} already exists`);
+                    break;
+                }
+
+                // Cerca ristorante per stripe_customer_id
+                let { data: restaurant } = await supabase
                     .from("restaurants")
                     .select("id")
                     .eq("stripe_customer_id", customerId)
                     .single();
 
-                if (restaurant) {
-                    await supabase
-                        .from("subscription_payments")
-                        .insert({
-                            restaurant_id: restaurant.id,
-                            stripe_invoice_id: invoice.id,
-                            stripe_payment_intent_id: invoice.payment_intent,
-                            amount: (invoice.amount_paid || 0) / 100,
-                            currency: invoice.currency || "eur",
-                            status: "paid",
-                            period_start: invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null,
-                            period_end: invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null,
-                        });
-
-                    // Pagamento andato a buon fine: aggiorna status e riattiva se era past_due
-                    await supabase
+                // Fallback: se non trovato (race condition con checkout.session.completed),
+                // cerca per stripe_subscription_id dalla fattura
+                if (!restaurant && invoice.subscription) {
+                    console.log(`[WEBHOOK] invoice.paid: restaurant not found by customer ${customerId}, trying subscription ${invoice.subscription}`);
+                    const { data: restaurantBySub } = await supabase
                         .from("restaurants")
-                        .update({
-                            subscription_status: "active",
-                            is_active: true,
-                            suspension_reason: null,
-                        })
-                        .eq("id", restaurant.id);
+                        .select("id")
+                        .eq("stripe_subscription_id", invoice.subscription)
+                        .single();
+                    restaurant = restaurantBySub;
 
-                    console.log(`Pagamento abbonamento registrato per ristorante ${restaurant.id}`);
+                    // Se trovato per subscription ma manca customer_id, aggiornalo
+                    if (restaurant) {
+                        await supabase
+                            .from("restaurants")
+                            .update({ stripe_customer_id: customerId })
+                            .eq("id", restaurant.id);
+                        console.log(`[WEBHOOK] invoice.paid: fixed missing stripe_customer_id for restaurant ${restaurant.id}`);
+                    }
                 }
+
+                // Ultimo fallback: aspetta 5 secondi e riprova (checkout potrebbe essere ancora in corso)
+                if (!restaurant) {
+                    console.log(`[WEBHOOK] invoice.paid: restaurant not found, waiting 5s for checkout to complete...`);
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    const { data: retryRestaurant } = await supabase
+                        .from("restaurants")
+                        .select("id")
+                        .eq("stripe_customer_id", customerId)
+                        .single();
+                    restaurant = retryRestaurant;
+                }
+
+                if (!restaurant) {
+                    console.error(`[WEBHOOK] invoice.paid: RISTORANTE NON TROVATO per customer=${customerId}, invoice=${invoice.id}, subscription=${invoice.subscription}. Pagamento PERSO.`);
+                    break;
+                }
+
+                const { error: insertError } = await supabase
+                    .from("subscription_payments")
+                    .insert({
+                        restaurant_id: restaurant.id,
+                        stripe_invoice_id: invoice.id,
+                        stripe_payment_intent_id: invoice.payment_intent,
+                        amount: (invoice.amount_paid || 0) / 100,
+                        currency: invoice.currency || "eur",
+                        status: "paid",
+                        period_start: invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null,
+                        period_end: invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null,
+                    });
+
+                if (insertError) {
+                    console.error(`[WEBHOOK] invoice.paid: ERRORE insert subscription_payments per restaurant ${restaurant.id}:`, JSON.stringify(insertError));
+                    break;
+                }
+
+                // Pagamento andato a buon fine: aggiorna status e riattiva se era past_due
+                const { error: updateError } = await supabase
+                    .from("restaurants")
+                    .update({
+                        subscription_status: "active",
+                        is_active: true,
+                        suspension_reason: null,
+                    })
+                    .eq("id", restaurant.id);
+
+                if (updateError) {
+                    console.error(`[WEBHOOK] invoice.paid: ERRORE update restaurant ${restaurant.id}:`, JSON.stringify(updateError));
+                }
+
+                console.log(`[WEBHOOK] ✅ Pagamento abbonamento registrato: €${((invoice.amount_paid || 0) / 100).toFixed(2)} per ristorante ${restaurant.id} (invoice ${invoice.id})`);
                 break;
             }
 
@@ -282,36 +343,43 @@ serve(async (req) => {
                     .eq("stripe_customer_id", customerId)
                     .single();
 
-                if (restaurant) {
+                if (!restaurant) {
+                    console.error(`[WEBHOOK] invoice.payment_failed: ristorante non trovato per customer=${customerId}, invoice=${invoice.id}`);
+                    break;
+                }
+
+                const { error: failInsertError } = await supabase
+                    .from("subscription_payments")
+                    .insert({
+                        restaurant_id: restaurant.id,
+                        stripe_invoice_id: invoice.id,
+                        amount: (invoice.amount_due || 0) / 100,
+                        currency: invoice.currency || "eur",
+                        status: "failed",
+                    });
+
+                if (failInsertError) {
+                    console.error(`[WEBHOOK] invoice.payment_failed: ERRORE insert:`, JSON.stringify(failInsertError));
+                }
+
+                // Controlla bonus attivo
+                const { data: activeBonus } = await supabase
+                    .from("restaurant_bonuses")
+                    .select("id")
+                    .eq("restaurant_id", restaurant.id)
+                    .eq("is_active", true)
+                    .gte("expires_at", new Date().toISOString())
+                    .limit(1);
+
+                if (!activeBonus || activeBonus.length === 0) {
                     await supabase
-                        .from("subscription_payments")
-                        .insert({
-                            restaurant_id: restaurant.id,
-                            stripe_invoice_id: invoice.id,
-                            amount: (invoice.amount_due || 0) / 100,
-                            currency: invoice.currency || "eur",
-                            status: "failed",
-                        });
+                        .from("restaurants")
+                        .update({
+                            subscription_status: "past_due",
+                        })
+                        .eq("id", restaurant.id);
 
-                    // Controlla bonus attivo
-                    const { data: activeBonus } = await supabase
-                        .from("restaurant_bonuses")
-                        .select("id")
-                        .eq("restaurant_id", restaurant.id)
-                        .eq("is_active", true)
-                        .gte("expires_at", new Date().toISOString())
-                        .limit(1);
-
-                    if (!activeBonus || activeBonus.length === 0) {
-                        await supabase
-                            .from("restaurants")
-                            .update({
-                                subscription_status: "past_due",
-                            })
-                            .eq("id", restaurant.id);
-
-                        console.log(`Pagamento fallito per ristorante ${restaurant.id} — status: past_due`);
-                    }
+                    console.log(`[WEBHOOK] Pagamento fallito per ristorante ${restaurant.id} — status: past_due`);
                 }
                 break;
             }
