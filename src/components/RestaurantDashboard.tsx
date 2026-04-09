@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useThermalPrinter } from '../hooks/useThermalPrinter'
+import { thermalPrinter } from '../services/ThermalPrinterService'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
@@ -651,14 +652,20 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       setOrders(data)
 
       // Auto-print new orders (skip initial load)
-      if (!initialOrderLoadRef.current && printer.connected && printer.settings.enabled && printer.settings.autoPrint) {
+      // Read directly from the singleton and refs to avoid stale closures
+      // (this function is captured by a useEffect that only depends on restaurantId)
+      const printerSettings = thermalPrinter.settings
+      const printerConnected = thermalPrinter.connected
+      if (!initialOrderLoadRef.current && printerConnected && printerSettings.enabled && printerSettings.autoPrint) {
         const newOrders = data.filter(o => !knownOrderIdsRef.current.has(o.id))
         for (const order of newOrders) {
           try {
-            const session = sessions.find(s => s.id === order.table_session_id)
-            const table = tables.find(t => t.id === session?.table_id)
+            const currentSessions = sessionsRef.current || []
+            const currentTables = restaurantTablesRef.current || []
+            const session = currentSessions.find(s => s.id === order.table_session_id)
+            const table = currentTables.find(t => t.id === session?.table_id)
             const tableLabel = table?.number?.toString() || table?.name || '?'
-            await printer.printOrder(order, tableLabel)
+            await thermalPrinter.printKitchenOrder({ order, tableLabel })
           } catch (e) {
             console.error('Auto-print failed:', e)
           }

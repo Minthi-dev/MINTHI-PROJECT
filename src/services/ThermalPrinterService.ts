@@ -72,6 +72,7 @@ class ThermalPrinterService extends EventTarget {
   private printQueue: (() => Promise<void>)[] = []
   private printing = false
   private _settings: PrinterSettings
+  private _disconnectHandler: ((e: any) => void) | null = null
 
   constructor() {
     super()
@@ -123,11 +124,19 @@ class ThermalPrinterService extends EventTarget {
   }
 
   async disconnect(): Promise<void> {
+    this._removeDisconnectListener()
     if (this.device?.opened) {
       try { await this.device.close() } catch { /* ignore */ }
     }
     this.device = null
     this._notify()
+  }
+
+  private _removeDisconnectListener(): void {
+    if (this._disconnectHandler) {
+      navigator.usb.removeEventListener('disconnect', this._disconnectHandler)
+      this._disconnectHandler = null
+    }
   }
 
   private async _openDevice(device: any): Promise<void> {
@@ -145,13 +154,16 @@ class ThermalPrinterService extends EventTarget {
 
     this.device = device
 
-    // Listen for disconnect
-    navigator.usb.addEventListener('disconnect', (e: any) => {
+    // Remove any previous listener before adding a new one
+    this._removeDisconnectListener()
+    this._disconnectHandler = (e: any) => {
       if (e.device === this.device) {
         this.device = null
+        this._disconnectHandler = null
         this._notify()
       }
-    })
+    }
+    navigator.usb.addEventListener('disconnect', this._disconnectHandler)
 
     this._notify()
   }
@@ -367,7 +379,7 @@ class ThermalPrinterService extends EventTarget {
     if (!this.device?.opened) {
       throw new Error('Stampante non collegata')
     }
-    // Send in chunks of 64 bytes (USB bulk transfer limit for some devices)
+    // Send in chunks to avoid overflowing the USB transfer buffer
     const CHUNK = 4096
     for (let i = 0; i < data.length; i += CHUNK) {
       const chunk = data.slice(i, i + CHUNK)
