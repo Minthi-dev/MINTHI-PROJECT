@@ -29,7 +29,8 @@ import {
     Warning,
     WarningCircle,
     ArrowClockwise,
-    Sparkle
+    Sparkle,
+    Printer
 } from '@phosphor-icons/react'
 import { SoundType } from '../utils/SoundManager'
 import WeeklyScheduleEditor from './WeeklyScheduleEditor'
@@ -38,6 +39,7 @@ import { DatabaseService } from '@/services/DatabaseService'
 import { supabase } from '@/lib/supabase'
 import type { WeeklyCopertoSchedule, WeeklyAyceSchedule, RestaurantStaff, WeeklyServiceSchedule, SubscriptionPayment } from '@/services/types'
 import { createDefaultCopertoSchedule, createDefaultAyceSchedule } from '@/utils/pricingUtils'
+import { useThermalPrinter } from '@/hooks/useThermalPrinter'
 import { toast } from 'sonner'
 import { loadConnectAndInitialize } from '@stripe/connect-js'
 import { ConnectComponentsProvider, ConnectAccountOnboarding } from '@stripe/react-connect-js'
@@ -178,6 +180,7 @@ export function SettingsView({
     onRestartSetup
 }: SettingsViewProps) {
 
+    const printer = useThermalPrinter()
     const [stripePaymentsEnabled, setStripePaymentsEnabled] = useState(false)
     const [autoDeliverReady, setAutoDeliverReady] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
@@ -499,6 +502,14 @@ export function SettingsView({
                     >
                         <CreditCard size={20} />
                         Abbonamento & Pagamenti
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="printer"
+                        data-settings-tab="printer"
+                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
+                    >
+                        <Printer size={20} />
+                        Stampante Cucina
                     </TabsTrigger>
                 </TabsList>
 
@@ -1591,6 +1602,172 @@ export function SettingsView({
                             </div>
                         )}
 
+                    </motion.div>
+                </TabsContent>
+
+                {/* 6. STAMPANTE CUCINA */}
+                <TabsContent value="printer">
+                    <motion.div
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                        className="space-y-6"
+                    >
+                        <Card className="bg-zinc-900/50 border-white/10">
+                            <CardHeader>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <Printer size={22} className="text-amber-400" />
+                                    Stampante Cucina
+                                </CardTitle>
+                                <CardDescription className="text-zinc-400">
+                                    Collega una stampante termica per stampare automaticamente le comande in cucina
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Browser support check */}
+                                {!printer.isSupported && (
+                                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                                        <div className="flex items-start gap-3">
+                                            <WarningCircle size={22} className="text-red-400 shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-sm font-medium text-red-300">Browser non compatibile</p>
+                                                <p className="text-sm text-red-400/70 mt-1">
+                                                    Usa Google Chrome o Microsoft Edge per collegare la stampante USB.
+                                                    Safari e Firefox non supportano WebUSB.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Connection status + button */}
+                                {printer.isSupported && (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-3 h-3 rounded-full ${printer.connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-zinc-600'}`} />
+                                                <div>
+                                                    <p className="text-sm font-medium text-white">
+                                                        {printer.connected ? 'Stampante collegata' : 'Nessuna stampante'}
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500">
+                                                        {printer.connected ? 'Pronta per stampare' : 'Collega una stampante Epson via USB'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {printer.connected ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => printer.disconnect()}
+                                                    className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                                                >
+                                                    Scollega
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={async () => {
+                                                        const ok = await printer.connect()
+                                                        if (ok) toast.success('Stampante collegata!')
+                                                        else toast.error('Collegamento fallito')
+                                                    }}
+                                                    className="bg-amber-500 hover:bg-amber-600 text-black font-medium"
+                                                >
+                                                    Collega Stampante
+                                                </Button>
+                                            )}
+                                        </div>
+
+                                        {/* Test print */}
+                                        {printer.connected && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={async () => {
+                                                    try {
+                                                        await printer.printTestPage()
+                                                        toast.success('Stampa di prova inviata!')
+                                                    } catch (e: any) {
+                                                        toast.error(e.message || 'Errore stampa')
+                                                    }
+                                                }}
+                                                className="border-white/10 text-zinc-300 hover:bg-white/5"
+                                            >
+                                                <Printer size={16} className="mr-2" />
+                                                Stampa di Prova
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Settings toggles */}
+                                {printer.isSupported && (
+                                    <>
+                                        <Separator className="bg-white/10" />
+
+                                        <div className="space-y-5">
+                                            {/* Auto-print */}
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-white">Stampa automatica</h3>
+                                                    <p className="text-sm text-amber-300/60">Le nuove comande vengono stampate automaticamente</p>
+                                                </div>
+                                                <Switch
+                                                    checked={printer.settings.autoPrint}
+                                                    onCheckedChange={(checked) => printer.updateSettings({ autoPrint: checked })}
+                                                />
+                                            </div>
+
+                                            {/* Auto-cut */}
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-white">Taglio automatico</h3>
+                                                    <p className="text-sm text-amber-300/60">Taglia la carta dopo ogni comanda</p>
+                                                </div>
+                                                <Switch
+                                                    checked={printer.settings.autoCut}
+                                                    onCheckedChange={(checked) => printer.updateSettings({ autoCut: checked })}
+                                                />
+                                            </div>
+
+                                            {/* Separate courses */}
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-white">Scontrino separato per portata</h3>
+                                                    <p className="text-sm text-amber-300/60">Ogni portata viene stampata su un foglio diverso</p>
+                                                </div>
+                                                <Switch
+                                                    checked={printer.settings.courseSeparate}
+                                                    onCheckedChange={(checked) => printer.updateSettings({ courseSeparate: checked })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Instructions */}
+                                <Separator className="bg-white/10" />
+                                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
+                                    <div className="flex items-start gap-3">
+                                        <Info size={20} className="text-amber-400 shrink-0 mt-0.5" />
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-medium text-amber-300">Come installare</p>
+                                            <ol className="text-sm text-zinc-400 space-y-1 list-decimal list-inside">
+                                                <li>Collega la stampante Epson al PC/tablet via USB</li>
+                                                <li>Clicca "Collega Stampante" qui sopra</li>
+                                                <li>Seleziona la stampante dalla finestra del browser</li>
+                                                <li>Fai una stampa di prova per verificare</li>
+                                            </ol>
+                                            <p className="text-xs text-zinc-500 mt-2">
+                                                Compatibile con Epson TM-T20III e stampanti termiche ESC/POS.
+                                                Richiede Google Chrome o Microsoft Edge.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </motion.div>
                 </TabsContent>
             </Tabs>

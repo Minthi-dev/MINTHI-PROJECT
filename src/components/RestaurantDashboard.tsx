@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useThermalPrinter } from '../hooks/useThermalPrinter'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { toast } from 'sonner'
@@ -137,6 +138,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   // Schedule Settings State
   const [lunchTimeStart, setLunchTimeStart] = useState('12:00')
   const [dinnerTimeStart, setDinnerTimeStart] = useState('19:00')
+
+  // Thermal printer
+  const printer = useThermalPrinter()
+  const knownOrderIdsRef = useRef<Set<string>>(new Set())
+  const initialOrderLoadRef = useRef(true)
 
   // Orders state initialized with explicit type to prevent 'never' inference
   const [orders, setOrders] = useState<Order[]>([])
@@ -643,6 +649,23 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     try {
       const data = await DatabaseService.getOrders(restaurantId)
       setOrders(data)
+
+      // Auto-print new orders (skip initial load)
+      if (!initialOrderLoadRef.current && printer.connected && printer.settings.enabled && printer.settings.autoPrint) {
+        const newOrders = data.filter(o => !knownOrderIdsRef.current.has(o.id))
+        for (const order of newOrders) {
+          try {
+            const session = sessions.find(s => s.id === order.table_session_id)
+            const table = tables.find(t => t.id === session?.table_id)
+            const tableLabel = table?.number?.toString() || table?.name || '?'
+            await printer.printOrder(order, tableLabel)
+          } catch (e) {
+            console.error('Auto-print failed:', e)
+          }
+        }
+      }
+      knownOrderIdsRef.current = new Set(data.map(o => o.id))
+      initialOrderLoadRef.current = false
 
       // Also fetch past orders for analytics
       const pastData = await DatabaseService.getPastOrders(restaurantId)
