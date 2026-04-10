@@ -96,6 +96,12 @@ class ThermalPrinterService extends EventTarget {
       const device = await navigator.usb.requestDevice({
         filters: [
           { vendorId: 0x04B8 }, // Epson
+          { vendorId: 0x0519 }, // Star Micronics
+          { vendorId: 0x0DD4 }, // Custom (brand italiano)
+          { vendorId: 0x0FE6 }, // ICS (POS-X)
+          { vendorId: 0x20D1 }, // MUNBYN / generic POS
+          { vendorId: 0x0483 }, // STMicroelectronics (some POS printers)
+          { classCode: 7 },     // USB Printer class (matches any printer)
         ]
       })
       await this._openDevice(device)

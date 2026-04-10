@@ -1651,7 +1651,7 @@ export function SettingsView({
                                                         {printer.connected ? 'Stampante collegata' : 'Nessuna stampante'}
                                                     </p>
                                                     <p className="text-xs text-zinc-500">
-                                                        {printer.connected ? 'Pronta per stampare' : 'Collega una stampante Epson via USB'}
+                                                        {printer.connected ? 'Pronta per stampare' : 'Collega una stampante termica via USB'}
                                                     </p>
                                                 </div>
                                             </div>
@@ -1754,13 +1754,13 @@ export function SettingsView({
                                         <div className="space-y-2">
                                             <p className="text-sm font-medium text-amber-300">Come installare</p>
                                             <ol className="text-sm text-zinc-400 space-y-1 list-decimal list-inside">
-                                                <li>Collega la stampante Epson al PC/tablet via USB</li>
+                                                <li>Collega la stampante termica al PC/tablet via USB</li>
                                                 <li>Clicca "Collega Stampante" qui sopra</li>
                                                 <li>Seleziona la stampante dalla finestra del browser</li>
                                                 <li>Fai una stampa di prova per verificare</li>
                                             </ol>
                                             <p className="text-xs text-zinc-500 mt-2">
-                                                Compatibile con Epson TM-T20III e stampanti termiche ESC/POS.
+                                                Compatibile con Epson, Star, MUNBYN e tutte le stampanti termiche ESC/POS.
                                                 Richiede Google Chrome o Microsoft Edge.
                                             </p>
                                         </div>
