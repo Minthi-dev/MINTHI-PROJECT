@@ -30,6 +30,7 @@ export function useThermalPrinter() {
 
   const disconnect = useCallback(async () => {
     await thermalPrinter.disconnect()
+    thermalPrinter.updateSettings({ enabled: false })
   }, [])
 
   const updateSettings = useCallback((patch: Partial<PrinterSettings>) => {

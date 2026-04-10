@@ -306,6 +306,10 @@ class ThermalPrinterService extends EventTarget {
       this.wsReconnectTimer = null
     }
     if (this.ws) {
+      // Null out handlers BEFORE close to prevent onclose from scheduling auto-reconnect
+      this.ws.onopen = null
+      this.ws.onclose = null
+      this.ws.onerror = null
       try { this.ws.close() } catch { /* ignore */ }
       this.ws = null
     }
