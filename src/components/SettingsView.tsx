@@ -1624,8 +1624,60 @@ export function SettingsView({
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-6">
-                                {/* Browser support check */}
-                                {!printer.isSupported && (
+
+                                {/* Mode selector */}
+                                <div className="space-y-3">
+                                    <p className="text-sm font-medium text-white">Tipo di connessione</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => printer.updateSettings({ mode: 'usb' })}
+                                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
+                                                printer.settings.mode === 'usb'
+                                                    ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                                                    : 'border-white/10 bg-zinc-800/40 text-zinc-400 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <Printer size={24} />
+                                            <div className="text-center">
+                                                <p className="text-sm font-medium">USB</p>
+                                                <p className="text-xs opacity-70">Cavo diretto al PC</p>
+                                            </div>
+                                        </button>
+                                        <button
+                                            onClick={() => printer.updateSettings({ mode: 'network' })}
+                                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
+                                                printer.settings.mode === 'network'
+                                                    ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                                                    : 'border-white/10 bg-zinc-800/40 text-zinc-400 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <ArrowClockwise size={24} />
+                                            <div className="text-center">
+                                                <p className="text-sm font-medium">WiFi / LAN</p>
+                                                <p className="text-xs opacity-70">Rete locale (altra stanza)</p>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Network: relay URL input */}
+                                {printer.settings.mode === 'network' && (
+                                    <div className="space-y-2">
+                                        <Label className="text-zinc-300 text-sm">URL Relay (printer-relay.js)</Label>
+                                        <Input
+                                            value={printer.settings.networkRelayUrl}
+                                            onChange={(e) => printer.updateSettings({ networkRelayUrl: e.target.value })}
+                                            placeholder="ws://localhost:8765"
+                                            className="bg-zinc-800 border-white/10 text-white font-mono text-sm"
+                                        />
+                                        <p className="text-xs text-zinc-500">
+                                            Lascia il valore di default se il relay gira sullo stesso PC del browser
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Browser support check (USB only) */}
+                                {printer.settings.mode === 'usb' && !printer.isSupported && (
                                     <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
                                         <div className="flex items-start gap-3">
                                             <WarningCircle size={22} className="text-red-400 shrink-0 mt-0.5" />
@@ -1651,7 +1703,12 @@ export function SettingsView({
                                                         {printer.connected ? 'Stampante collegata' : 'Nessuna stampante'}
                                                     </p>
                                                     <p className="text-xs text-zinc-500">
-                                                        {printer.connected ? 'Pronta per stampare' : 'Collega una stampante termica via USB'}
+                                                        {printer.connected
+                                                            ? 'Pronta per stampare'
+                                                            : printer.settings.mode === 'network'
+                                                                ? 'Avvia il relay sul PC della cucina, poi clicca Connetti'
+                                                                : 'Collega la stampante via cavo USB al PC'
+                                                        }
                                                     </p>
                                                 </div>
                                             </div>
@@ -1670,11 +1727,11 @@ export function SettingsView({
                                                     onClick={async () => {
                                                         const ok = await printer.connect()
                                                         if (ok) toast.success('Stampante collegata!')
-                                                        else toast.error('Collegamento fallito')
+                                                        else toast.error('Collegamento fallito — verifica che il relay sia attivo')
                                                     }}
                                                     className="bg-amber-500 hover:bg-amber-600 text-black font-medium"
                                                 >
-                                                    Collega Stampante
+                                                    {printer.settings.mode === 'network' ? 'Connetti Relay' : 'Collega Stampante'}
                                                 </Button>
                                             )}
                                         </div>
@@ -1751,18 +1808,39 @@ export function SettingsView({
                                 <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
                                     <div className="flex items-start gap-3">
                                         <Info size={20} className="text-amber-400 shrink-0 mt-0.5" />
-                                        <div className="space-y-2">
-                                            <p className="text-sm font-medium text-amber-300">Come installare</p>
-                                            <ol className="text-sm text-zinc-400 space-y-1 list-decimal list-inside">
-                                                <li>Collega la stampante termica al PC/tablet via USB</li>
-                                                <li>Clicca "Collega Stampante" qui sopra</li>
-                                                <li>Seleziona la stampante dalla finestra del browser</li>
-                                                <li>Fai una stampa di prova per verificare</li>
-                                            </ol>
-                                            <p className="text-xs text-zinc-500 mt-2">
-                                                Compatibile con Epson, Star, MUNBYN e tutte le stampanti termiche ESC/POS.
-                                                Richiede Google Chrome o Microsoft Edge.
-                                            </p>
+                                        <div className="space-y-2 w-full">
+                                            {printer.settings.mode === 'usb' ? (
+                                                <>
+                                                    <p className="text-sm font-medium text-amber-300">Come installare (USB)</p>
+                                                    <ol className="text-sm text-zinc-400 space-y-1 list-decimal list-inside">
+                                                        <li>Collega la stampante termica al PC/tablet via cavo USB</li>
+                                                        <li>Clicca "Collega Stampante" qui sopra</li>
+                                                        <li>Seleziona la stampante dalla finestra del browser</li>
+                                                        <li>Fai una stampa di prova per verificare</li>
+                                                    </ol>
+                                                    <p className="text-xs text-zinc-500 mt-2">
+                                                        Compatibile con Epson, Star, MUNBYN e tutte le stampanti termiche ESC/POS.
+                                                        Richiede Google Chrome o Microsoft Edge.
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <p className="text-sm font-medium text-amber-300">Come installare (WiFi / LAN)</p>
+                                                    <ol className="text-sm text-zinc-400 space-y-1 list-decimal list-inside">
+                                                        <li>Collega la stampante alla rete WiFi o via cavo LAN (porta RJ45)</li>
+                                                        <li>Segna l'IP della stampante (es. 192.168.1.50) — stampalo dal menu della stampante</li>
+                                                        <li>Sul PC collegato alla stessa rete, installa Node.js da nodejs.org</li>
+                                                        <li>Scarica il file <code className="text-amber-300 bg-zinc-800 px-1 rounded text-xs">printer-relay.js</code> nella cartella del progetto</li>
+                                                        <li>Apri il terminale e digita: <code className="text-amber-300 bg-zinc-800 px-1 rounded text-xs">npm install ws && node printer-relay.js 192.168.1.50</code></li>
+                                                        <li>Lascia aperta la finestra del terminale, poi clicca "Connetti Relay" qui sopra</li>
+                                                        <li>Fai una stampa di prova per verificare</li>
+                                                    </ol>
+                                                    <p className="text-xs text-zinc-500 mt-2">
+                                                        Il relay va fatto girare sul PC della cassa (o su qualsiasi PC nella stessa rete).
+                                                        Compatibile con Epson TM-T20III, Star, MUNBYN e tutte le stampanti termiche con porta di rete.
+                                                    </p>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
