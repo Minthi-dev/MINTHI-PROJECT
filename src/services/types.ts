@@ -1,8 +1,17 @@
 export type UserRole = 'ADMIN' | 'OWNER' | 'STAFF' | 'CUSTOMER'
 export type RestaurantStaffRole = 'OWNER' | 'STAFF'
 export type SessionStatus = 'OPEN' | 'CLOSED'
-export type OrderStatus = 'OPEN' | 'PAID' | 'CANCELLED' | 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'delivered'
+export type OrderStatus = 'OPEN' | 'PENDING' | 'PREPARING' | 'READY' | 'PICKED_UP' | 'PAID' | 'CANCELLED' | 'pending' | 'preparing' | 'ready' | 'served' | 'completed' | 'delivered'
 export type OrderItemStatus = 'PENDING' | 'IN_PREPARATION' | 'READY' | 'SERVED' | 'DELIVERED' | 'pending' | 'preparing' | 'ready' | 'served' | 'delivered' | 'PAID' | 'CANCELLED'
+export type OrderType = 'dine_in' | 'takeaway'
+export type TakeawayPaymentMethod = 'cash' | 'stripe' | 'card_pos' | 'split'
+export interface OrderPaymentEntry {
+    method: 'cash' | 'stripe' | 'card_pos'
+    amount: number
+    at: string
+    label?: string
+    by?: string
+}
 
 export interface User {
     id: string
@@ -84,6 +93,12 @@ export interface Restaurant {
     is_active?: boolean
     subscription_cancel_at?: string
     auto_deliver_ready_dishes?: boolean
+    // Takeaway (asporto)
+    takeaway_enabled?: boolean
+    dine_in_enabled?: boolean
+    takeaway_require_stripe?: boolean
+    takeaway_estimated_minutes?: number
+    takeaway_pickup_notice?: string
 }
 
 export interface DayMealConfig {
@@ -222,16 +237,27 @@ export interface Room {
 export interface Order {
     id: string
     restaurant_id: string
-    table_session_id: string
+    table_session_id: string | null
     status: OrderStatus
     total_amount: number
     created_at: string
     updated_at?: string
     closed_at?: string
-    payment_method?: 'cash' | 'stripe' | null
+    payment_method?: 'cash' | 'stripe' | 'card_pos' | 'split' | null
     // Frontend helper
     items?: OrderItem[]
     table_id?: string // Helper
+    // Takeaway (asporto)
+    order_type?: OrderType
+    pickup_number?: number | null
+    pickup_code?: string | null
+    customer_name?: string | null
+    customer_phone?: string | null
+    customer_notes?: string | null
+    paid_amount?: number
+    ready_at?: string | null
+    picked_up_at?: string | null
+    payments?: OrderPaymentEntry[]
 }
 
 export interface OrderItem {

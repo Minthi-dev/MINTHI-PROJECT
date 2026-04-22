@@ -45,6 +45,10 @@ export function useThermalPrinter() {
     await thermalPrinter.printKitchenOrder({ order, tableLabel, waiterName })
   }, [])
 
+  const printTakeawayReceipt = useCallback(async (order: Order, restaurantName?: string) => {
+    await thermalPrinter.printTakeawayReceipt({ order, restaurantName })
+  }, [])
+
   const printTestPage = useCallback(async () => {
     await thermalPrinter.printTestPage()
   }, [])
@@ -57,6 +61,7 @@ export function useThermalPrinter() {
     disconnect,
     updateSettings,
     printOrder,
+    printTakeawayReceipt,
     printTestPage,
   }
 }

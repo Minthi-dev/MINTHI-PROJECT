@@ -18,6 +18,10 @@ const OWNER_ALLOWED_FIELDS = [
     "show_cooking_times", "enable_course_suggestions",
     "waiter_mode_enabled", "allow_waiter_payments",
     "vat_number", "billing_name", "enable_stripe_payments",
+    "auto_deliver_ready_dishes",
+    // Takeaway
+    "takeaway_enabled", "dine_in_enabled", "takeaway_require_stripe",
+    "takeaway_estimated_minutes", "takeaway_pickup_notice",
 ];
 
 // Admin can also update these fields

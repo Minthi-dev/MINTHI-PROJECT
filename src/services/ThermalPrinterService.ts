@@ -160,6 +160,10 @@ class ThermalPrinterService extends EventTarget {
     await this._enqueue(() => this._printKitchenOrder(params))
   }
 
+  async printTakeawayReceipt(params: { order: Order; restaurantName?: string }): Promise<void> {
+    await this._enqueue(() => this._printTakeawayReceipt(params))
+  }
+
   async printTestPage(): Promise<void> {
     await this._enqueue(() => this._printTestPage())
   }
@@ -401,6 +405,91 @@ class ThermalPrinterService extends EventTarget {
       buf.push(...CMD.SIZE_NORMAL, ...CMD.BOLD_OFF)
       if (item.note) buf.push(...this._text(`     > ${item.note}`))
     }
+  }
+
+  private async _printTakeawayReceipt({ order, restaurantName }: {
+    order: Order; restaurantName?: string
+  }): Promise<void> {
+    const items = order.items || []
+    const time = new Date(order.created_at).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const pickup = String(order.pickup_number || 0).padStart(3, '0')
+    const total = Number(order.total_amount || 0)
+    const paid = Number(order.paid_amount || 0)
+    const due = Math.max(0, Math.round((total - paid) * 100) / 100)
+    const payments: any[] = Array.isArray((order as any).payments) ? (order as any).payments : []
+    const buf: number[] = []
+
+    buf.push(...CMD.RESET, ...CMD.CODEPAGE_858)
+
+    // Header
+    buf.push(...CMD.ALIGN_CENTER, ...CMD.SIZE_DOUBLE, ...CMD.BOLD_ON)
+    buf.push(...this._text(restaurantName || 'MINTHI'))
+    buf.push(...CMD.SIZE_NORMAL, ...CMD.BOLD_OFF)
+    buf.push(...this._text('RICEVUTA NON FISCALE'))
+    buf.push(...this._text(this._line('=')))
+
+    // Pickup number (huge)
+    buf.push(...CMD.ALIGN_CENTER, ...CMD.SIZE_DOUBLE, ...CMD.BOLD_ON)
+    buf.push(...this._text(`N. ${pickup}`))
+    buf.push(...CMD.SIZE_NORMAL, ...CMD.BOLD_OFF)
+    buf.push(...CMD.ALIGN_LEFT)
+    buf.push(...this._text(`Data: ${time}`))
+    if (order.customer_name) buf.push(...this._text(`Cliente: ${order.customer_name}`))
+    if (order.customer_phone) buf.push(...this._text(`Tel: ${order.customer_phone}`))
+    buf.push(...this._text(this._line('-')))
+
+    // Items with prices
+    for (const it of items) {
+      const name = it.dish?.name || `Piatto #${it.dish_id.slice(0, 6)}`
+      const unit = Number(it.dish?.price || 0)
+      const lineTotal = unit * it.quantity
+      const left = `${it.quantity}x ${name}`
+      const right = `€${lineTotal.toFixed(2)}`
+      const pad = Math.max(1, COLS - left.length - right.length)
+      buf.push(...this._text(left.slice(0, COLS - right.length - 1) + ' '.repeat(pad) + right))
+      if (it.note) buf.push(...this._text(`    > ${it.note}`))
+    }
+
+    // Totals
+    buf.push(...this._text(this._line('-')))
+    const totalLeft = 'TOTALE'
+    const totalRight = `€${total.toFixed(2)}`
+    buf.push(...CMD.BOLD_ON)
+    buf.push(...this._text(totalLeft + ' '.repeat(Math.max(1, COLS - totalLeft.length - totalRight.length)) + totalRight))
+    buf.push(...CMD.BOLD_OFF)
+
+    // Payments breakdown
+    if (payments.length > 0) {
+      buf.push(...this._text(this._line('-')))
+      buf.push(...this._text('PAGAMENTI:'))
+      for (const p of payments) {
+        const method = p.method === 'cash' ? 'Contanti' : p.method === 'card_pos' ? 'POS' : p.method === 'stripe' ? 'Stripe' : p.method || '?'
+        const label = p.label ? ` (${p.label})` : ''
+        const leftP = `  ${method}${label}`
+        const rightP = `€${Number(p.amount).toFixed(2)}`
+        const padP = Math.max(1, COLS - leftP.length - rightP.length)
+        buf.push(...this._text(leftP.slice(0, COLS - rightP.length - 1) + ' '.repeat(padP) + rightP))
+      }
+      if (due < 0.01) {
+        buf.push(...CMD.BOLD_ON)
+        buf.push(...this._text('PAGATO'))
+        buf.push(...CMD.BOLD_OFF)
+      } else {
+        const dueLeft = 'DA PAGARE'
+        const dueRight = `€${due.toFixed(2)}`
+        buf.push(...CMD.BOLD_ON)
+        buf.push(...this._text(dueLeft + ' '.repeat(Math.max(1, COLS - dueLeft.length - dueRight.length)) + dueRight))
+        buf.push(...CMD.BOLD_OFF)
+      }
+    }
+
+    buf.push(...this._text(this._line('=')))
+    buf.push(...CMD.ALIGN_CENTER)
+    buf.push(...this._text('Grazie e buon appetito!'))
+    buf.push(...CMD.FEED_LINES(2))
+    if (this._settings.autoCut) buf.push(...CMD.FEED_CUT)
+
+    await this._send(new Uint8Array(buf))
   }
 
   private async _printTestPage(): Promise<void> {

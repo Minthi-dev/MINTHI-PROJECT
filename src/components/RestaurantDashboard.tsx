@@ -62,7 +62,8 @@ import {
   CreditCard,
   Lock,
   LockOpen,
-  ShieldCheck
+  ShieldCheck,
+  Package
 } from '@phosphor-icons/react'
 import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -79,6 +80,7 @@ import ReservationsManager from './ReservationsManager'
 import AnalyticsCharts from './AnalyticsCharts'
 import CustomMenusManager from './CustomMenusManager'
 import QRCodeGenerator from './QRCodeGenerator'
+import TakeawayOrdersPanel from './takeaway/TakeawayOrdersPanel'
 import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, Room } from '../services/types'
 import { soundManager, type SoundType } from '../utils/SoundManager'
 import { ModeToggle } from './ModeToggle'
@@ -1982,6 +1984,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   useEffect(() => {
     if (activeSection === 'tables') setActiveTab('tables')
+    else if (activeSection === 'takeaway') setActiveTab('takeaway')
     else if (activeSection === 'menu') setActiveTab('menu')
     else if (activeSection === 'reservations') setActiveTab('reservations')
     else if (activeSection === 'analytics') setActiveTab('analytics')
@@ -2094,6 +2097,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               {[
                 { id: 'orders', label: 'Ordini', icon: Clock },
                 { id: 'tables', label: 'Tavoli', icon: MapPin },
+                ...(currentRestaurant?.takeaway_enabled ? [{ id: 'takeaway', label: 'Asporto', icon: Package }] : []),
                 { id: 'menu', label: 'Menu', icon: BookOpen },
                 { id: 'reservations', label: 'Prenotazioni', icon: Calendar },
                 { id: 'analytics', label: 'Analitiche', icon: ChartBar },
@@ -2458,6 +2462,61 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   />
                 )}
             </TabsContent >
+
+            {/* Takeaway Tab */}
+            <TabsContent value="takeaway" className="space-y-6">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10">
+                <div>
+                  <h2 className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Asporto</span></h2>
+                  <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">Ordini da ritirare, pagamenti e ricevute</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-white/10 text-zinc-300 hover:bg-white/5"
+                    onClick={() => {
+                      const url = `${window.location.origin}/display/${restaurantId}`
+                      window.open(url, '_blank', 'noopener,noreferrer')
+                    }}
+                  >
+                    <ChartBar size={14} className="mr-1" /> Apri schermo pubblico
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-white/10 text-zinc-300 hover:bg-white/5"
+                    onClick={() => {
+                      const url = `${window.location.origin}/client/takeaway/${restaurantId}`
+                      navigator.clipboard.writeText(url).then(() => toast.success('Link menu copiato')).catch(() => toast.error('Copia non riuscita'))
+                    }}
+                  >
+                    <QrCode size={14} className="mr-1" /> Copia link menu
+                  </Button>
+                </div>
+              </div>
+              {currentRestaurant?.takeaway_enabled ? (
+                <TakeawayOrdersPanel
+                  restaurantId={restaurantId}
+                  onPrintOrder={async (order) => {
+                    try {
+                      await thermalPrinter.printTakeawayReceipt({ order, restaurantName: currentRestaurant?.name })
+                      toast.success('Ricevuta inviata alla stampante')
+                    } catch (e: any) {
+                      toast.error(e?.message || 'Errore stampa')
+                    }
+                  }}
+                />
+              ) : (
+                <div className="text-center py-20 text-zinc-500">
+                  <Package size={48} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm uppercase tracking-widest">L'asporto non è attivo. Attivalo dalle Impostazioni.</p>
+                  <Button size="sm" className="mt-4 bg-amber-500 hover:bg-amber-400 text-black" onClick={() => { setActiveTab('settings'); setActiveSection('settings') }}>
+                    <Gear size={14} className="mr-1" /> Vai alle impostazioni
+                  </Button>
+                </div>
+              )}
+            </TabsContent>
 
             {/* Tables Tab */}
             <TabsContent value="tables" className="space-y-6">

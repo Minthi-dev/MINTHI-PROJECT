@@ -30,7 +30,10 @@ import {
     WarningCircle,
     ArrowClockwise,
     Sparkle,
-    Printer
+    Printer,
+    Package,
+    QrCode,
+    Copy
 } from '@phosphor-icons/react'
 import { SoundType } from '../utils/SoundManager'
 import WeeklyScheduleEditor from './WeeklyScheduleEditor'
@@ -183,6 +186,12 @@ export function SettingsView({
     const printer = useThermalPrinter()
     const [stripePaymentsEnabled, setStripePaymentsEnabled] = useState(false)
     const [autoDeliverReady, setAutoDeliverReady] = useState(false)
+    const [takeawayEnabled, setTakeawayEnabled] = useState(false)
+    const [dineInEnabled, setDineInEnabled] = useState(true)
+    const [takeawayRequireStripe, setTakeawayRequireStripe] = useState(false)
+    const [takeawayEstimatedMinutes, setTakeawayEstimatedMinutes] = useState(20)
+    const [takeawayPickupNotice, setTakeawayPickupNotice] = useState('')
+    const [savingTakeaway, setSavingTakeaway] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
     const [isStaffLoading, setIsStaffLoading] = useState(false)
     const [showStaffDialog, setShowStaffDialog] = useState(false)
@@ -245,7 +254,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_estimated_minutes, takeaway_pickup_notice')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -254,6 +263,11 @@ export function SettingsView({
                 setSubscriptionInfo(data)
                 setVatNumber(data.vat_number || '')
                 setBillingName(data.billing_name || '')
+                setTakeawayEnabled((data as any).takeaway_enabled ?? false)
+                setDineInEnabled((data as any).dine_in_enabled ?? true)
+                setTakeawayRequireStripe((data as any).takeaway_require_stripe ?? false)
+                setTakeawayEstimatedMinutes((data as any).takeaway_estimated_minutes ?? 20)
+                setTakeawayPickupNotice((data as any).takeaway_pickup_notice || '')
 
                 // If account exists but is not marked as enabled, check with Stripe API directly once
                 if (data.stripe_connect_account_id && !data.stripe_connect_enabled) {
@@ -341,6 +355,24 @@ export function SettingsView({
             toast.error('Errore collegamento Stripe: ' + msg)
         } finally {
             setLoadingConnectOnboarding(false)
+        }
+    }
+
+    const saveTakeawaySettings = async (patch: Partial<{
+        takeaway_enabled: boolean
+        dine_in_enabled: boolean
+        takeaway_require_stripe: boolean
+        takeaway_estimated_minutes: number
+        takeaway_pickup_notice: string
+    }>) => {
+        setSavingTakeaway(true)
+        try {
+            await DatabaseService.updateRestaurant({ id: restaurantId, ...patch })
+            toast.success('Impostazioni asporto aggiornate')
+        } catch (e: any) {
+            toast.error('Errore: ' + (e?.message || 'Impossibile salvare'))
+        } finally {
+            setSavingTakeaway(false)
         }
     }
 
@@ -494,6 +526,14 @@ export function SettingsView({
                     >
                         <CalendarCheck size={20} />
                         Prenotazioni
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="takeaway"
+                        data-settings-tab="takeaway"
+                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
+                    >
+                        <Package size={20} />
+                        Asporto
                     </TabsTrigger>
                     <TabsTrigger
                         value="subscription"
@@ -1142,6 +1182,152 @@ export function SettingsView({
                                 defaultDinnerStart={dinnerTimeStart}
                             />
                         </div>
+                    </motion.div>
+                </TabsContent>
+
+                {/* SEZIONE ASPORTO */}
+                <TabsContent value="takeaway">
+                    <motion.div
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        className="space-y-6"
+                    >
+                        {/* Toggle principali */}
+                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                            <div className="p-6 sm:p-8">
+                                <div className="flex items-start gap-3 mb-6">
+                                    <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
+                                        <Package weight="duotone" size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-white">Servizio Asporto</h3>
+                                        <p className="text-sm text-zinc-400 mt-1">I clienti ordinano dal QR code e ritirano al bancone con un numero di ritiro.</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-5">
+                                    <div className="flex items-center justify-between">
+                                        <div className="pr-4 space-y-1">
+                                            <Label className="text-base font-semibold text-zinc-200 block">Abilita Asporto</Label>
+                                            <p className="text-xs text-zinc-400">Espone il menu asporto pubblico su <code className="text-amber-400">/client/takeaway/&lt;id&gt;</code>.</p>
+                                        </div>
+                                        <Switch
+                                            checked={takeawayEnabled}
+                                            disabled={savingTakeaway}
+                                            onCheckedChange={(v) => { setTakeawayEnabled(v); saveTakeawaySettings({ takeaway_enabled: v }) }}
+                                            className="data-[state=checked]:bg-amber-500 scale-110 shrink-0"
+                                        />
+                                    </div>
+                                    <Separator className="bg-white/5" />
+                                    <div className="flex items-center justify-between">
+                                        <div className="pr-4 space-y-1">
+                                            <Label className="text-base font-semibold text-zinc-200 block">Servizio ai Tavoli</Label>
+                                            <p className="text-xs text-zinc-400">Disattiva se fai solo asporto. I QR tavolo non funzioneranno.</p>
+                                        </div>
+                                        <Switch
+                                            checked={dineInEnabled}
+                                            disabled={savingTakeaway}
+                                            onCheckedChange={(v) => { setDineInEnabled(v); saveTakeawaySettings({ dine_in_enabled: v }) }}
+                                            className="data-[state=checked]:bg-amber-500 scale-110 shrink-0"
+                                        />
+                                    </div>
+                                    <Separator className="bg-white/5" />
+                                    <div className="flex items-center justify-between">
+                                        <div className="pr-4 space-y-1">
+                                            <Label className="text-base font-semibold text-zinc-200 block">Pagamento Online Obbligatorio</Label>
+                                            <p className="text-xs text-zinc-400">Il cliente deve pagare con carta (Stripe) prima che l'ordine arrivi in cucina. Richiede Stripe Connect attivo.</p>
+                                        </div>
+                                        <Switch
+                                            checked={takeawayRequireStripe}
+                                            disabled={savingTakeaway || !takeawayEnabled}
+                                            onCheckedChange={(v) => { setTakeawayRequireStripe(v); saveTakeawaySettings({ takeaway_require_stripe: v }) }}
+                                            className="data-[state=checked]:bg-amber-500 scale-110 shrink-0"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Parametri */}
+                        {takeawayEnabled && (
+                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                            <div className="p-6 sm:p-8 space-y-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Clock size={20} className="text-amber-500" /> Parametri ordine</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <Label className="text-sm text-zinc-300">Tempo stimato di preparazione (minuti)</Label>
+                                        <Input
+                                            type="number"
+                                            min={5}
+                                            max={120}
+                                            value={takeawayEstimatedMinutes}
+                                            onChange={e => setTakeawayEstimatedMinutes(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
+                                            onBlur={() => saveTakeawaySettings({ takeaway_estimated_minutes: takeawayEstimatedMinutes })}
+                                            className="bg-white/5 border-white/10"
+                                        />
+                                        <p className="text-xs text-zinc-500">Mostrato al cliente in fase di ordine.</p>
+                                    </div>
+                                    <div className="space-y-2 md:col-span-2">
+                                        <Label className="text-sm text-zinc-300">Avviso per il cliente al ritiro (opzionale)</Label>
+                                        <Input
+                                            value={takeawayPickupNotice}
+                                            maxLength={200}
+                                            onChange={e => setTakeawayPickupNotice(e.target.value)}
+                                            onBlur={() => saveTakeawaySettings({ takeaway_pickup_notice: takeawayPickupNotice })}
+                                            placeholder="Es. Ingresso posteriore · Suonare il campanello"
+                                            className="bg-white/5 border-white/10"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        )}
+
+                        {/* Link pubblici */}
+                        {takeawayEnabled && (
+                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
+                            <div className="p-6 sm:p-8 space-y-4">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2"><QrCode size={20} className="text-amber-500" /> Link pubblici</h3>
+                                <div className="space-y-3">
+                                    <div className="bg-black/40 border border-white/10 rounded-xl p-4">
+                                        <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Menu asporto (per il QR code)</div>
+                                        <div className="flex items-center gap-2">
+                                            <code className="flex-1 text-sm text-amber-300 font-mono break-all">{`${window.location.origin}/client/takeaway/${restaurantId}`}</code>
+                                            <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/client/takeaway/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
+                                                <Copy size={14} />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/40 border border-white/10 rounded-xl p-4">
+                                        <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Schermo pubblico (monitor in sala)</div>
+                                        <div className="flex items-center gap-2">
+                                            <code className="flex-1 text-sm text-emerald-300 font-mono break-all">{`${window.location.origin}/display/${restaurantId}`}</code>
+                                            <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
+                                                <Copy size={14} />
+                                            </Button>
+                                            <Button size="sm" variant="outline" className="border-white/10" onClick={() => window.open(`${window.location.origin}/display/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
+                                                <ArrowSquareOut size={14} />
+                                            </Button>
+                                        </div>
+                                        <p className="text-xs text-zinc-500 mt-2">Apri in un dispositivo da mostrare ai clienti. Tieni acceso lo schermo — resta sveglio automaticamente.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        )}
+
+                        {takeawayRequireStripe && !subscriptionInfo?.stripe_connect_enabled && (
+                            <div className="rounded-2xl bg-amber-950/40 border border-amber-500/30 p-4 flex items-start gap-3">
+                                <WarningCircle size={20} className="text-amber-400 shrink-0 mt-0.5" />
+                                <div className="text-sm text-amber-200">
+                                    Hai richiesto il pagamento obbligatorio, ma Stripe Connect non risulta ancora attivato. Vai in <strong>Abbonamento & Pagamenti</strong> per completare l'onboarding.
+                                </div>
+                            </div>
+                        )}
                     </motion.div>
                 </TabsContent>
 

@@ -84,6 +84,75 @@ serve(async (req) => {
 
                 console.log(`[WEBHOOK] checkout.session.completed — paymentType: ${paymentType}, metadata:`, JSON.stringify(session.metadata));
 
+                if (paymentType === "takeaway_order") {
+                    // === PAGAMENTO ORDINE ASPORTO ===
+                    const restaurantId = session.metadata?.restaurantId;
+                    const orderId = session.metadata?.orderId;
+                    const splitLabel = session.metadata?.splitLabel || 'Pagamento online';
+                    const amountPaid = (session.amount_total || 0) / 100;
+
+                    if (!restaurantId || !orderId) {
+                        console.error(`[WEBHOOK] takeaway_order SKIP: metadata incompleto`, JSON.stringify(session.metadata));
+                        break;
+                    }
+
+                    const { data: order, error: fetchErr } = await supabase
+                        .from("orders")
+                        .select("id, status, total_amount, paid_amount, payments, order_type")
+                        .eq("id", orderId)
+                        .maybeSingle();
+                    if (fetchErr || !order) {
+                        console.error(`[WEBHOOK] takeaway_order: ordine ${orderId} non trovato`, fetchErr);
+                        break;
+                    }
+                    if (order.order_type !== "takeaway") {
+                        console.warn(`[WEBHOOK] takeaway_order: ordine ${orderId} non è takeaway`);
+                        break;
+                    }
+
+                    // Idempotency: use Stripe session id as deterministic label identifier
+                    const stripeLabel = `${splitLabel} [${(session as any).id}]`;
+                    const existing: any[] = Array.isArray(order.payments) ? order.payments : [];
+                    if (existing.some(p => typeof p?.label === 'string' && p.label.endsWith(`[${(session as any).id}]`))) {
+                        console.log(`[WEBHOOK] takeaway_order: pagamento ${(session as any).id} già registrato`);
+                        break;
+                    }
+
+                    const newPayments = [
+                        ...existing,
+                        {
+                            method: "stripe",
+                            amount: Math.round(amountPaid * 100) / 100,
+                            at: new Date().toISOString(),
+                            label: stripeLabel,
+                        },
+                    ];
+                    const newPaid = Math.round(((Number(order.paid_amount) || 0) + amountPaid) * 100) / 100;
+                    const total = Number(order.total_amount) || 0;
+                    const fullyPaid = newPaid + 0.01 >= total;
+
+                    const updates: Record<string, unknown> = {
+                        paid_amount: newPaid,
+                        payments: newPayments,
+                    };
+                    if (fullyPaid) {
+                        updates.status = "PAID";
+                        updates.payment_method = newPayments.length > 1 ? "split" : "stripe";
+                        updates.closed_at = new Date().toISOString();
+                    } else if (order.status === "PENDING") {
+                        // Partial/deposit? Move to PREPARING so kitchen can see it.
+                        updates.status = "PREPARING";
+                    }
+
+                    const { error: upErr } = await supabase.from("orders").update(updates).eq("id", orderId);
+                    if (upErr) {
+                        console.error(`[WEBHOOK] takeaway_order update error:`, upErr);
+                    } else {
+                        console.log(`[WEBHOOK] ✅ Takeaway ${orderId} paid €${amountPaid} (totale: €${newPaid}, pieno: ${fullyPaid})`);
+                    }
+                    break;
+                }
+
                 if (paymentType === "customer_order") {
                     // === PAGAMENTO CLIENTE (ordine dal menu) ===
                     const restaurantId = session.metadata?.restaurantId;

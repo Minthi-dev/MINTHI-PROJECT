@@ -96,7 +96,10 @@ export const DatabaseService = {
             'menu_style', 'menu_primary_color', 'view_only_menu_enabled',
             'enable_reservation_room_selection', 'enable_public_reservations',
             'show_cooking_times', 'enable_course_suggestions',
-            'auto_deliver_ready_dishes'
+            'auto_deliver_ready_dishes',
+            'enable_stripe_payments', 'vat_number', 'billing_name',
+            'takeaway_enabled', 'dine_in_enabled', 'takeaway_require_stripe',
+            'takeaway_estimated_minutes', 'takeaway_pickup_notice',
         ]
 
         // Copia solo i campi presenti nell'oggetto input
@@ -755,6 +758,185 @@ export const DatabaseService = {
         }
         const { error } = await supabase.from('order_items').update(updates).eq('id', itemId)
         if (error) throw error
+    },
+
+    // ======================================================================
+    // TAKEAWAY (asporto)
+    // ======================================================================
+    async getTakeawayRestaurantInfo(restaurantId: string) {
+        const { data, error } = await supabase.rpc('get_takeaway_restaurant_info', {
+            p_restaurant_id: restaurantId,
+        })
+        if (error) throw error
+        return (Array.isArray(data) ? data[0] : data) as {
+            id: string
+            name: string
+            logo_url: string | null
+            address: string | null
+            menu_style: string | null
+            menu_primary_color: string | null
+            takeaway_enabled: boolean
+            takeaway_require_stripe: boolean
+            takeaway_estimated_minutes: number
+            takeaway_pickup_notice: string | null
+            enable_stripe_payments: boolean
+            stripe_connect_enabled: boolean
+        } | null
+    },
+
+    async getTakeawayDisplay(restaurantId: string) {
+        const { data, error } = await supabase.rpc('get_takeaway_display', {
+            p_restaurant_id: restaurantId,
+        })
+        if (error) throw error
+        return (data || []) as Array<{
+            id: string
+            pickup_number: number
+            status: string
+            ready_at: string | null
+            created_at: string
+        }>
+    },
+
+    async getTakeawayOrderStatus(restaurantId: string, pickupCode: string) {
+        const { data, error } = await supabase.rpc('get_takeaway_order_status', {
+            p_restaurant_id: restaurantId,
+            p_pickup_code: pickupCode,
+        })
+        if (error) throw error
+        return (Array.isArray(data) ? data[0] : data) as {
+            id: string
+            pickup_number: number
+            status: string
+            total_amount: number
+            paid_amount: number
+            ready_at: string | null
+            created_at: string
+            customer_name: string
+            estimated_minutes: number
+        } | null
+    },
+
+    async createTakeawayOrder(payload: {
+        restaurantId: string
+        items: Array<{ dish_id: string; quantity: number; note?: string }>
+        customerName: string
+        customerPhone: string
+        customerNotes?: string
+        customerEmail?: string
+        paymentMethod: 'stripe' | 'pay_on_pickup'
+    }) {
+        const { data, error } = await supabase.functions.invoke('takeaway-create-order', {
+            body: payload,
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore creazione ordine')
+        if (data?.error) throw new Error(data.error)
+        return data as {
+            success: true
+            orderId: string
+            pickupNumber: number
+            pickupCode: string
+            estimatedMinutes: number
+            paymentMethod: 'stripe' | 'pay_on_pickup'
+            checkoutUrl?: string
+            sessionId?: string
+            paymentRequired?: boolean
+        }
+    },
+
+    async updateTakeawayStatus(orderId: string, nextStatus: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('takeaway-update-status', {
+            body: { userId, orderId, nextStatus },
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ordine')
+        if (data?.error) throw new Error(data.error)
+        return data
+    },
+
+    async registerTakeawayPayment(orderId: string, method: 'cash' | 'card_pos', amount: number, label?: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('takeaway-pay', {
+            body: { userId, orderId, action: 'register_payment', method, amount, label },
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore pagamento')
+        if (data?.error) throw new Error(data.error)
+        return data as { success: true; paidAmount: number; fullyPaid: boolean }
+    },
+
+    async createTakeawayStripeCheckout(orderId: string, amount: number, label?: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('takeaway-pay', {
+            body: { userId, orderId, action: 'create_stripe_checkout', amount, label },
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore checkout')
+        if (data?.error) throw new Error(data.error)
+        return data as { success: true; checkoutUrl: string; sessionId: string }
+    },
+
+    async refundLastTakeawayPayment(orderId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('takeaway-pay', {
+            body: { userId, orderId, action: 'refund_last' },
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore')
+        if (data?.error) throw new Error(data.error)
+        return data
+    },
+
+    async cancelTakeawayOrder(orderId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('takeaway-pay', {
+            body: { userId, orderId, action: 'cancel_order' },
+        })
+        if (error) throw new Error(data?.error || error?.message || 'Errore')
+        if (data?.error) throw new Error(data.error)
+        return data
+    },
+
+    async getTakeawayOrders(restaurantId: string) {
+        const { data, error } = await supabase
+            .from('orders')
+            .select(`
+                id, status, total_amount, paid_amount, created_at, ready_at, picked_up_at, closed_at,
+                order_type, pickup_number, pickup_code, customer_name, customer_phone, customer_notes,
+                payment_method, payments, restaurant_id,
+                items:order_items(id, order_id, dish_id, quantity, status, note, course_number,
+                    dish:dishes(id, name, price, category_id))
+            `)
+            .eq('restaurant_id', restaurantId)
+            .eq('order_type', 'takeaway')
+            .neq('status', 'CANCELLED')
+            .order('created_at', { ascending: false })
+            .limit(200)
+        if (error) throw error
+        return (data || []) as unknown as Order[]
+    },
+
+    async getDishesForMenu(restaurantId: string) {
+        const { data, error } = await supabase
+            .from('dishes')
+            .select('id, name, description, price, vat_rate, category_id, is_active, is_available, image_url, allergens')
+            .eq('restaurant_id', restaurantId)
+            .eq('is_active', true)
+        if (error) throw error
+        return data as unknown as Dish[]
+    },
+
+    async getCategoriesForMenu(restaurantId: string) {
+        const { data, error } = await supabase
+            .from('categories')
+            .select('id, name, "order", is_active')
+            .eq('restaurant_id', restaurantId)
+            .eq('is_active', true)
+            .order('order', { ascending: true })
+        if (error) throw error
+        return data as unknown as Category[]
     },
 
     // Bookings

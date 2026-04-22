@@ -31,7 +31,7 @@ export function KitchenView({ orders, tables, dishes, selectedCategoryIds = [], 
         return () => clearInterval(interval)
     }, [])
 
-    const getTableName = (tableId?: string, sessionId?: string) => {
+    const getTableName = (tableId?: string, sessionId?: string | null) => {
         if (sessionId) {
             const session = sessions.find(s => s.id === sessionId)
             if (session) {
