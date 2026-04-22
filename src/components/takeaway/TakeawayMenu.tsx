@@ -20,6 +20,17 @@ interface CartLine {
     note?: string
 }
 
+// Stable idempotency key per cart lifetime. Regenerated after a successful
+// submission (see submitOrder) so the next order isn't deduplicated.
+function makeIdempotencyKey() {
+    try {
+        if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+            return (crypto as any).randomUUID() as string
+        }
+    } catch {}
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 export default function TakeawayMenu() {
     const { restaurantId } = useParams<{ restaurantId: string }>()
     const navigate = useNavigate()
@@ -38,6 +49,8 @@ export default function TakeawayMenu() {
     const [customerNotes, setCustomerNotes] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [paymentChoice, setPaymentChoice] = useState<'stripe' | 'pay_on_pickup'>('stripe')
+    const [loadError, setLoadError] = useState<string | null>(null)
+    const [idempotencyKey, setIdempotencyKey] = useState<string>(() => makeIdempotencyKey())
 
     useEffect(() => {
         if (!restaurantId) return
@@ -45,22 +58,25 @@ export default function TakeawayMenu() {
         ;(async () => {
             try {
                 setLoading(true)
-                const [info, cats, ds] = await Promise.all([
-                    DatabaseService.getTakeawayRestaurantInfo(restaurantId),
-                    DatabaseService.getCategoriesForMenu(restaurantId),
-                    DatabaseService.getDishesForMenu(restaurantId),
-                ])
+                setLoadError(null)
+                // Single RPC: restaurant + categories + dishes in one roundtrip.
+                // Fewer network hops = fewer iOS Safari "Load failed" errors.
+                const { restaurant: info, categories: cats, dishes: ds } =
+                    await DatabaseService.getTakeawayMenu(restaurantId)
                 if (!alive) return
-                setRestaurant(info)
-                setCategories(cats || [])
-                setDishes(ds || [])
+                setRestaurant(info as RestaurantInfo | null)
+                setCategories((cats || []) as Category[])
+                setDishes((ds || []) as Dish[])
                 if (cats && cats.length > 0) setActiveCategory(cats[0].id)
                 // Default payment method based on restaurant config
                 if (info?.takeaway_require_stripe) setPaymentChoice('stripe')
                 else if (!info?.enable_stripe_payments || !info?.stripe_connect_enabled) setPaymentChoice('pay_on_pickup')
             } catch (e: any) {
-                console.error(e)
-                toast.error('Errore caricamento menù')
+                console.error('[TakeawayMenu] load error:', e)
+                if (alive) {
+                    setLoadError(e?.message || 'Impossibile caricare il menù')
+                    toast.error('Errore caricamento menù')
+                }
             } finally {
                 if (alive) setLoading(false)
             }
@@ -139,6 +155,7 @@ export default function TakeawayMenu() {
                 customerEmail: customerEmail.trim() || undefined,
                 customerNotes: customerNotes.trim() || undefined,
                 paymentMethod: paymentChoice,
+                idempotencyKey,
             })
 
             if (result.paymentMethod === 'stripe' && result.checkoutUrl) {
@@ -147,10 +164,14 @@ export default function TakeawayMenu() {
                 window.location.href = result.checkoutUrl
                 return
             }
-            // Pay on pickup — navigate directly to status
+            // Pay on pickup — reset idempotency key (this order is done)
+            // and navigate to status page.
+            setIdempotencyKey(makeIdempotencyKey())
+            setCart([])
             navigate(`/client/takeaway/${restaurantId}/order/${result.pickupCode}?created=1`)
         } catch (e: any) {
-            toast.error(e?.message || 'Errore invio ordine')
+            console.error('[TakeawayMenu] submit error:', e)
+            toast.error(e?.message || 'Errore invio ordine. Controlla la connessione e riprova.')
         } finally {
             setSubmitting(false)
         }
@@ -167,9 +188,16 @@ export default function TakeawayMenu() {
     if (!restaurant) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-zinc-950 text-white p-6 text-center">
-                <div>
-                    <h2 className="text-xl mb-2">Ristorante non trovato</h2>
-                    <p className="text-zinc-400 text-sm">Controlla il QR code o contatta il locale.</p>
+                <div className="space-y-3">
+                    <h2 className="text-xl">{loadError ? 'Errore di caricamento' : 'Ristorante non trovato'}</h2>
+                    <p className="text-zinc-400 text-sm max-w-sm mx-auto">
+                        {loadError || 'Controlla il QR code o contatta il locale.'}
+                    </p>
+                    {loadError && (
+                        <Button onClick={() => window.location.reload()} className="bg-amber-500 hover:bg-amber-400 text-black font-bold mt-2">
+                            Riprova
+                        </Button>
+                    )}
                 </div>
             </div>
         )

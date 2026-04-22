@@ -784,6 +784,25 @@ export const DatabaseService = {
         } | null
     },
 
+    // Single RPC: returns restaurant info + categories + dishes in one roundtrip.
+    // Replaces direct table reads for the takeaway customer menu.
+    async getTakeawayMenu(restaurantId: string) {
+        const { data, error } = await supabase.rpc('get_takeaway_menu', {
+            p_restaurant_id: restaurantId,
+        })
+        if (error) throw error
+        const payload = (data || {}) as {
+            restaurant?: any
+            categories?: any[]
+            dishes?: any[]
+        }
+        return {
+            restaurant: payload.restaurant ?? null,
+            categories: (payload.categories ?? []) as Category[],
+            dishes: (payload.dishes ?? []) as Dish[],
+        }
+    },
+
     async getTakeawayDisplay(restaurantId: string) {
         const { data, error } = await supabase.rpc('get_takeaway_display', {
             p_restaurant_id: restaurantId,
@@ -825,13 +844,65 @@ export const DatabaseService = {
         customerNotes?: string
         customerEmail?: string
         paymentMethod: 'stripe' | 'pay_on_pickup'
+        idempotencyKey?: string
     }) {
-        const { data, error } = await supabase.functions.invoke('takeaway-create-order', {
-            body: payload,
-        })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione ordine')
-        if (data?.error) throw new Error(data.error)
-        return data as {
+        // Direct fetch (instead of supabase.functions.invoke) so we always see
+        // the server's error body on iOS Safari — invoke() can mask non-2xx
+        // responses behind a generic FunctionsHttpError and hide the real
+        // message. With direct fetch we always parse `{ error }` from the JSON.
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/takeaway-create-order`
+        const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+
+        // Generate a stable idempotency key if the caller didn't supply one.
+        // Safer than Math.random: iOS Safari supports crypto.randomUUID.
+        const idemKey =
+            payload.idempotencyKey ||
+            (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                ? (crypto as any).randomUUID()
+                : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+
+        // 25s timeout — long enough for cold starts + Stripe Connect, short
+        // enough that a stuck request gives the user a real error quickly.
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 25000)
+
+        let response: Response
+        try {
+            response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    apikey: anon,
+                    Authorization: `Bearer ${anon}`,
+                },
+                body: JSON.stringify({ ...payload, idempotencyKey: idemKey }),
+                signal: controller.signal,
+                // iOS Safari hint: don't cache the request
+                cache: 'no-store',
+            })
+        } catch (e: any) {
+            clearTimeout(timer)
+            if (e?.name === 'AbortError') {
+                throw new Error('Timeout di rete. Riprova tra qualche secondo.')
+            }
+            throw new Error('Errore di connessione. Controlla la rete e riprova.')
+        }
+        clearTimeout(timer)
+
+        let body: any = null
+        try {
+            body = await response.json()
+        } catch {
+            // non-JSON body → keep null
+        }
+
+        if (!response.ok) {
+            const msg = (body && (body.error || body.message)) || `Errore server (${response.status})`
+            throw new Error(msg)
+        }
+        if (body?.error) throw new Error(body.error)
+
+        return body as {
             success: true
             orderId: string
             pickupNumber: number
@@ -841,6 +912,7 @@ export const DatabaseService = {
             checkoutUrl?: string
             sessionId?: string
             paymentRequired?: boolean
+            deduplicated?: boolean
         }
     },
 

@@ -57,8 +57,15 @@ serve(async (req) => {
             headers: { ...cors, "Content-Type": "application/json" },
         });
 
+    let payload: any;
     try {
-        const payload = await req.json();
+        payload = await req.json();
+    } catch (e) {
+        console.error("[TAKEAWAY] bad JSON body:", e);
+        return json({ error: "Richiesta non valida" }, 400);
+    }
+
+    try {
         const {
             restaurantId,
             items,
@@ -69,6 +76,7 @@ serve(async (req) => {
             customerEmail,
             successUrl,
             cancelUrl,
+            idempotencyKey,
         } = payload ?? {};
 
         // --- Input validation ---------------------------------------------------
@@ -85,6 +93,30 @@ serve(async (req) => {
         if (!cleanPhone) return json({ error: "Telefono obbligatorio" }, 400);
 
         const chosenMethod = paymentMethod === "stripe" ? "stripe" : "pay_on_pickup";
+        const cleanIdempotencyKey = sanitizeStr(idempotencyKey, 64);
+
+        // --- Idempotency short-circuit ----------------------------------------
+        // If the client retries (iPhone flaky network, double-tap), return the
+        // existing order instead of creating a duplicate.
+        if (cleanIdempotencyKey) {
+            const { data: existing } = await supabase
+                .from("orders")
+                .select("id, pickup_number, pickup_code, status, total_amount")
+                .eq("restaurant_id", restaurantId)
+                .eq("idempotency_key", cleanIdempotencyKey)
+                .maybeSingle();
+            if (existing) {
+                return json({
+                    success: true,
+                    orderId: existing.id,
+                    pickupNumber: existing.pickup_number,
+                    pickupCode: existing.pickup_code,
+                    paymentMethod: chosenMethod,
+                    paymentRequired: chosenMethod !== "stripe",
+                    deduplicated: true,
+                });
+            }
+        }
 
         // Validate item shape
         const dishIds: string[] = [];
@@ -201,6 +233,8 @@ serve(async (req) => {
                 customer_notes: cleanNotes,
                 paid_amount: 0,
                 payments: [],
+                payment_method: chosenMethod === "stripe" ? null : "pay_on_pickup",
+                idempotency_key: cleanIdempotencyKey,
             })
             .select("id")
             .single();
