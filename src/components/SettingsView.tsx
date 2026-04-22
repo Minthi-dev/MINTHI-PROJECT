@@ -38,6 +38,8 @@ import {
 import { SoundType } from '../utils/SoundManager'
 import WeeklyScheduleEditor from './WeeklyScheduleEditor'
 import WeeklyServiceHoursEditor from './WeeklyServiceHoursEditor'
+import TakeawayQRPosterButton from './takeaway/TakeawayQRPosterButton'
+import QRCodeGenerator from './QRCodeGenerator'
 import { DatabaseService } from '@/services/DatabaseService'
 import { supabase } from '@/lib/supabase'
 import type { WeeklyCopertoSchedule, WeeklyAyceSchedule, RestaurantStaff, WeeklyServiceSchedule, SubscriptionPayment } from '@/services/types'
@@ -478,79 +480,49 @@ export function SettingsView({
     }
 
     return (
-        <div className="space-y-8 pb-24 text-zinc-100">
-            {/* Header */}
+        <div className="space-y-6 pb-24 text-zinc-100">
+            {/* Header — minimal, elegant */}
             <motion.div
-                initial={{ opacity: 0, y: -20 }}
+                initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4 pb-4 border-b border-white/10"
+                className="flex items-center justify-between gap-4"
             >
-                <div>
-                    <h2 data-tour="settings-header" className="text-2xl font-light text-white tracking-tight">Gestione <span className="font-bold text-amber-500">Impostazioni</span></h2>
-                    <p className="text-sm text-zinc-400 mt-1 uppercase tracking-wider font-medium">
-                        Configura ogni aspetto del tuo ristorante
-                    </p>
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                        <Gear size={22} weight="fill" className="text-amber-400" />
+                    </div>
+                    <div>
+                        <h2 data-tour="settings-header" className="text-xl sm:text-2xl font-bold text-white tracking-tight">Impostazioni</h2>
+                        <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">Configura ogni aspetto del tuo locale</p>
+                    </div>
                 </div>
             </motion.div>
 
             <Tabs defaultValue="general" className="w-full">
-                <TabsList className="w-full justify-start h-auto bg-transparent border-b border-white/10 p-0 pb-0 mb-8 gap-6 overflow-x-auto [overflow:visible]">
-                    <TabsTrigger
-                        value="general"
-                        data-settings-tab="general"
-                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
-                    >
-                        <Storefront size={20} />
-                        Generale
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="costs"
-                        data-settings-tab="costs"
-                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
-                    >
-                        <Coins size={20} />
-                        Costi & Menu
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="staff"
-                        data-settings-tab="staff"
-                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
-                    >
-                        <Users size={20} />
-                        Staff
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="reservations"
-                        data-settings-tab="reservations"
-                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
-                    >
-                        <CalendarCheck size={20} />
-                        Prenotazioni
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="takeaway"
-                        data-settings-tab="takeaway"
-                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
-                    >
-                        <Package size={20} />
-                        Asporto
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="subscription"
-                        data-settings-tab="subscription"
-                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-emerald-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-emerald-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
-                    >
-                        <CreditCard size={20} />
-                        Abbonamento & Pagamenti
-                    </TabsTrigger>
-                    <TabsTrigger
-                        value="printer"
-                        data-settings-tab="printer"
-                        className="rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent px-2 py-3 text-zinc-400 data-[state=active]:text-amber-400 transition-all font-medium gap-2 focus-visible:outline-none focus-visible:ring-0"
-                    >
-                        <Printer size={20} />
-                        Stampante Cucina
-                    </TabsTrigger>
+                {/* Pill-style tab list — cleaner, scroll-friendly, consistent color accent */}
+                <TabsList className="w-full h-auto bg-zinc-900/40 border border-white/5 rounded-2xl p-1.5 mb-8 gap-1 overflow-x-auto no-scrollbar justify-start flex-nowrap">
+                    {[
+                        { value: 'general', icon: Storefront, label: 'Generale', color: 'amber' },
+                        { value: 'costs', icon: Coins, label: 'Costi & Menu', color: 'amber' },
+                        { value: 'staff', icon: Users, label: 'Staff', color: 'amber' },
+                        { value: 'reservations', icon: CalendarCheck, label: 'Prenotazioni', color: 'amber' },
+                        { value: 'takeaway', icon: Package, label: 'Asporto', color: 'amber' },
+                        { value: 'subscription', icon: CreditCard, label: 'Abbonamento', color: 'emerald' },
+                        { value: 'printer', icon: Printer, label: 'Stampante', color: 'amber' },
+                    ].map(({ value, icon: Icon, label, color }) => (
+                        <TabsTrigger
+                            key={value}
+                            value={value}
+                            data-settings-tab={value}
+                            className={`shrink-0 rounded-xl px-4 py-2.5 text-sm text-zinc-400 hover:text-white transition-all gap-2 font-medium focus-visible:outline-none focus-visible:ring-0 data-[state=active]:shadow-sm ${color === 'emerald'
+                                ? 'data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-300 data-[state=active]:ring-1 data-[state=active]:ring-emerald-500/30'
+                                : 'data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-300 data-[state=active]:ring-1 data-[state=active]:ring-amber-500/30'
+                                }`}
+                        >
+                            <Icon size={16} weight="fill" />
+                            <span className="whitespace-nowrap">{label}</span>
+                        </TabsTrigger>
+                    ))}
                 </TabsList>
 
                 {/* 1. SEZIONE GENERALE */}
@@ -1287,33 +1259,51 @@ export function SettingsView({
                         </div>
                         )}
 
-                        {/* Link pubblici */}
-                        {takeawayEnabled && (
+                        {/* Link pubblici + QR poster */}
+                        {takeawayEnabled && restaurantId && (
                         <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-6 sm:p-8 space-y-4">
-                                <h3 className="text-lg font-bold text-white flex items-center gap-2"><QrCode size={20} className="text-amber-500" /> Link pubblici</h3>
-                                <div className="space-y-3">
-                                    <div className="bg-black/40 border border-white/10 rounded-xl p-4">
-                                        <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Menu asporto (per il QR code)</div>
-                                        <div className="flex items-center gap-2">
-                                            <code className="flex-1 text-sm text-amber-300 font-mono break-all">{`${window.location.origin}/client/takeaway/${restaurantId}`}</code>
-                                            <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/client/takeaway/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
-                                                <Copy size={14} />
-                                            </Button>
-                                        </div>
+                            <div className="p-6 sm:p-8 space-y-5">
+                                <div className="flex items-center justify-between gap-3">
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><QrCode size={20} className="text-amber-500" /> QR & Link pubblici</h3>
+                                    <TakeawayQRPosterButton
+                                        restaurantId={restaurantId}
+                                        restaurantName={restaurantName}
+                                        size="sm"
+                                    />
+                                </div>
+
+                                {/* Preview QR + menu link side by side */}
+                                <div className="grid grid-cols-1 md:grid-cols-[auto,1fr] gap-5 items-start">
+                                    <div className="bg-white p-3 rounded-xl shadow-inner self-center mx-auto">
+                                        <QRCodeGenerator value={`${window.location.origin}/client/takeaway/${restaurantId}`} size={150} />
                                     </div>
-                                    <div className="bg-black/40 border border-white/10 rounded-xl p-4">
-                                        <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Schermo pubblico (monitor in sala)</div>
-                                        <div className="flex items-center gap-2">
-                                            <code className="flex-1 text-sm text-emerald-300 font-mono break-all">{`${window.location.origin}/display/${restaurantId}`}</code>
-                                            <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
-                                                <Copy size={14} />
-                                            </Button>
-                                            <Button size="sm" variant="outline" className="border-white/10" onClick={() => window.open(`${window.location.origin}/display/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
-                                                <ArrowSquareOut size={14} />
-                                            </Button>
+                                    <div className="space-y-3">
+                                        <div className="bg-black/40 border border-white/10 rounded-xl p-4">
+                                            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Menu asporto (QR code)</div>
+                                            <div className="flex items-center gap-2">
+                                                <code className="flex-1 text-xs text-amber-300 font-mono break-all">{`${window.location.origin}/client/takeaway/${restaurantId}`}</code>
+                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/client/takeaway/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
+                                                    <Copy size={14} />
+                                                </Button>
+                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => window.open(`${window.location.origin}/client/takeaway/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
+                                                    <ArrowSquareOut size={14} />
+                                                </Button>
+                                            </div>
+                                            <p className="text-xs text-zinc-500 mt-2">Stampa il PDF con il QR code grande: perfetto da mettere al bancone o in vetrina.</p>
                                         </div>
-                                        <p className="text-xs text-zinc-500 mt-2">Apri in un dispositivo da mostrare ai clienti. Tieni acceso lo schermo — resta sveglio automaticamente.</p>
+                                        <div className="bg-black/40 border border-white/10 rounded-xl p-4">
+                                            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Schermo pubblico (monitor in sala d'attesa)</div>
+                                            <div className="flex items-center gap-2">
+                                                <code className="flex-1 text-xs text-emerald-300 font-mono break-all">{`${window.location.origin}/display/${restaurantId}`}</code>
+                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
+                                                    <Copy size={14} />
+                                                </Button>
+                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => window.open(`${window.location.origin}/display/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
+                                                    <ArrowSquareOut size={14} />
+                                                </Button>
+                                            </div>
+                                            <p className="text-xs text-zinc-500 mt-2">Apri in un dispositivo da mostrare ai clienti. Tieni acceso lo schermo — resta sveglio automaticamente.</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

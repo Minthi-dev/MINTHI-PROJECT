@@ -10,9 +10,11 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ShoppingBag, Timer, Bell, ForkKnife, CheckCircle, Wallet, CreditCard, Trash, Receipt, CaretRight, Copy, Package, User as UserIcon } from '@phosphor-icons/react'
 import TakeawayPaymentDialog from './TakeawayPaymentDialog'
+import TakeawayQRPosterButton from './TakeawayQRPosterButton'
 
 interface Props {
     restaurantId: string
+    restaurantName?: string
     onPrintOrder?: (order: Order) => void
 }
 
@@ -33,7 +35,7 @@ function orderDue(order: Order) {
     return Math.max(0, Math.round((total - paid) * 100) / 100)
 }
 
-export default function TakeawayOrdersPanel({ restaurantId, onPrintOrder }: Props) {
+export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPrintOrder }: Props) {
     const [orders, setOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
     const [tab, setTab] = useState<Tab>('queue')
@@ -87,7 +89,17 @@ export default function TakeawayOrdersPanel({ restaurantId, onPrintOrder }: Prop
     const changeStatus = async (o: Order, next: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') => {
         try {
             await DatabaseService.updateTakeawayStatus(o.id, next)
-            toast.success('Stato aggiornato')
+            if (next === 'PICKED_UP') {
+                toast.success(`#${String(o.pickup_number || 0).padStart(3, '0')} consegnato \u2014 rimosso dal display`, {
+                    duration: 2500,
+                })
+            } else if (next === 'READY') {
+                toast.success(`#${String(o.pickup_number || 0).padStart(3, '0')} pronto al ritiro`)
+            } else if (next === 'PREPARING') {
+                toast.success('In preparazione')
+            } else {
+                toast.success('Stato aggiornato')
+            }
         } catch (e: any) {
             toast.error(e?.message || 'Errore')
         }
@@ -108,10 +120,17 @@ export default function TakeawayOrdersPanel({ restaurantId, onPrintOrder }: Prop
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <Package size={22} className="text-amber-400" weight="fill" /> Ordini asporto
                 </h2>
-                <div className="ml-auto flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
-                    <TabButton active={tab === 'queue'} onClick={() => setTab('queue')} count={grouped.queue.length} icon={<ForkKnife size={14} />} label="In cucina" />
-                    <TabButton active={tab === 'ready'} onClick={() => setTab('ready')} count={grouped.ready.length} icon={<Bell size={14} />} label="Pronti" />
-                    <TabButton active={tab === 'closed'} onClick={() => setTab('closed')} count={grouped.closed.length} icon={<CheckCircle size={14} />} label="Chiusi" />
+                <div className="ml-auto flex items-center gap-2">
+                    <TakeawayQRPosterButton
+                        restaurantId={restaurantId}
+                        restaurantName={restaurantName || 'Il mio locale'}
+                        className="border-white/10 text-zinc-300 hover:text-amber-300 hover:bg-amber-500/5"
+                    />
+                    <div className="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
+                        <TabButton active={tab === 'queue'} onClick={() => setTab('queue')} count={grouped.queue.length} icon={<ForkKnife size={14} />} label="In cucina" />
+                        <TabButton active={tab === 'ready'} onClick={() => setTab('ready')} count={grouped.ready.length} icon={<Bell size={14} />} label="Pronti" />
+                        <TabButton active={tab === 'closed'} onClick={() => setTab('closed')} count={grouped.closed.length} icon={<CheckCircle size={14} />} label="Chiusi" />
+                    </div>
                 </div>
             </div>
 
@@ -180,9 +199,19 @@ export default function TakeawayOrdersPanel({ restaurantId, onPrintOrder }: Prop
                                                 <Button size="sm" onClick={() => changeStatus(o, 'READY')} className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2"><Bell size={14} className="mr-1" />Segna pronto</Button>
                                             )}
                                             {o.status === 'READY' && (
-                                                <Button size="sm" onClick={() => changeStatus(o, 'PICKED_UP')} className="bg-zinc-700 hover:bg-zinc-600 text-white col-span-2"><CheckCircle size={14} className="mr-1" />Segna ritirato</Button>
+                                                <Button
+                                                    onClick={() => {
+                                                        if (due > 0.01) {
+                                                            if (!confirm(`Residuo da incassare: \u20ac${due.toFixed(2)}.\nConfermi la consegna senza pagamento?`)) return
+                                                        }
+                                                        changeStatus(o, 'PICKED_UP')
+                                                    }}
+                                                    className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2 h-12 text-base shadow-lg shadow-emerald-500/20 ring-2 ring-emerald-400/40"
+                                                >
+                                                    <CheckCircle size={18} weight="fill" className="mr-2" />Consegnato al cliente
+                                                </Button>
                                             )}
-                                            {due > 0.01 && o.status !== 'CANCELLED' && (
+                                            {due > 0.01 && o.status !== 'CANCELLED' && o.status !== 'PICKED_UP' && (
                                                 <Button size="sm" onClick={() => openPayment(o)} variant="outline" className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 col-span-2">
                                                     <Receipt size={14} className="mr-1" /> Pagamento
                                                 </Button>

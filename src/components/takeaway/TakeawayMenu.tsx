@@ -5,10 +5,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Card } from '@/components/ui/card'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger, DrawerDescription } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ShoppingBag, Minus, Plus, Trash, ForkKnife, CreditCard, Wallet, Clock, CheckCircle, Storefront, ArrowLeft } from '@phosphor-icons/react'
+import { ShoppingBag, Minus, Plus, Trash, ForkKnife, CreditCard, Wallet, Clock, CheckCircle, Storefront, ArrowLeft, Info } from '@phosphor-icons/react'
 import { DatabaseService } from '@/services/DatabaseService'
 import type { Dish, Category } from '@/services/types'
 
@@ -251,7 +250,7 @@ export default function TakeawayMenu() {
                 )}
             </header>
 
-            {/* Menu */}
+            {/* Menu — visually aligned with CustomerMenu (photo + description + allergens badge) */}
             <main className="max-w-2xl mx-auto px-4 py-6 space-y-8">
                 {categories.map(cat => {
                     const catDishes = dishesByCategory.get(cat.id) || []
@@ -260,18 +259,57 @@ export default function TakeawayMenu() {
                         <section key={cat.id} id={`cat-${cat.id}`}>
                             <h2 className="text-amber-400/90 font-semibold uppercase tracking-wider text-sm mb-3">{cat.name}</h2>
                             <div className="space-y-2">
-                                {catDishes.map(d => (
-                                    <Card key={d.id} className="bg-zinc-900/60 border-white/5 p-3 flex items-start gap-3 hover:border-amber-500/30 transition-colors">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="font-semibold">{d.name}</div>
-                                            {d.description && <div className="text-xs text-zinc-400 mt-0.5 line-clamp-2">{d.description}</div>}
-                                            <div className="text-amber-400 font-bold mt-1">€{Number(d.price).toFixed(2)}</div>
-                                        </div>
-                                        <Button size="sm" onClick={() => addToCart(d)} className="bg-amber-500 hover:bg-amber-400 text-black font-bold">
-                                            <Plus size={16} weight="bold" /> Aggiungi
-                                        </Button>
-                                    </Card>
-                                ))}
+                                {catDishes.map((d, index) => {
+                                    const hasImage = !!d.image_url?.trim()
+                                    const hasAllergens = !!d.allergens && d.allergens.length > 0
+                                    return (
+                                        <motion.div
+                                            key={d.id}
+                                            layout
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.3) }}
+                                            onClick={() => addToCart(d)}
+                                            className="flex items-center gap-4 p-4 rounded-xl bg-zinc-900/70 border border-amber-500/10 shadow-lg hover:border-amber-500/40 transition-all duration-500 cursor-pointer group active:scale-[0.98] backdrop-blur-sm"
+                                        >
+                                            {hasImage && (
+                                                <div className="w-[72px] h-[72px] shrink-0 relative rounded-lg overflow-hidden shadow-inner border border-white/5 bg-gradient-to-br from-zinc-900 to-zinc-950">
+                                                    <img
+                                                        src={d.image_url}
+                                                        alt={d.name}
+                                                        loading="lazy"
+                                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                                        onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }}
+                                                    />
+                                                    {hasAllergens && (
+                                                        <div className="absolute bottom-1 right-1 p-0.5 rounded-full shadow-sm bg-zinc-950/90 border border-amber-500/20">
+                                                            <Info size={10} className="text-amber-400" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            <div className="flex-1 min-w-0 py-0.5">
+                                                <h3 className="font-normal text-base leading-tight line-clamp-1 mb-1 tracking-wide text-white">{d.name}</h3>
+                                                {d.description && (
+                                                    <p className="text-xs line-clamp-2 leading-snug font-light text-zinc-400">{d.description}</p>
+                                                )}
+                                                <div className="flex items-center justify-between mt-2">
+                                                    <span className="font-medium text-sm tracking-wide text-amber-400">€ {Number(d.price).toFixed(2)}</span>
+                                                </div>
+                                            </div>
+
+                                            <Button
+                                                size="icon"
+                                                className="rounded-full shrink-0 bg-amber-500/10 hover:bg-amber-500 hover:text-black border border-amber-500/40 text-amber-400 transition-all duration-300 hover:scale-110"
+                                                onClick={(e) => { e.stopPropagation(); addToCart(d) }}
+                                                aria-label={`Aggiungi ${d.name}`}
+                                            >
+                                                <Plus size={20} weight="bold" />
+                                            </Button>
+                                        </motion.div>
+                                    )
+                                })}
                             </div>
                         </section>
                     )

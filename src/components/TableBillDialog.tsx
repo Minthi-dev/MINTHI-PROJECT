@@ -32,6 +32,7 @@ interface SplitItem {
     quantity: number // Always 1 for split items
     status: string
     isVirtual?: boolean
+    isPrePaid?: boolean // true when order_items.paid_online_at is set (pagato anticipatamente via Stripe)
     originalId?: string // Link to original item if this is a split part
     originalItem?: any
     dish?: Dish
@@ -151,6 +152,7 @@ export default function TableBillDialog({
                     // For display/logic: Expand quantity into individual items
                     // e.g. "Coca Cola x3" -> 3 separate "Coca Cola" lines
                     const qty = item.quantity || 1
+                    const isPrePaid = !!item.paid_online_at
                     for (let i = 0; i < qty; i++) {
                         items.push({
                             id: `${item.id}-split-${i}`, // Virtual split ID
@@ -160,6 +162,7 @@ export default function TableBillDialog({
                             price: price,
                             quantity: 1, // Normalized to 1
                             status: item.status,
+                            isPrePaid,
                             dish: item.dish
                         })
                     }
@@ -176,9 +179,10 @@ export default function TableBillDialog({
         return [...realItemsExpanded, ...virt]
     }, [realItemsExpanded, virtualItems, paidItemIds])
 
-    // Only unpaid items for selection/payment logic
+    // Only unpaid items for selection/payment logic.
+    // Pre-paid (Stripe anticipato) items are excluded — they're already settled.
     const unpaidSplitItems = useMemo(() => {
-        return splitPayableItems.filter(i => !paidItemIds.has(i.id))
+        return splitPayableItems.filter(i => !paidItemIds.has(i.id) && !i.isPrePaid)
     }, [splitPayableItems, paidItemIds])
 
     // Items already marked as PAID in the database (for display in overview)
@@ -454,10 +458,11 @@ export default function TableBillDialog({
                                                 })
 
                                                 // Group UNPAID items for clean receipt display — show ALL items including €0 AYCE dishes
-                                                const displayGroups = new Map<string, { name: string, quantity: number, price: number, total: number, isAyce: boolean, isVirtual: boolean }>()
+                                                const displayGroups = new Map<string, { name: string, quantity: number, price: number, total: number, isAyce: boolean, isVirtual: boolean, isPrePaid: boolean }>()
 
                                                 splitPayableItems.forEach(item => {
-                                                    const key = `${item.name}-${item.price}`
+                                                    // Key includes pre-paid flag so pre-paid items render as their own row with a dedicated badge
+                                                    const key = `${item.name}-${item.price}-${item.isPrePaid ? 'prepaid' : 'due'}`
                                                     const existing = displayGroups.get(key)
                                                     if (existing) {
                                                         existing.quantity += 1
@@ -469,7 +474,8 @@ export default function TableBillDialog({
                                                             price: item.price,
                                                             total: item.price,
                                                             isAyce: item.price === 0 && !item.isVirtual,
-                                                            isVirtual: !!item.isVirtual
+                                                            isVirtual: !!item.isVirtual,
+                                                            isPrePaid: !!item.isPrePaid,
                                                         })
                                                     }
                                                 })
@@ -517,16 +523,17 @@ export default function TableBillDialog({
                                                             </div>
                                                         )}
                                                         {Array.from(displayGroups.entries()).map(([key, item]) => (
-                                                            <div key={key} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 group hover:bg-white/5 transition-colors rounded-lg px-2 -mx-2">
+                                                            <div key={key} className={`flex justify-between items-center py-2 border-b border-white/5 last:border-0 group transition-colors rounded-lg px-2 -mx-2 ${item.isPrePaid ? 'bg-indigo-500/5 hover:bg-indigo-500/10' : 'hover:bg-white/5'}`}>
                                                                 <div className="flex gap-3 text-sm items-center">
-                                                                    <span className="font-bold min-w-[24px] h-6 rounded bg-white/10 flex items-center justify-center text-xs text-zinc-300">{item.quantity}x</span>
+                                                                    <span className={`font-bold min-w-[24px] h-6 rounded flex items-center justify-center text-xs ${item.isPrePaid ? 'bg-indigo-500/20 text-indigo-200' : 'bg-white/10 text-zinc-300'}`}>{item.quantity}x</span>
                                                                     <div className="flex flex-col">
-                                                                        <span className="font-medium text-zinc-200">{item.name}</span>
+                                                                        <span className={`font-medium ${item.isPrePaid ? 'text-indigo-100' : 'text-zinc-200'}`}>{item.name}</span>
                                                                         {item.isAyce && <span className="text-[10px] text-amber-500/70 font-bold uppercase tracking-wider">AYCE incluso</span>}
+                                                                        {item.isPrePaid && <span className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">💳 Pagato anticipatamente</span>}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className="font-mono font-bold text-sm tabular-nums text-zinc-300">
+                                                                    <span className={`font-mono font-bold text-sm tabular-nums ${item.isPrePaid ? 'text-indigo-300' : 'text-zinc-300'}`}>
                                                                         {item.price === 0 ? <span className="text-emerald-500/70">{'\u20AC'}0.00</span> : `\u20AC${item.total.toFixed(2)}`}
                                                                     </span>
                                                                     {canDeleteItems && !item.isVirtual && (
@@ -620,12 +627,14 @@ export default function TableBillDialog({
                                         <div className="p-4 space-y-2 pb-6">
                                             {splitPayableItems.map((item) => {
                                                 const isPaid = paidItemIds.has(item.id)
-                                                const isSelected = !isPaid && selectedSplitItems.has(item.id)
+                                                const isPrePaid = !!item.isPrePaid
+                                                const locked = isPaid || isPrePaid
+                                                const isSelected = !locked && selectedSplitItems.has(item.id)
                                                 return (
                                                     <div
                                                         key={item.id}
                                                         onClick={() => {
-                                                            if (isPaid) return // Can't interact with paid items
+                                                            if (locked) return
                                                             const newSet = new Set(selectedSplitItems)
                                                             if (newSet.has(item.id)) newSet.delete(item.id)
                                                             else newSet.add(item.id)
@@ -633,26 +642,32 @@ export default function TableBillDialog({
                                                         }}
                                                         className={`flex items-center justify-between p-4 rounded-xl border transition-all select-none group ${isPaid
                                                             ? 'bg-white/[0.02] border-white/5 opacity-40 cursor-default'
-                                                            : isSelected
-                                                                ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)] cursor-pointer'
-                                                                : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10 cursor-pointer'
+                                                            : isPrePaid
+                                                                ? 'bg-indigo-500/10 border-indigo-500/30 cursor-default'
+                                                                : isSelected
+                                                                    ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_20px_-5px_rgba(245,158,11,0.2)] cursor-pointer'
+                                                                    : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10 cursor-pointer'
                                                             }`}
                                                     >
                                                         <div className="flex items-center gap-4">
                                                             <div className={`w-6 h-6 rounded-full border flex items-center justify-center transition-all ${isPaid
                                                                 ? 'bg-emerald-500/20 border-emerald-500/50'
-                                                                : isSelected ? 'bg-amber-500 border-amber-500 scale-110' : 'border-zinc-600 bg-transparent group-hover:border-zinc-500'
+                                                                : isPrePaid
+                                                                    ? 'bg-indigo-500/20 border-indigo-500/50'
+                                                                    : isSelected ? 'bg-amber-500 border-amber-500 scale-110' : 'border-zinc-600 bg-transparent group-hover:border-zinc-500'
                                                                 }`}>
                                                                 {isPaid && <Check size={14} weight="bold" className="text-emerald-500" />}
+                                                                {isPrePaid && <Check size={14} weight="bold" className="text-indigo-300" />}
                                                                 {isSelected && <Check size={14} weight="bold" className="text-black" />}
                                                             </div>
                                                             <div className="flex flex-col">
-                                                                <span className={`text-sm font-medium transition-colors ${isPaid ? 'line-through text-zinc-600' : isSelected ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-300'}`}>{item.name}</span>
+                                                                <span className={`text-sm font-medium transition-colors ${isPaid ? 'line-through text-zinc-600' : isPrePaid ? 'text-indigo-100' : isSelected ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-300'}`}>{item.name}</span>
                                                                 {isPaid && <span className="text-[10px] text-emerald-600 uppercase font-bold tracking-wider">Pagato</span>}
-                                                                {!isPaid && item.isVirtual && <span className="text-[10px] text-zinc-600 uppercase font-bold tracking-wider">Autom</span>}
+                                                                {isPrePaid && <span className="text-[10px] text-indigo-300 uppercase font-bold tracking-wider">💳 Pagato anticipatamente</span>}
+                                                                {!locked && item.isVirtual && <span className="text-[10px] text-zinc-600 uppercase font-bold tracking-wider">Autom</span>}
                                                             </div>
                                                         </div>
-                                                        <span className={`font-mono font-bold transition-colors ${isPaid ? 'line-through text-zinc-700' : isSelected ? 'text-amber-500' : 'text-zinc-500 group-hover:text-zinc-400'}`}>€{item.price.toFixed(2)}</span>
+                                                        <span className={`font-mono font-bold transition-colors ${isPaid ? 'line-through text-zinc-700' : isPrePaid ? 'text-indigo-300' : isSelected ? 'text-amber-500' : 'text-zinc-500 group-hover:text-zinc-400'}`}>€{item.price.toFixed(2)}</span>
                                                     </div>
                                                 )
                                             })}

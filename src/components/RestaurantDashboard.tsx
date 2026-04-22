@@ -2498,6 +2498,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               {currentRestaurant?.takeaway_enabled ? (
                 <TakeawayOrdersPanel
                   restaurantId={restaurantId}
+                  restaurantName={currentRestaurant?.name}
                   onPrintOrder={async (order) => {
                     try {
                       await thermalPrinter.printTakeawayReceipt({ order, restaurantName: currentRestaurant?.name })

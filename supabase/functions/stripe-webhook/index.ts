@@ -213,7 +213,9 @@ serve(async (req) => {
                         console.log(`[WEBHOOK] ✅ Pagamento cliente registrato: €${amountPaid.toFixed(2)} per sessione ${sessionId} (${splitLabel}). Totale pagato: €${newPaidAmount.toFixed(2)}`);
                     }
 
-                    // Mark specific order items as PAID if paidOrderItemIds present
+                    // Pre-payment: flag these items as paid online, but DO NOT mark them
+                    // as PAID/SERVED. The kitchen still needs to prepare and deliver them —
+                    // Stripe checkout is a pre-payment, not a completion signal.
                     const paidItemIdsRaw = session.metadata?.paidOrderItemIds;
                     if (paidItemIdsRaw && paidItemIdsRaw !== '') {
                         try {
@@ -221,13 +223,16 @@ serve(async (req) => {
                             if (Array.isArray(paidItemIds) && paidItemIds.length > 0) {
                                 const { error: itemUpdateError } = await supabase
                                     .from("order_items")
-                                    .update({ status: "PAID" })
+                                    .update({
+                                        paid_online_at: new Date().toISOString(),
+                                        paid_online_session_id: (session as any).id,
+                                    })
                                     .in("id", paidItemIds);
 
                                 if (itemUpdateError) {
-                                    console.error(`[WEBHOOK] Errore aggiornamento order_items a PAID:`, itemUpdateError);
+                                    console.error(`[WEBHOOK] Errore flagging paid_online_at:`, itemUpdateError);
                                 } else {
-                                    console.log(`[WEBHOOK] ✅ ${paidItemIds.length} order_items marcati come PAID`);
+                                    console.log(`[WEBHOOK] ✅ ${paidItemIds.length} order_items contrassegnati come PAGATI ANTICIPATAMENTE (kitchen continua)`);
                                 }
                             }
                         } catch (parseErr) {

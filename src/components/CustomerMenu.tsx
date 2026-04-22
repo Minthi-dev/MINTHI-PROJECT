@@ -1784,12 +1784,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   const getDishOrderedCount = (dishId: string) => perDishOrderedCount[dishId] || 0
 
-  // Helper: get all payable items (not PAID, not CANCELLED)
+  // Helper: get all payable items (not PAID, not CANCELLED, not already pre-paid online).
+  // Items with paid_online_at set were pre-paid via Stripe — the kitchen is still preparing
+  // them, but they must NOT be offered for re-payment.
   const payableItems = useMemo(() => {
     const items: { id: string, name: string, price: number, quantity: number, orderId: string }[] = []
     previousOrders.forEach(order => {
       order.items?.forEach((item: any) => {
         if (item.status === 'PAID' || item.status === 'CANCELLED') return
+        if (item.paid_online_at) return
         const dishName = item.dish?.name || dishes.find(d => d.id === item.dish_id)?.name || 'Piatto'
         items.push({
           id: `${order.id}_${item.dish_id}_${item.id || items.length}`,
