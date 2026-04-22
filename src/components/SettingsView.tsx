@@ -480,27 +480,33 @@ export function SettingsView({
     }
 
     return (
-        <div className="space-y-6 pb-24 text-zinc-100">
-            {/* Header — minimal, elegant */}
+        <div className="space-y-8 pb-24 text-zinc-100">
+            {/* Header — bold hero card with gradient, impossible to miss */}
             <motion.div
-                initial={{ opacity: 0, y: -10 }}
+                initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center justify-between gap-4"
+                className="relative overflow-hidden rounded-3xl border border-amber-500/25 bg-gradient-to-br from-amber-500/20 via-zinc-900 to-zinc-950 shadow-[0_10px_40px_-12px_rgba(245,158,11,0.25)]"
             >
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                        <Gear size={22} weight="fill" className="text-amber-400" />
+                <div className="absolute -top-24 -right-16 w-72 h-72 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-20 -left-10 w-60 h-60 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="relative p-6 sm:p-8 flex items-center gap-5">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_8px_30px_-6px_rgba(245,158,11,0.7)] flex items-center justify-center shrink-0">
+                        <Gear size={36} weight="fill" className="text-black" />
                     </div>
-                    <div>
-                        <h2 data-tour="settings-header" className="text-xl sm:text-2xl font-bold text-white tracking-tight">Impostazioni</h2>
-                        <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">Configura ogni aspetto del tuo locale</p>
+                    <div className="min-w-0">
+                        <h2 data-tour="settings-header" className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+                            Impostazioni
+                        </h2>
+                        <p className="text-sm sm:text-base text-zinc-300 mt-1">
+                            Personalizza <span className="text-amber-400 font-semibold">ogni aspetto</span> del tuo locale
+                        </p>
                     </div>
                 </div>
             </motion.div>
 
             <Tabs defaultValue="general" className="w-full">
-                {/* Pill-style tab list — cleaner, scroll-friendly, consistent color accent */}
-                <TabsList className="w-full h-auto bg-zinc-900/40 border border-white/5 rounded-2xl p-1.5 mb-8 gap-1 overflow-x-auto no-scrollbar justify-start flex-nowrap">
+                {/* Bold filled-pill tab list — active tab is solid amber with glow */}
+                <TabsList className="w-full h-auto bg-zinc-950/60 border border-white/10 rounded-2xl p-2 mb-8 gap-1.5 overflow-x-auto no-scrollbar justify-start flex-nowrap shadow-inner">
                     {[
                         { value: 'general', icon: Storefront, label: 'Generale', color: 'amber' },
                         { value: 'costs', icon: Coins, label: 'Costi & Menu', color: 'amber' },
@@ -514,9 +520,9 @@ export function SettingsView({
                             key={value}
                             value={value}
                             data-settings-tab={value}
-                            className={`shrink-0 rounded-xl px-4 py-2.5 text-sm text-zinc-400 hover:text-white transition-all gap-2 font-medium focus-visible:outline-none focus-visible:ring-0 data-[state=active]:shadow-sm ${color === 'emerald'
-                                ? 'data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-300 data-[state=active]:ring-1 data-[state=active]:ring-emerald-500/30'
-                                : 'data-[state=active]:bg-amber-500/15 data-[state=active]:text-amber-300 data-[state=active]:ring-1 data-[state=active]:ring-amber-500/30'
+                            className={`shrink-0 rounded-xl px-4 py-3 text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-all gap-2 font-semibold focus-visible:outline-none focus-visible:ring-0 ${color === 'emerald'
+                                ? 'data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-400 data-[state=active]:to-emerald-600 data-[state=active]:text-black data-[state=active]:shadow-[0_4px_20px_-4px_rgba(16,185,129,0.7)]'
+                                : 'data-[state=active]:bg-gradient-to-br data-[state=active]:from-amber-400 data-[state=active]:to-amber-600 data-[state=active]:text-black data-[state=active]:shadow-[0_4px_20px_-4px_rgba(245,158,11,0.7)]'
                                 }`}
                         >
                             <Icon size={16} weight="fill" />
