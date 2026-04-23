@@ -1266,7 +1266,7 @@ export const DatabaseService = {
                 items: params.items,
                 totalAmount: params.totalAmount,
                 splitLabel: params.splitLabel || 'Pagamento',
-                successUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=success`,
+                successUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
                 cancelUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=cancelled`,
                 paidOrderItemIds: params.paidOrderItemIds,
             }
@@ -1287,6 +1287,34 @@ export const DatabaseService = {
             throw new Error(errorMsg);
         }
         return data; // { sessionId: string, url: string }
+    },
+
+    // Stripe - Verifica deterministica sessione (fallback/complementare al webhook)
+    // Restituisce { paid, amount, newPaidAmount, itemsFlagged, alreadyRegistered, sessionId }
+    async verifyStripeSession(sessionId: string, restaurantId: string) {
+        const { data, error } = await supabase.functions.invoke('stripe-verify-session', {
+            body: { sessionId, restaurantId }
+        })
+        if (error) {
+            let msg = 'Errore verifica pagamento'
+            try {
+                if (data?.error) msg = data.error
+                else if ((error as any).context) {
+                    const body = await (error as any).context.json()
+                    if (body?.error) msg = body.error
+                } else if (error.message) msg = error.message
+            } catch { /* ignore */ }
+            throw new Error(msg)
+        }
+        return data as {
+            paid: boolean,
+            amount?: number,
+            newPaidAmount?: number,
+            fullyPaid?: boolean,
+            itemsFlagged?: number,
+            alreadyRegistered?: boolean,
+            sessionId: string,
+        }
     },
 
     // Stripe - Toggle pagamenti clienti

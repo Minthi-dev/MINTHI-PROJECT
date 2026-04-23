@@ -1727,17 +1727,67 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   // Check for payment success/cancel from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('payment') === 'success') {
-      setStripePaymentSuccess(true)
-      setCustomerTab('payment') // Auto-switch to payment tab to show success
-      toast.success('Pagamento completato con successo!', { duration: 5000 })
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname)
-      // Refresh orders
-      if (sessionId) fetchOrders()
+    const paymentStatus = params.get('payment')
+    const stripeSessionId = params.get('session_id')
 
-      // POLLING FALLBACK: poll session for updated paid_amount every 3s for 30s
-      // This handles cases where the webhook is slow or realtime doesn't fire immediately
+    if (paymentStatus === 'success') {
+      // Clean URL immediately so refresh/back doesn't re-trigger
+      window.history.replaceState({}, '', window.location.pathname)
+
+      // DETERMINISTIC VERIFICATION: call edge function that queries Stripe
+      // directly and registers the payment idempotently. This is independent
+      // of the webhook — so even if the webhook failed/was delayed, payment
+      // is still registered here. If the webhook ran first, this is a no-op.
+      const verifyAndShow = async () => {
+        const toastId = 'stripe-verify'
+        try {
+          if (!stripeSessionId || !restaurantId) {
+            // Fallback: no session ID available — optimistic UI only
+            setStripePaymentSuccess(true)
+            setCustomerTab('payment')
+            toast.success('Pagamento completato!', { id: toastId, duration: 5000 })
+            if (sessionId) fetchOrders()
+            return
+          }
+
+          toast.loading('Verifica pagamento...', { id: toastId })
+          const result = await DatabaseService.verifyStripeSession(stripeSessionId, restaurantId)
+
+          if (result.paid) {
+            setStripePaymentSuccess(true)
+            setCustomerTab('payment')
+            if (result.alreadyRegistered) {
+              toast.success('Pagamento confermato!', { id: toastId, duration: 4000 })
+            } else {
+              toast.success(
+                result.amount
+                  ? `Pagamento di €${result.amount.toFixed(2)} registrato!`
+                  : 'Pagamento registrato!',
+                { id: toastId, duration: 5000 }
+              )
+            }
+            // Refresh the session to reflect the new paid_amount
+            if (sessionId) {
+              const fresh = await DatabaseService.getSessionById(sessionId)
+              if (fresh) onSessionUpdate?.(fresh)
+              fetchOrders()
+            }
+          } else {
+            toast.error('Pagamento non ancora confermato. Riprova tra poco.', { id: toastId, duration: 5000 })
+          }
+        } catch (e: any) {
+          console.error('[stripe verify]', e)
+          // Even on verify error, show success UI optimistically — webhook
+          // may have already handled it. Polling below will confirm.
+          setStripePaymentSuccess(true)
+          setCustomerTab('payment')
+          toast.success('Pagamento ricevuto, verifica in corso...', { id: toastId, duration: 4000 })
+          if (sessionId) fetchOrders()
+        }
+      }
+      verifyAndShow()
+
+      // POLLING FALLBACK: continue polling for up to 30s to catch realtime delays
       if (sessionId) {
         let pollCount = 0
         const maxPolls = 10
@@ -1747,7 +1797,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
             const freshSession = await DatabaseService.getSessionById(sessionId)
             if (freshSession) {
               onSessionUpdate?.(freshSession)
-              // Stop polling if paid_amount increased (webhook worked)
               const currentPaid = activeSession?.paid_amount || 0
               if ((freshSession.paid_amount || 0) > currentPaid) {
                 clearInterval(pollInterval)
@@ -1760,7 +1809,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         }, 3000)
         return () => clearInterval(pollInterval)
       }
-    } else if (params.get('payment') === 'cancelled') {
+    } else if (paymentStatus === 'cancelled') {
       toast.error('Pagamento annullato', { duration: 3000 })
       window.history.replaceState({}, '', window.location.pathname)
     }

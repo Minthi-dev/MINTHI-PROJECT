@@ -567,10 +567,10 @@ export function SettingsView({
                         )}
 
                         {/* Nome Ristorante */}
-                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                            <div className="flex items-center gap-3 mb-6">
-                                <h3 className="text-2xl font-bold flex items-center gap-3">
-                                    <Storefront className="text-amber-500 w-8 h-8" weight="duotone" />
+                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
+                                <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                    <Storefront className="text-amber-400 w-5 h-5" weight="fill" />
                                     Profilo Attività
                                 </h3>
                                 <InfoTip id="profilo" text="Il nome del ristorante viene mostrato ai clienti nel menù digitale QR, nelle ricevute e nella pagina di prenotazione online." />
@@ -602,10 +602,10 @@ export function SettingsView({
 
 
                         {/* Suoni */}
-                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
-                            <div className="flex items-center gap-3 mb-6">
-                                <h3 className="text-2xl font-bold flex items-center gap-3">
-                                    <SpeakerHigh className="text-amber-500 w-8 h-8" weight="duotone" />
+                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
+                                <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                    <SpeakerHigh className="text-amber-400 w-5 h-5" weight="fill" />
                                     Notifiche Sonore
                                 </h3>
                                 <InfoTip id="suoni" text="Quando un cliente invia un ordine dal menù QR, il browser riproduce un suono di notifica. Tieni il volume del dispositivo attivo. Il suono funziona solo se la pagina è aperta e il browser ha il permesso audio." />
@@ -658,7 +658,7 @@ export function SettingsView({
 
                         {/* Configurazione Guidata */}
                         {onRestartSetup && (
-                            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
                                         <h3 className="text-base font-semibold text-white">Configurazione Guidata</h3>
@@ -676,7 +676,7 @@ export function SettingsView({
                         )}
 
                         {/* Assistenza */}
-                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
                             <h3 className="text-base font-semibold text-white mb-1">Assistenza</h3>
                             <p className="text-zinc-400 text-sm mb-3">Hai bisogno di aiuto?</p>
                             <p className="text-sm text-zinc-300">
@@ -756,12 +756,12 @@ export function SettingsView({
                             </div>
 
                             {/* Configurazione Portate */}
-                            <div data-tour="settings-course-split" className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <div data-tour="settings-course-split" className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-2xl font-bold flex items-center gap-3">
-                                                <ForkKnife className="text-amber-500 w-8 h-8" weight="duotone" />
+                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                                <ForkKnife className="text-amber-400 w-5 h-5" weight="fill" />
                                                 Suddivisione in Portate
                                             </h3>
                                             <InfoTip id="portate" text="Quando attiva, il cliente sceglie per ogni piatto in quale portata vuole riceverlo (Primo, Secondo, ecc.). La cucina riceve gli ordini raggruppati per portata. In modalità cameriere, il cameriere assegna la portata al momento dell'ordine." />
@@ -782,12 +782,12 @@ export function SettingsView({
                             </div>
 
                             {/* Suggerimenti Portate Successive */}
-                            <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <div className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-2xl font-bold flex items-center gap-3">
-                                                <Sparkle className="text-amber-500 w-8 h-8" weight="duotone" />
+                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                                <Sparkle className="text-amber-400 w-5 h-5" weight="fill" />
                                                 Suggerimenti Portate
                                             </h3>
                                             <InfoTip id="suggestions" text="Dopo che il cliente aggiunge un piatto al carrello, il sistema suggerisce automaticamente le categorie successive (es. se ordina un Primo, propone Secondi, Contorni, Dolci, Bevande). L'ordine segue quello delle categorie in Gestione Menu. Se la divisione in portate è attiva, il piatto suggerito verrà inserito automaticamente nella portata successiva." />
@@ -808,12 +808,12 @@ export function SettingsView({
                             </div>
 
                             {/* Menu Solo Visualizzazione */}
-                            <div data-tour="settings-viewonly" className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <div data-tour="settings-viewonly" className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-2xl font-bold flex items-center gap-3">
-                                                <Eye className="text-amber-500 w-8 h-8" weight="duotone" />
+                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                                <Eye className="text-amber-400 w-5 h-5" weight="fill" />
                                                 Menu Solo Visualizzazione
                                             </h3>
                                             <InfoTip id="viewonly" text="Utile se vuoi usare Minthi solo come menù digitale senza gestione ordini. I clienti scansionano il QR e vedono piatti e prezzi, ma non possono ordinare. I QR code mostreranno 'Scansiona per visualizzare il menù' invece di 'Scansiona per ordinare'." />
@@ -831,12 +831,12 @@ export function SettingsView({
                             </div>
 
                             {/* Tempo Medio di Cottura */}
-                            <div className="col-span-full p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                            <div className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-2xl font-bold flex items-center gap-3">
-                                                <Clock className="text-amber-500 w-8 h-8" weight="duotone" />
+                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                                <Clock className="text-amber-400 w-5 h-5" weight="fill" />
                                                 Tempo Medio di Cottura
                                             </h3>
                                             <InfoTip id="cooktime" text="Minthi calcola automaticamente il tempo medio di preparazione di ogni piatto basandosi sugli ordini degli ultimi 2 mesi (servono almeno 3 ordini per piatto). Il tempo viene mostrato sotto il nome del piatto nel menù cliente e nella dashboard cameriere." />
@@ -866,7 +866,7 @@ export function SettingsView({
                         exit="exit"
                         className="space-y-6"
                     >
-                        <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm">
+                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
@@ -1077,10 +1077,10 @@ export function SettingsView({
                         {/* Top row: Turnazione and QR Code */}
                         <div className="grid md:grid-cols-2 gap-6 items-stretch">
                             {/* Turnazione Tavoli */}
-                            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm shadow-xl flex flex-col justify-center">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <h3 className="text-2xl font-bold flex items-center gap-3">
-                                        <Clock className="text-amber-500 w-8 h-8" weight="duotone" />
+                            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset] shadow-xl flex flex-col justify-center">
+                                <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
+                                    <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                        <Clock className="text-amber-400 w-5 h-5" weight="fill" />
                                         Turnazione Tavoli
                                     </h3>
                                     <InfoTip id="turnazione" text="La durata della prenotazione determina per quanto tempo un tavolo resta occupato nel calendario prenotazioni. Dopo questo periodo il tavolo torna disponibile per nuove prenotazioni. Es. con 2 ore, una prenotazione alle 20:00 libera il tavolo alle 22:00." />
@@ -1107,10 +1107,10 @@ export function SettingsView({
                             </div>
 
                             {/* QR Code & Prenotazioni Pubbliche */}
-                            <div className="p-6 sm:p-8 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-sm shadow-xl flex flex-col justify-center">
-                                <div className="flex items-center gap-3 mb-6">
-                                    <h3 className="text-2xl font-bold flex items-center gap-3">
-                                        <Storefront className="text-amber-500 w-8 h-8" weight="duotone" />
+                            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset] shadow-xl flex flex-col justify-center">
+                                <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
+                                    <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                        <Storefront className="text-amber-400 w-5 h-5" weight="fill" />
                                         Prenotazioni via QR
                                     </h3>
                                     <InfoTip id="qr-prenotazioni" text="I clienti possono prenotare scannerizzando un QR code dedicato (diverso da quello dei tavoli). Scelgono data, ora, numero persone e sala. Le prenotazioni appaiono nel calendario nella sezione Prenotazioni. Puoi disattivare temporaneamente se il ristorante è pieno." />
@@ -1170,159 +1170,202 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-6"
+                        className="space-y-5"
                     >
-                        {/* Toggle principali */}
-                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-6 sm:p-8">
-                                <div className="flex items-start gap-3 mb-6">
-                                    <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
-                                        <Package weight="duotone" size={32} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-2xl font-bold text-white">Servizio Asporto</h3>
-                                        <p className="text-sm text-zinc-400 mt-1">I clienti ordinano dal QR code e ritirano al bancone con un numero di ritiro.</p>
-                                    </div>
+                        {/* HERO TOGGLE — centerpiece */}
+                        <div className={`relative overflow-hidden rounded-2xl border transition-all ${takeawayEnabled
+                            ? 'border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950'
+                            : 'border-white/10 bg-gradient-to-br from-zinc-900/70 to-zinc-950/40'
+                            }`}>
+                            {takeawayEnabled && (
+                                <div className="absolute -top-20 -right-10 w-56 h-56 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+                            )}
+                            <div className="relative p-5 sm:p-6 flex items-center gap-4">
+                                <div className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center ${takeawayEnabled
+                                    ? 'bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_6px_20px_-6px_rgba(245,158,11,0.6)]'
+                                    : 'bg-white/5 border border-white/10'
+                                    }`}>
+                                    <Package size={28} weight="fill" className={takeawayEnabled ? 'text-black' : 'text-zinc-500'} />
                                 </div>
-
-                                <div className="space-y-5">
-                                    <div className="flex items-center justify-between">
-                                        <div className="pr-4 space-y-1">
-                                            <Label className="text-base font-semibold text-zinc-200 block">Abilita Asporto</Label>
-                                            <p className="text-xs text-zinc-400">Espone il menu asporto pubblico su <code className="text-amber-400">/client/takeaway/&lt;id&gt;</code>.</p>
-                                        </div>
-                                        <Switch
-                                            checked={takeawayEnabled}
-                                            disabled={savingTakeaway}
-                                            onCheckedChange={(v) => { setTakeawayEnabled(v); saveTakeawaySettings({ takeaway_enabled: v }) }}
-                                            className="data-[state=checked]:bg-amber-500 scale-110 shrink-0"
-                                        />
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-lg sm:text-xl font-semibold text-white">Servizio Asporto</h3>
+                                        {takeawayEnabled && (
+                                            <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                                                Attivo
+                                            </span>
+                                        )}
                                     </div>
-                                    <Separator className="bg-white/5" />
-                                    <div className="flex items-center justify-between">
-                                        <div className="pr-4 space-y-1">
-                                            <Label className="text-base font-semibold text-zinc-200 block">Servizio ai Tavoli</Label>
-                                            <p className="text-xs text-zinc-400">Disattiva se fai solo asporto. I QR tavolo non funzioneranno.</p>
-                                        </div>
-                                        <Switch
-                                            checked={dineInEnabled}
-                                            disabled={savingTakeaway}
-                                            onCheckedChange={(v) => { setDineInEnabled(v); saveTakeawaySettings({ dine_in_enabled: v }) }}
-                                            className="data-[state=checked]:bg-amber-500 scale-110 shrink-0"
-                                        />
-                                    </div>
-                                    <Separator className="bg-white/5" />
-                                    <div className="flex items-center justify-between">
-                                        <div className="pr-4 space-y-1">
-                                            <Label className="text-base font-semibold text-zinc-200 block">Pagamento Online Obbligatorio</Label>
-                                            <p className="text-xs text-zinc-400">Il cliente deve pagare con carta (Stripe) prima che l'ordine arrivi in cucina. Richiede Stripe Connect attivo.</p>
-                                        </div>
-                                        <Switch
-                                            checked={takeawayRequireStripe}
-                                            disabled={savingTakeaway || !takeawayEnabled}
-                                            onCheckedChange={(v) => { setTakeawayRequireStripe(v); saveTakeawaySettings({ takeaway_require_stripe: v }) }}
-                                            className="data-[state=checked]:bg-amber-500 scale-110 shrink-0"
-                                        />
-                                    </div>
+                                    <p className="text-sm text-zinc-400 mt-0.5">
+                                        {takeawayEnabled
+                                            ? 'I clienti ordinano dal QR pubblico e ritirano al bancone.'
+                                            : 'Attiva per permettere ordini da asporto con QR code e numeri di ritiro.'}
+                                    </p>
                                 </div>
+                                <Switch
+                                    checked={takeawayEnabled}
+                                    disabled={savingTakeaway}
+                                    onCheckedChange={(v) => { setTakeawayEnabled(v); saveTakeawaySettings({ takeaway_enabled: v }) }}
+                                    className="data-[state=checked]:bg-amber-500 scale-125 shrink-0"
+                                />
                             </div>
                         </div>
 
-                        {/* Parametri */}
+                        {/* Empty state quando disabilitato */}
+                        {!takeawayEnabled && (
+                            <div className="rounded-2xl border border-white/5 bg-zinc-900/30 p-8 text-center">
+                                <div className="inline-flex w-14 h-14 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-4">
+                                    <QrCode size={26} className="text-zinc-500" />
+                                </div>
+                                <h4 className="text-base font-semibold text-zinc-300 mb-1">Asporto disattivato</h4>
+                                <p className="text-sm text-zinc-500 max-w-md mx-auto">
+                                    Attiva l'interruttore sopra per mostrare menu pubblico, numeri di ritiro, display sala d'attesa e pannello cassa asporto.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Configurazioni visibili solo quando attivo */}
                         {takeawayEnabled && (
-                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-6 sm:p-8 space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Clock size={20} className="text-amber-500" /> Parametri ordine</h3>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <Label className="text-sm text-zinc-300">Tempo stimato di preparazione (minuti)</Label>
-                                        <Input
-                                            type="number"
-                                            min={5}
-                                            max={120}
-                                            value={takeawayEstimatedMinutes}
-                                            onChange={e => setTakeawayEstimatedMinutes(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
-                                            onBlur={() => saveTakeawaySettings({ takeaway_estimated_minutes: takeawayEstimatedMinutes })}
-                                            className="bg-white/5 border-white/10"
-                                        />
-                                        <p className="text-xs text-zinc-500">Mostrato al cliente in fase di ordine.</p>
-                                    </div>
-                                    <div className="space-y-2 md:col-span-2">
-                                        <Label className="text-sm text-zinc-300">Avviso per il cliente al ritiro (opzionale)</Label>
-                                        <Input
-                                            value={takeawayPickupNotice}
-                                            maxLength={200}
-                                            onChange={e => setTakeawayPickupNotice(e.target.value)}
-                                            onBlur={() => saveTakeawaySettings({ takeaway_pickup_notice: takeawayPickupNotice })}
-                                            placeholder="Es. Ingresso posteriore · Suonare il campanello"
-                                            className="bg-white/5 border-white/10"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        )}
-
-                        {/* Link pubblici + QR poster */}
-                        {takeawayEnabled && restaurantId && (
-                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-6 sm:p-8 space-y-5">
-                                <div className="flex items-center justify-between gap-3">
-                                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><QrCode size={20} className="text-amber-500" /> QR & Link pubblici</h3>
-                                    <TakeawayQRPosterButton
-                                        restaurantId={restaurantId}
-                                        restaurantName={restaurantName}
-                                        size="sm"
-                                    />
-                                </div>
-
-                                {/* Preview QR + menu link side by side */}
-                                <div className="grid grid-cols-1 md:grid-cols-[auto,1fr] gap-5 items-start">
-                                    <div className="bg-white p-3 rounded-xl shadow-inner self-center mx-auto">
-                                        <QRCodeGenerator value={`${window.location.origin}/client/takeaway/${restaurantId}`} size={150} />
-                                    </div>
-                                    <div className="space-y-3">
-                                        <div className="bg-black/40 border border-white/10 rounded-xl p-4">
-                                            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Menu asporto (QR code)</div>
-                                            <div className="flex items-center gap-2">
-                                                <code className="flex-1 text-xs text-amber-300 font-mono break-all">{`${window.location.origin}/client/takeaway/${restaurantId}`}</code>
-                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/client/takeaway/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
-                                                    <Copy size={14} />
-                                                </Button>
-                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => window.open(`${window.location.origin}/client/takeaway/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
-                                                    <ArrowSquareOut size={14} />
-                                                </Button>
-                                            </div>
-                                            <p className="text-xs text-zinc-500 mt-2">Stampa il PDF con il QR code grande: perfetto da mettere al bancone o in vetrina.</p>
+                            <>
+                                {/* 2-column grid: left = opzioni servizio, right = parametri ordine */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                                    {/* Opzioni servizio */}
+                                    <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10">
+                                        <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
+                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                                <Gear className="text-amber-400 w-5 h-5" weight="fill" />
+                                                Modalità servizio
+                                            </h3>
                                         </div>
-                                        <div className="bg-black/40 border border-white/10 rounded-xl p-4">
-                                            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Schermo pubblico (monitor in sala d'attesa)</div>
-                                            <div className="flex items-center gap-2">
-                                                <code className="flex-1 text-xs text-emerald-300 font-mono break-all">{`${window.location.origin}/display/${restaurantId}`}</code>
-                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
-                                                    <Copy size={14} />
-                                                </Button>
-                                                <Button size="sm" variant="outline" className="border-white/10" onClick={() => window.open(`${window.location.origin}/display/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
-                                                    <ArrowSquareOut size={14} />
-                                                </Button>
+                                        <div className="space-y-4">
+                                            <div className="flex items-start justify-between gap-3 py-1">
+                                                <div className="min-w-0">
+                                                    <Label className="text-sm font-medium text-zinc-200 block">Servizio ai tavoli</Label>
+                                                    <p className="text-xs text-zinc-500 mt-0.5">Disattiva se fai solo asporto.</p>
+                                                </div>
+                                                <Switch
+                                                    checked={dineInEnabled}
+                                                    disabled={savingTakeaway}
+                                                    onCheckedChange={(v) => { setDineInEnabled(v); saveTakeawaySettings({ dine_in_enabled: v }) }}
+                                                    className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
+                                                />
                                             </div>
-                                            <p className="text-xs text-zinc-500 mt-2">Apri in un dispositivo da mostrare ai clienti. Tieni acceso lo schermo — resta sveglio automaticamente.</p>
+                                            <Separator className="bg-white/5" />
+                                            <div className="flex items-start justify-between gap-3 py-1">
+                                                <div className="min-w-0">
+                                                    <Label className="text-sm font-medium text-zinc-200 block">Pagamento online obbligatorio</Label>
+                                                    <p className="text-xs text-zinc-500 mt-0.5">Il cliente paga con carta prima di stampare l'ordine in cucina.</p>
+                                                </div>
+                                                <Switch
+                                                    checked={takeawayRequireStripe}
+                                                    disabled={savingTakeaway}
+                                                    onCheckedChange={(v) => { setTakeawayRequireStripe(v); saveTakeawaySettings({ takeaway_require_stripe: v }) }}
+                                                    className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Parametri ordine */}
+                                    <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10">
+                                        <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
+                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                                <Clock className="text-amber-400 w-5 h-5" weight="fill" />
+                                                Tempi & avvisi
+                                            </h3>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs uppercase tracking-wider text-zinc-400">Tempo preparazione</Label>
+                                                <div className="flex items-center gap-2">
+                                                    <Input
+                                                        type="number"
+                                                        min={5}
+                                                        max={120}
+                                                        value={takeawayEstimatedMinutes}
+                                                        onChange={e => setTakeawayEstimatedMinutes(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
+                                                        onBlur={() => saveTakeawaySettings({ takeaway_estimated_minutes: takeawayEstimatedMinutes })}
+                                                        className="bg-black/30 border-white/10 h-10 w-24 text-center font-semibold"
+                                                    />
+                                                    <span className="text-sm text-zinc-400">minuti</span>
+                                                </div>
+                                                <p className="text-xs text-zinc-500">Mostrato al cliente in fase d'ordine.</p>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs uppercase tracking-wider text-zinc-400">Nota per il ritiro</Label>
+                                                <Input
+                                                    value={takeawayPickupNotice}
+                                                    maxLength={200}
+                                                    onChange={e => setTakeawayPickupNotice(e.target.value)}
+                                                    onBlur={() => saveTakeawaySettings({ takeaway_pickup_notice: takeawayPickupNotice })}
+                                                    placeholder="Es. Ingresso posteriore · Suonare il campanello"
+                                                    className="bg-black/30 border-white/10 h-10"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        )}
 
-                        {takeawayRequireStripe && !subscriptionInfo?.stripe_connect_enabled && (
-                            <div className="rounded-2xl bg-amber-950/40 border border-amber-500/30 p-4 flex items-start gap-3">
-                                <WarningCircle size={20} className="text-amber-400 shrink-0 mt-0.5" />
-                                <div className="text-sm text-amber-200">
-                                    Hai richiesto il pagamento obbligatorio, ma Stripe Connect non risulta ancora attivato. Vai in <strong>Abbonamento & Pagamenti</strong> per completare l'onboarding.
-                                </div>
-                            </div>
+                                {/* QR & Link pubblici */}
+                                {restaurantId && (
+                                    <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-white/5">
+                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
+                                                <QrCode className="text-amber-400 w-5 h-5" weight="fill" />
+                                                QR & Link pubblici
+                                            </h3>
+                                            <TakeawayQRPosterButton
+                                                restaurantId={restaurantId}
+                                                restaurantName={restaurantName}
+                                                size="sm"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-[auto,1fr] gap-5 items-start">
+                                            <div className="bg-white p-3 rounded-xl shadow-lg self-center mx-auto">
+                                                <QRCodeGenerator value={`${window.location.origin}/client/takeaway/${restaurantId}`} size={140} />
+                                            </div>
+                                            <div className="space-y-3">
+                                                <div className="bg-black/30 border border-white/10 rounded-xl p-3.5">
+                                                    <div className="text-[10px] text-amber-300/80 uppercase tracking-wider mb-1.5 font-semibold">Menu asporto</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <code className="flex-1 text-xs text-amber-200 font-mono break-all">{`${window.location.origin}/client/takeaway/${restaurantId}`}</code>
+                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/client/takeaway/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
+                                                            <Copy size={14} />
+                                                        </Button>
+                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => window.open(`${window.location.origin}/client/takeaway/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
+                                                            <ArrowSquareOut size={14} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-black/30 border border-white/10 rounded-xl p-3.5">
+                                                    <div className="text-[10px] text-emerald-300/80 uppercase tracking-wider mb-1.5 font-semibold">Display sala d'attesa</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <code className="flex-1 text-xs text-emerald-200 font-mono break-all">{`${window.location.origin}/display/${restaurantId}`}</code>
+                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
+                                                            <Copy size={14} />
+                                                        </Button>
+                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => window.open(`${window.location.origin}/display/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
+                                                            <ArrowSquareOut size={14} />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <p className="text-[11px] text-zinc-500 pt-1">
+                                                    Stampa il PDF dal bottone in alto — QR gigante leggibile da lontano, ideale per vetrina o bancone.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {takeawayRequireStripe && !subscriptionInfo?.stripe_connect_enabled && (
+                                    <div className="rounded-xl bg-amber-950/40 border border-amber-500/30 p-4 flex items-start gap-3">
+                                        <WarningCircle size={20} className="text-amber-400 shrink-0 mt-0.5" />
+                                        <div className="text-sm text-amber-200">
+                                            Hai richiesto il pagamento obbligatorio, ma Stripe Connect non è ancora attivo. Vai in <strong>Abbonamento</strong> per completare l'onboarding.
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </motion.div>
                 </TabsContent>
@@ -1337,19 +1380,28 @@ export function SettingsView({
                         className="space-y-6"
                     >
                         {/* 1. Pagamenti Online — Toggle + Connect */}
-                        <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                            <div className="p-6 sm:p-8">
-                                <div className="flex items-center justify-between mb-6">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
-                                            <CreditCard weight="duotone" size={32} />
+                        <div className={`relative overflow-hidden rounded-2xl border transition-all ${stripePaymentsEnabled
+                            ? 'border-violet-500/30 bg-gradient-to-br from-violet-500/10 via-zinc-900 to-zinc-950'
+                            : 'border-white/10 bg-gradient-to-br from-zinc-900/70 to-zinc-950/40'
+                            }`}>
+                            {stripePaymentsEnabled && (
+                                <div className="absolute -top-20 -right-10 w-56 h-56 bg-violet-500/15 rounded-full blur-3xl pointer-events-none" />
+                            )}
+                            <div className="relative p-5 sm:p-6">
+                                <div className="flex items-center justify-between gap-4 mb-4">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${stripePaymentsEnabled
+                                            ? 'bg-gradient-to-br from-violet-400 to-violet-600 shadow-[0_6px_20px_-6px_rgba(139,92,246,0.6)]'
+                                            : 'bg-white/5 border border-white/10'
+                                            }`}>
+                                            <CreditCard weight="fill" size={22} className={stripePaymentsEnabled ? 'text-black' : 'text-zinc-500'} />
                                         </div>
-                                        <div>
-                                            <div className="flex items-center gap-3">
-                                                <h3 className="text-2xl font-bold text-white">Pagamenti al Tavolo</h3>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-lg sm:text-xl font-semibold text-white">Pagamenti al Tavolo</h3>
                                                 <InfoTip id="pagamenti" text="Attivando i pagamenti, i clienti possono pagare il conto con carta direttamente dal menù QR. Devi collegare un account Stripe per ricevere i pagamenti sul tuo conto bancario. I soldi arrivano automaticamente. Ricordati di emettere lo scontrino fiscale separatamente." />
                                             </div>
-                                            <p className="text-sm text-zinc-400 mt-1">I clienti pagano direttamente dal menu digitale con carta</p>
+                                            <p className="text-sm text-zinc-400 mt-0.5">I clienti pagano con carta dal menu QR.</p>
                                         </div>
                                     </div>
                                     <Switch
@@ -1364,7 +1416,7 @@ export function SettingsView({
                                                 toast.error('Errore: ' + e.message)
                                             }
                                         }}
-                                        className="data-[state=checked]:bg-amber-500"
+                                        className="data-[state=checked]:bg-violet-500 scale-110"
                                     />
                                 </div>
 
@@ -1586,27 +1638,25 @@ export function SettingsView({
                         {subscriptionInfo?.stripe_subscription_id ? (
                             <div data-tour="settings-subscription" className="space-y-6">
                                 {/* Active Subscription Card */}
-                                <div className={`rounded-2xl border overflow-hidden ${subscriptionInfo.subscription_status === 'past_due'
-                                    ? 'bg-zinc-900/50 border-red-500/20'
+                                <div className={`relative overflow-hidden rounded-2xl border ${subscriptionInfo.subscription_status === 'past_due'
+                                    ? 'border-red-500/30 bg-gradient-to-br from-red-500/10 via-zinc-900 to-zinc-950'
                                     : subscriptionInfo.subscription_status === 'canceled'
-                                        ? 'bg-zinc-900/50 border-white/5'
-                                        : 'bg-zinc-900/50 border-emerald-500/10'
+                                        ? 'border-white/10 bg-gradient-to-br from-zinc-900/70 to-zinc-950/40'
+                                        : 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-zinc-900 to-zinc-950'
                                     }`}>
-                                    <div className="p-6 sm:p-8">
-                                        <div className="flex items-center justify-between mb-6">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-3 rounded-xl flex items-center justify-center ${subscriptionInfo.subscription_status === 'past_due' ? 'bg-red-500/10'
-                                                    : subscriptionInfo.subscription_status === 'canceled' ? 'bg-zinc-800'
-                                                        : 'bg-emerald-500/10'
+                                    <div className="absolute -top-20 -right-10 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+                                    <div className="relative p-5 sm:p-6">
+                                        <div className="flex items-center justify-between gap-4 mb-5">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${subscriptionInfo.subscription_status === 'past_due' ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-[0_6px_20px_-6px_rgba(239,68,68,0.6)]'
+                                                    : subscriptionInfo.subscription_status === 'canceled' ? 'bg-white/5 border border-white/10'
+                                                        : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_6px_20px_-6px_rgba(16,185,129,0.6)]'
                                                     }`}>
-                                                    <CreditCard className={`${subscriptionInfo.subscription_status === 'past_due' ? 'text-red-400'
-                                                        : subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-400'
-                                                            : 'text-emerald-400'
-                                                        }`} weight="duotone" size={28} />
+                                                    <CreditCard className={subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-500' : 'text-black'} weight="fill" size={22} />
                                                 </div>
-                                                <div>
-                                                    <h3 className="text-xl font-bold text-white">Abbonamento MINTHI</h3>
-                                                    <p className="text-sm text-zinc-500 mt-0.5">Piano mensile</p>
+                                                <div className="min-w-0">
+                                                    <h3 className="text-lg sm:text-xl font-semibold text-white">Abbonamento MINTHI</h3>
+                                                    <p className="text-xs text-zinc-500 mt-0.5">Piano mensile</p>
                                                 </div>
                                             </div>
                                             {/* Status */}
