@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import { useState, useEffect, useRef } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -480,38 +479,31 @@ export function SettingsView({
     }
 
     return (
-        <div className="space-y-8 pb-24 text-zinc-100">
-            {/* Header — bold hero card with gradient, impossible to miss */}
+        <div className="pb-24 text-zinc-100">
+            {/* Minimal header — matches the restaurant-name pattern used throughout the app */}
             <motion.div
-                initial={{ opacity: 0, y: -12 }}
+                initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="relative overflow-hidden rounded-3xl border border-amber-500/25 bg-gradient-to-br from-amber-500/20 via-zinc-900 to-zinc-950 shadow-[0_10px_40px_-12px_rgba(245,158,11,0.25)]"
+                className="flex items-center gap-3 mb-8"
             >
-                <div className="absolute -top-24 -right-16 w-72 h-72 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-20 -left-10 w-60 h-60 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="relative p-6 sm:p-8 flex items-center gap-5">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_8px_30px_-6px_rgba(245,158,11,0.7)] flex items-center justify-center shrink-0">
-                        <Gear size={36} weight="fill" className="text-black" />
-                    </div>
-                    <div className="min-w-0">
-                        <h2 data-tour="settings-header" className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
-                            Impostazioni
-                        </h2>
-                        <p className="text-sm sm:text-base text-zinc-300 mt-1">
-                            Personalizza <span className="text-amber-400 font-semibold">ogni aspetto</span> del tuo locale
-                        </p>
-                    </div>
-                </div>
+                <Gear size={16} weight="fill" className="text-amber-500" />
+                <h2 data-tour="settings-header" className="text-sm font-medium text-zinc-200 tracking-wide">
+                    Impostazioni
+                </h2>
+                <span className="text-[9px] uppercase tracking-[0.2em] text-zinc-600 font-bold ml-auto hidden sm:inline">
+                    Configurazione locale
+                </span>
             </motion.div>
 
             <Tabs defaultValue="general" className="w-full">
-                {/* Bold filled-pill tab list — active tab is solid amber with glow */}
-                <TabsList className="w-full h-auto bg-zinc-950/60 border border-white/10 rounded-2xl p-2 mb-8 gap-1.5 overflow-x-auto no-scrollbar justify-start flex-nowrap shadow-inner">
+                {/* Flat tab bar — underline accent on active, no boxes. Mirrors the sidebar aesthetic horizontally. */}
+                <TabsList className="w-full h-auto bg-transparent border-b border-white/[0.05] rounded-none p-0 mb-8 gap-6 overflow-x-auto no-scrollbar justify-start flex-nowrap">
                     {[
                         { value: 'general', icon: Storefront, label: 'Generale', color: 'amber' },
                         { value: 'costs', icon: Coins, label: 'Costi & Menu', color: 'amber' },
                         { value: 'staff', icon: Users, label: 'Staff', color: 'amber' },
                         { value: 'reservations', icon: CalendarCheck, label: 'Prenotazioni', color: 'amber' },
+                        // Asporto entry — shown always so owner can toggle it on; header here doubles as the enable row.
                         { value: 'takeaway', icon: Package, label: 'Asporto', color: 'amber' },
                         { value: 'subscription', icon: CreditCard, label: 'Abbonamento', color: 'emerald' },
                         { value: 'printer', icon: Printer, label: 'Stampante', color: 'amber' },
@@ -520,13 +512,18 @@ export function SettingsView({
                             key={value}
                             value={value}
                             data-settings-tab={value}
-                            className={`shrink-0 rounded-xl px-4 py-3 text-sm text-zinc-400 hover:text-white hover:bg-white/5 transition-all gap-2 font-semibold focus-visible:outline-none focus-visible:ring-0 ${color === 'emerald'
-                                ? 'data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-400 data-[state=active]:to-emerald-600 data-[state=active]:text-black data-[state=active]:shadow-[0_4px_20px_-4px_rgba(16,185,129,0.7)]'
-                                : 'data-[state=active]:bg-gradient-to-br data-[state=active]:from-amber-400 data-[state=active]:to-amber-600 data-[state=active]:text-black data-[state=active]:shadow-[0_4px_20px_-4px_rgba(245,158,11,0.7)]'
+                            className={`group relative shrink-0 rounded-none px-0 py-3 -mb-px text-[13px] tracking-wide text-zinc-500 hover:text-zinc-200 transition-colors gap-2 font-medium bg-transparent shadow-none focus-visible:outline-none focus-visible:ring-0 data-[state=active]:bg-transparent ${color === 'emerald'
+                                ? 'data-[state=active]:text-emerald-400'
+                                : 'data-[state=active]:text-amber-400'
                                 }`}
                         >
-                            <Icon size={16} weight="fill" />
+                            <Icon size={14} weight="fill" className="opacity-60 group-data-[state=active]:opacity-100" />
                             <span className="whitespace-nowrap">{label}</span>
+                            {/* underline accent — appears only on active */}
+                            <span className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-full opacity-0 group-data-[state=active]:opacity-100 transition-opacity ${color === 'emerald'
+                                ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]'
+                                : 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]'
+                                }`} />
                         </TabsTrigger>
                     ))}
                 </TabsList>
@@ -538,39 +535,35 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="grid gap-6"
+                        className="divide-y divide-white/[0.04]"
                     >
-                        {/* Guida Interattiva — primo elemento visibile */}
+                        {/* Guida Interattiva — flat inline row, matches app aesthetic */}
                         {onRestartTour && (
-                            <div className="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 via-zinc-900/80 to-zinc-900/50 backdrop-blur-sm">
-                                <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl -translate-y-10 translate-x-10" />
-                                <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
-                                            <Sparkle className="text-amber-400 w-6 h-6" weight="fill" />
-                                        </div>
-                                        <div>
-                                            <h3 className="text-lg font-bold text-white">Guida Interattiva</h3>
-                                            <p className="text-zinc-400 text-sm mt-0.5">Naviga un sito demo con dati di esempio e scopri tutte le funzioni di Minthi.</p>
-                                        </div>
+                            <div className="py-7 border-b border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3">
+                                    <Sparkle className="text-amber-500 w-4 h-4 mt-0.5" weight="fill" />
+                                    <div>
+                                        <div className="text-sm font-medium text-zinc-100">Guida Interattiva</div>
+                                        <p className="text-xs text-zinc-500 mt-1 max-w-md">Naviga un sito demo con dati di esempio e scopri tutte le funzioni di Minthi.</p>
                                     </div>
-                                    <Button
-                                        data-tour="settings-demo-btn"
-                                        onClick={onRestartTour}
-                                        className="bg-amber-500 hover:bg-amber-400 text-black font-bold h-11 px-6 rounded-xl shadow-[0_0_20px_-4px_rgba(245,158,11,0.5)] hover:shadow-[0_0_25px_-4px_rgba(245,158,11,0.7)] transition-all shrink-0"
-                                    >
-                                        <Sparkle size={16} weight="fill" className="mr-2" />
-                                        Avvia Demo
-                                    </Button>
                                 </div>
+                                <Button
+                                    data-tour="settings-demo-btn"
+                                    onClick={onRestartTour}
+                                    variant="ghost"
+                                    className="h-9 px-4 rounded-lg bg-amber-500/10 hover:bg-amber-500/15 text-amber-400 hover:text-amber-300 border border-amber-500/20 text-[13px] font-medium tracking-wide shrink-0 self-start sm:self-auto"
+                                >
+                                    <Sparkle size={13} weight="fill" className="mr-1.5" />
+                                    Avvia Demo
+                                </Button>
                             </div>
                         )}
 
                         {/* Nome Ristorante */}
-                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
-                            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
-                                <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                    <Storefront className="text-amber-400 w-5 h-5" weight="fill" />
+                        <div className="py-7 border-b border-white/[0.05]">
+                            <div className="flex items-center gap-2 mb-4">
+                                <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                    <Storefront className="text-amber-500 w-3 h-3" weight="fill" />
                                     Profilo Attività
                                 </h3>
                                 <InfoTip id="profilo" text="Il nome del ristorante viene mostrato ai clienti nel menù digitale QR, nelle ricevute e nella pagina di prenotazione online." />
@@ -602,10 +595,10 @@ export function SettingsView({
 
 
                         {/* Suoni */}
-                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
-                            <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
-                                <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                    <SpeakerHigh className="text-amber-400 w-5 h-5" weight="fill" />
+                        <div className="py-7 border-b border-white/[0.05]">
+                            <div className="flex items-center gap-2 mb-4">
+                                <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                    <SpeakerHigh className="text-amber-500 w-3 h-3" weight="fill" />
                                     Notifiche Sonore
                                 </h3>
                                 <InfoTip id="suoni" text="Quando un cliente invia un ordine dal menù QR, il browser riproduce un suono di notifica. Tieni il volume del dispositivo attivo. Il suono funziona solo se la pagina è aperta e il browser ha il permesso audio." />
@@ -658,7 +651,7 @@ export function SettingsView({
 
                         {/* Configurazione Guidata */}
                         {onRestartSetup && (
-                            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                            <div className="py-7 border-b border-white/[0.05]">
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
                                         <h3 className="text-base font-semibold text-white">Configurazione Guidata</h3>
@@ -676,7 +669,7 @@ export function SettingsView({
                         )}
 
                         {/* Assistenza */}
-                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                        <div className="py-7 border-b border-white/[0.05]">
                             <h3 className="text-base font-semibold text-white mb-1">Assistenza</h3>
                             <p className="text-zinc-400 text-sm mb-3">Hai bisogno di aiuto?</p>
                             <p className="text-sm text-zinc-300">
@@ -699,7 +692,7 @@ export function SettingsView({
                         exit="exit"
                         className="space-y-6"
                     >
-                        <div className="grid gap-6">
+                        <div className="divide-y divide-white/[0.04]">
                             {/* All You Can Eat - Weekly Schedule */}
                             <div data-tour="settings-ayce" className="relative p-6 rounded-2xl bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 border border-white/5 overflow-hidden">
                                 <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
@@ -756,12 +749,12 @@ export function SettingsView({
                             </div>
 
                             {/* Configurazione Portate */}
-                            <div data-tour="settings-course-split" className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                            <div data-tour="settings-course-split" className="col-span-full py-7 border-b border-white/[0.05]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                                <ForkKnife className="text-amber-400 w-5 h-5" weight="fill" />
+                                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                                <ForkKnife className="text-amber-500 w-3 h-3" weight="fill" />
                                                 Suddivisione in Portate
                                             </h3>
                                             <InfoTip id="portate" text="Quando attiva, il cliente sceglie per ogni piatto in quale portata vuole riceverlo (Primo, Secondo, ecc.). La cucina riceve gli ordini raggruppati per portata. In modalità cameriere, il cameriere assegna la portata al momento dell'ordine." />
@@ -782,12 +775,12 @@ export function SettingsView({
                             </div>
 
                             {/* Suggerimenti Portate Successive */}
-                            <div className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                            <div className="col-span-full py-7 border-b border-white/[0.05]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                                <Sparkle className="text-amber-400 w-5 h-5" weight="fill" />
+                                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                                <Sparkle className="text-amber-500 w-3 h-3" weight="fill" />
                                                 Suggerimenti Portate
                                             </h3>
                                             <InfoTip id="suggestions" text="Dopo che il cliente aggiunge un piatto al carrello, il sistema suggerisce automaticamente le categorie successive (es. se ordina un Primo, propone Secondi, Contorni, Dolci, Bevande). L'ordine segue quello delle categorie in Gestione Menu. Se la divisione in portate è attiva, il piatto suggerito verrà inserito automaticamente nella portata successiva." />
@@ -808,12 +801,12 @@ export function SettingsView({
                             </div>
 
                             {/* Menu Solo Visualizzazione */}
-                            <div data-tour="settings-viewonly" className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                            <div data-tour="settings-viewonly" className="col-span-full py-7 border-b border-white/[0.05]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                                <Eye className="text-amber-400 w-5 h-5" weight="fill" />
+                                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                                <Eye className="text-amber-500 w-3 h-3" weight="fill" />
                                                 Menu Solo Visualizzazione
                                             </h3>
                                             <InfoTip id="viewonly" text="Utile se vuoi usare Minthi solo come menù digitale senza gestione ordini. I clienti scansionano il QR e vedono piatti e prezzi, ma non possono ordinare. I QR code mostreranno 'Scansiona per visualizzare il menù' invece di 'Scansiona per ordinare'." />
@@ -831,12 +824,12 @@ export function SettingsView({
                             </div>
 
                             {/* Tempo Medio di Cottura */}
-                            <div className="col-span-full p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                            <div className="col-span-full py-7 border-b border-white/[0.05]">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                                <Clock className="text-amber-400 w-5 h-5" weight="fill" />
+                                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                                <Clock className="text-amber-500 w-3 h-3" weight="fill" />
                                                 Tempo Medio di Cottura
                                             </h3>
                                             <InfoTip id="cooktime" text="Minthi calcola automaticamente il tempo medio di preparazione di ogni piatto basandosi sugli ordini degli ultimi 2 mesi (servono almeno 3 ordini per piatto). Il tempo viene mostrato sotto il nome del piatto nel menù cliente e nella dashboard cameriere." />
@@ -866,7 +859,7 @@ export function SettingsView({
                         exit="exit"
                         className="space-y-6"
                     >
-                        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset]">
+                        <div className="py-7 border-b border-white/[0.05]">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="p-3 bg-amber-500/10 rounded-xl text-amber-500">
@@ -1077,10 +1070,10 @@ export function SettingsView({
                         {/* Top row: Turnazione and QR Code */}
                         <div className="grid md:grid-cols-2 gap-6 items-stretch">
                             {/* Turnazione Tavoli */}
-                            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset] shadow-xl flex flex-col justify-center">
-                                <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
-                                    <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                        <Clock className="text-amber-400 w-5 h-5" weight="fill" />
+                            <div className="py-7 border-b border-white/[0.05] shadow-xl flex flex-col justify-center">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                        <Clock className="text-amber-500 w-3 h-3" weight="fill" />
                                         Turnazione Tavoli
                                     </h3>
                                     <InfoTip id="turnazione" text="La durata della prenotazione determina per quanto tempo un tavolo resta occupato nel calendario prenotazioni. Dopo questo periodo il tavolo torna disponibile per nuove prenotazioni. Es. con 2 ore, una prenotazione alle 20:00 libera il tavolo alle 22:00." />
@@ -1107,10 +1100,10 @@ export function SettingsView({
                             </div>
 
                             {/* QR Code & Prenotazioni Pubbliche */}
-                            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10 shadow-[0_1px_0_0_rgba(255,255,255,0.04)_inset] shadow-xl flex flex-col justify-center">
-                                <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
-                                    <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                        <Storefront className="text-amber-400 w-5 h-5" weight="fill" />
+                            <div className="py-7 border-b border-white/[0.05] shadow-xl flex flex-col justify-center">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                        <Storefront className="text-amber-500 w-3 h-3" weight="fill" />
                                         Prenotazioni via QR
                                     </h3>
                                     <InfoTip id="qr-prenotazioni" text="I clienti possono prenotare scannerizzando un QR code dedicato (diverso da quello dei tavoli). Scelgono data, ora, numero persone e sala. Le prenotazioni appaiono nel calendario nella sezione Prenotazioni. Puoi disattivare temporaneamente se il ristorante è pieno." />
@@ -1170,55 +1163,42 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-5"
+                        className="divide-y divide-white/[0.04]"
                     >
-                        {/* HERO TOGGLE — centerpiece */}
-                        <div className={`relative overflow-hidden rounded-2xl border transition-all ${takeawayEnabled
-                            ? 'border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-zinc-900 to-zinc-950'
-                            : 'border-white/10 bg-gradient-to-br from-zinc-900/70 to-zinc-950/40'
-                            }`}>
-                            {takeawayEnabled && (
-                                <div className="absolute -top-20 -right-10 w-56 h-56 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
-                            )}
-                            <div className="relative p-5 sm:p-6 flex items-center gap-4">
-                                <div className={`shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center ${takeawayEnabled
-                                    ? 'bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_6px_20px_-6px_rgba(245,158,11,0.6)]'
-                                    : 'bg-white/5 border border-white/10'
-                                    }`}>
-                                    <Package size={28} weight="fill" className={takeawayEnabled ? 'text-black' : 'text-zinc-500'} />
-                                </div>
-                                <div className="flex-1 min-w-0">
+                        {/* Toggle principale — flat inline row, no rectangle */}
+                        <div className="py-7 flex items-center justify-between gap-4">
+                            <div className="flex items-start gap-3">
+                                <Package size={16} weight="fill" className={`mt-0.5 ${takeawayEnabled ? 'text-amber-500' : 'text-zinc-600'}`} />
+                                <div>
                                     <div className="flex items-center gap-2">
-                                        <h3 className="text-lg sm:text-xl font-semibold text-white">Servizio Asporto</h3>
+                                        <span className="text-sm font-medium text-zinc-100">Servizio Asporto</span>
                                         {takeawayEnabled && (
-                                            <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                                            <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-emerald-400 font-bold">
+                                                <span className="w-1 h-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
                                                 Attivo
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-sm text-zinc-400 mt-0.5">
+                                    <p className="text-xs text-zinc-500 mt-1 max-w-md">
                                         {takeawayEnabled
                                             ? 'I clienti ordinano dal QR pubblico e ritirano al bancone.'
                                             : 'Attiva per permettere ordini da asporto con QR code e numeri di ritiro.'}
                                     </p>
                                 </div>
-                                <Switch
-                                    checked={takeawayEnabled}
-                                    disabled={savingTakeaway}
-                                    onCheckedChange={(v) => { setTakeawayEnabled(v); saveTakeawaySettings({ takeaway_enabled: v }) }}
-                                    className="data-[state=checked]:bg-amber-500 scale-125 shrink-0"
-                                />
                             </div>
+                            <Switch
+                                checked={takeawayEnabled}
+                                disabled={savingTakeaway}
+                                onCheckedChange={(v) => { setTakeawayEnabled(v); saveTakeawaySettings({ takeaway_enabled: v }) }}
+                                className="data-[state=checked]:bg-amber-500 shrink-0"
+                            />
                         </div>
 
-                        {/* Empty state quando disabilitato */}
+                        {/* Empty state quando disabilitato — inline minimal */}
                         {!takeawayEnabled && (
-                            <div className="rounded-2xl border border-white/5 bg-zinc-900/30 p-8 text-center">
-                                <div className="inline-flex w-14 h-14 items-center justify-center rounded-2xl bg-white/5 border border-white/10 mb-4">
-                                    <QrCode size={26} className="text-zinc-500" />
-                                </div>
-                                <h4 className="text-base font-semibold text-zinc-300 mb-1">Asporto disattivato</h4>
-                                <p className="text-sm text-zinc-500 max-w-md mx-auto">
+                            <div className="py-12 text-center">
+                                <QrCode size={22} className="text-zinc-600 mx-auto mb-3" />
+                                <p className="text-[13px] text-zinc-500 max-w-md mx-auto">
                                     Attiva l'interruttore sopra per mostrare menu pubblico, numeri di ritiro, display sala d'attesa e pannello cassa asporto.
                                 </p>
                             </div>
@@ -1227,129 +1207,124 @@ export function SettingsView({
                         {/* Configurazioni visibili solo quando attivo */}
                         {takeawayEnabled && (
                             <>
-                                {/* 2-column grid: left = opzioni servizio, right = parametri ordine */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                                    {/* Opzioni servizio */}
-                                    <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10">
-                                        <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
-                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                                <Gear className="text-amber-400 w-5 h-5" weight="fill" />
-                                                Modalità servizio
-                                            </h3>
+                                {/* Modalità servizio — flat rows */}
+                                <div className="py-7">
+                                    <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2 mb-5">
+                                        <Gear className="text-amber-500 w-3 h-3" weight="fill" />
+                                        Modalità servizio
+                                    </h3>
+                                    <div className="divide-y divide-white/[0.04]">
+                                        <div className="flex items-start justify-between gap-4 py-3.5">
+                                            <div className="min-w-0">
+                                                <Label className="text-sm font-medium text-zinc-200 block">Servizio ai tavoli</Label>
+                                                <p className="text-xs text-zinc-500 mt-1">Disattiva se fai solo asporto.</p>
+                                            </div>
+                                            <Switch
+                                                checked={dineInEnabled}
+                                                disabled={savingTakeaway}
+                                                onCheckedChange={(v) => { setDineInEnabled(v); saveTakeawaySettings({ dine_in_enabled: v }) }}
+                                                className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
+                                            />
                                         </div>
-                                        <div className="space-y-4">
-                                            <div className="flex items-start justify-between gap-3 py-1">
-                                                <div className="min-w-0">
-                                                    <Label className="text-sm font-medium text-zinc-200 block">Servizio ai tavoli</Label>
-                                                    <p className="text-xs text-zinc-500 mt-0.5">Disattiva se fai solo asporto.</p>
-                                                </div>
-                                                <Switch
-                                                    checked={dineInEnabled}
-                                                    disabled={savingTakeaway}
-                                                    onCheckedChange={(v) => { setDineInEnabled(v); saveTakeawaySettings({ dine_in_enabled: v }) }}
-                                                    className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
-                                                />
+                                        <div className="flex items-start justify-between gap-4 py-3.5">
+                                            <div className="min-w-0">
+                                                <Label className="text-sm font-medium text-zinc-200 block">Pagamento online obbligatorio</Label>
+                                                <p className="text-xs text-zinc-500 mt-1">Il cliente paga con carta prima di stampare l'ordine in cucina.</p>
                                             </div>
-                                            <Separator className="bg-white/5" />
-                                            <div className="flex items-start justify-between gap-3 py-1">
-                                                <div className="min-w-0">
-                                                    <Label className="text-sm font-medium text-zinc-200 block">Pagamento online obbligatorio</Label>
-                                                    <p className="text-xs text-zinc-500 mt-0.5">Il cliente paga con carta prima di stampare l'ordine in cucina.</p>
-                                                </div>
-                                                <Switch
-                                                    checked={takeawayRequireStripe}
-                                                    disabled={savingTakeaway}
-                                                    onCheckedChange={(v) => { setTakeawayRequireStripe(v); saveTakeawaySettings({ takeaway_require_stripe: v }) }}
-                                                    className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Parametri ordine */}
-                                    <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10">
-                                        <div className="flex items-center gap-2 mb-5 pb-4 border-b border-white/5">
-                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                                <Clock className="text-amber-400 w-5 h-5" weight="fill" />
-                                                Tempi & avvisi
-                                            </h3>
-                                        </div>
-                                        <div className="space-y-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-xs uppercase tracking-wider text-zinc-400">Tempo preparazione</Label>
-                                                <div className="flex items-center gap-2">
-                                                    <Input
-                                                        type="number"
-                                                        min={5}
-                                                        max={120}
-                                                        value={takeawayEstimatedMinutes}
-                                                        onChange={e => setTakeawayEstimatedMinutes(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
-                                                        onBlur={() => saveTakeawaySettings({ takeaway_estimated_minutes: takeawayEstimatedMinutes })}
-                                                        className="bg-black/30 border-white/10 h-10 w-24 text-center font-semibold"
-                                                    />
-                                                    <span className="text-sm text-zinc-400">minuti</span>
-                                                </div>
-                                                <p className="text-xs text-zinc-500">Mostrato al cliente in fase d'ordine.</p>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-xs uppercase tracking-wider text-zinc-400">Nota per il ritiro</Label>
-                                                <Input
-                                                    value={takeawayPickupNotice}
-                                                    maxLength={200}
-                                                    onChange={e => setTakeawayPickupNotice(e.target.value)}
-                                                    onBlur={() => saveTakeawaySettings({ takeaway_pickup_notice: takeawayPickupNotice })}
-                                                    placeholder="Es. Ingresso posteriore · Suonare il campanello"
-                                                    className="bg-black/30 border-white/10 h-10"
-                                                />
-                                            </div>
+                                            <Switch
+                                                checked={takeawayRequireStripe}
+                                                disabled={savingTakeaway}
+                                                onCheckedChange={(v) => { setTakeawayRequireStripe(v); saveTakeawaySettings({ takeaway_require_stripe: v }) }}
+                                                className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
+                                            />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* QR & Link pubblici */}
-                                {restaurantId && (
-                                    <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-br from-zinc-900/70 to-zinc-950/40 border border-white/10">
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-white/5">
-                                            <h3 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2.5">
-                                                <QrCode className="text-amber-400 w-5 h-5" weight="fill" />
-                                                QR & Link pubblici
-                                            </h3>
-                                            <TakeawayQRPosterButton
-                                                restaurantId={restaurantId}
-                                                restaurantName={restaurantName}
-                                                size="sm"
+                                {/* Tempi & avvisi — flat rows */}
+                                <div className="py-7 border-t border-white/[0.05]">
+                                    <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2 mb-5">
+                                        <Clock className="text-amber-500 w-3 h-3" weight="fill" />
+                                        Tempi & avvisi
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-5">
+                                        <div className="space-y-2">
+                                            <Label className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold">Tempo preparazione</Label>
+                                            <div className="flex items-center gap-3">
+                                                <Input
+                                                    type="number"
+                                                    min={5}
+                                                    max={120}
+                                                    value={takeawayEstimatedMinutes}
+                                                    onChange={e => setTakeawayEstimatedMinutes(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
+                                                    onBlur={() => saveTakeawaySettings({ takeaway_estimated_minutes: takeawayEstimatedMinutes })}
+                                                    className="bg-transparent border-0 border-b border-white/10 rounded-none h-9 w-20 text-center font-semibold focus-visible:ring-0 focus-visible:border-amber-500 px-0"
+                                                />
+                                                <span className="text-xs text-zinc-500">minuti · mostrato al cliente</span>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold">Nota per il ritiro</Label>
+                                            <Input
+                                                value={takeawayPickupNotice}
+                                                maxLength={200}
+                                                onChange={e => setTakeawayPickupNotice(e.target.value)}
+                                                onBlur={() => saveTakeawaySettings({ takeaway_pickup_notice: takeawayPickupNotice })}
+                                                placeholder="Es. Ingresso posteriore · Suonare il campanello"
+                                                className="bg-transparent border-0 border-b border-white/10 rounded-none h-9 px-0 focus-visible:ring-0 focus-visible:border-amber-500"
                                             />
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-[auto,1fr] gap-5 items-start">
-                                            <div className="bg-white p-3 rounded-xl shadow-lg self-center mx-auto">
-                                                <QRCodeGenerator value={`${window.location.origin}/client/takeaway/${restaurantId}`} size={140} />
+                                    </div>
+                                </div>
+
+                                {/* QR & Link pubblici — flat layout, no card */}
+                                {restaurantId && (
+                                    <div className="py-7 border-t border-white/[0.05]">
+                                        <div className="flex items-center gap-2 mb-5">
+                                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2">
+                                                <QrCode className="text-amber-500 w-3 h-3" weight="fill" />
+                                                QR & Link pubblici
+                                            </h3>
+                                            <div className="ml-auto">
+                                                <TakeawayQRPosterButton
+                                                    restaurantId={restaurantId}
+                                                    restaurantName={restaurantName}
+                                                    size="sm"
+                                                />
                                             </div>
-                                            <div className="space-y-3">
-                                                <div className="bg-black/30 border border-white/10 rounded-xl p-3.5">
-                                                    <div className="text-[10px] text-amber-300/80 uppercase tracking-wider mb-1.5 font-semibold">Menu asporto</div>
-                                                    <div className="flex items-center gap-2">
-                                                        <code className="flex-1 text-xs text-amber-200 font-mono break-all">{`${window.location.origin}/client/takeaway/${restaurantId}`}</code>
-                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/client/takeaway/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
-                                                            <Copy size={14} />
-                                                        </Button>
-                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => window.open(`${window.location.origin}/client/takeaway/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
-                                                            <ArrowSquareOut size={14} />
-                                                        </Button>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-[auto,1fr] gap-6 items-start">
+                                            <div className="bg-white p-3 rounded-lg self-start">
+                                                <QRCodeGenerator value={`${window.location.origin}/client/takeaway/${restaurantId}`} size={120} />
+                                            </div>
+                                            <div className="divide-y divide-white/[0.04]">
+                                                {[
+                                                    { label: 'Menu asporto', url: `${window.location.origin}/client/takeaway/${restaurantId}`, dot: 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.8)]' },
+                                                    { label: "Display sala d'attesa", url: `${window.location.origin}/display/${restaurantId}`, dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]' },
+                                                ].map(link => (
+                                                    <div key={link.label} className="py-3 first:pt-0 flex items-center gap-3 min-w-0">
+                                                        <span className={`w-1 h-1 rounded-full shrink-0 ${link.dot}`} />
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-1">{link.label}</div>
+                                                            <code className="text-[11px] text-zinc-300 font-mono break-all">{link.url}</code>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => { navigator.clipboard.writeText(link.url).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}
+                                                            className="shrink-0 p-2 rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-white/[0.04] transition-colors"
+                                                            title="Copia"
+                                                        >
+                                                            <Copy size={13} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                                                            className="shrink-0 p-2 rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-white/[0.04] transition-colors"
+                                                            title="Apri"
+                                                        >
+                                                            <ArrowSquareOut size={13} />
+                                                        </button>
                                                     </div>
-                                                </div>
-                                                <div className="bg-black/30 border border-white/10 rounded-xl p-3.5">
-                                                    <div className="text-[10px] text-emerald-300/80 uppercase tracking-wider mb-1.5 font-semibold">Display sala d'attesa</div>
-                                                    <div className="flex items-center gap-2">
-                                                        <code className="flex-1 text-xs text-emerald-200 font-mono break-all">{`${window.location.origin}/display/${restaurantId}`}</code>
-                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/display/${restaurantId}`).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}>
-                                                            <Copy size={14} />
-                                                        </Button>
-                                                        <Button size="sm" variant="outline" className="border-white/10 shrink-0" onClick={() => window.open(`${window.location.origin}/display/${restaurantId}`, '_blank', 'noopener,noreferrer')}>
-                                                            <ArrowSquareOut size={14} />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                                <p className="text-[11px] text-zinc-500 pt-1">
+                                                ))}
+                                                <p className="text-[11px] text-zinc-500 pt-3">
                                                     Stampa il PDF dal bottone in alto — QR gigante leggibile da lontano, ideale per vetrina o bancone.
                                                 </p>
                                             </div>
@@ -1358,10 +1333,10 @@ export function SettingsView({
                                 )}
 
                                 {takeawayRequireStripe && !subscriptionInfo?.stripe_connect_enabled && (
-                                    <div className="rounded-xl bg-amber-950/40 border border-amber-500/30 p-4 flex items-start gap-3">
-                                        <WarningCircle size={20} className="text-amber-400 shrink-0 mt-0.5" />
-                                        <div className="text-sm text-amber-200">
-                                            Hai richiesto il pagamento obbligatorio, ma Stripe Connect non è ancora attivo. Vai in <strong>Abbonamento</strong> per completare l'onboarding.
+                                    <div className="py-4 flex items-start gap-3 border-t border-amber-500/20">
+                                        <WarningCircle size={14} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
+                                        <div className="text-xs text-amber-300/90 leading-relaxed">
+                                            Hai richiesto il pagamento obbligatorio, ma Stripe Connect non è ancora attivo. Vai in <strong className="text-amber-200">Abbonamento</strong> per completare l'onboarding.
                                         </div>
                                     </div>
                                 )}
@@ -1377,126 +1352,109 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-6"
+                        className="divide-y divide-white/[0.04]"
                     >
-                        {/* 1. Pagamenti Online — Toggle + Connect */}
-                        <div className={`relative overflow-hidden rounded-2xl border transition-all ${stripePaymentsEnabled
-                            ? 'border-violet-500/30 bg-gradient-to-br from-violet-500/10 via-zinc-900 to-zinc-950'
-                            : 'border-white/10 bg-gradient-to-br from-zinc-900/70 to-zinc-950/40'
-                            }`}>
-                            {stripePaymentsEnabled && (
-                                <div className="absolute -top-20 -right-10 w-56 h-56 bg-violet-500/15 rounded-full blur-3xl pointer-events-none" />
-                            )}
-                            <div className="relative p-5 sm:p-6">
-                                <div className="flex items-center justify-between gap-4 mb-4">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${stripePaymentsEnabled
-                                            ? 'bg-gradient-to-br from-violet-400 to-violet-600 shadow-[0_6px_20px_-6px_rgba(139,92,246,0.6)]'
-                                            : 'bg-white/5 border border-white/10'
-                                            }`}>
-                                            <CreditCard weight="fill" size={22} className={stripePaymentsEnabled ? 'text-black' : 'text-zinc-500'} />
+                        {/* Pagamenti al tavolo — flat, no gradient hero */}
+                        <div className="py-7">
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <CreditCard weight="fill" size={16} className={`mt-0.5 ${stripePaymentsEnabled ? 'text-violet-400' : 'text-zinc-600'}`} />
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium text-zinc-100">Pagamenti al Tavolo</span>
+                                            {stripePaymentsEnabled && (
+                                                <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-violet-300 font-bold">
+                                                    <span className="w-1 h-1 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(139,92,246,0.8)]" />
+                                                    Attivo
+                                                </span>
+                                            )}
+                                            <InfoTip id="pagamenti" text="Attivando i pagamenti, i clienti possono pagare il conto con carta direttamente dal menù QR. Devi collegare un account Stripe per ricevere i pagamenti sul tuo conto bancario. I soldi arrivano automaticamente. Ricordati di emettere lo scontrino fiscale separatamente." />
                                         </div>
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="text-lg sm:text-xl font-semibold text-white">Pagamenti al Tavolo</h3>
-                                                <InfoTip id="pagamenti" text="Attivando i pagamenti, i clienti possono pagare il conto con carta direttamente dal menù QR. Devi collegare un account Stripe per ricevere i pagamenti sul tuo conto bancario. I soldi arrivano automaticamente. Ricordati di emettere lo scontrino fiscale separatamente." />
-                                            </div>
-                                            <p className="text-sm text-zinc-400 mt-0.5">I clienti pagano con carta dal menu QR.</p>
-                                        </div>
+                                        <p className="text-xs text-zinc-500 mt-1 max-w-md">I clienti pagano con carta dal menu QR — i soldi arrivano sul tuo conto Stripe.</p>
                                     </div>
-                                    <Switch
-                                        data-tour="settings-stripe-toggle"
-                                        checked={stripePaymentsEnabled}
-                                        onCheckedChange={async (checked) => {
-                                            try {
-                                                await DatabaseService.toggleStripePayments(restaurantId, checked)
-                                                setStripePaymentsEnabled(checked)
-                                                toast.success(checked ? 'Pagamenti online attivati' : 'Pagamenti online disattivati')
-                                            } catch (e: any) {
-                                                toast.error('Errore: ' + e.message)
-                                            }
-                                        }}
-                                        className="data-[state=checked]:bg-violet-500 scale-110"
-                                    />
                                 </div>
+                                <Switch
+                                    data-tour="settings-stripe-toggle"
+                                    checked={stripePaymentsEnabled}
+                                    onCheckedChange={async (checked) => {
+                                        try {
+                                            await DatabaseService.toggleStripePayments(restaurantId, checked)
+                                            setStripePaymentsEnabled(checked)
+                                            toast.success(checked ? 'Pagamenti online attivati' : 'Pagamenti online disattivati')
+                                        } catch (e: any) {
+                                            toast.error('Errore: ' + e.message)
+                                        }
+                                    }}
+                                    className="data-[state=checked]:bg-violet-500 shrink-0"
+                                />
+                            </div>
 
-                                {stripePaymentsEnabled && (
-                                    <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
-                                        <div className="flex items-center gap-3 p-4 bg-violet-500/5 rounded-xl border border-violet-500/10">
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => setShowStripeGuide(true)}
-                                                className="w-full h-12 text-base rounded-xl gap-2 border-violet-500/30 text-violet-300 hover:bg-violet-500/10 hover:text-white"
-                                            >
-                                                📖 Come funziona il pagamento con Stripe?
-                                            </Button>
-                                        </div>
+                            {stripePaymentsEnabled && (
+                                <div className="mt-6 pt-6 border-t border-white/[0.04] space-y-5 animate-in slide-in-from-top-2 duration-200">
+                                    {/* Guida link — inline, ghost button */}
+                                    <button
+                                        onClick={() => setShowStripeGuide(true)}
+                                        className="inline-flex items-center gap-2 text-xs text-violet-300 hover:text-violet-200 transition-colors"
+                                    >
+                                        <Info size={14} weight="fill" />
+                                        <span className="underline underline-offset-4 decoration-violet-500/40 hover:decoration-violet-400">Come funziona il pagamento con Stripe</span>
+                                    </button>
 
-                                        {/* Connect Status */}
-                                        <div className={`flex items-center justify-between p-4 rounded-xl border ${subscriptionInfo?.stripe_connect_enabled
-                                            ? 'bg-emerald-500/5 border-emerald-500/10'
-                                            : subscriptionInfo?.stripe_connect_account_id
-                                                ? 'bg-amber-500/5 border-amber-500/10'
-                                                : 'bg-zinc-800/50 border-white/5'
-                                            }`}>
-                                            <div className="flex items-center gap-3">
-                                                {subscriptionInfo?.stripe_connect_enabled ? (
-                                                    <CheckCircle weight="fill" size={24} className="text-emerald-400" />
-                                                ) : subscriptionInfo?.stripe_connect_account_id ? (
-                                                    <Warning weight="fill" size={24} className="text-amber-400" />
-                                                ) : (
-                                                    <Buildings size={24} className="text-zinc-500" />
-                                                )}
-                                                <div>
-                                                    <p className="text-base font-semibold text-white">
-                                                        {subscriptionInfo?.stripe_connect_enabled
-                                                            ? 'Account collegato'
-                                                            : subscriptionInfo?.stripe_connect_account_id
-                                                                ? 'Verifica in corso'
-                                                                : 'Account non collegato'}
-                                                    </p>
-                                                    <p className="text-sm text-zinc-500 mt-0.5">
-                                                        {subscriptionInfo?.stripe_connect_enabled
-                                                            ? 'I pagamenti arrivano direttamente sul tuo conto'
-                                                            : subscriptionInfo?.stripe_connect_account_id
-                                                                ? 'Stripe sta verificando i tuoi dati aziendali'
-                                                                : 'Collega il tuo account Stripe per ricevere pagamenti'}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2 flex-wrap">
-                                                <Button
-                                                    onClick={handleConnectOnboarding}
-                                                    disabled={loadingConnectOnboarding}
-                                                    variant={subscriptionInfo?.stripe_connect_enabled ? 'outline' : 'default'}
-                                                    className={`h-11 px-5 text-sm rounded-xl gap-2 ${!subscriptionInfo?.stripe_connect_enabled ? 'bg-violet-600 hover:bg-violet-700 text-white shadow-[0_0_15px_-3px_rgba(139,92,246,0.4)]' : 'border-violet-500/30 text-violet-300 hover:bg-violet-500/10'}`}
-                                                >
-                                                    {loadingConnectOnboarding ? (
-                                                        <ArrowClockwise className="animate-spin" size={18} />
-                                                    ) : (
-                                                        <Gear size={18} />
-                                                    )}
-                                                    {subscriptionInfo?.stripe_connect_enabled ? 'Apri Dashboard Stripe ↗' : subscriptionInfo?.stripe_connect_account_id ? 'Controlla Stato Verifica ↗' : 'Collega Account Stripe ↗'}
-                                                </Button>
+                                    {/* Connect status — flat inline row */}
+                                    <div className="flex items-center justify-between gap-4 py-2">
+                                        <div className="flex items-start gap-3 min-w-0">
+                                            {subscriptionInfo?.stripe_connect_enabled ? (
+                                                <CheckCircle weight="fill" size={14} className="text-emerald-400 mt-0.5 shrink-0" />
+                                            ) : subscriptionInfo?.stripe_connect_account_id ? (
+                                                <Warning weight="fill" size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                                            ) : (
+                                                <Buildings size={14} className="text-zinc-600 mt-0.5 shrink-0" />
+                                            )}
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold">Account Stripe Connect</p>
+                                                <p className="text-sm font-medium text-zinc-200 mt-1">
+                                                    {subscriptionInfo?.stripe_connect_enabled
+                                                        ? 'Collegato'
+                                                        : subscriptionInfo?.stripe_connect_account_id
+                                                            ? 'Verifica in corso'
+                                                            : 'Non collegato'}
+                                                </p>
+                                                <p className="text-xs text-zinc-500 mt-0.5">
+                                                    {subscriptionInfo?.stripe_connect_enabled
+                                                        ? 'I pagamenti arrivano direttamente sul tuo conto.'
+                                                        : subscriptionInfo?.stripe_connect_account_id
+                                                            ? 'Stripe sta verificando i tuoi dati aziendali.'
+                                                            : 'Collega il tuo account Stripe per ricevere pagamenti.'}
+                                                </p>
                                             </div>
                                         </div>
+                                        <Button
+                                            onClick={handleConnectOnboarding}
+                                            disabled={loadingConnectOnboarding}
+                                            variant="ghost"
+                                            size="sm"
+                                            className="shrink-0 h-8 px-3 text-xs text-violet-300 hover:text-violet-200 hover:bg-violet-500/10 gap-1.5"
+                                        >
+                                            {loadingConnectOnboarding ? (
+                                                <ArrowClockwise className="animate-spin" size={12} />
+                                            ) : (
+                                                <ArrowSquareOut size={12} />
+                                            )}
+                                            {subscriptionInfo?.stripe_connect_enabled ? 'Dashboard' : subscriptionInfo?.stripe_connect_account_id ? 'Stato' : 'Collega'}
+                                        </Button>
+                                    </div>
 
-                                        {/* Payout info when connected */}
-                                        {subscriptionInfo?.stripe_connect_enabled && (
-                                            <div className="mt-3 space-y-3">
-                                                <div className="p-4 rounded-xl bg-violet-500/5 border border-violet-500/10">
-                                                    <p className="text-sm text-zinc-400 leading-relaxed">
-                                                        💰 I clienti pagano con carta → i soldi arrivano sul <span className="text-white font-medium">tuo conto bancario</span> automaticamente. Apri la <span className="text-violet-400">Dashboard Stripe</span> per gestire pagamenti, fatture e commissioni.
-                                                    </p>
-                                                </div>
-
-                                                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
-                                                    <p className="text-sm text-zinc-500 leading-relaxed">
-                                                        ⚠️ Il pagamento digitale <span className="text-zinc-300">non sostituisce</span> lo scontrino fiscale. Consulta la <button onClick={() => setShowStripeGuide(true)} className="text-amber-400 underline underline-offset-2 hover:text-amber-300">Guida Pagamenti</button> per tutti i dettagli fiscali.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
+                                    {/* Info rows — inline, subtle */}
+                                    {subscriptionInfo?.stripe_connect_enabled && (
+                                        <div className="space-y-2 pt-2 border-t border-white/[0.04]">
+                                            <p className="text-xs text-zinc-500 leading-relaxed">
+                                                <span className="text-zinc-300">I soldi arrivano sul tuo conto bancario automaticamente.</span> Apri la Dashboard Stripe per gestire pagamenti, fatture e commissioni.
+                                            </p>
+                                            <p className="text-xs text-zinc-500 leading-relaxed">
+                                                <span className="text-amber-300/90">⚠ Il pagamento digitale non sostituisce lo scontrino fiscale.</span> <button onClick={() => setShowStripeGuide(true)} className="text-amber-300 underline underline-offset-4 hover:text-amber-200">Guida</button>
+                                            </p>
+                                        </div>
+                                    )}
 
                                         {/* Stripe Payment Guide Dialog */}
                                         <Dialog open={showStripeGuide} onOpenChange={setShowStripeGuide}>
@@ -1629,455 +1587,394 @@ export function SettingsView({
                                             </DialogContent>
                                         </Dialog>
 
-                                    </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
 
-                        {/* 2. Abbonamento */}
+                        {/* 2. Abbonamento — flat section */}
                         {subscriptionInfo?.stripe_subscription_id ? (
-                            <div data-tour="settings-subscription" className="space-y-6">
-                                {/* Active Subscription Card */}
-                                <div className={`relative overflow-hidden rounded-2xl border ${subscriptionInfo.subscription_status === 'past_due'
-                                    ? 'border-red-500/30 bg-gradient-to-br from-red-500/10 via-zinc-900 to-zinc-950'
-                                    : subscriptionInfo.subscription_status === 'canceled'
-                                        ? 'border-white/10 bg-gradient-to-br from-zinc-900/70 to-zinc-950/40'
-                                        : 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-zinc-900 to-zinc-950'
-                                    }`}>
-                                    <div className="absolute -top-20 -right-10 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-                                    <div className="relative p-5 sm:p-6">
-                                        <div className="flex items-center justify-between gap-4 mb-5">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center ${subscriptionInfo.subscription_status === 'past_due' ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-[0_6px_20px_-6px_rgba(239,68,68,0.6)]'
-                                                    : subscriptionInfo.subscription_status === 'canceled' ? 'bg-white/5 border border-white/10'
-                                                        : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_6px_20px_-6px_rgba(16,185,129,0.6)]'
+                            <div data-tour="settings-subscription" className="py-7">
+                                {/* Header row */}
+                                <div className="flex items-start justify-between gap-4 mb-5">
+                                    <div className="flex items-start gap-3 min-w-0">
+                                        <CreditCard weight="fill" size={16} className={`mt-0.5 shrink-0 ${subscriptionInfo.subscription_status === 'past_due' ? 'text-red-400' : subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-500' : 'text-emerald-400'}`} />
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-sm font-medium text-zinc-100">Abbonamento MINTHI</span>
+                                                {/* Status chip — minimal, dot + label */}
+                                                <span className={`inline-flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] font-bold ${['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at
+                                                    ? 'text-emerald-400'
+                                                    : ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at
+                                                        ? 'text-amber-400'
+                                                        : subscriptionInfo.subscription_status === 'past_due'
+                                                            ? 'text-red-400'
+                                                            : 'text-zinc-500'
                                                     }`}>
-                                                    <CreditCard className={subscriptionInfo.subscription_status === 'canceled' ? 'text-zinc-500' : 'text-black'} weight="fill" size={22} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <h3 className="text-lg sm:text-xl font-semibold text-white">Abbonamento MINTHI</h3>
-                                                    <p className="text-xs text-zinc-500 mt-0.5">Piano mensile</p>
-                                                </div>
+                                                    {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && <><span className="w-1 h-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)] animate-pulse" />Attivo</>}
+                                                    {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at && <><span className="w-1 h-1 rounded-full bg-amber-400" />Annullato</>}
+                                                    {subscriptionInfo.subscription_status === 'past_due' && <><span className="w-1 h-1 rounded-full bg-red-500 animate-pulse" />Pagamento fallito</>}
+                                                    {subscriptionInfo.subscription_status === 'canceled' && <><span className="w-1 h-1 rounded-full bg-zinc-500" />Annullato</>}
+                                                    {!subscriptionInfo.subscription_status && <><span className="w-1 h-1 rounded-full bg-emerald-500" />Attivo</>}
+                                                </span>
                                             </div>
-                                            {/* Status */}
-                                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at
-                                                ? 'bg-emerald-500/10 text-emerald-400'
-                                                : ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at
-                                                    ? 'bg-amber-500/10 text-amber-500'
-                                                    : subscriptionInfo.subscription_status === 'past_due'
-                                                        ? 'bg-red-500/10 text-red-400'
-                                                        : 'bg-zinc-800 text-zinc-400'
-                                                }`}>
-                                                {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />Attivo</>}
-                                                {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at && <><span className="w-2 h-2 rounded-full bg-amber-400" />Annullato</>}
-                                                {subscriptionInfo.subscription_status === 'past_due' && <><WarningCircle weight="fill" size={16} />Pagamento fallito</>}
-                                                {subscriptionInfo.subscription_status === 'canceled' && 'Annullato'}
-                                                {!subscriptionInfo.subscription_status && 'Attivo'}
-                                            </span>
-                                        </div>
-
-                                        {/* Past due warning */}
-                                        {subscriptionInfo.subscription_status === 'past_due' && (
-                                            <div className="flex items-start gap-3 p-4 bg-red-500/5 rounded-xl border border-red-500/10 mb-5">
-                                                <WarningCircle weight="fill" size={20} className="text-red-400 mt-0.5 shrink-0" />
-                                                <p className="text-sm text-zinc-400 leading-relaxed">
-                                                    <span className="text-red-400 font-medium">Pagamento non riuscito.</span> Aggiorna il metodo di pagamento per evitare la sospensione del servizio.
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Cancel at period end notice */}
-                                        {subscriptionInfo.subscription_cancel_at && subscriptionInfo.subscription_status !== 'canceled' && (
-                                            <div className="flex items-center gap-3 p-4 bg-amber-500/5 rounded-xl border border-amber-500/10 mb-5">
-                                                <WarningCircle size={20} className="text-amber-400 shrink-0" />
-                                                <div>
-                                                    <p className="text-sm text-white font-medium">Abbonamento annullato</p>
-                                                    <p className="text-sm text-zinc-400 mt-0.5">
-                                                        Potrai continuare ad usufruire di tutti i servizi fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Fully canceled notice */}
-                                        {subscriptionInfo.subscription_status === 'canceled' && (
-                                            <div className="flex items-center gap-3 p-4 bg-red-500/5 rounded-xl border border-red-500/10 mb-5">
-                                                <WarningCircle size={20} className="text-red-400 shrink-0" />
-                                                <div>
-                                                    <p className="text-sm text-white font-medium">Abbonamento annullato</p>
-                                                    <p className="text-sm text-zinc-400 mt-0.5">
-                                                        {subscriptionInfo.subscription_cancel_at
-                                                            ? <>I servizi sono rimasti attivi fino al <span className="text-white font-medium">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>. Riattiva l'abbonamento per continuare.</>
-                                                            : <>L'abbonamento è stato annullato. Riattiva per continuare ad usufruire dei servizi.</>
-                                                        }
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Active discount */}
-                                        {activeDiscount && activeDiscount.is_active && (
-                                            <div className="flex items-center gap-3 p-4 bg-amber-500/5 rounded-xl border border-amber-500/10 mb-5">
-                                                <Receipt size={20} className="text-amber-400 shrink-0" />
-                                                <div className="flex-1">
-                                                    <p className="text-sm text-white font-medium">
-                                                        Sconto attivo: {activeDiscount.discount_percent}%
-                                                        {activeDiscount.discount_duration === 'forever' ? ' per sempre'
-                                                            : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
-                                                                : ` per ${activeDiscount.discount_duration_months || activeDiscount.discount_duration} mesi`}
-                                                    </p>
-                                                    {priceAmount > 0 && !subscriptionInfo.subscription_cancel_at && (
-                                                        <p className="text-xs text-zinc-500 mt-0.5">
-                                                            Prossimo addebito scontato: <span className="text-amber-400">€{(priceAmount * (1 - activeDiscount.discount_percent / 100)).toFixed(2)}/mese</span>
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Next billing — only when truly active and not cancelling */}
-                                        {nextPaymentDate && ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && (
-                                            <div className="flex items-center gap-3 p-4 bg-black/20 rounded-xl mb-5">
-                                                <Clock size={20} className="text-zinc-500 shrink-0" />
-                                                <p className="text-sm text-zinc-400">
-                                                    Prossimo addebito: <span className="text-white font-medium">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                                </p>
-                                            </div>
-                                        )}
-
-                                        {/* Actions */}
-                                        <div className="flex gap-3">
-                                            <Button
-                                                onClick={handleOpenBillingPortal}
-                                                disabled={loadingBillingPortal}
-                                                className="flex-1 h-11 bg-white/10 hover:bg-white/15 text-white text-sm font-medium rounded-xl gap-2"
-                                            >
-                                                {loadingBillingPortal ? (
-                                                    <ArrowClockwise className="animate-spin" size={18} />
-                                                ) : (
-                                                    <ArrowSquareOut size={18} />
-                                                )}
-                                                Gestisci Abbonamento
-                                            </Button>
-                                            <Button
-                                                onClick={handleOpenBillingPortal}
-                                                disabled={loadingBillingPortal}
-                                                variant="outline"
-                                                className="h-11 text-sm border-white/10 text-zinc-400 hover:text-white rounded-xl gap-2 px-5"
-                                            >
-                                                <Receipt size={18} />
-                                                Fatture
-                                            </Button>
+                                            <p className="text-xs text-zinc-500 mt-1">Piano mensile</p>
                                         </div>
                                     </div>
                                 </div>
 
+                                {/* Inline notices — flat, subtle, no boxes */}
+                                <div className="divide-y divide-white/[0.04]">
+                                    {subscriptionInfo.subscription_status === 'past_due' && (
+                                        <div className="py-3 flex items-start gap-3">
+                                            <WarningCircle weight="fill" size={14} className="text-red-400 mt-0.5 shrink-0" />
+                                            <p className="text-xs text-zinc-400 leading-relaxed">
+                                                <span className="text-red-300 font-medium">Pagamento non riuscito.</span> Aggiorna il metodo di pagamento per evitare la sospensione del servizio.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {subscriptionInfo.subscription_cancel_at && subscriptionInfo.subscription_status !== 'canceled' && (
+                                        <div className="py-3 flex items-start gap-3">
+                                            <WarningCircle size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                                            <div className="min-w-0">
+                                                <p className="text-xs text-zinc-300 font-medium">Abbonamento annullato</p>
+                                                <p className="text-xs text-zinc-500 mt-0.5">
+                                                    Servizi attivi fino al <span className="text-zinc-300">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {subscriptionInfo.subscription_status === 'canceled' && (
+                                        <div className="py-3 flex items-start gap-3">
+                                            <WarningCircle size={14} className="text-red-400 mt-0.5 shrink-0" />
+                                            <div className="min-w-0">
+                                                <p className="text-xs text-zinc-300 font-medium">Abbonamento annullato</p>
+                                                <p className="text-xs text-zinc-500 mt-0.5">
+                                                    {subscriptionInfo.subscription_cancel_at
+                                                        ? <>Servizi attivi fino al <span className="text-zinc-300">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>. Riattiva per continuare.</>
+                                                        : <>Riattiva per continuare ad usufruire dei servizi.</>
+                                                    }
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeDiscount && activeDiscount.is_active && (
+                                        <div className="py-3 flex items-start gap-3">
+                                            <Receipt size={14} className="text-amber-400 mt-0.5 shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs text-zinc-300 font-medium">
+                                                    Sconto attivo: {activeDiscount.discount_percent}%
+                                                    {activeDiscount.discount_duration === 'forever' ? ' per sempre'
+                                                        : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
+                                                            : ` per ${activeDiscount.discount_duration_months || activeDiscount.discount_duration} mesi`}
+                                                </p>
+                                                {priceAmount > 0 && !subscriptionInfo.subscription_cancel_at && (
+                                                    <p className="text-xs text-zinc-500 mt-0.5">
+                                                        Prossimo addebito: <span className="text-amber-300">€{(priceAmount * (1 - activeDiscount.discount_percent / 100)).toFixed(2)}/mese</span>
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {nextPaymentDate && ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && (
+                                        <div className="py-3 flex items-center gap-3">
+                                            <Clock size={14} className="text-zinc-500 shrink-0" />
+                                            <p className="text-xs text-zinc-400">
+                                                Prossimo addebito <span className="text-zinc-200 font-medium">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Actions — minimal ghost buttons */}
+                                <div className="flex gap-2 mt-5">
+                                    <Button
+                                        onClick={handleOpenBillingPortal}
+                                        disabled={loadingBillingPortal}
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-9 px-4 text-xs border-white/10 text-zinc-200 hover:bg-white/[0.04] hover:text-white gap-2"
+                                    >
+                                        {loadingBillingPortal ? (
+                                            <ArrowClockwise className="animate-spin" size={13} />
+                                        ) : (
+                                            <ArrowSquareOut size={13} />
+                                        )}
+                                        Gestisci Abbonamento
+                                    </Button>
+                                    <Button
+                                        onClick={handleOpenBillingPortal}
+                                        disabled={loadingBillingPortal}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-9 px-4 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] gap-2"
+                                    >
+                                        <Receipt size={13} />
+                                        Fatture
+                                    </Button>
+                                </div>
                             </div>
                         ) : (
-                            /* No subscription */
-                            <div data-tour="settings-subscription" className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-                                <div className="p-6 sm:p-8 text-center">
-                                    <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-5">
-                                        <CreditCard className="text-emerald-500" weight="bold" size={32} />
-                                    </div>
-                                    <h3 className="text-2xl font-bold text-white mb-2">Abbonamento MINTHI</h3>
-                                    <p className="text-base text-zinc-500 mb-6">Sblocca tutte le funzionalità del gestionale</p>
+                            /* No subscription — flat centered pitch, no boxes */
+                            <div data-tour="settings-subscription" className="py-10 text-center max-w-md mx-auto">
+                                <CreditCard className="text-emerald-400 mx-auto mb-5" weight="fill" size={28} />
+                                <h3 className="text-sm font-medium text-zinc-100 tracking-wide mb-1">Abbonamento MINTHI</h3>
+                                <p className="text-xs text-zinc-500 mb-6">Sblocca tutte le funzionalità del gestionale</p>
 
-                                    <div className="bg-black/30 rounded-xl p-6 mb-6 text-left">
-                                        <div className="flex items-baseline gap-1 mb-5">
-                                            <span className="text-3xl font-bold text-white">€49</span>
-                                            <span className="text-zinc-500 text-base">/mese</span>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {['Ordini e tavoli illimitati', 'Menu digitale QR code', 'Supporto prioritario', 'Statistiche avanzate'].map((f, i) => (
-                                                <div key={i} className="flex items-center gap-3 text-base text-zinc-300">
-                                                    <CheckCircle className="text-emerald-500 shrink-0" weight="fill" size={20} />
-                                                    {f}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <Button
-                                        className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-base rounded-xl shadow-[0_0_20px_-3px_rgba(16,185,129,0.4)]"
-                                        onClick={async () => {
-                                            try {
-                                                const { data: restaurantData } = await supabase
-                                                    .from('restaurants')
-                                                    .select('stripe_price_id')
-                                                    .eq('id', restaurantId)
-                                                    .single();
-
-                                                let priceId = restaurantData?.stripe_price_id;
-                                                if (!priceId) {
-                                                    priceId = await DatabaseService.getAppConfig('stripe_price_id');
-                                                }
-                                                if (!priceId) {
-                                                    toast.error("L'amministratore non ha ancora configurato il Price ID di Stripe. Contatta il supporto.");
-                                                    return;
-                                                }
-
-                                                toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
-                                                const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
-                                                window.location.href = url;
-                                            } catch (e: any) {
-                                                console.error(e);
-                                                toast.error("Errore: " + e.message, { id: "stripe-checkout" });
-                                            }
-                                        }}
-                                    >
-                                        Attiva Abbonamento
-                                    </Button>
-                                    <p className="text-xs text-emerald-400/80 mt-3 font-medium">Prova gratuita fino al 1° del prossimo mese</p>
-                                    <p className="text-xs text-zinc-600 mt-1">Pagamenti sicuri gestiti da Stripe</p>
+                                <div className="flex items-baseline justify-center gap-1 mb-6">
+                                    <span className="text-4xl font-light text-white tracking-tight">€49</span>
+                                    <span className="text-zinc-500 text-sm">/mese</span>
                                 </div>
+
+                                <ul className="space-y-2.5 mb-8 text-left max-w-xs mx-auto">
+                                    {['Ordini e tavoli illimitati', 'Menu digitale QR code', 'Supporto prioritario', 'Statistiche avanzate'].map((f, i) => (
+                                        <li key={i} className="flex items-center gap-2.5 text-sm text-zinc-300">
+                                            <CheckCircle className="text-emerald-400 shrink-0" weight="fill" size={14} />
+                                            {f}
+                                        </li>
+                                    ))}
+                                </ul>
+
+                                <Button
+                                    className="h-10 px-6 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md shadow-[0_0_20px_-4px_rgba(16,185,129,0.5)]"
+                                    onClick={async () => {
+                                        try {
+                                            const { data: restaurantData } = await supabase
+                                                .from('restaurants')
+                                                .select('stripe_price_id')
+                                                .eq('id', restaurantId)
+                                                .single();
+
+                                            let priceId = restaurantData?.stripe_price_id;
+                                            if (!priceId) {
+                                                priceId = await DatabaseService.getAppConfig('stripe_price_id');
+                                            }
+                                            if (!priceId) {
+                                                toast.error("L'amministratore non ha ancora configurato il Price ID di Stripe. Contatta il supporto.");
+                                                return;
+                                            }
+
+                                            toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
+                                            const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
+                                            window.location.href = url;
+                                        } catch (e: any) {
+                                            console.error(e);
+                                            toast.error("Errore: " + e.message, { id: "stripe-checkout" });
+                                        }
+                                    }}
+                                >
+                                    Attiva Abbonamento
+                                </Button>
+                                <p className="text-[11px] text-emerald-400/80 mt-3 font-medium">Prova gratuita fino al 1° del prossimo mese</p>
+                                <p className="text-[11px] text-zinc-600 mt-1">Pagamenti sicuri gestiti da Stripe</p>
                             </div>
                         )}
 
                     </motion.div>
                 </TabsContent>
 
-                {/* 6. STAMPANTE CUCINA */}
+                {/* 6. STAMPANTE CUCINA — flat sections, no Card */}
                 <TabsContent value="printer">
                     <motion.div
                         variants={containerVariants}
                         initial="hidden"
                         animate="visible"
-                        className="space-y-6"
+                        className="divide-y divide-white/[0.04]"
                     >
-                        <Card className="bg-zinc-900/50 border-white/10">
-                            <CardHeader>
-                                <CardTitle className="text-white flex items-center gap-2">
-                                    <Printer size={22} className="text-amber-400" />
-                                    Stampante Cucina
-                                </CardTitle>
-                                <CardDescription className="text-zinc-400">
-                                    Collega una stampante termica per stampare automaticamente le comande in cucina
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
+                        {/* Tipo di connessione — flat 2-col selector */}
+                        <div className="py-7">
+                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2 mb-5">
+                                <Printer className="text-amber-500 w-3 h-3" weight="fill" />
+                                Tipo di connessione
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                {[
+                                    { id: 'usb', icon: Printer, label: 'USB', desc: 'Cavo diretto al PC' },
+                                    { id: 'network', icon: ArrowClockwise, label: 'WiFi / LAN', desc: 'Rete locale' },
+                                ].map(({ id, icon: Icon, label, desc }) => {
+                                    const active = printer.settings.mode === id;
+                                    return (
+                                        <button
+                                            key={id}
+                                            onClick={() => printer.updateSettings({ mode: id as 'usb' | 'network' })}
+                                            className={`group relative flex items-center gap-3 p-4 rounded-md transition-all ${active
+                                                ? 'bg-amber-500/[0.06] text-amber-300'
+                                                : 'text-zinc-400 hover:bg-white/[0.02] hover:text-zinc-200'
+                                                }`}
+                                        >
+                                            {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />}
+                                            <Icon size={16} weight={active ? 'fill' : 'regular'} className={active ? 'text-amber-400' : 'text-zinc-500'} />
+                                            <div className="text-left min-w-0">
+                                                <p className="text-sm font-medium">{label}</p>
+                                                <p className="text-[11px] text-zinc-500">{desc}</p>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
 
-                                {/* Mode selector */}
-                                <div className="space-y-3">
-                                    <p className="text-sm font-medium text-white">Tipo di connessione</p>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button
-                                            onClick={() => printer.updateSettings({ mode: 'usb' })}
-                                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
-                                                printer.settings.mode === 'usb'
-                                                    ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
-                                                    : 'border-white/10 bg-zinc-800/40 text-zinc-400 hover:border-white/20'
-                                            }`}
-                                        >
-                                            <Printer size={24} />
-                                            <div className="text-center">
-                                                <p className="text-sm font-medium">USB</p>
-                                                <p className="text-xs opacity-70">Cavo diretto al PC</p>
-                                            </div>
-                                        </button>
-                                        <button
-                                            onClick={() => printer.updateSettings({ mode: 'network' })}
-                                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
-                                                printer.settings.mode === 'network'
-                                                    ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
-                                                    : 'border-white/10 bg-zinc-800/40 text-zinc-400 hover:border-white/20'
-                                            }`}
-                                        >
-                                            <ArrowClockwise size={24} />
-                                            <div className="text-center">
-                                                <p className="text-sm font-medium">WiFi / LAN</p>
-                                                <p className="text-xs opacity-70">Rete locale (altra stanza)</p>
-                                            </div>
-                                        </button>
-                                    </div>
+                            {/* Network: relay URL */}
+                            {printer.settings.mode === 'network' && (
+                                <div className="mt-5 space-y-2">
+                                    <Label className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold">URL Relay</Label>
+                                    <Input
+                                        value={printer.settings.networkRelayUrl}
+                                        onChange={(e) => printer.updateSettings({ networkRelayUrl: e.target.value })}
+                                        placeholder="ws://localhost:8765"
+                                        className="bg-transparent border-0 border-b border-white/10 rounded-none h-9 px-0 font-mono text-sm focus-visible:ring-0 focus-visible:border-amber-500"
+                                    />
+                                    <p className="text-[11px] text-zinc-500">Lascia il default se il relay gira sullo stesso PC.</p>
                                 </div>
+                            )}
 
-                                {/* Network: relay URL input */}
-                                {printer.settings.mode === 'network' && (
-                                    <div className="space-y-2">
-                                        <Label className="text-zinc-300 text-sm">URL Relay (printer-relay.js)</Label>
-                                        <Input
-                                            value={printer.settings.networkRelayUrl}
-                                            onChange={(e) => printer.updateSettings({ networkRelayUrl: e.target.value })}
-                                            placeholder="ws://localhost:8765"
-                                            className="bg-zinc-800 border-white/10 text-white font-mono text-sm"
-                                        />
-                                        <p className="text-xs text-zinc-500">
-                                            Lascia il valore di default se il relay gira sullo stesso PC del browser
+                            {/* Browser support check (USB only) */}
+                            {printer.settings.mode === 'usb' && !printer.isSupported && (
+                                <div className="mt-5 flex items-start gap-3">
+                                    <WarningCircle size={14} weight="fill" className="text-red-400 shrink-0 mt-0.5" />
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-medium text-red-300">Browser non compatibile</p>
+                                        <p className="text-[11px] text-zinc-500 mt-0.5 leading-relaxed">
+                                            Usa Google Chrome o Microsoft Edge per collegare la stampante USB. Safari e Firefox non supportano WebUSB.
                                         </p>
                                     </div>
-                                )}
-
-                                {/* Browser support check (USB only) */}
-                                {printer.settings.mode === 'usb' && !printer.isSupported && (
-                                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-                                        <div className="flex items-start gap-3">
-                                            <WarningCircle size={22} className="text-red-400 shrink-0 mt-0.5" />
-                                            <div>
-                                                <p className="text-sm font-medium text-red-300">Browser non compatibile</p>
-                                                <p className="text-sm text-red-400/70 mt-1">
-                                                    Usa Google Chrome o Microsoft Edge per collegare la stampante USB.
-                                                    Safari e Firefox non supportano WebUSB.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Connection status + button */}
-                                {printer.isSupported && (
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-3 h-3 rounded-full ${printer.connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-zinc-600'}`} />
-                                                <div>
-                                                    <p className="text-sm font-medium text-white">
-                                                        {printer.connected ? 'Stampante collegata' : 'Nessuna stampante'}
-                                                    </p>
-                                                    <p className="text-xs text-zinc-500">
-                                                        {printer.connected
-                                                            ? 'Pronta per stampare'
-                                                            : printer.settings.mode === 'network'
-                                                                ? 'Avvia il relay sul PC della cucina, poi clicca Connetti'
-                                                                : 'Collega la stampante via cavo USB al PC'
-                                                        }
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {printer.connected ? (
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => printer.disconnect()}
-                                                    className="border-red-500/30 text-red-400 hover:bg-red-500/10"
-                                                >
-                                                    Scollega
-                                                </Button>
-                                            ) : (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={async () => {
-                                                        const ok = await printer.connect()
-                                                        if (ok) toast.success('Stampante collegata!')
-                                                        else toast.error('Collegamento fallito — verifica che il relay sia attivo')
-                                                    }}
-                                                    className="bg-amber-500 hover:bg-amber-600 text-black font-medium"
-                                                >
-                                                    {printer.settings.mode === 'network' ? 'Connetti Relay' : 'Collega Stampante'}
-                                                </Button>
-                                            )}
-                                        </div>
-
-                                        {/* Test print */}
-                                        {printer.connected && (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={async () => {
-                                                    try {
-                                                        await printer.printTestPage()
-                                                        toast.success('Stampa di prova inviata!')
-                                                    } catch (e: any) {
-                                                        toast.error(e.message || 'Errore stampa')
-                                                    }
-                                                }}
-                                                className="border-white/10 text-zinc-300 hover:bg-white/5"
-                                            >
-                                                <Printer size={16} className="mr-2" />
-                                                Stampa di Prova
-                                            </Button>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Settings toggles */}
-                                {printer.isSupported && (
-                                    <>
-                                        <Separator className="bg-white/10" />
-
-                                        <div className="space-y-5">
-                                            {/* Auto-print */}
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <h3 className="text-sm font-medium text-white">Stampa automatica</h3>
-                                                    <p className="text-sm text-amber-300/60">Le nuove comande vengono stampate automaticamente</p>
-                                                </div>
-                                                <Switch
-                                                    checked={printer.settings.autoPrint}
-                                                    onCheckedChange={(checked) => printer.updateSettings({ autoPrint: checked })}
-                                                />
-                                            </div>
-
-                                            {/* Auto-cut */}
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <h3 className="text-sm font-medium text-white">Taglio automatico</h3>
-                                                    <p className="text-sm text-amber-300/60">Taglia la carta dopo ogni comanda</p>
-                                                </div>
-                                                <Switch
-                                                    checked={printer.settings.autoCut}
-                                                    onCheckedChange={(checked) => printer.updateSettings({ autoCut: checked })}
-                                                />
-                                            </div>
-
-                                            {/* Separate courses */}
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <h3 className="text-sm font-medium text-white">Scontrino separato per portata</h3>
-                                                    <p className="text-sm text-amber-300/60">Ogni portata viene stampata su un foglio diverso</p>
-                                                </div>
-                                                <Switch
-                                                    checked={printer.settings.courseSeparate}
-                                                    onCheckedChange={(checked) => printer.updateSettings({ courseSeparate: checked })}
-                                                />
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Instructions */}
-                                <Separator className="bg-white/10" />
-                                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
-                                    <div className="flex items-start gap-3">
-                                        <Info size={20} className="text-amber-400 shrink-0 mt-0.5" />
-                                        <div className="space-y-2 w-full">
-                                            {printer.settings.mode === 'usb' ? (
-                                                <>
-                                                    <p className="text-sm font-medium text-amber-300">Come installare (USB)</p>
-                                                    <ol className="text-sm text-zinc-400 space-y-1 list-decimal list-inside">
-                                                        <li>Collega la stampante termica al PC/tablet via cavo USB</li>
-                                                        <li>Clicca "Collega Stampante" qui sopra</li>
-                                                        <li>Seleziona la stampante dalla finestra del browser</li>
-                                                        <li>Fai una stampa di prova per verificare</li>
-                                                    </ol>
-                                                    <p className="text-xs text-zinc-500 mt-2">
-                                                        Compatibile con Epson, Star, MUNBYN e tutte le stampanti termiche ESC/POS.
-                                                        Richiede Google Chrome o Microsoft Edge.
-                                                    </p>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <p className="text-sm font-medium text-amber-300">Come installare (WiFi / LAN)</p>
-                                                    <ol className="text-sm text-zinc-400 space-y-1 list-decimal list-inside">
-                                                        <li>Collega la stampante alla rete WiFi o via cavo LAN (porta RJ45)</li>
-                                                        <li>Segna l'IP della stampante (es. 192.168.1.50) — stampalo dal menu della stampante</li>
-                                                        <li>Sul PC collegato alla stessa rete, installa Node.js da nodejs.org</li>
-                                                        <li>Scarica il file <code className="text-amber-300 bg-zinc-800 px-1 rounded text-xs">printer-relay.js</code> nella cartella del progetto</li>
-                                                        <li>Apri il terminale e digita: <code className="text-amber-300 bg-zinc-800 px-1 rounded text-xs">npm install ws && node printer-relay.js 192.168.1.50</code></li>
-                                                        <li>Lascia aperta la finestra del terminale, poi clicca "Connetti Relay" qui sopra</li>
-                                                        <li>Fai una stampa di prova per verificare</li>
-                                                    </ol>
-                                                    <p className="text-xs text-zinc-500 mt-2">
-                                                        Il relay va fatto girare sul PC della cassa (o su qualsiasi PC nella stessa rete).
-                                                        Compatibile con Epson TM-T20III, Star, MUNBYN e tutte le stampanti termiche con porta di rete.
-                                                    </p>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
-                            </CardContent>
-                        </Card>
+                            )}
+                        </div>
+
+                        {/* Stato connessione — flat row */}
+                        {printer.isSupported && (
+                            <div className="py-7">
+                                <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-4">
+                                    Stato
+                                </h3>
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${printer.connected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-zinc-600'}`} />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-zinc-100">
+                                                {printer.connected ? 'Stampante collegata' : 'Nessuna stampante'}
+                                            </p>
+                                            <p className="text-[11px] text-zinc-500 mt-0.5">
+                                                {printer.connected
+                                                    ? 'Pronta per stampare'
+                                                    : printer.settings.mode === 'network'
+                                                        ? 'Avvia il relay sul PC della cucina, poi clicca Connetti'
+                                                        : 'Collega la stampante via cavo USB al PC'
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {printer.connected ? (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => printer.disconnect()}
+                                            className="shrink-0 h-8 px-3 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                        >
+                                            Scollega
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            size="sm"
+                                            onClick={async () => {
+                                                const ok = await printer.connect()
+                                                if (ok) toast.success('Stampante collegata!')
+                                                else toast.error('Collegamento fallito — verifica che il relay sia attivo')
+                                            }}
+                                            className="shrink-0 h-8 px-4 text-xs bg-amber-500 hover:bg-amber-600 text-black font-medium"
+                                        >
+                                            {printer.settings.mode === 'network' ? 'Connetti Relay' : 'Collega'}
+                                        </Button>
+                                    )}
+                                </div>
+
+                                {printer.connected && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={async () => {
+                                            try {
+                                                await printer.printTestPage()
+                                                toast.success('Stampa di prova inviata!')
+                                            } catch (e: any) {
+                                                toast.error(e.message || 'Errore stampa')
+                                            }
+                                        }}
+                                        className="mt-3 h-8 px-3 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] gap-2"
+                                    >
+                                        <Printer size={13} />
+                                        Stampa di prova
+                                    </Button>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Preferenze — flat rows */}
+                        {printer.isSupported && (
+                            <div className="py-7">
+                                <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-4">
+                                    Preferenze di stampa
+                                </h3>
+                                <div className="divide-y divide-white/[0.04]">
+                                    {[
+                                        { key: 'autoPrint', label: 'Stampa automatica', desc: 'Le nuove comande vengono stampate automaticamente' },
+                                        { key: 'autoCut', label: 'Taglio automatico', desc: 'Taglia la carta dopo ogni comanda' },
+                                        { key: 'courseSeparate', label: 'Scontrino separato per portata', desc: 'Ogni portata su un foglio diverso' },
+                                    ].map(({ key, label, desc }) => (
+                                        <div key={key} className="flex items-start justify-between gap-4 py-3.5">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-medium text-zinc-200">{label}</p>
+                                                <p className="text-xs text-zinc-500 mt-1">{desc}</p>
+                                            </div>
+                                            <Switch
+                                                checked={(printer.settings as any)[key]}
+                                                onCheckedChange={(checked) => printer.updateSettings({ [key]: checked } as any)}
+                                                className="data-[state=checked]:bg-amber-500 shrink-0 mt-0.5"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Istruzioni — flat text block */}
+                        <div className="py-7">
+                            <h3 className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold flex items-center gap-2 mb-4">
+                                <Info className="text-amber-500 w-3 h-3" weight="fill" />
+                                Come installare {printer.settings.mode === 'usb' ? '(USB)' : '(WiFi / LAN)'}
+                            </h3>
+                            {printer.settings.mode === 'usb' ? (
+                                <>
+                                    <ol className="text-xs text-zinc-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+                                        <li>Collega la stampante termica al PC/tablet via cavo USB</li>
+                                        <li>Clicca "Collega" qui sopra</li>
+                                        <li>Seleziona la stampante dalla finestra del browser</li>
+                                        <li>Fai una stampa di prova per verificare</li>
+                                    </ol>
+                                    <p className="text-[11px] text-zinc-500 mt-3">
+                                        Compatibile con Epson, Star, MUNBYN e tutte le stampanti termiche ESC/POS. Richiede Chrome o Edge.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <ol className="text-xs text-zinc-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+                                        <li>Collega la stampante alla rete WiFi o via cavo LAN</li>
+                                        <li>Segna l'IP della stampante (es. 192.168.1.50)</li>
+                                        <li>Sul PC collegato alla stessa rete, installa Node.js da nodejs.org</li>
+                                        <li>Scarica <code className="text-amber-300 bg-white/[0.04] px-1 rounded text-[10px]">printer-relay.js</code> nella cartella del progetto</li>
+                                        <li>Terminale: <code className="text-amber-300 bg-white/[0.04] px-1 rounded text-[10px]">npm install ws && node printer-relay.js 192.168.1.50</code></li>
+                                        <li>Lascia aperto, poi clicca "Connetti Relay" qui sopra</li>
+                                        <li>Fai una stampa di prova</li>
+                                    </ol>
+                                    <p className="text-[11px] text-zinc-500 mt-3">
+                                        Il relay va fatto girare sul PC della cassa. Compatibile con Epson TM-T20III, Star, MUNBYN e altre stampanti di rete.
+                                    </p>
+                                </>
+                            )}
+                        </div>
                     </motion.div>
                 </TabsContent>
             </Tabs>
