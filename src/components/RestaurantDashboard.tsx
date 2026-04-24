@@ -63,7 +63,9 @@ import {
   Lock,
   LockOpen,
   ShieldCheck,
-  Package
+  Package,
+  Copy,
+  ArrowSquareOut
 } from '@phosphor-icons/react'
 import { ChefHat, SlidersHorizontal } from 'lucide-react'
 import jsPDF from 'jspdf'
@@ -81,6 +83,7 @@ import AnalyticsCharts from './AnalyticsCharts'
 import CustomMenusManager from './CustomMenusManager'
 import QRCodeGenerator from './QRCodeGenerator'
 import TakeawayOrdersPanel from './takeaway/TakeawayOrdersPanel'
+import TakeawayQRPosterButton from './takeaway/TakeawayQRPosterButton'
 import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, Room } from '../services/types'
 import { soundManager, type SoundType } from '../utils/SoundManager'
 import { ModeToggle } from './ModeToggle'
@@ -150,6 +153,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   // Orders state initialized with explicit type to prevent 'never' inference
   const [orders, setOrders] = useState<Order[]>([])
   const [pastOrders, setPastOrders] = useState<Order[]>([])
+
+  // Takeaway public QR dialog
+  const [showTakeawayPublicDialog, setShowTakeawayPublicDialog] = useState(false)
 
   // Export Menu State
   const [showExportMenuDialog, setShowExportMenuDialog] = useState(false)
@@ -1983,14 +1989,17 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   }
 
   useEffect(() => {
-    if (activeSection === 'tables') setActiveTab('tables')
-    else if (activeSection === 'takeaway') setActiveTab('takeaway')
+    const dineInActive = currentRestaurant?.dine_in_enabled !== false
+    const takeawayActive = !!currentRestaurant?.takeaway_enabled
+    // If the current section is hidden by service mode, remap to a visible one.
+    if (activeSection === 'tables') setActiveTab(dineInActive ? 'tables' : (takeawayActive ? 'takeaway' : 'menu'))
+    else if (activeSection === 'takeaway') setActiveTab(takeawayActive ? 'takeaway' : (dineInActive ? 'orders' : 'menu'))
     else if (activeSection === 'menu') setActiveTab('menu')
     else if (activeSection === 'reservations') setActiveTab('reservations')
     else if (activeSection === 'analytics') setActiveTab('analytics')
     else if (activeSection === 'settings') setActiveTab('settings')
-    else setActiveTab('orders')
-  }, [activeSection])
+    else setActiveTab(dineInActive ? 'orders' : (takeawayActive ? 'takeaway' : 'menu'))
+  }, [activeSection, currentRestaurant?.dine_in_enabled, currentRestaurant?.takeaway_enabled])
 
   if (!restaurantId) {
     return (
@@ -2094,14 +2103,25 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             </div>
 
             <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto min-w-[272px]">
-              {[
-                { id: 'orders', label: 'Ordini', icon: Clock },
-                { id: 'tables', label: 'Tavoli', icon: MapPin },
-                ...(currentRestaurant?.takeaway_enabled ? [{ id: 'takeaway', label: 'Asporto', icon: Package }] : []),
-                { id: 'menu', label: 'Menu', icon: BookOpen },
-                { id: 'reservations', label: 'Prenotazioni', icon: Calendar },
-                { id: 'analytics', label: 'Analitiche', icon: ChartBar },
-              ].map((item) => (
+              {(() => {
+                // Conditional nav based on service modes:
+                // - dine_in_enabled: show Ordini + Tavoli
+                // - takeaway_enabled: show Asporto
+                // - takeaway-only mode (dine-in off): hide Ordini + Tavoli entirely
+                // dine_in_enabled defaults to TRUE when the field is missing (legacy accounts).
+                const dineInActive = currentRestaurant?.dine_in_enabled !== false
+                const takeawayActive = !!currentRestaurant?.takeaway_enabled
+                return [
+                  ...(dineInActive ? [
+                    { id: 'orders', label: 'Ordini', icon: Clock },
+                    { id: 'tables', label: 'Tavoli', icon: MapPin },
+                  ] : []),
+                  ...(takeawayActive ? [{ id: 'takeaway', label: 'Asporto', icon: Package }] : []),
+                  { id: 'menu', label: 'Menu', icon: BookOpen },
+                  { id: 'reservations', label: 'Prenotazioni', icon: Calendar },
+                  { id: 'analytics', label: 'Analitiche', icon: ChartBar },
+                ]
+              })().map((item) => (
                 <Button
                   key={item.id}
                   variant="ghost"
@@ -2474,24 +2494,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-white/10 text-zinc-300 hover:bg-white/5"
-                    onClick={() => {
-                      const url = `${window.location.origin}/display/${restaurantId}`
-                      window.open(url, '_blank', 'noopener,noreferrer')
-                    }}
+                    className="border-white/10 text-zinc-300 hover:bg-white/5 gap-1.5"
+                    onClick={() => setShowTakeawayPublicDialog(true)}
                   >
-                    <ChartBar size={14} className="mr-1" /> Apri schermo pubblico
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-white/10 text-zinc-300 hover:bg-white/5"
-                    onClick={() => {
-                      const url = `${window.location.origin}/client/takeaway/${restaurantId}`
-                      navigator.clipboard.writeText(url).then(() => toast.success('Link menu copiato')).catch(() => toast.error('Copia non riuscita'))
-                    }}
-                  >
-                    <QrCode size={14} className="mr-1" /> Copia link menu
+                    <QrCode size={14} /> QR & Link pubblici
                   </Button>
                 </div>
               </div>
@@ -5459,6 +5465,74 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 Rimuovi Password
               </Button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Takeaway — QR & Link pubblici (minimal popup, opened from the Asporto section) */}
+      <Dialog open={showTakeawayPublicDialog} onOpenChange={setShowTakeawayPublicDialog}>
+        <DialogContent className="max-w-md bg-zinc-950 border border-white/[0.06] p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/[0.04]">
+            <DialogTitle className="text-sm font-medium text-zinc-100 flex items-center gap-2">
+              <QrCode size={14} weight="fill" className="text-amber-500" />
+              QR & Link pubblici — Asporto
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500 mt-1">
+              Condividi questi link con i clienti o stampa il poster QR per la vetrina.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-6 py-5 space-y-5">
+            {/* QR + poster button */}
+            <div className="flex items-start gap-4">
+              <div className="bg-white p-2.5 rounded-lg shrink-0">
+                <QRCodeGenerator value={`${window.location.origin}/client/takeaway/${restaurantId}`} size={110} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Inquadra il QR per aprire il menu asporto. Stampa il PDF a grande formato per metterlo in vetrina.
+                </p>
+                <div className="mt-3">
+                  {restaurantId && (
+                    <TakeawayQRPosterButton
+                      restaurantId={restaurantId}
+                      restaurantName={currentRestaurant?.name}
+                      size="sm"
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Link rows */}
+            <div className="divide-y divide-white/[0.04] border-t border-white/[0.04] pt-1">
+              {[
+                { label: 'Menu asporto', url: `${window.location.origin}/client/takeaway/${restaurantId}`, dot: 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.8)]' },
+                { label: "Display sala d'attesa", url: `${window.location.origin}/display/${restaurantId}`, dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]' },
+              ].map(link => (
+                <div key={link.label} className="py-3 flex items-center gap-3 min-w-0">
+                  <span className={`w-1 h-1 rounded-full shrink-0 ${link.dot}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 font-semibold mb-1">{link.label}</div>
+                    <code className="text-[11px] text-zinc-300 font-mono break-all">{link.url}</code>
+                  </div>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(link.url).then(() => toast.success('Link copiato')).catch(() => toast.error('Copia non riuscita')) }}
+                    className="shrink-0 p-2 rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-white/[0.04] transition-colors"
+                    title="Copia"
+                  >
+                    <Copy size={13} />
+                  </button>
+                  <button
+                    onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                    className="shrink-0 p-2 rounded-md text-zinc-500 hover:text-zinc-100 hover:bg-white/[0.04] transition-colors"
+                    title="Apri"
+                  >
+                    <ArrowSquareOut size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
