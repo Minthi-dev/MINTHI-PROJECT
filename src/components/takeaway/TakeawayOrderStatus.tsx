@@ -33,16 +33,41 @@ export default function TakeawayOrderStatus() {
         created_at: string
         customer_name: string
         estimated_minutes: number
+        takeaway_require_stripe: boolean
     } | null>(null)
     const [loading, setLoading] = useState(true)
     const [notFound, setNotFound] = useState(false)
+    const [verifyingPayment, setVerifyingPayment] = useState(false)
 
     useEffect(() => {
         const justCreated = searchParams.get('created') === '1'
         const paymentSuccess = searchParams.get('payment') === 'success'
         if (justCreated) toast.success('Ordine inviato!')
-        if (paymentSuccess) toast.success('Pagamento completato!')
+        if (paymentSuccess && !searchParams.get('session_id')) toast.success('Pagamento completato!')
     }, [searchParams])
+
+    useEffect(() => {
+        const sessionId = searchParams.get('session_id')
+        if (!restaurantId || !pickupCode || searchParams.get('payment') !== 'success' || !sessionId) return
+
+        let alive = true
+        ;(async () => {
+            setVerifyingPayment(true)
+            try {
+                const result = await DatabaseService.verifyStripeSession(sessionId, restaurantId)
+                if (!alive) return
+                if (result?.paid) toast.success('Pagamento Stripe confermato!')
+                const data = await DatabaseService.getTakeawayOrderStatus(restaurantId, pickupCode)
+                if (alive && data) setOrder(data as any)
+            } catch (e: any) {
+                if (alive) toast.error(e?.message || 'Pagamento non verificato. Attendi qualche secondo.')
+            } finally {
+                if (alive) setVerifyingPayment(false)
+            }
+        })()
+
+        return () => { alive = false }
+    }, [restaurantId, pickupCode, searchParams])
 
     useEffect(() => {
         if (!restaurantId || !pickupCode) return
@@ -113,6 +138,7 @@ export default function TakeawayOrderStatus() {
     const isReady = order.status === 'READY'
     const isClosed = order.status === 'PICKED_UP' || order.status === 'PAID' || order.status === 'CANCELLED'
     const unpaid = Math.max(0, Number(order.total_amount) - Number(order.paid_amount))
+    const requiresOnlinePayment = Boolean(order.takeaway_require_stripe)
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white p-4 flex items-start justify-center">
@@ -165,7 +191,9 @@ export default function TakeawayOrderStatus() {
                     </div>
                     {unpaid > 0.01 && (
                         <div className="flex justify-between text-sm">
-                            <span className="text-amber-400">Da pagare al ritiro</span>
+                            <span className="text-amber-400">
+                                {requiresOnlinePayment ? (verifyingPayment ? 'Verifica pagamento online' : 'Pagamento online in attesa') : 'Da pagare al ritiro'}
+                            </span>
                             <span className="font-bold text-amber-400">€{unpaid.toFixed(2)}</span>
                         </div>
                     )}

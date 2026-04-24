@@ -6,13 +6,13 @@
 // via the restaurant's Connect account.
 // =====================================================================
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import Stripe from "https://esm.sh/stripe@20.4.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess, validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
-    apiVersion: "2024-04-10" as any,
+    apiVersion: "2026-02-25.clover" as any,
     httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -52,10 +52,18 @@ serve(async (req) => {
         const access = await verifyAccess(supabase, userId, order.restaurant_id);
         if (!access.valid) return json({ error: "Non autorizzato" }, 403);
 
+        const { data: restaurantConfig } = await supabase
+            .from("restaurants")
+            .select("takeaway_require_stripe")
+            .eq("id", order.restaurant_id)
+            .maybeSingle();
+        const requiresStripePrepay = restaurantConfig?.takeaway_require_stripe === true;
+
         const payments: Array<{ method: string; amount: number; at: string; label?: string; by?: string }> =
             Array.isArray(order.payments) ? [...order.payments] : [];
         const currentPaid = Number(order.paid_amount) || 0;
         const total = Number(order.total_amount) || 0;
+        const remaining = Math.max(0, Math.round((total - currentPaid) * 100) / 100);
 
         const a = body as PaymentAction;
 
@@ -63,6 +71,9 @@ serve(async (req) => {
         // register_payment — cash or pos card, handled directly
         // ------------------------------------------------------------------
         if (a.action === "register_payment") {
+            if (requiresStripePrepay) {
+                return json({ error: "Questo ordine richiede pagamento anticipato online con Stripe" }, 409);
+            }
             if (!["cash", "card_pos"].includes(a.method)) return json({ error: "Metodo non valido" }, 400);
             if (typeof a.amount !== "number" || !Number.isFinite(a.amount) || a.amount <= 0) {
                 return json({ error: "Importo non valido" }, 400);
@@ -106,24 +117,23 @@ serve(async (req) => {
             const label = a.label?.slice(0, 64) || "Stripe online";
             const duplicate = payments.some((p) => p.method === "stripe" && p.label === label && Math.abs(p.amount - a.amount) < 0.01);
             if (duplicate) return json({ success: true, duplicate: true });
+            if (currentPaid + 0.01 >= total) return json({ success: true, duplicate: true });
+            const creditedAmount = Math.min(a.amount, remaining);
             payments.push({
                 method: "stripe",
-                amount: Math.round(a.amount * 100) / 100,
+                amount: Math.round(creditedAmount * 100) / 100,
                 at: new Date().toISOString(),
                 label,
                 by: userId,
             });
-            const newPaid = Math.round((currentPaid + a.amount) * 100) / 100;
+            const newPaid = Math.round((currentPaid + creditedAmount) * 100) / 100;
             const fullyPaid = newPaid + 0.01 >= total;
             const updates: Record<string, unknown> = {
                 paid_amount: newPaid,
                 payments,
                 payment_method: fullyPaid ? (payments.length > 1 ? "split" : "stripe") : null,
             };
-            if (fullyPaid) {
-                updates.status = "PAID";
-                updates.closed_at = new Date().toISOString();
-            } else if (order.status === "PENDING") {
+            if (order.status === "PENDING" && fullyPaid) {
                 updates.status = "PREPARING";
             }
             const { error } = await supabase.from("orders").update(updates).eq("id", orderId);
@@ -139,6 +149,9 @@ serve(async (req) => {
             if (currentPaid + a.amount > total + 0.01) {
                 return json({ error: `Importo supera il totale (residuo: €${(total - currentPaid).toFixed(2)})` }, 400);
             }
+            if (requiresStripePrepay && Math.abs(a.amount - remaining) > 0.01) {
+                return json({ error: `Pagamento anticipato obbligatorio: incassa l'intero residuo (€${remaining.toFixed(2)}) con Stripe` }, 409);
+            }
 
             const { data: rest } = await supabase
                 .from("restaurants")
@@ -151,12 +164,11 @@ serve(async (req) => {
             }
 
             const origin = req.headers.get("origin") || "https://minthi.it";
-            const defaultSuccess = `${origin}/client/takeaway/${order.restaurant_id}/order/${order.pickup_code}?payment=success`;
+            const defaultSuccess = `${origin}/client/takeaway/${order.restaurant_id}/order/${order.pickup_code}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
             const defaultCancel = `${origin}/client/takeaway/${order.restaurant_id}/order/${order.pickup_code}?payment=cancelled`;
 
             const session = await stripe.checkout.sessions.create(
                 {
-                    payment_method_types: ["card"],
                     mode: "payment",
                     line_items: [
                         {
@@ -179,7 +191,10 @@ serve(async (req) => {
                         splitLabel: (a.label || "Pagamento").slice(0, 60),
                     },
                 },
-                { stripeAccount: rest.stripe_connect_account_id! }
+                {
+                    stripeAccount: rest.stripe_connect_account_id!,
+                    idempotencyKey: `takeaway-counter-${order.id}-${Math.round(a.amount * 100)}`,
+                }
             );
             return json({ success: true, checkoutUrl: session.url, sessionId: session.id });
         }

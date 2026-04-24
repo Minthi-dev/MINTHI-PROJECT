@@ -45,6 +45,24 @@ serve(async (req) => {
         const access = await verifyAccess(supabase, userId, order.restaurant_id);
         if (!access.valid) return json({ error: "Non autorizzato" }, 403);
 
+        const { data: restaurant } = await supabase
+            .from("restaurants")
+            .select("takeaway_require_stripe")
+            .eq("id", order.restaurant_id)
+            .maybeSingle();
+
+        const paid = Number(order.paid_amount) || 0;
+        const total = Number(order.total_amount) || 0;
+        const requiresStripePrepay = restaurant?.takeaway_require_stripe === true;
+        if (
+            requiresStripePrepay &&
+            order.status === "PENDING" &&
+            nextStatus === "PREPARING" &&
+            paid + 0.01 < total
+        ) {
+            return json({ error: "Pagamento online obbligatorio: l'ordine entra in cucina solo dopo Stripe" }, 409);
+        }
+
         const allowed = ALLOWED[order.status] ?? [];
         if (!allowed.includes(nextStatus)) {
             return json({ error: `Transizione non consentita da ${order.status} a ${nextStatus}` }, 400);
@@ -59,8 +77,6 @@ serve(async (req) => {
             // (c'è un pagamento registrato E l'importo copre il totale).
             // Non tocchiamo payment_method — è già stato impostato dalle funzioni
             // di pagamento (takeaway-pay / stripe-webhook / stripe-verify-session).
-            const paid = Number(order.paid_amount) || 0;
-            const total = Number(order.total_amount) || 0;
             if (paid > 0 && paid + 0.01 >= total) {
                 updates.status = "PAID";
                 updates.closed_at = now;

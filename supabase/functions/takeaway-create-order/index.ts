@@ -4,13 +4,13 @@
 // Server-side price validation, atomic pickup number, optional Stripe flow.
 // =====================================================================
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import Stripe from "https://esm.sh/stripe@20.4.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateRedirectUrl } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
-    apiVersion: "2024-04-10" as any,
+    apiVersion: "2026-02-25.clover" as any,
     httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -45,6 +45,47 @@ function randomCode(len = 6): string {
     let out = "";
     for (let i = 0; i < len; i++) out += alphabet[buf[i] % alphabet.length];
     return out;
+}
+
+async function createTakeawayCheckoutSession(args: {
+    req: Request;
+    restaurantId: string;
+    stripeAccountId: string;
+    orderId: string;
+    pickupCode: string;
+    pickupNumber: number;
+    lineItems: Array<Record<string, unknown>>;
+    customerEmail?: string;
+    successUrl?: string;
+    cancelUrl?: string;
+    idempotencyKey: string;
+}) {
+    const origin = args.req.headers.get("origin") || "https://minthi.it";
+    const defaultSuccess = `${origin}/client/takeaway/${args.restaurantId}/order/${args.pickupCode}?payment=success&session_id={CHECKOUT_SESSION_ID}`;
+    const defaultCancel = `${origin}/client/takeaway/${args.restaurantId}?payment=cancelled&code=${args.pickupCode}`;
+
+    return await stripe.checkout.sessions.create(
+        {
+            mode: "payment",
+            line_items: args.lineItems,
+            success_url: validateRedirectUrl(args.successUrl, defaultSuccess),
+            cancel_url: validateRedirectUrl(args.cancelUrl, defaultCancel),
+            metadata: {
+                paymentType: "takeaway_order",
+                restaurantId: args.restaurantId,
+                orderId: args.orderId,
+                pickupCode: args.pickupCode,
+                pickupNumber: String(args.pickupNumber),
+            },
+            ...(typeof args.customerEmail === "string" && args.customerEmail.length > 3 && args.customerEmail.length < 120
+                ? { customer_email: args.customerEmail }
+                : {}),
+        },
+        {
+            stripeAccount: args.stripeAccountId,
+            idempotencyKey: args.idempotencyKey,
+        }
+    );
 }
 
 serve(async (req) => {
@@ -98,23 +139,27 @@ serve(async (req) => {
         // --- Idempotency short-circuit ----------------------------------------
         // If the client retries (iPhone flaky network, double-tap), return the
         // existing order instead of creating a duplicate.
+        let existingOrder: any = null;
         if (cleanIdempotencyKey) {
             const { data: existing } = await supabase
                 .from("orders")
-                .select("id, pickup_number, pickup_code, status, total_amount")
+                .select("id, pickup_number, pickup_code, status, total_amount, paid_amount")
                 .eq("restaurant_id", restaurantId)
                 .eq("idempotency_key", cleanIdempotencyKey)
                 .maybeSingle();
             if (existing) {
-                return json({
-                    success: true,
-                    orderId: existing.id,
-                    pickupNumber: existing.pickup_number,
-                    pickupCode: existing.pickup_code,
-                    paymentMethod: chosenMethod,
-                    paymentRequired: chosenMethod !== "stripe",
-                    deduplicated: true,
-                });
+                if (chosenMethod !== "stripe") {
+                    return json({
+                        success: true,
+                        orderId: existing.id,
+                        pickupNumber: existing.pickup_number,
+                        pickupCode: existing.pickup_code,
+                        paymentMethod: "pay_on_pickup",
+                        paymentRequired: true,
+                        deduplicated: true,
+                    });
+                }
+                existingOrder = existing;
             }
         }
 
@@ -159,6 +204,61 @@ serve(async (req) => {
             if (!restaurant.stripe_connect_account_id || !restaurant.stripe_connect_enabled) {
                 return json({ error: "Il ristorante non ha ancora completato la configurazione per ricevere pagamenti" }, 403);
             }
+        }
+
+        if (existingOrder && chosenMethod === "stripe") {
+            const remaining = Math.max(
+                0,
+                Math.round((Number(existingOrder.total_amount || 0) - Number(existingOrder.paid_amount || 0)) * 100) / 100
+            );
+            if (remaining <= 0.01) {
+                return json({
+                    success: true,
+                    orderId: existingOrder.id,
+                    pickupNumber: existingOrder.pickup_number,
+                    pickupCode: existingOrder.pickup_code,
+                    estimatedMinutes: restaurant.takeaway_estimated_minutes,
+                    paymentMethod: "stripe",
+                    paymentRequired: false,
+                    deduplicated: true,
+                });
+            }
+
+            const session = await createTakeawayCheckoutSession({
+                req,
+                restaurantId,
+                stripeAccountId: restaurant.stripe_connect_account_id!,
+                orderId: existingOrder.id,
+                pickupCode: existingOrder.pickup_code,
+                pickupNumber: existingOrder.pickup_number,
+                customerEmail,
+                successUrl,
+                cancelUrl,
+                idempotencyKey: `takeaway-order-retry-${existingOrder.id}-${Math.round(remaining * 100)}`,
+                lineItems: [
+                    {
+                        price_data: {
+                            currency: "eur",
+                            product_data: { name: `Asporto #${existingOrder.pickup_number} — ${restaurant.name}`.slice(0, 120) },
+                            unit_amount: Math.round(remaining * 100),
+                        },
+                        quantity: 1,
+                    },
+                ],
+            });
+
+            return json({
+                success: true,
+                orderId: existingOrder.id,
+                pickupNumber: existingOrder.pickup_number,
+                pickupCode: existingOrder.pickup_code,
+                estimatedMinutes: restaurant.takeaway_estimated_minutes,
+                paymentMethod: "stripe",
+                checkoutUrl: session.url,
+                sessionId: session.id,
+                paymentRequired: true,
+                deduplicated: true,
+            });
         }
 
         // --- Load dishes and authoritatively compute total --------------------
@@ -290,31 +390,20 @@ serve(async (req) => {
             return json({ error: "Totale Stripe = 0" }, 400);
         }
 
-        const origin = req.headers.get("origin") || "https://minthi.it";
-        const defaultSuccess = `${origin}/client/takeaway/${restaurantId}/order/${pickupCode}?payment=success`;
-        const defaultCancel = `${origin}/client/takeaway/${restaurantId}?payment=cancelled&code=${pickupCode}`;
-
         try {
-            const session = await stripe.checkout.sessions.create(
-                {
-                    payment_method_types: ["card"],
-                    mode: "payment",
-                    line_items: lineItems,
-                    success_url: validateRedirectUrl(successUrl, defaultSuccess),
-                    cancel_url: validateRedirectUrl(cancelUrl, defaultCancel),
-                    metadata: {
-                        paymentType: "takeaway_order",
-                        restaurantId,
-                        orderId: newOrder.id,
-                        pickupCode,
-                        pickupNumber: String(pickupNumber),
-                    },
-                    ...(typeof customerEmail === "string" && customerEmail.length > 3 && customerEmail.length < 120
-                        ? { customer_email: customerEmail }
-                        : {}),
-                },
-                { stripeAccount: restaurant.stripe_connect_account_id! }
-            );
+            const session = await createTakeawayCheckoutSession({
+                req,
+                restaurantId,
+                stripeAccountId: restaurant.stripe_connect_account_id!,
+                orderId: newOrder.id,
+                pickupCode,
+                pickupNumber,
+                lineItems,
+                customerEmail,
+                successUrl,
+                cancelUrl,
+                idempotencyKey: `takeaway-order-${newOrder.id}-${Math.round(total * 100)}`,
+            });
 
             return json({
                 success: true,

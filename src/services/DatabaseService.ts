@@ -618,6 +618,7 @@ export const DatabaseService = {
                 )
             `)
             .eq('restaurant_id', restaurantId)
+            .eq('order_type', 'dine_in')
             .neq('status', 'PAID')
             .neq('status', 'CANCELLED')
         if (error) throw error
@@ -833,6 +834,7 @@ export const DatabaseService = {
             created_at: string
             customer_name: string
             estimated_minutes: number
+            takeaway_require_stripe: boolean
         } | null
     },
 

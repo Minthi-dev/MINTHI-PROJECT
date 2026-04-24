@@ -131,6 +131,7 @@ export default function TakeawayMenu() {
 
     const canPayStripe = Boolean(restaurant?.enable_stripe_payments && restaurant?.stripe_connect_enabled)
     const canPayOnPickup = !restaurant?.takeaway_require_stripe
+    const stripeRequiredButUnavailable = Boolean(restaurant?.takeaway_require_stripe && !canPayStripe)
 
     const submitOrder = async () => {
         if (!restaurantId) return
@@ -394,7 +395,7 @@ export default function TakeawayMenu() {
 
                         <div className="pt-2">
                             <label className="text-xs text-zinc-400 uppercase tracking-wider block mb-2">Pagamento</label>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className={`grid gap-2 ${canPayStripe && canPayOnPickup ? 'grid-cols-2' : 'grid-cols-1'}`}>
                                 {canPayStripe && (
                                     <button
                                         onClick={() => setPaymentChoice('stripe')}
@@ -416,6 +417,11 @@ export default function TakeawayMenu() {
                                     </button>
                                 )}
                             </div>
+                            {stripeRequiredButUnavailable && (
+                                <p className="text-xs text-red-300 mt-3 bg-red-500/10 border border-red-500/25 rounded-lg p-2">
+                                    Questo locale richiede pagamento online, ma Stripe non è ancora configurato. Avvisa lo staff.
+                                </p>
+                            )}
                             {restaurant?.takeaway_pickup_notice && (
                                 <p className="text-xs text-amber-300/80 mt-3 bg-amber-500/5 border border-amber-500/20 rounded-lg p-2">
                                     {restaurant.takeaway_pickup_notice}
@@ -429,10 +435,10 @@ export default function TakeawayMenu() {
 
                         <Button
                             onClick={submitOrder}
-                            disabled={submitting || cart.length === 0}
+                            disabled={submitting || cart.length === 0 || stripeRequiredButUnavailable}
                             className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-12"
                         >
-                            {submitting ? 'Invio...' : paymentChoice === 'stripe' ? `Paga €${total.toFixed(2)}` : 'Invia ordine'}
+                            {submitting ? 'Invio...' : stripeRequiredButUnavailable ? 'Pagamento online non disponibile' : paymentChoice === 'stripe' ? `Paga €${total.toFixed(2)}` : 'Invia ordine'}
                         </Button>
                         <button onClick={() => setCheckoutOpen(false)} className="text-sm text-zinc-400 hover:text-white w-full flex items-center justify-center gap-1">
                             <ArrowLeft size={14} /> Torna al carrello

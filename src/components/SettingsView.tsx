@@ -212,6 +212,7 @@ export function SettingsView({
     const [activeDiscount, setActiveDiscount] = useState<any>(null)
     const [priceAmount, setPriceAmount] = useState<number>(0)
     const [openInfo, setOpenInfo] = useState<string | null>(null)
+    const stripeReadyForTakeaway = Boolean(stripePaymentsEnabled && subscriptionInfo?.stripe_connect_enabled)
 
     const InfoTip = ({ id, text }: { id: string; text: string }) => (
         <>
@@ -360,6 +361,11 @@ export function SettingsView({
         takeaway_estimated_minutes: number
         takeaway_pickup_notice: string
     }>) => {
+        if (patch.takeaway_require_stripe === true && !stripeReadyForTakeaway) {
+            setTakeawayRequireStripe(false)
+            toast.error('Prima attiva i pagamenti online e completa Stripe Connect.')
+            return
+        }
         setSavingTakeaway(true)
         try {
             await DatabaseService.updateRestaurant({ id: restaurantId, ...patch })
@@ -1209,17 +1215,20 @@ export function SettingsView({
                                             </div>
                                             <Switch
                                                 checked={takeawayRequireStripe}
-                                                disabled={savingTakeaway}
-                                                onCheckedChange={(v) => { setTakeawayRequireStripe(v); saveTakeawaySettings({ takeaway_require_stripe: v }) }}
+                                                disabled={savingTakeaway || (!stripeReadyForTakeaway && !takeawayRequireStripe)}
+                                                onCheckedChange={(v) => {
+                                                    setTakeawayRequireStripe(v)
+                                                    saveTakeawaySettings({ takeaway_require_stripe: v })
+                                                }}
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
                                         </div>
                                     </div>
-                                    {takeawayRequireStripe && !subscriptionInfo?.stripe_connect_enabled && (
+                                    {!stripeReadyForTakeaway && (
                                         <div className="mt-3 flex items-start gap-2.5 px-1">
                                             <WarningCircle size={14} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
                                             <p className="text-[12px] text-amber-300/90 leading-relaxed">
-                                                Pagamento obbligatorio richiesto, ma Stripe Connect non è ancora attivo. Completa l'onboarding in <strong className="text-amber-200">Abbonamento</strong>.
+                                                Per rendere il pagamento anticipato obbligatorio devi prima attivare i pagamenti online e completare Stripe Connect nella sezione <strong className="text-amber-200">Abbonamento e pagamenti</strong>.
                                             </p>
                                         </div>
                                     )}

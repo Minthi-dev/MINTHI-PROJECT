@@ -13,9 +13,10 @@ interface Props {
     order: Order | null
     onPaid?: () => void
     onPrintReceipt?: (order: Order) => void
+    forceStripeOnly?: boolean
 }
 
-export default function TakeawayPaymentDialog({ open, onOpenChange, order, onPaid, onPrintReceipt }: Props) {
+export default function TakeawayPaymentDialog({ open, onOpenChange, order, onPaid, onPrintReceipt, forceStripeOnly = false }: Props) {
     const [amount, setAmount] = useState('')
     const [label, setLabel] = useState('')
     const [processing, setProcessing] = useState(false)
@@ -31,7 +32,7 @@ export default function TakeawayPaymentDialog({ open, onOpenChange, order, onPai
             setLabel('')
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, order?.id])
+    }, [open, order?.id, forceStripeOnly, remaining])
 
     if (!order) return null
 
@@ -41,6 +42,7 @@ export default function TakeawayPaymentDialog({ open, onOpenChange, order, onPai
     }
 
     const registerManual = async (method: 'cash' | 'card_pos') => {
+        if (forceStripeOnly) return toast.error('Questo ordine richiede pagamento online con Stripe')
         const amt = parsedAmount()
         if (Number.isNaN(amt)) return toast.error('Importo non valido')
         if (amt > remaining + 0.01) return toast.error(`Massimo €${remaining.toFixed(2)}`)
@@ -59,7 +61,7 @@ export default function TakeawayPaymentDialog({ open, onOpenChange, order, onPai
     }
 
     const payStripeLink = async () => {
-        const amt = parsedAmount()
+        const amt = forceStripeOnly ? remaining : parsedAmount()
         if (Number.isNaN(amt)) return toast.error('Importo non valido')
         if (amt > remaining + 0.01) return toast.error(`Massimo €${remaining.toFixed(2)}`)
         setProcessing(true)
@@ -144,6 +146,11 @@ export default function TakeawayPaymentDialog({ open, onOpenChange, order, onPai
 
                     {!fullyPaid && (
                         <div className="space-y-3">
+                            {forceStripeOnly && (
+                                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                                    Pagamento anticipato obbligatorio: l'ordine resta fuori dalla cucina finché Stripe non conferma l'intero residuo.
+                                </div>
+                            )}
                             <div>
                                 <label className="text-xs text-zinc-400 uppercase tracking-wider">Importo (€)</label>
                                 <Input
@@ -152,46 +159,55 @@ export default function TakeawayPaymentDialog({ open, onOpenChange, order, onPai
                                     min="0.01"
                                     value={amount}
                                     onChange={e => setAmount(e.target.value)}
+                                    disabled={forceStripeOnly}
                                     className="bg-white/5 border-white/10 mt-1 text-lg"
                                     placeholder={remaining.toFixed(2)}
                                 />
-                                <div className="flex gap-2 mt-2">
-                                    <Button size="sm" variant="outline" onClick={() => setAmount(remaining.toFixed(2))} className="border-white/10 text-xs">Residuo</Button>
-                                    <Button size="sm" variant="outline" onClick={splitHalf} className="border-white/10 text-xs">Metà</Button>
-                                    <Button size="sm" variant="outline" onClick={() => splitCustom(3)} className="border-white/10 text-xs">1/3</Button>
-                                    <Button size="sm" variant="outline" onClick={() => splitCustom(4)} className="border-white/10 text-xs">1/4</Button>
+                                {!forceStripeOnly && (
+                                    <div className="flex gap-2 mt-2">
+                                        <Button size="sm" variant="outline" onClick={() => setAmount(remaining.toFixed(2))} className="border-white/10 text-xs">Residuo</Button>
+                                        <Button size="sm" variant="outline" onClick={splitHalf} className="border-white/10 text-xs">Metà</Button>
+                                        <Button size="sm" variant="outline" onClick={() => splitCustom(3)} className="border-white/10 text-xs">1/3</Button>
+                                        <Button size="sm" variant="outline" onClick={() => splitCustom(4)} className="border-white/10 text-xs">1/4</Button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {!forceStripeOnly && (
+                                <div>
+                                    <label className="text-xs text-zinc-400 uppercase tracking-wider">Etichetta (opzionale)</label>
+                                    <Input value={label} onChange={e => setLabel(e.target.value)} maxLength={64} placeholder="Es. Cliente 1, Alla romana..." className="bg-white/5 border-white/10 mt-1" />
                                 </div>
-                            </div>
+                            )}
 
-                            <div>
-                                <label className="text-xs text-zinc-400 uppercase tracking-wider">Etichetta (opzionale)</label>
-                                <Input value={label} onChange={e => setLabel(e.target.value)} maxLength={64} placeholder="Es. Cliente 1, Alla romana..." className="bg-white/5 border-white/10 mt-1" />
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                                <Button
-                                    onClick={() => registerManual('cash')}
-                                    disabled={processing}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white h-14 flex flex-col gap-0"
-                                >
-                                    <Wallet size={20} />
-                                    <span className="text-xs">Contanti</span>
-                                </Button>
-                                <Button
-                                    onClick={() => registerManual('card_pos')}
-                                    disabled={processing}
-                                    className="bg-blue-600 hover:bg-blue-500 text-white h-14 flex flex-col gap-0"
-                                >
-                                    <CreditCard size={20} />
-                                    <span className="text-xs">POS carta</span>
-                                </Button>
+                            <div className={`grid grid-cols-1 ${forceStripeOnly ? '' : 'sm:grid-cols-3'} gap-2 pt-1`}>
+                                {!forceStripeOnly && (
+                                    <>
+                                        <Button
+                                            onClick={() => registerManual('cash')}
+                                            disabled={processing}
+                                            className="bg-emerald-600 hover:bg-emerald-500 text-white h-14 flex flex-col gap-0"
+                                        >
+                                            <Wallet size={20} />
+                                            <span className="text-xs">Contanti</span>
+                                        </Button>
+                                        <Button
+                                            onClick={() => registerManual('card_pos')}
+                                            disabled={processing}
+                                            className="bg-blue-600 hover:bg-blue-500 text-white h-14 flex flex-col gap-0"
+                                        >
+                                            <CreditCard size={20} />
+                                            <span className="text-xs">POS carta</span>
+                                        </Button>
+                                    </>
+                                )}
                                 <Button
                                     onClick={payStripeLink}
                                     disabled={processing}
                                     className="bg-violet-600 hover:bg-violet-500 text-white h-14 flex flex-col gap-0"
                                 >
                                     <CreditCard size={20} />
-                                    <span className="text-xs">Stripe online</span>
+                                    <span className="text-xs">{forceStripeOnly ? 'Apri pagamento Stripe' : 'Stripe online'}</span>
                                 </Button>
                             </div>
                         </div>

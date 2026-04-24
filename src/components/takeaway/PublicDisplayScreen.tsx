@@ -94,7 +94,7 @@ export default function PublicDisplayScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restaurantId])
 
-    const preparing = orders.filter(o => o.status === 'PENDING' || o.status === 'PREPARING').slice().sort((a, b) => a.pickup_number - b.pickup_number)
+    const preparing = orders.filter(o => o.status === 'PREPARING').slice().sort((a, b) => a.pickup_number - b.pickup_number)
     const ready = orders.filter(o => o.status === 'READY').slice().sort((a, b) => a.pickup_number - b.pickup_number)
 
     if (loading) {

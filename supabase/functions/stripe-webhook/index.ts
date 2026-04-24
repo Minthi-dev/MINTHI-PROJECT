@@ -1,9 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import Stripe from "https://esm.sh/stripe@20.4.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
-    apiVersion: "2024-04-10" as any,
+    apiVersion: "2026-02-25.clover" as any,
     httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -118,17 +118,23 @@ serve(async (req) => {
                         break;
                     }
 
+                    const currentPaid = Number(order.paid_amount) || 0;
+                    const total = Number(order.total_amount) || 0;
+                    if (currentPaid + 0.01 >= total) {
+                        console.log(`[WEBHOOK] takeaway_order: ordine ${orderId} già saldato, skip extra session ${(session as any).id}`);
+                        break;
+                    }
+                    const creditedAmount = Math.min(amountPaid, Math.max(0, total - currentPaid));
                     const newPayments = [
                         ...existing,
                         {
                             method: "stripe",
-                            amount: Math.round(amountPaid * 100) / 100,
+                            amount: Math.round(creditedAmount * 100) / 100,
                             at: new Date().toISOString(),
                             label: stripeLabel,
                         },
                     ];
-                    const newPaid = Math.round(((Number(order.paid_amount) || 0) + amountPaid) * 100) / 100;
-                    const total = Number(order.total_amount) || 0;
+                    const newPaid = Math.round((currentPaid + creditedAmount) * 100) / 100;
                     const fullyPaid = newPaid + 0.01 >= total;
 
                     // IMPORTANTE: il pagamento Stripe NON chiude l'ordine.
@@ -142,9 +148,9 @@ serve(async (req) => {
                         // Traccia il metodo ma NON chiude l'ordine né imposta closed_at.
                         updates.payment_method = newPayments.length > 1 ? "split" : "stripe";
                     }
-                    if (order.status === "PENDING") {
-                        // Primo pagamento (anche parziale/deposito): sposta in PREPARING
-                        // così la cucina vede subito l'ordine.
+                    if (order.status === "PENDING" && fullyPaid) {
+                        // L'asporto prepagato entra in cucina solo quando Stripe
+                        // ha coperto l'intero totale dell'ordine.
                         updates.status = "PREPARING";
                     }
 

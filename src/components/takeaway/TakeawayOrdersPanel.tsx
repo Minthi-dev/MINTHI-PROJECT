@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Copy, Package, User as UserIcon, Check, ArrowsDownUp, FunnelSimple } from '@phosphor-icons/react'
+import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Copy, Package, User as UserIcon, Check, ArrowsDownUp, FunnelSimple, CreditCard } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import TakeawayPaymentDialog from './TakeawayPaymentDialog'
 import TakeawayQRPosterButton from './TakeawayQRPosterButton'
@@ -16,6 +16,7 @@ import TakeawayQRPosterButton from './TakeawayQRPosterButton'
 interface Props {
     restaurantId: string
     restaurantName?: string
+    takeawayRequireStripe?: boolean
     onPrintOrder?: (order: Order) => void
 }
 
@@ -54,7 +55,7 @@ function formatMinutes(mins: number) {
     return `${m}'`
 }
 
-export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPrintOrder }: Props) {
+export default function TakeawayOrdersPanel({ restaurantId, restaurantName, takeawayRequireStripe = false, onPrintOrder }: Props) {
     const [orders, setOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
     const [tab, setTab] = useState<Tab>('active')
@@ -62,6 +63,7 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPr
     const [sortOrder, setSortOrder] = useState<SortOrder>('oldest')
     const [selected, setSelected] = useState<Order | null>(null)
     const [payOpen, setPayOpen] = useState(false)
+    const [forceStripePayment, setForceStripePayment] = useState(false)
     const [detailOpen, setDetailOpen] = useState(false)
     const [now, setNow] = useState(Date.now())
 
@@ -111,7 +113,7 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPr
         }
         const counts = {
             active: activeAll.length,
-            pending: activeAll.filter(o => o.status === 'PENDING' || o.status === 'PREPARING').length,
+            pending: activeAll.filter(o => o.status === 'PREPARING').length,
             ready: activeAll.filter(o => o.status === 'READY').length,
             archive: archiveAll.length,
         }
@@ -125,7 +127,7 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPr
                 .slice(0, ARCHIVE_DISPLAY_LIMIT)
         }
         let list = active
-        if (statusFilter === 'preparing') list = list.filter(o => o.status === 'PENDING' || o.status === 'PREPARING')
+        if (statusFilter === 'preparing') list = list.filter(o => o.status === 'PREPARING')
         else if (statusFilter === 'ready') list = list.filter(o => o.status === 'READY')
         const sorted = [...list].sort((a, b) => {
             const ta = new Date(a.created_at).getTime()
@@ -152,7 +154,11 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPr
         }
     }
 
-    const openPayment = (o: Order) => { setSelected(o); setPayOpen(true) }
+    const openPayment = (o: Order, forceStripeOnly = false) => {
+        setSelected(o)
+        setForceStripePayment(forceStripeOnly)
+        setPayOpen(true)
+    }
     const openDetail = (o: Order) => { setSelected(o); setDetailOpen(true) }
 
     const copyPickupLink = (o: Order) => {
@@ -265,6 +271,7 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPr
                                     onPay={openPayment}
                                     onDetail={openDetail}
                                     onCopy={copyPickupLink}
+                                    takeawayRequireStripe={takeawayRequireStripe}
                                 />
                             ))}
                         </AnimatePresence>
@@ -278,6 +285,7 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, onPr
                 order={selected}
                 onPaid={refresh}
                 onPrintReceipt={onPrintOrder}
+                forceStripeOnly={forceStripePayment}
             />
 
             <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
@@ -338,18 +346,20 @@ interface TakeawayCardProps {
     order: Order
     now: number
     onStatus: (o: Order, next: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') => void
-    onPay: (o: Order) => void
+    onPay: (o: Order, forceStripeOnly?: boolean) => void
     onDetail: (o: Order) => void
     onCopy: (o: Order) => void
+    takeawayRequireStripe: boolean
 }
 
-function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy }: TakeawayCardProps) {
+function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy, takeawayRequireStripe }: TakeawayCardProps) {
     const due = orderDue(o)
     const meta = statusMeta[o.status] || statusMeta.PREPARING
     const minutesAgo = Math.floor((now - new Date(o.created_at).getTime()) / 60000)
     const isArchive = o.status === 'PAID' || o.status === 'PICKED_UP'
     const isReady = o.status === 'READY'
     const itemsCount = (o.items || []).reduce((s: number, it: any) => s + (it.quantity || 0), 0)
+    const lockedForStripePrepay = takeawayRequireStripe && o.status === 'PENDING' && due > 0.01
 
     return (
         <motion.div
@@ -379,7 +389,9 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy }: Take
                             </div>
                             <div className="text-sm text-zinc-400 font-mono tracking-tight">{o.customer_phone || ''}</div>
                             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                <Badge className={`${meta.color} border text-xs uppercase font-bold tracking-wide px-2 py-0.5`}>{meta.label}</Badge>
+                                <Badge className={`${meta.color} border text-xs uppercase font-bold tracking-wide px-2 py-0.5`}>
+                                    {lockedForStripePrepay ? 'Attesa Stripe' : meta.label}
+                                </Badge>
                                 <span className="text-xs text-zinc-400 flex items-center gap-1 font-medium">
                                     <Clock size={12} weight="fill" />{formatMinutes(minutesAgo)}
                                 </span>
@@ -391,6 +403,11 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy }: Take
                 <CardContent className="flex-1 p-4 flex flex-col gap-3">
                     {/* Item list — bigger text */}
                     <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 -mr-1">
+                        {lockedForStripePrepay && (
+                            <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-100">
+                                Ordine non inviato in cucina: pagamento online obbligatorio non ancora confermato.
+                            </div>
+                        )}
                         {(o.items || []).map((it: any) => (
                             <div key={it.id} className="flex items-start justify-between gap-2 text-sm">
                                 <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -429,7 +446,15 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy }: Take
 
                     {/* Actions */}
                     <div className="grid grid-cols-2 gap-2 mt-auto">
-                        {o.status === 'PENDING' && (
+                        {o.status === 'PENDING' && lockedForStripePrepay && (
+                            <Button
+                                disabled
+                                className="bg-zinc-800 text-zinc-400 border border-white/10 col-span-2 h-11 text-base"
+                            >
+                                <CreditCard size={18} weight="fill" className="mr-2" />Attesa pagamento Stripe
+                            </Button>
+                        )}
+                        {o.status === 'PENDING' && !lockedForStripePrepay && (
                             <Button
                                 onClick={() => onStatus(o, 'PREPARING')}
                                 className="bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 h-11 text-base shadow-lg shadow-amber-500/20"
@@ -461,11 +486,11 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy }: Take
                         {due > 0.01 && o.status !== 'CANCELLED' && o.status !== 'PICKED_UP' && (
                             <Button
                                 size="sm"
-                                onClick={() => onPay(o)}
+                                onClick={() => onPay(o, lockedForStripePrepay)}
                                 variant="outline"
                                 className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 col-span-2 h-10 text-sm font-semibold"
                             >
-                                <Receipt size={16} className="mr-1.5" /> Gestisci pagamento
+                                <Receipt size={16} className="mr-1.5" /> {lockedForStripePrepay ? 'Apri pagamento Stripe' : 'Gestisci pagamento'}
                             </Button>
                         )}
                         <Button

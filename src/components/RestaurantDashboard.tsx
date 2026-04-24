@@ -2505,6 +2505,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                 <TakeawayOrdersPanel
                   restaurantId={restaurantId}
                   restaurantName={currentRestaurant?.name}
+                  takeawayRequireStripe={Boolean(currentRestaurant?.takeaway_require_stripe)}
                   onPrintOrder={async (order) => {
                     try {
                       await thermalPrinter.printTakeawayReceipt({ order, restaurantName: currentRestaurant?.name })

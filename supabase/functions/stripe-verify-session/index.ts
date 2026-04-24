@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import Stripe from "https://esm.sh/stripe@20.4.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
@@ -21,7 +21,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
  */
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
-    apiVersion: "2024-04-10" as any,
+    apiVersion: "2026-02-25.clover" as any,
     httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -54,7 +54,7 @@ serve(async (req) => {
         // Retrieve the session from Stripe — authoritative source of truth
         let session: any;
         try {
-            session = await stripe.checkout.sessions.retrieve(sessionId, {
+            session = await stripe.checkout.sessions.retrieve(sessionId, {}, {
                 stripeAccount: restaurant.stripe_connect_account_id,
             });
         } catch (err: any) {
@@ -95,12 +95,17 @@ serve(async (req) => {
             }
 
             const stripeLabel = `${splitLabel} [${sessionId}]`;
+            const currentPaid = Number(order.paid_amount) || 0;
+            const total = Number(order.total_amount) || 0;
+            if (currentPaid + 0.01 >= total) {
+                return json({ paid: true, alreadyRegistered: true, sessionId }, 200, corsHeaders);
+            }
+            const creditedAmount = Math.min(amountPaid, Math.max(0, total - currentPaid));
             const newPayments = [
                 ...existing,
-                { method: "stripe", amount: Math.round(amountPaid * 100) / 100, at: new Date().toISOString(), label: stripeLabel },
+                { method: "stripe", amount: Math.round(creditedAmount * 100) / 100, at: new Date().toISOString(), label: stripeLabel },
             ];
-            const newPaid = Math.round(((Number(order.paid_amount) || 0) + amountPaid) * 100) / 100;
-            const total = Number(order.total_amount) || 0;
+            const newPaid = Math.round((currentPaid + creditedAmount) * 100) / 100;
             const fullyPaid = newPaid + 0.01 >= total;
 
             // IMPORTANTE: il pagamento Stripe NON chiude l'ordine.
@@ -109,8 +114,9 @@ serve(async (req) => {
             if (fullyPaid) {
                 updates.payment_method = newPayments.length > 1 ? "split" : "stripe";
             }
-            if (order.status === "PENDING") {
-                // Primo pagamento: sposta l'ordine in PREPARING per la cucina.
+            if (order.status === "PENDING" && fullyPaid) {
+                // L'ordine asporto entra in cucina solo quando Stripe copre
+                // l'intero totale.
                 updates.status = "PREPARING";
             }
 
