@@ -55,10 +55,14 @@ serve(async (req) => {
         if (nextStatus === "READY") updates.ready_at = now;
         if (nextStatus === "PICKED_UP") {
             updates.picked_up_at = now;
-            // If fully paid, also close the order financially
-            if (Number(order.paid_amount) + 0.01 >= Number(order.total_amount)) {
+            // Closure automatica SOLO se l'ordine è effettivamente saldato
+            // (c'è un pagamento registrato E l'importo copre il totale).
+            // Non tocchiamo payment_method — è già stato impostato dalle funzioni
+            // di pagamento (takeaway-pay / stripe-webhook / stripe-verify-session).
+            const paid = Number(order.paid_amount) || 0;
+            const total = Number(order.total_amount) || 0;
+            if (paid > 0 && paid + 0.01 >= total) {
                 updates.status = "PAID";
-                updates.payment_method = "stripe"; // final settlement happens via takeaway-pay; see below
                 updates.closed_at = now;
             }
         }

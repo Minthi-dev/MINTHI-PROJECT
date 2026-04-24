@@ -131,16 +131,20 @@ serve(async (req) => {
                     const total = Number(order.total_amount) || 0;
                     const fullyPaid = newPaid + 0.01 >= total;
 
+                    // IMPORTANTE: il pagamento Stripe NON chiude l'ordine.
+                    // L'ordine rimane attivo (PENDING/PREPARING/READY) finché lo staff
+                    // non lo consegna manualmente. Stripe registra solo il pagamento.
                     const updates: Record<string, unknown> = {
                         paid_amount: newPaid,
                         payments: newPayments,
                     };
                     if (fullyPaid) {
-                        updates.status = "PAID";
+                        // Traccia il metodo ma NON chiude l'ordine né imposta closed_at.
                         updates.payment_method = newPayments.length > 1 ? "split" : "stripe";
-                        updates.closed_at = new Date().toISOString();
-                    } else if (order.status === "PENDING") {
-                        // Partial/deposit? Move to PREPARING so kitchen can see it.
+                    }
+                    if (order.status === "PENDING") {
+                        // Primo pagamento (anche parziale/deposito): sposta in PREPARING
+                        // così la cucina vede subito l'ordine.
                         updates.status = "PREPARING";
                     }
 

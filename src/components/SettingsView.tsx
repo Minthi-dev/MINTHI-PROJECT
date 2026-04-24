@@ -506,12 +506,12 @@ export function SettingsView({
                             key={value}
                             value={value}
                             data-settings-tab={value}
-                            className={`group relative shrink-0 rounded-none px-0 py-3 -mb-px text-[13px] tracking-wide text-zinc-500 hover:text-zinc-200 transition-colors gap-2 font-medium bg-transparent shadow-none focus-visible:outline-none focus-visible:ring-0 data-[state=active]:bg-transparent ${color === 'emerald'
+                            className={`group relative shrink-0 rounded-none px-0 py-3 -mb-px text-sm tracking-wide text-zinc-500 hover:text-zinc-200 transition-colors gap-2 font-semibold bg-transparent shadow-none focus-visible:outline-none focus-visible:ring-0 data-[state=active]:bg-transparent ${color === 'emerald'
                                 ? 'data-[state=active]:text-emerald-400'
                                 : 'data-[state=active]:text-amber-400'
                                 }`}
                         >
-                            <Icon size={14} weight="fill" className="opacity-60 group-data-[state=active]:opacity-100" />
+                            <Icon size={16} weight="fill" className="opacity-60 group-data-[state=active]:opacity-100" />
                             <span className="whitespace-nowrap">{label}</span>
                             {/* underline accent — appears only on active */}
                             <span className={`absolute bottom-0 left-0 right-0 h-[2px] rounded-full opacity-0 group-data-[state=active]:opacity-100 transition-opacity ${color === 'emerald'
@@ -529,15 +529,15 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-8 max-w-3xl"
+                        className="space-y-10 max-w-3xl"
                     >
                         {/* Profilo Attività */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Profilo Attività
                                 <InfoTip id="profilo" text="Il nome del ristorante viene mostrato ai clienti nel menù digitale QR, nelle ricevute e nella pagina di prenotazione online." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                 <div className="px-4 py-4">
                                     <Label className="text-[13px] text-zinc-400 mb-2 block">Nome del ristorante</Label>
                                     <div className="flex gap-2">
@@ -558,22 +558,22 @@ export function SettingsView({
                                     </div>
                                 </div>
                             </div>
-                            <p className="text-[12px] text-zinc-500 mt-2 px-1">
+                            <p className="text-[13px] text-zinc-500 mt-2 px-1 leading-relaxed">
                                 Appare sui menu digitali, sulle ricevute e nella pagina di prenotazione.
                             </p>
                         </section>
 
                         {/* Notifiche Sonore */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Notifiche Sonore
                                 <InfoTip id="suoni" text="Quando un cliente invia un ordine dal menù QR, il browser riproduce un suono di notifica. Tieni il volume del dispositivo attivo. Il suono funziona solo se la pagina è aperta e il browser ha il permesso audio." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
-                                <div data-tour="settings-sound-toggle" className="flex items-center justify-between gap-4 px-4 py-3.5">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                <div data-tour="settings-sound-toggle" className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium text-zinc-100">Suono nuovi ordini</p>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Effetto sonoro all'arrivo di una comanda in cucina.</p>
+                                        <p className="text-[15px] font-semibold text-white">Suono nuovi ordini</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Effetto sonoro all'arrivo di una comanda in cucina.</p>
                                     </div>
                                     <Switch
                                         checked={soundEnabled}
@@ -582,10 +582,10 @@ export function SettingsView({
                                     />
                                 </div>
                                 {soundEnabled && (
-                                    <div className="flex items-center justify-between gap-4 px-4 py-3.5 animate-in slide-in-from-top-2">
+                                    <div className="flex items-center justify-between gap-4 px-5 py-4 animate-in slide-in-from-top-2">
                                         <div className="min-w-0">
-                                            <p className="text-sm font-medium text-zinc-100">Tono di notifica</p>
-                                            <p className="text-[13px] text-zinc-400 mt-0.5">Scegli il suono e ascolta l'anteprima.</p>
+                                            <p className="text-[15px] font-semibold text-white">Tono di notifica</p>
+                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Scegli il suono e ascolta l'anteprima.</p>
                                         </div>
                                         <div className="flex gap-2 shrink-0">
                                             <Select value={selectedSound} onValueChange={(val) => setSelectedSound(val as SoundType)}>
@@ -619,15 +619,15 @@ export function SettingsView({
                         {/* Guida & Setup */}
                         {(onRestartTour || onRestartSetup) && (
                             <section>
-                                <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                                <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                     Guida & Setup
                                 </h3>
-                                <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
+                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                     {onRestartTour && (
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Guida interattiva</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Naviga un sito demo con dati di esempio e scopri tutte le funzioni.</p>
+                                                <p className="text-[15px] font-semibold text-white">Guida interattiva</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Naviga un sito demo con dati di esempio e scopri tutte le funzioni.</p>
                                             </div>
                                             <Button
                                                 data-tour="settings-demo-btn"
@@ -642,10 +642,10 @@ export function SettingsView({
                                         </div>
                                     )}
                                     {onRestartSetup && (
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Configurazione guidata</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Segui i passaggi per configurare categorie, piatti, tavoli e impostazioni.</p>
+                                                <p className="text-[15px] font-semibold text-white">Configurazione guidata</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Segui i passaggi per configurare categorie, piatti, tavoli e impostazioni.</p>
                                             </div>
                                             <Button
                                                 onClick={onRestartSetup}
@@ -663,14 +663,14 @@ export function SettingsView({
 
                         {/* Assistenza */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                 Assistenza
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium text-zinc-100">Hai bisogno di aiuto?</p>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Il nostro supporto è a disposizione.</p>
+                                        <p className="text-[15px] font-semibold text-white">Hai bisogno di aiuto?</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Il nostro supporto è a disposizione.</p>
                                     </div>
                                     <a
                                         href="tel:+393517570155"
@@ -692,15 +692,15 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-8 max-w-3xl"
+                        className="space-y-10 max-w-3xl"
                     >
                         {/* All You Can Eat */}
                         <section data-tour="settings-ayce">
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 All You Can Eat
                                 <InfoTip id="ayce" text="L'All You Can Eat attiva una modalità a prezzo fisso: il cliente paga un importo unico e può ordinare liberamente dal menù. Puoi impostare un limite massimo di piatti per persona. Supporta programmazione settimanale con prezzi diversi per ogni giorno della settimana." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                 <div className="px-4 py-4">
                                     <WeeklyScheduleEditor
                                         type="ayce"
@@ -723,11 +723,11 @@ export function SettingsView({
 
                         {/* Coperto */}
                         <section data-tour="settings-coperto">
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Coperto
                                 <InfoTip id="coperto" text="Il Coperto è un costo aggiuntivo applicato automaticamente per ogni persona al tavolo. Viene aggiunto al conto finale. Supporta programmazione settimanale con prezzi diversi per giorno." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                 <div className="px-4 py-4">
                                     <WeeklyScheduleEditor
                                         type="coperto"
@@ -749,18 +749,18 @@ export function SettingsView({
 
                         {/* Opzioni Menu */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                 Opzioni Menu
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                 {/* Suddivisione in Portate */}
-                                <div data-tour="settings-course-split" className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                <div data-tour="settings-course-split" className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-zinc-100">Suddivisione in portate</p>
+                                            <p className="text-[15px] font-semibold text-white">Suddivisione in portate</p>
                                             <InfoTip id="portate" text="Quando attiva, il cliente sceglie per ogni piatto in quale portata vuole riceverlo (Primo, Secondo, ecc.). La cucina riceve gli ordini raggruppati per portata. In modalità cameriere, il cameriere assegna la portata al momento dell'ordine." />
                                         </div>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Il cliente sceglie l'ordine di uscita (Antipasti, Primi, Secondi).</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Il cliente sceglie l'ordine di uscita (Antipasti, Primi, Secondi).</p>
                                     </div>
                                     <Switch
                                         checked={courseSplittingEnabled}
@@ -773,13 +773,13 @@ export function SettingsView({
                                 </div>
 
                                 {/* Suggerimenti Portate Successive */}
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-zinc-100">Suggerimenti portate</p>
+                                            <p className="text-[15px] font-semibold text-white">Suggerimenti portate</p>
                                             <InfoTip id="suggestions" text="Dopo che il cliente aggiunge un piatto al carrello, il sistema suggerisce automaticamente le categorie successive (es. se ordina un Primo, propone Secondi, Contorni, Dolci, Bevande). L'ordine segue quello delle categorie in Gestione Menu. Se la divisione in portate è attiva, il piatto suggerito verrà inserito automaticamente nella portata successiva." />
                                         </div>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Propone le portate successive dopo ogni ordine.</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Propone le portate successive dopo ogni ordine.</p>
                                     </div>
                                     <Switch
                                         checked={courseSuggestionsEnabled}
@@ -792,13 +792,13 @@ export function SettingsView({
                                 </div>
 
                                 {/* Menu Solo Visualizzazione */}
-                                <div data-tour="settings-viewonly" className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                <div data-tour="settings-viewonly" className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-zinc-100">Menu solo visualizzazione</p>
+                                            <p className="text-[15px] font-semibold text-white">Menu solo visualizzazione</p>
                                             <InfoTip id="viewonly" text="Utile se vuoi usare Minthi solo come menù digitale senza gestione ordini. I clienti scansionano il QR e vedono piatti e prezzi, ma non possono ordinare. I QR code mostreranno 'Scansiona per visualizzare il menù' invece di 'Scansiona per ordinare'." />
                                         </div>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">I clienti visualizzano il menù senza poter ordinare.</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">I clienti visualizzano il menù senza poter ordinare.</p>
                                     </div>
                                     <Switch
                                         checked={viewOnlyMenuEnabled}
@@ -808,13 +808,13 @@ export function SettingsView({
                                 </div>
 
                                 {/* Tempo Medio di Cottura */}
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-zinc-100">Tempo medio di cottura</p>
+                                            <p className="text-[15px] font-semibold text-white">Tempo medio di cottura</p>
                                             <InfoTip id="cooktime" text="Minthi calcola automaticamente il tempo medio di preparazione di ogni piatto basandosi sugli ordini degli ultimi 2 mesi (servono almeno 3 ordini per piatto). Il tempo viene mostrato sotto il nome del piatto nel menù cliente e nella dashboard cameriere." />
                                         </div>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Mostra il tempo medio di preparazione sotto ogni piatto.</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Mostra il tempo medio di preparazione sotto ogni piatto.</p>
                                     </div>
                                     <Switch
                                         checked={showCookingTimes}
@@ -834,19 +834,19 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-8 max-w-3xl"
+                        className="space-y-10 max-w-3xl"
                     >
                         {/* Modalità Cameriere */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Modalità Cameriere
                                 <InfoTip id="staff" text="Crea un account per ogni cameriere. Il cameriere accede dalla pagina di login con le sue credenziali e vede solo i tavoli a lui assegnati, gli ordini in arrivo e può segnare i piatti come serviti. Assegna i tavoli ai camerieri dalla sezione Tavoli nella dashboard." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium text-zinc-100">Abilita gestione camerieri</p>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Crea credenziali dedicate e assegna tavoli al personale di sala.</p>
+                                        <p className="text-[15px] font-semibold text-white">Abilita gestione camerieri</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Crea credenziali dedicate e assegna tavoli al personale di sala.</p>
                                     </div>
                                     <Switch
                                         data-tour="settings-waiter-toggle"
@@ -858,10 +858,10 @@ export function SettingsView({
 
                                 {waiterModeEnabled && (
                                     <>
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Permessi di pagamento</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">I camerieri possono segnare i tavoli come pagati dalla loro dashboard.</p>
+                                                <p className="text-[15px] font-semibold text-white">Permessi di pagamento</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">I camerieri possono segnare i tavoli come pagati dalla loro dashboard.</p>
                                             </div>
                                             <Switch
                                                 checked={allowWaiterPayments}
@@ -869,10 +869,10 @@ export function SettingsView({
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
                                         </div>
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Consegna automatica piatti pronti</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Quando un piatto è pronto in cucina, viene considerato consegnato senza notifica al cameriere.</p>
+                                                <p className="text-[15px] font-semibold text-white">Consegna automatica piatti pronti</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Quando un piatto è pronto in cucina, viene considerato consegnato senza notifica al cameriere.</p>
                                             </div>
                                             <Switch
                                                 checked={autoDeliverReady}
@@ -895,8 +895,8 @@ export function SettingsView({
                         {/* Credenziali Camerieri */}
                         {waiterModeEnabled && (
                             <section>
-                                <div className="flex items-center justify-between mb-2.5 px-1">
-                                    <h3 className="text-[13px] font-medium text-zinc-400 tracking-wide">
+                                <div className="flex items-center justify-between mb-3 px-1">
+                                    <h3 className="text-[15px] font-bold text-white tracking-wide uppercase">
                                         Credenziali Camerieri
                                     </h3>
                                     <Button
@@ -914,7 +914,7 @@ export function SettingsView({
                                     </Button>
                                 </div>
 
-                                <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                     {isStaffLoading ? (
                                         <p className="text-zinc-500 text-sm px-4 py-6 text-center">Caricamento in corso...</p>
                                     ) : staffList.length === 0 ? (
@@ -1041,19 +1041,19 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-8 max-w-3xl"
+                        className="space-y-10 max-w-3xl"
                     >
                         {/* Turnazione Tavoli */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Turnazione Tavoli
                                 <InfoTip id="turnazione" text="La durata della prenotazione determina per quanto tempo un tavolo resta occupato nel calendario prenotazioni. Dopo questo periodo il tavolo torna disponibile per nuove prenotazioni. Es. con 2 ore, una prenotazione alle 20:00 libera il tavolo alle 22:00." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium text-zinc-100">Durata standard prenotazione</p>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Quanto tempo il tavolo resta occupato nel calendario.</p>
+                                        <p className="text-[15px] font-semibold text-white">Durata standard prenotazione</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Quanto tempo il tavolo resta occupato nel calendario.</p>
                                     </div>
                                     <Select
                                         data-tour="settings-turnover"
@@ -1079,15 +1079,15 @@ export function SettingsView({
 
                         {/* Prenotazioni Pubbliche via QR */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Prenotazioni Pubbliche
                                 <InfoTip id="qr-prenotazioni" text="I clienti possono prenotare scannerizzando un QR code dedicato (diverso da quello dei tavoli). Scelgono data, ora, numero persone e sala. Le prenotazioni appaiono nel calendario nella sezione Prenotazioni. Puoi disattivare temporaneamente se il ristorante è pieno." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium text-zinc-100">Abilita prenotazioni da QR</p>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">I clienti prenotano da QR dedicato. Se disattivato, il QR mostra un avviso.</p>
+                                        <p className="text-[15px] font-semibold text-white">Abilita prenotazioni da QR</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">I clienti prenotano da QR dedicato. Se disattivato, il QR mostra un avviso.</p>
                                     </div>
                                     <Switch
                                         data-tour="settings-public-booking"
@@ -1096,10 +1096,10 @@ export function SettingsView({
                                         className="data-[state=checked]:bg-amber-500 shrink-0"
                                     />
                                 </div>
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
                                         <p className={`text-sm font-medium ${enablePublicReservations ? 'text-zinc-100' : 'text-zinc-500'}`}>Consenti scelta sala</p>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">Il cliente può indicare preferenze sulla zona (es. Terrazza, Interno).</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Il cliente può indicare preferenze sulla zona (es. Terrazza, Interno).</p>
                                     </div>
                                     <Switch
                                         disabled={!enablePublicReservations}
@@ -1113,10 +1113,10 @@ export function SettingsView({
 
                         {/* Orari di Servizio */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                 Orari di Servizio
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                 <div className="px-4 py-4">
                                     <WeeklyServiceHoursEditor
                                         schedule={weeklyServiceHours || {
@@ -1141,18 +1141,18 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-8 max-w-3xl"
+                        className="space-y-10 max-w-3xl"
                     >
                         {/* Servizio Asporto — toggle principale */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                 Servizio Asporto
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-zinc-100">Abilita asporto</p>
+                                            <p className="text-[15px] font-semibold text-white">Abilita asporto</p>
                                             {takeawayEnabled && (
                                                 <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
                                                     <span className="w-1 h-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]" />
@@ -1160,7 +1160,7 @@ export function SettingsView({
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
                                             {takeawayEnabled
                                                 ? 'I clienti ordinano dal QR pubblico e ritirano al bancone.'
                                                 : 'Attiva per permettere ordini da asporto con QR code e numeri di ritiro.'}
@@ -1175,7 +1175,7 @@ export function SettingsView({
                                 </div>
                             </div>
                             {!takeawayEnabled && (
-                                <p className="text-[12px] text-zinc-500 mt-2 px-1">
+                                <p className="text-[13px] text-zinc-500 mt-2 px-1 leading-relaxed">
                                     Attiva l'asporto per sbloccare menu pubblico, numeri di ritiro, display sala d'attesa e pannello cassa asporto.
                                 </p>
                             )}
@@ -1186,14 +1186,14 @@ export function SettingsView({
                             <>
                                 {/* Modalità servizio */}
                                 <section>
-                                    <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                                    <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                         Modalità servizio
                                     </h3>
-                                    <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Servizio ai tavoli</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Disattiva se fai solo asporto.</p>
+                                                <p className="text-[15px] font-semibold text-white">Servizio ai tavoli</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Disattiva se fai solo asporto.</p>
                                             </div>
                                             <Switch
                                                 checked={dineInEnabled}
@@ -1202,10 +1202,10 @@ export function SettingsView({
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
                                         </div>
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Pagamento online obbligatorio</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Il cliente paga con carta prima che l'ordine arrivi in cucina.</p>
+                                                <p className="text-[15px] font-semibold text-white">Pagamento online obbligatorio</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Il cliente paga con carta prima che l'ordine arrivi in cucina.</p>
                                             </div>
                                             <Switch
                                                 checked={takeawayRequireStripe}
@@ -1227,14 +1227,14 @@ export function SettingsView({
 
                                 {/* Tempi & avvisi */}
                                 <section>
-                                    <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                                    <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                         Tempi & avvisi
                                     </h3>
-                                    <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Tempo preparazione</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Minuti mostrati al cliente dopo l'ordine.</p>
+                                                <p className="text-[15px] font-semibold text-white">Tempo preparazione</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Minuti mostrati al cliente dopo l'ordine.</p>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <Input
@@ -1249,10 +1249,10 @@ export function SettingsView({
                                                 <span className="text-[13px] text-zinc-500">min</span>
                                             </div>
                                         </div>
-                                        <div className="px-4 py-3.5">
+                                        <div className="px-5 py-4">
                                             <div className="mb-2">
-                                                <p className="text-sm font-medium text-zinc-100">Nota per il ritiro</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Visibile al cliente nella schermata di conferma ordine.</p>
+                                                <p className="text-[15px] font-semibold text-white">Nota per il ritiro</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Visibile al cliente nella schermata di conferma ordine.</p>
                                             </div>
                                             <Input
                                                 value={takeawayPickupNotice}
@@ -1277,19 +1277,19 @@ export function SettingsView({
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="space-y-8 max-w-3xl"
+                        className="space-y-10 max-w-3xl"
                     >
                         {/* Pagamenti al tavolo */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide flex items-center gap-2">
+                            <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Pagamenti al Tavolo
                                 <InfoTip id="pagamenti" text="Attivando i pagamenti, i clienti possono pagare il conto con carta direttamente dal menù QR. Devi collegare un account Stripe per ricevere i pagamenti sul tuo conto bancario. I soldi arrivano automaticamente. Ricordati di emettere lo scontrino fiscale separatamente." />
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
-                                <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                <div className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-zinc-100">Accetta pagamenti online</p>
+                                            <p className="text-[15px] font-semibold text-white">Accetta pagamenti online</p>
                                             {stripePaymentsEnabled && (
                                                 <span className="inline-flex items-center gap-1 text-[10px] text-violet-300 font-medium">
                                                     <span className="w-1 h-1 rounded-full bg-violet-400 shadow-[0_0_6px_rgba(139,92,246,0.8)]" />
@@ -1297,7 +1297,7 @@ export function SettingsView({
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-[13px] text-zinc-400 mt-0.5">I clienti pagano dal menu QR — i soldi arrivano sul tuo conto Stripe.</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">I clienti pagano dal menu QR — i soldi arrivano sul tuo conto Stripe.</p>
                                     </div>
                                     <Switch
                                         data-tour="settings-stripe-toggle"
@@ -1316,7 +1316,7 @@ export function SettingsView({
                                 </div>
 
                                 {stripePaymentsEnabled && (
-                                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                    <div className="flex items-center justify-between gap-4 px-5 py-4">
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
                                                 {subscriptionInfo?.stripe_connect_enabled ? (
@@ -1326,11 +1326,11 @@ export function SettingsView({
                                                 ) : (
                                                     <Buildings size={13} className="text-zinc-500 shrink-0" />
                                                 )}
-                                                <p className="text-sm font-medium text-zinc-100">
+                                                <p className="text-[15px] font-semibold text-white">
                                                     Account Stripe Connect
                                                 </p>
                                             </div>
-                                            <p className="text-[13px] text-zinc-400 mt-0.5">
+                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
                                                 {subscriptionInfo?.stripe_connect_enabled
                                                     ? 'Collegato · i pagamenti arrivano sul tuo conto.'
                                                     : subscriptionInfo?.stripe_connect_account_id
@@ -1507,17 +1507,17 @@ export function SettingsView({
 
                         {/* Abbonamento MINTHI */}
                         <section data-tour="settings-subscription">
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                 Abbonamento MINTHI
                             </h3>
                             {subscriptionInfo?.stripe_subscription_id ? (
                                 <>
-                                    <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
+                                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                         {/* Stato + piano */}
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    <p className="text-sm font-medium text-zinc-100">Stato abbonamento</p>
+                                                    <p className="text-[15px] font-semibold text-white">Stato abbonamento</p>
                                                     <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at
                                                         ? 'text-emerald-400'
                                                         : ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at
@@ -1533,16 +1533,16 @@ export function SettingsView({
                                                         {!subscriptionInfo.subscription_status && <><span className="w-1 h-1 rounded-full bg-emerald-500" />Attivo</>}
                                                     </span>
                                                 </div>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Piano mensile MINTHI</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Piano mensile MINTHI</p>
                                             </div>
                                         </div>
 
                                         {/* Prossimo addebito */}
                                         {nextPaymentDate && ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && (
-                                            <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                            <div className="flex items-center justify-between gap-4 px-5 py-4">
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-zinc-100">Prossimo addebito</p>
-                                                    <p className="text-[13px] text-zinc-400 mt-0.5">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                                    <p className="text-[15px] font-semibold text-white">Prossimo addebito</p>
+                                                    <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                                                 </div>
                                                 {activeDiscount && activeDiscount.is_active && priceAmount > 0 && (
                                                     <p className="text-sm text-amber-300 shrink-0">€{(priceAmount * (1 - activeDiscount.discount_percent / 100)).toFixed(2)}</p>
@@ -1552,10 +1552,10 @@ export function SettingsView({
 
                                         {/* Sconto attivo */}
                                         {activeDiscount && activeDiscount.is_active && (
-                                            <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                            <div className="flex items-center justify-between gap-4 px-5 py-4">
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-medium text-zinc-100">Sconto attivo</p>
-                                                    <p className="text-[13px] text-zinc-400 mt-0.5">
+                                                    <p className="text-[15px] font-semibold text-white">Sconto attivo</p>
+                                                    <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
                                                         {activeDiscount.discount_percent}%
                                                         {activeDiscount.discount_duration === 'forever' ? ' per sempre'
                                                             : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
@@ -1624,7 +1624,7 @@ export function SettingsView({
                                     </div>
                                 </>
                             ) : (
-                                <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                     <div className="px-4 py-8 text-center max-w-md mx-auto">
                                         <CreditCard className="text-emerald-400 mx-auto mb-4" weight="fill" size={26} />
                                         <p className="text-sm font-medium text-zinc-100 mb-1">Sblocca tutte le funzionalità</p>
@@ -1689,14 +1689,14 @@ export function SettingsView({
                         variants={containerVariants}
                         initial="hidden"
                         animate="visible"
-                        className="space-y-8 max-w-3xl"
+                        className="space-y-10 max-w-3xl"
                     >
                         {/* Tipo di connessione */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                 Tipo di connessione
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                 <div className="grid grid-cols-2 divide-x divide-white/[0.05]">
                                     {[
                                         { id: 'usb', icon: Printer, label: 'USB', desc: 'Cavo diretto al PC' },
@@ -1727,10 +1727,10 @@ export function SettingsView({
 
                                 {/* Network: relay URL */}
                                 {printer.settings.mode === 'network' && (
-                                    <div className="border-t border-white/[0.05] px-4 py-3.5">
+                                    <div className="border-t border-white/[0.05] px-5 py-4">
                                         <div className="mb-2">
-                                            <p className="text-sm font-medium text-zinc-100">URL Relay</p>
-                                            <p className="text-[13px] text-zinc-400 mt-0.5">Lascia il default se il relay gira sullo stesso PC.</p>
+                                            <p className="text-[15px] font-semibold text-white">URL Relay</p>
+                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Lascia il default se il relay gira sullo stesso PC.</p>
                                         </div>
                                         <Input
                                             value={printer.settings.networkRelayUrl}
@@ -1759,18 +1759,18 @@ export function SettingsView({
                         {/* Stato connessione */}
                         {printer.isSupported && (
                             <section>
-                                <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                                <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                     Stato
                                 </h3>
-                                <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
-                                    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                    <div className="flex items-center justify-between gap-4 px-5 py-4">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <span className={`w-2 h-2 rounded-full shrink-0 ${printer.connected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-zinc-600'}`} />
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">
+                                                <p className="text-[15px] font-semibold text-white">
                                                     {printer.connected ? 'Stampante collegata' : 'Nessuna stampante'}
                                                 </p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
                                                     {printer.connected
                                                         ? 'Pronta per stampare'
                                                         : printer.settings.mode === 'network'
@@ -1805,10 +1805,10 @@ export function SettingsView({
                                     </div>
 
                                     {printer.connected && (
-                                        <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">Stampa di prova</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">Verifica che la stampante funzioni correttamente.</p>
+                                                <p className="text-[15px] font-semibold text-white">Stampa di prova</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Verifica che la stampante funzioni correttamente.</p>
                                             </div>
                                             <Button
                                                 variant="outline"
@@ -1835,19 +1835,19 @@ export function SettingsView({
                         {/* Preferenze */}
                         {printer.isSupported && (
                             <section>
-                                <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                                <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                     Preferenze di stampa
                                 </h3>
-                                <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden divide-y divide-white/[0.05]">
+                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                     {[
                                         { key: 'autoPrint', label: 'Stampa automatica', desc: 'Le nuove comande vengono stampate automaticamente.' },
                                         { key: 'autoCut', label: 'Taglio automatico', desc: 'Taglia la carta dopo ogni comanda.' },
                                         { key: 'courseSeparate', label: 'Scontrino separato per portata', desc: 'Ogni portata su un foglio diverso.' },
                                     ].map(({ key, label, desc }) => (
-                                        <div key={key} className="flex items-center justify-between gap-4 px-4 py-3.5">
+                                        <div key={key} className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-medium text-zinc-100">{label}</p>
-                                                <p className="text-[13px] text-zinc-400 mt-0.5">{desc}</p>
+                                                <p className="text-[15px] font-semibold text-white">{label}</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">{desc}</p>
                                             </div>
                                             <Switch
                                                 checked={(printer.settings as any)[key]}
@@ -1862,10 +1862,10 @@ export function SettingsView({
 
                         {/* Istruzioni */}
                         <section>
-                            <h3 className="text-[13px] font-medium text-zinc-400 mb-2.5 px-1 tracking-wide">
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                 Come installare {printer.settings.mode === 'usb' ? '(USB)' : '(WiFi / LAN)'}
                             </h3>
-                            <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] overflow-hidden">
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
                                 <div className="px-4 py-4">
                                     {printer.settings.mode === 'usb' ? (
                                         <>
