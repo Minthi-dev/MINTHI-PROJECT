@@ -2506,7 +2506,30 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   restaurantId={restaurantId}
                   restaurantName={currentRestaurant?.name}
                   takeawayRequireStripe={Boolean(currentRestaurant?.takeaway_require_stripe)}
-                  onPrintOrder={async (order) => {
+                  onPrintKitchenOrder={async (order) => {
+                    try {
+                      await thermalPrinter.printKitchenOrder({
+                        order,
+                        tableLabel: `ASPORTO #${String(order.pickup_number || 0).padStart(3, '0')}`,
+                      })
+                      toast.success('Comanda asporto inviata alla stampante')
+                    } catch (e: any) {
+                      toast.error(e?.message || 'Errore stampa')
+                    }
+                  }}
+                  onAutoPrintKitchenOrder={async (order) => {
+                    const settings = thermalPrinter.settings
+                    if (!thermalPrinter.connected || !settings.enabled || !settings.autoPrint) return
+                    try {
+                      await thermalPrinter.printKitchenOrder({
+                        order,
+                        tableLabel: `ASPORTO #${String(order.pickup_number || 0).padStart(3, '0')}`,
+                      })
+                    } catch (e) {
+                      console.error('Auto-print takeaway failed:', e)
+                    }
+                  }}
+                  onPrintReceipt={async (order) => {
                     try {
                       await thermalPrinter.printTakeawayReceipt({ order, restaurantName: currentRestaurant?.name })
                       toast.success('Ricevuta inviata alla stampante')

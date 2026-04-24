@@ -4,6 +4,15 @@
  */
 
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
+const SESSION_TTL_DAYS = Number(Deno.env.get('MINTHI_SESSION_TTL_DAYS') || '14')
+
+type AppSession = {
+    user_id: string
+    role: 'ADMIN' | 'OWNER' | 'STAFF'
+    restaurant_id: string | null
+    expires_at: string
+    revoked_at: string | null
+}
 
 /**
  * Verifies that the request contains a valid Authorization header
@@ -57,6 +66,92 @@ export function validateRedirectUrl(url: string | undefined | null, fallback: st
     return fallback
 }
 
+function sessionSecret(): string {
+    return Deno.env.get('MINTHI_SESSION_SECRET') ||
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+        Deno.env.get('SUPABASE_ANON_KEY') ||
+        'minthi-session-fallback'
+}
+
+function randomToken(): string {
+    const bytes = new Uint8Array(32)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function sha256Hex(input: string): Promise<string> {
+    const bytes = new TextEncoder().encode(input)
+    const digest = await crypto.subtle.digest('SHA-256', bytes)
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function hashSessionToken(token: string): Promise<string> {
+    return sha256Hex(`${sessionSecret()}:${token}`)
+}
+
+export async function createAppSession(
+    supabase: any,
+    params: { userId: string; role: 'ADMIN' | 'OWNER' | 'STAFF'; restaurantId?: string | null }
+): Promise<{ sessionToken: string; expiresAt: string }> {
+    const sessionToken = randomToken()
+    const tokenHash = await hashSessionToken(sessionToken)
+    const expiresAt = new Date(Date.now() + Math.max(1, SESSION_TTL_DAYS) * 24 * 60 * 60 * 1000).toISOString()
+
+    const { error } = await supabase.from('app_sessions').insert({
+        user_id: params.userId,
+        role: params.role,
+        restaurant_id: params.restaurantId ?? null,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+    })
+
+    if (error) {
+        console.error('[AUTH] createAppSession error:', error)
+        throw new Error('Impossibile creare la sessione')
+    }
+
+    return { sessionToken, expiresAt }
+}
+
+export async function revokeAppSession(
+    supabase: any,
+    userId: string,
+    sessionToken?: string | null
+): Promise<void> {
+    if (!userId || !sessionToken) return
+    const tokenHash = await hashSessionToken(sessionToken)
+    await supabase
+        .from('app_sessions')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .eq('token_hash', tokenHash)
+        .is('revoked_at', null)
+}
+
+export async function verifySessionToken(
+    supabase: any,
+    userId: string,
+    sessionToken?: string | null
+): Promise<{ valid: boolean; session?: AppSession }> {
+    if (!userId || !sessionToken || typeof sessionToken !== 'string' || sessionToken.length < 32) {
+        return { valid: false }
+    }
+
+    const tokenHash = await hashSessionToken(sessionToken)
+    const { data: session, error } = await supabase
+        .from('app_sessions')
+        .select('user_id, role, restaurant_id, expires_at, revoked_at')
+        .eq('user_id', userId)
+        .eq('token_hash', tokenHash)
+        .maybeSingle()
+
+    if (error || !session) return { valid: false }
+    if (session.revoked_at) return { valid: false }
+    if (new Date(session.expires_at).getTime() <= Date.now()) return { valid: false }
+
+    return { valid: true, session: session as AppSession }
+}
+
 /**
  * Verifies user access to a restaurant.
  * Checks users table (ADMIN/OWNER) and restaurant_staff (STAFF).
@@ -64,7 +159,8 @@ export function validateRedirectUrl(url: string | undefined | null, fallback: st
 export async function verifyAccess(
     supabase: any,
     userId: string,
-    restaurantId?: string
+    restaurantId?: string,
+    sessionToken?: string | null
 ): Promise<{
     valid: boolean;
     role: string | null;
@@ -75,20 +171,30 @@ export async function verifyAccess(
 }> {
     const deny = { valid: false, role: null, isAdmin: false, isOwner: false, isStaff: false };
 
+    const sessionResult = await verifySessionToken(supabase, userId, sessionToken)
+    if (!sessionResult.valid || !sessionResult.session) {
+        return deny
+    }
+    const appSession = sessionResult.session
+
     // 1. Check users table (ADMIN / OWNER)
     const { data: user } = await supabase
         .from("users").select("id, role").eq("id", userId).maybeSingle();
 
     if (user) {
-        if (user.role === "ADMIN") {
+        if (user.role === "ADMIN" && appSession.role === "ADMIN") {
             return { valid: true, role: "ADMIN", isAdmin: true, isOwner: false, isStaff: false };
         }
-        if (restaurantId) {
+        if (user.role === "OWNER" && appSession.role === "OWNER" && restaurantId) {
+            if (appSession.restaurant_id && appSession.restaurant_id !== restaurantId) return { ...deny, role: "OWNER" }
             const { data: rest } = await supabase
                 .from("restaurants").select("owner_id").eq("id", restaurantId).maybeSingle();
             if (rest && rest.owner_id === userId) {
                 return { valid: true, role: "OWNER", isAdmin: false, isOwner: true, isStaff: false };
             }
+        }
+        if (user.role === "OWNER" && appSession.role === "OWNER" && !restaurantId) {
+            return { valid: true, role: "OWNER", isAdmin: false, isOwner: true, isStaff: false, staffRestaurantId: appSession.restaurant_id ?? undefined };
         }
         return { ...deny, role: user.role };
     }
@@ -98,8 +204,14 @@ export async function verifyAccess(
         .from("restaurant_staff").select("id, restaurant_id, is_active")
         .eq("id", userId).eq("is_active", true).maybeSingle();
 
-    if (staff && (!restaurantId || staff.restaurant_id === restaurantId)) {
+    if (staff && appSession.role === "STAFF" && (!restaurantId || staff.restaurant_id === restaurantId) && (!appSession.restaurant_id || appSession.restaurant_id === staff.restaurant_id)) {
         return { valid: true, role: "STAFF", isAdmin: false, isOwner: false, isStaff: true, staffRestaurantId: staff.restaurant_id };
+    }
+
+    // Legacy waiter sessions are not backed by restaurant_staff rows. They are
+    // still server-created and scoped to a single restaurant via app_sessions.
+    if (!staff && appSession.role === "STAFF" && appSession.restaurant_id && (!restaurantId || appSession.restaurant_id === restaurantId)) {
+        return { valid: true, role: "STAFF", isAdmin: false, isOwner: false, isStaff: true, staffRestaurantId: appSession.restaurant_id };
     }
 
     return deny;

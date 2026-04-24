@@ -22,11 +22,11 @@ serve(async (req) => {
     }
 
     try {
-        const { action, amount_cents, userId } = await req.json();
+        const { action, amount_cents, userId, sessionToken } = await req.json();
 
         // "create" requires admin auth; "get" is read-only (admin panel only)
         if (userId) {
-            const access = await verifyAccess(supabase, userId);
+            const access = await verifyAccess(supabase, userId, undefined, sessionToken);
             if (!access.valid || !access.isAdmin) {
                 return new Response(JSON.stringify({ error: "Non autorizzato — solo admin" }), {
                     status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -22,7 +22,7 @@ serve(async (req) => {
     }
 
     try {
-        const { userId, priceId, restaurantId, pendingRegistrationId, successUrl, cancelUrl, couponId } = await req.json();
+        const { userId, priceId, restaurantId, pendingRegistrationId, successUrl, cancelUrl, couponId, sessionToken } = await req.json();
 
         // Auth: existing restaurant requires userId + verifyAccess; registration flow skips auth
         if (restaurantId && !pendingRegistrationId) {
@@ -31,7 +31,7 @@ serve(async (req) => {
                     status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
                 });
             }
-            const access = await verifyAccess(supabase, userId, restaurantId);
+            const access = await verifyAccess(supabase, userId, restaurantId, sessionToken);
             if (!access.valid) {
                 return new Response(JSON.stringify({ error: "Forbidden" }), {
                     status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },

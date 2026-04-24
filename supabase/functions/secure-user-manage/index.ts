@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import bcrypt from "https://esm.sh/bcryptjs@2.4.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyAccess } from "../_shared/auth.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -13,15 +14,14 @@ serve(async (req) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
     try {
-        const { userId, action, data, targetUserId } = await req.json();
+        const { userId, action, data, targetUserId, sessionToken } = await req.json();
         const json = (body: any, status = 200) =>
             new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
         if (!userId || !action) return json({ error: "Parametri mancanti" }, 400);
 
-        // Only ADMIN can manage users
-        const { data: caller } = await supabase.from("users").select("id, role").eq("id", userId).maybeSingle();
-        if (!caller || caller.role !== "ADMIN") return json({ error: "Non autorizzato: solo admin" }, 403);
+        const access = await verifyAccess(supabase, userId, undefined, sessionToken);
+        if (!access.valid || !access.isAdmin) return json({ error: "Non autorizzato: solo admin" }, 403);
 
         switch (action) {
             case "create": {

@@ -29,15 +29,15 @@ serve(async (req) => {
     }
 
     try {
-        const { userId, to, subject, html, text } = await req.json() as EmailRequest & { userId?: string }
+        const { userId, to, subject, html, text, sessionToken } = await req.json() as EmailRequest & { userId?: string; sessionToken?: string }
 
         if (!userId) {
             return new Response(JSON.stringify({ error: "Authentication required" }), {
                 status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
             })
         }
-        const access = await verifyAccess(supabase, userId)
-        if (!access.valid) {
+        const access = await verifyAccess(supabase, userId, undefined, sessionToken)
+        if (!access.valid || !access.isAdmin) {
             return new Response(JSON.stringify({ error: "Forbidden" }), {
                 status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
             })

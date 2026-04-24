@@ -13,7 +13,7 @@ serve(async (req) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
     try {
-        const { userId, restaurantId, action, data, targetId } = await req.json();
+        const { userId, restaurantId, action, data, targetId, sessionToken } = await req.json();
         const json = (body: any, status = 200) =>
             new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
@@ -29,7 +29,7 @@ serve(async (req) => {
         if (!resolvedRestaurantId) return json({ error: "restaurantId non determinabile" }, 400);
 
         // Owner or admin only (staff cannot manage rooms)
-        const access = await verifyAccess(supabase, userId, resolvedRestaurantId);
+        const access = await verifyAccess(supabase, userId, resolvedRestaurantId, sessionToken);
         if (!access.valid || access.isStaff) return json({ error: "Non autorizzato" }, 403);
 
         switch (action) {

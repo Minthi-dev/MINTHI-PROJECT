@@ -11,7 +11,46 @@ function _getCurrentUserId(): string | null {
     return null
 }
 
+function _getCurrentSessionToken(): string | null {
+    try {
+        return localStorage.getItem('minthi_session_token')
+    } catch {
+        return null
+    }
+}
+
 export const DatabaseService = {
+    async validateCurrentSession(user: Pick<User, 'id' | 'role' | 'restaurant_id'>) {
+        const sessionToken = _getCurrentSessionToken()
+        if (!sessionToken) return false
+        const { data, error } = await supabase.functions.invoke('login', {
+            body: {
+                action: 'validate_session',
+                userId: user.id,
+                restaurantId: user.restaurant_id,
+                sessionToken,
+            }
+        })
+        if (error) return false
+        return data?.valid === true && data?.role === user.role
+    },
+
+    async logoutCurrentSession() {
+        const userId = _getCurrentUserId()
+        const sessionToken = _getCurrentSessionToken()
+        if (userId && sessionToken) {
+            try {
+                await supabase.functions.invoke('login', {
+                    body: { action: 'logout', userId, sessionToken }
+                })
+            } catch {
+                // Local logout still proceeds if the network is unavailable.
+            }
+        }
+        localStorage.removeItem('minthi_session_token')
+        localStorage.removeItem('minthi_session_expires_at')
+    },
+
     // Users
     async getUsers() {
         const { data, error } = await supabase.from('users_safe').select('id, email, name, role, created_at')
@@ -99,7 +138,7 @@ export const DatabaseService = {
             'auto_deliver_ready_dishes',
             'enable_stripe_payments', 'vat_number', 'billing_name',
             'takeaway_enabled', 'dine_in_enabled', 'takeaway_require_stripe',
-            'takeaway_estimated_minutes', 'takeaway_pickup_notice',
+            'takeaway_pickup_notice',
         ]
 
         // Copia solo i campi presenti nell'oggetto input
@@ -985,9 +1024,8 @@ export const DatabaseService = {
             `)
             .eq('restaurant_id', restaurantId)
             .eq('order_type', 'takeaway')
-            .neq('status', 'CANCELLED')
             .order('created_at', { ascending: false })
-            .limit(200)
+            .limit(500)
         if (error) throw error
         return (data || []) as unknown as Order[]
     },

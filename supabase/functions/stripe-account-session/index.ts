@@ -22,7 +22,7 @@ serve(async (req) => {
     }
 
     try {
-        const { userId, restaurantId } = await req.json();
+        const { userId, restaurantId, sessionToken } = await req.json();
 
         if (!restaurantId) {
             return new Response(
@@ -35,7 +35,7 @@ serve(async (req) => {
                 status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
-        const access = await verifyAccess(supabase, userId, restaurantId);
+        const access = await verifyAccess(supabase, userId, restaurantId, sessionToken);
         if (!access.valid) {
             return new Response(JSON.stringify({ error: "Forbidden" }), {
                 status: 403,

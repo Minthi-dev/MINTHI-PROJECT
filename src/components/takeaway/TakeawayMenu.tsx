@@ -106,6 +106,25 @@ export default function TakeawayMenu() {
         return Math.round(t * 100) / 100
     }, [cart])
 
+    const dishPrepMinutes = (dish?: Dish | null) => {
+        const estimated = Number((dish as any)?.prep_estimated_minutes)
+        const fallback = Number(restaurant?.takeaway_estimated_minutes)
+        return Math.max(2, Math.min(120, Math.round(Number.isFinite(estimated) && estimated > 0 ? estimated : fallback || 8)))
+    }
+
+    const dishPrepMeta = (dish?: Dish | null) => {
+        const sample = Number((dish as any)?.prep_sample_count || 0)
+        const confidence = String((dish as any)?.prep_confidence || 'default')
+        if (sample >= 3) return `media su ${sample} preparazioni recenti`
+        if (confidence === 'restaurant_fallback') return 'stimato dagli ordini recenti del locale'
+        return 'stima iniziale, si affina con gli ordini'
+    }
+
+    const cartPrepMinutes = useMemo(() => {
+        if (cart.length === 0) return Math.max(5, Math.round(Number(restaurant?.takeaway_estimated_minutes) || 8))
+        return Math.max(5, cart.reduce((sum, line) => sum + dishPrepMinutes(line.dish) * line.quantity, 0))
+    }, [cart, restaurant?.takeaway_estimated_minutes])
+
     const addToCartDirect = (dish: Dish) => {
         setCart(prev => {
             const idx = prev.findIndex(c => c.dish.id === dish.id && !c.note)
@@ -116,7 +135,7 @@ export default function TakeawayMenu() {
             }
             return [...prev, { dish, quantity: 1 }]
         })
-        toast.success(`+1 ${dish.name}`, { duration: 900 })
+        toast.success(`${dish.name} aggiunto · stima cucina +${dishPrepMinutes(dish)} min`, { duration: 1600 })
     }
     const requestAddToCart = (dish: Dish) => setPendingDish(dish)
     const confirmAddToCart = () => {
@@ -233,7 +252,7 @@ export default function TakeawayMenu() {
                         <p className="text-xs text-amber-400/90 uppercase tracking-widest">Ordina e ritira</p>
                     </div>
                     <div className="text-right text-xs">
-                        <div className="flex items-center justify-end gap-1 text-zinc-400"><Clock size={12} /> ~{restaurant.takeaway_estimated_minutes} min</div>
+                        <div className="flex items-center justify-end gap-1 text-zinc-400"><Clock size={12} /> stima ~{cartPrepMinutes} min</div>
                     </div>
                 </div>
                 {/* Categories */}
@@ -302,8 +321,11 @@ export default function TakeawayMenu() {
                                                 {d.description && (
                                                     <p className="text-xs line-clamp-2 leading-snug font-light text-zinc-400">{d.description}</p>
                                                 )}
-                                                <div className="flex items-center justify-between mt-2">
+                                                <div className="flex items-center justify-between mt-2 gap-2">
                                                     <span className="font-medium text-sm tracking-wide text-amber-400">€ {Number(d.price).toFixed(2)}</span>
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] border border-white/10 px-2 py-0.5 text-[11px] font-semibold text-zinc-300">
+                                                        <Clock size={11} className="text-amber-400" /> ~{dishPrepMinutes(d)} min
+                                                    </span>
                                                 </div>
                                             </div>
 
@@ -333,7 +355,7 @@ export default function TakeawayMenu() {
                             className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-full py-3 px-6 shadow-2xl flex items-center gap-3 max-w-md w-full justify-between"
                         >
                             <span className="flex items-center gap-2"><ShoppingBag size={20} weight="bold" /> {cart.reduce((s, c) => s + c.quantity, 0)} piatti</span>
-                            <span className="flex items-center gap-2">€{total.toFixed(2)}<ForkKnife size={18} weight="bold" /></span>
+                            <span className="flex items-center gap-2">~{cartPrepMinutes} min · €{total.toFixed(2)}<ForkKnife size={18} weight="bold" /></span>
                         </button>
                     </motion.div>
                 )}
@@ -344,7 +366,7 @@ export default function TakeawayMenu() {
                 <DrawerContent className="bg-zinc-950 border-white/10">
                     <DrawerHeader>
                         <DrawerTitle className="text-white">Il tuo ordine</DrawerTitle>
-                        <DrawerDescription className="text-zinc-400 text-xs">Ritiro in negozio · ~{restaurant.takeaway_estimated_minutes} min</DrawerDescription>
+                        <DrawerDescription className="text-zinc-400 text-xs">Ritiro in negozio · stima cucina ~{cartPrepMinutes} min</DrawerDescription>
                     </DrawerHeader>
                     <div className="px-4 pb-4 max-h-[55vh] overflow-y-auto space-y-2">
                         {cart.length === 0 && <p className="text-zinc-500 text-sm text-center py-8">Carrello vuoto</p>}
@@ -352,7 +374,7 @@ export default function TakeawayMenu() {
                             <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
                                 <div className="flex-1 min-w-0">
                                     <div className="font-medium text-sm truncate">{line.dish.name}</div>
-                                    <div className="text-xs text-zinc-400">€{Number(line.dish.price).toFixed(2)} × {line.quantity}</div>
+                                    <div className="text-xs text-zinc-400">€{Number(line.dish.price).toFixed(2)} × {line.quantity} · ~{dishPrepMinutes(line.dish) * line.quantity} min</div>
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <Button size="icon" variant="ghost" onClick={() => decrement(idx)} className="h-8 w-8 text-white"><Minus size={14} /></Button>
@@ -364,6 +386,10 @@ export default function TakeawayMenu() {
                         ))}
                     </div>
                     <div className="px-4 pb-6 pt-2 border-t border-white/5">
+                        <div className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100 flex items-center justify-between gap-3">
+                            <span className="inline-flex items-center gap-2"><Clock size={16} weight="fill" /> Tempo stimato</span>
+                            <span className="font-black text-base">~{cartPrepMinutes} min</span>
+                        </div>
                         <div className="flex justify-between text-lg font-bold mb-3">
                             <span>Totale</span><span className="text-amber-400">€{total.toFixed(2)}</span>
                         </div>
@@ -439,6 +465,10 @@ export default function TakeawayMenu() {
                         <div className="flex justify-between text-lg font-bold pt-3 border-t border-white/5">
                             <span>Totale</span><span className="text-amber-400">€{total.toFixed(2)}</span>
                         </div>
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100 flex items-center justify-between gap-3">
+                            <span className="inline-flex items-center gap-2"><Clock size={16} weight="fill" /> Stima preparazione</span>
+                            <span className="font-black">~{cartPrepMinutes} min</span>
+                        </div>
 
                         <Button
                             onClick={submitOrder}
@@ -470,7 +500,19 @@ export default function TakeawayMenu() {
                                 {pendingDish.description && (
                                     <p className="text-sm text-zinc-400 mt-1 line-clamp-2">{pendingDish.description}</p>
                                 )}
-                                <div className="text-amber-400 font-bold mt-3">€{Number(pendingDish.price).toFixed(2)}</div>
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                                        <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Prezzo</div>
+                                        <div className="text-amber-400 font-bold">€{Number(pendingDish.price).toFixed(2)}</div>
+                                    </div>
+                                    <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-2">
+                                        <div className="text-[10px] uppercase tracking-widest text-amber-300/70 font-bold">Tempo medio</div>
+                                        <div className="text-white font-black">~{dishPrepMinutes(pendingDish)} min</div>
+                                    </div>
+                                </div>
+                                <p className="mt-3 text-xs leading-relaxed text-zinc-400">
+                                    {dishPrepMeta(pendingDish)}
+                                </p>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <Button

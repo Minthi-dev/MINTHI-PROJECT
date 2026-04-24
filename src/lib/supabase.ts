@@ -8,3 +8,35 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+const originalInvoke = supabase.functions.invoke.bind(supabase.functions)
+
+supabase.functions.invoke = ((functionName: string, options?: any) => {
+    const body = options?.body
+    const shouldAttachSession =
+        body &&
+        typeof body === 'object' &&
+        !(body instanceof FormData) &&
+        'userId' in body &&
+        !('sessionToken' in body)
+
+    if (!shouldAttachSession) {
+        return originalInvoke(functionName, options)
+    }
+
+    let sessionToken: string | null = null
+    try {
+        sessionToken = localStorage.getItem('minthi_session_token')
+    } catch {
+        sessionToken = null
+    }
+
+    if (!sessionToken) {
+        return originalInvoke(functionName, options)
+    }
+
+    return originalInvoke(functionName, {
+        ...options,
+        body: { ...body, sessionToken },
+    })
+}) as typeof supabase.functions.invoke

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { verifyAccess } from "../_shared/auth.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -21,7 +22,7 @@ const OWNER_ALLOWED_FIELDS = [
     "auto_deliver_ready_dishes",
     // Takeaway
     "takeaway_enabled", "dine_in_enabled", "takeaway_require_stripe",
-    "takeaway_estimated_minutes", "takeaway_pickup_notice",
+    "takeaway_pickup_notice",
 ];
 
 // Admin can also update these fields
@@ -34,7 +35,7 @@ serve(async (req) => {
     }
 
     try {
-        const { userId, restaurantId, data } = await req.json();
+        const { userId, restaurantId, data, sessionToken } = await req.json();
 
         if (!userId || !restaurantId || !data || typeof data !== "object") {
             return new Response(
@@ -43,21 +44,14 @@ serve(async (req) => {
             );
         }
 
-        // 1. Verify user exists and get their role
-        const { data: user } = await supabase
-            .from("users")
-            .select("id, role")
-            .eq("id", userId)
-            .maybeSingle();
-
-        if (!user) {
+        const access = await verifyAccess(supabase, userId, restaurantId, sessionToken);
+        if (!access.valid || access.isStaff) {
             return new Response(
-                JSON.stringify({ error: "Utente non trovato" }),
-                { status: 401, headers: { ...cors, "Content-Type": "application/json" } }
+                JSON.stringify({ error: "Non autorizzato" }),
+                { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
             );
         }
 
-        // 2. Verify restaurant exists and check ownership
         const { data: restaurant } = await supabase
             .from("restaurants")
             .select("id, owner_id")
@@ -71,15 +65,7 @@ serve(async (req) => {
             );
         }
 
-        const isOwner = restaurant.owner_id === userId;
-        const isAdmin = user.role === "ADMIN";
-
-        if (!isOwner && !isAdmin) {
-            return new Response(
-                JSON.stringify({ error: "Non autorizzato" }),
-                { status: 403, headers: { ...cors, "Content-Type": "application/json" } }
-            );
-        }
+        const isAdmin = access.isAdmin;
 
         // 3. Filter to allowed fields only (Stripe fields are NEVER allowed from frontend)
         const allowedFields = isAdmin

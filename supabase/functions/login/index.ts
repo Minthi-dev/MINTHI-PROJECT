@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import bcrypt from "https://esm.sh/bcryptjs@2.4.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { createAppSession, revokeAppSession, verifyAccess } from "../_shared/auth.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -31,7 +32,38 @@ serve(async (req) => {
     }
 
     try {
-        const { username, password } = await req.json();
+        const body = await req.json();
+        const { action, username, password, userId, restaurantId, sessionToken } = body;
+
+        if (action === "validate_session") {
+            if (!userId || !sessionToken) {
+                return new Response(JSON.stringify({ valid: false }), {
+                    status: 401,
+                    headers: { ...cors, "Content-Type": "application/json" },
+                });
+            }
+
+            const access = await verifyAccess(supabase, userId, restaurantId, sessionToken);
+            if (!access.valid) {
+                return new Response(JSON.stringify({ valid: false }), {
+                    status: 401,
+                    headers: { ...cors, "Content-Type": "application/json" },
+                });
+            }
+
+            return new Response(JSON.stringify({ valid: true, role: access.role }), {
+                status: 200,
+                headers: { ...cors, "Content-Type": "application/json" },
+            });
+        }
+
+        if (action === "logout") {
+            await revokeAppSession(supabase, userId, sessionToken);
+            return new Response(JSON.stringify({ success: true }), {
+                status: 200,
+                headers: { ...cors, "Content-Type": "application/json" },
+            });
+        }
 
         if (!username || !password || typeof username !== "string" || typeof password !== "string") {
             return new Response(JSON.stringify({ error: "username e password richiesti" }), {
@@ -94,10 +126,18 @@ serve(async (req) => {
                     restaurant_name = rest.name;
                 }
 
+                const session = await createAppSession(supabase, {
+                    userId: u.id,
+                    role: u.role,
+                    restaurantId: restaurant_id,
+                });
+
                 return new Response(
                     JSON.stringify({
                         user: { id: u.id, name: u.name, email: u.email, role: u.role, restaurant_id },
                         restaurant_name,
+                        sessionToken: session.sessionToken,
+                        sessionExpiresAt: session.expiresAt,
                     }),
                     { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
                 );
@@ -125,6 +165,12 @@ serve(async (req) => {
                     );
                 }
 
+                const session = await createAppSession(supabase, {
+                    userId: staffData.id,
+                    role: "STAFF",
+                    restaurantId: rest?.id || staffData.restaurant_id,
+                });
+
                 return new Response(
                     JSON.stringify({
                         user: {
@@ -135,6 +181,8 @@ serve(async (req) => {
                             restaurant_id: rest?.id || staffData.restaurant_id,
                         },
                         restaurant_name: rest?.name,
+                        sessionToken: session.sessionToken,
+                        sessionExpiresAt: session.expiresAt,
                     }),
                     { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
                 );
@@ -163,16 +211,25 @@ serve(async (req) => {
 
                 const waiterMatch = verifyPassword(password, target.waiter_password);
                 if (waiterMatch) {
+                    const legacyUserId = crypto.randomUUID();
+                    const session = await createAppSession(supabase, {
+                        userId: legacyUserId,
+                        role: "STAFF",
+                        restaurantId: target.id,
+                    });
+
                     return new Response(
                         JSON.stringify({
                             user: {
-                                id: crypto.randomUUID(),
+                                id: legacyUserId,
                                 name: "Cameriere",
                                 email: `waiter@${slug}.local`,
                                 role: "STAFF",
                                 restaurant_id: target.id,
                             },
                             restaurant_name: target.name,
+                            sessionToken: session.sessionToken,
+                            sessionExpiresAt: session.expiresAt,
                         }),
                         { status: 200, headers: { ...cors, "Content-Type": "application/json" } }
                     );

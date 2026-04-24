@@ -115,25 +115,23 @@ const AppContent = () => {
       try {
         const parsedUser = JSON.parse(savedUser)
 
-        // Server-side role validation BEFORE granting access
-        // This prevents localStorage manipulation attacks
+        // Server-side session validation BEFORE granting access.
+        // A forged localStorage user without the opaque token is rejected.
         const validate = async () => {
           try {
-            let valid = false
-            if (parsedUser.role === 'ADMIN' || parsedUser.role === 'OWNER') {
-              const { data } = await supabase.from('users_safe').select('id, role').eq('id', parsedUser.id).single()
-              valid = !!(data && data.role === parsedUser.role)
-            } else if (parsedUser.role === 'STAFF') {
-              valid = await DatabaseService.verifyStaffSession(parsedUser.id)
-            }
+            const valid = await DatabaseService.validateCurrentSession(parsedUser)
 
             if (valid) {
               setUser(parsedUser)
             } else {
               localStorage.removeItem('minthi_user')
+              localStorage.removeItem('minthi_session_token')
+              localStorage.removeItem('minthi_session_expires_at')
             }
           } catch {
             localStorage.removeItem('minthi_user')
+            localStorage.removeItem('minthi_session_token')
+            localStorage.removeItem('minthi_session_expires_at')
           } finally {
             setLoading(false)
           }
@@ -142,6 +140,8 @@ const AppContent = () => {
         return
       } catch (e) {
         localStorage.removeItem('minthi_user')
+        localStorage.removeItem('minthi_session_token')
+        localStorage.removeItem('minthi_session_expires_at')
       }
     }
 
@@ -159,7 +159,10 @@ const AppContent = () => {
   }, [])
 
   const handleLogout = () => {
+    DatabaseService.logoutCurrentSession()
     localStorage.removeItem('minthi_user')
+    localStorage.removeItem('minthi_session_token')
+    localStorage.removeItem('minthi_session_expires_at')
     supabase.auth.signOut()
     setUser(null)
   }

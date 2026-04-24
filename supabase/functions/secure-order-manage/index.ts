@@ -17,7 +17,7 @@ serve(async (req) => {
 
     try {
         const body = await req.json();
-        const { userId, action, sessionId, orderIds, orderId, itemId, paymentMethod, data } = body;
+        const { userId, action, sessionId, orderIds, orderId, itemId, paymentMethod, data, sessionToken } = body;
         const json = (b: any, status = 200) =>
             new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
@@ -54,7 +54,7 @@ serve(async (req) => {
 
         if (!restaurantId) return json({ error: "Contesto ristorante non trovato" }, 404);
 
-        const access = await verifyAccess(supabase, userId, restaurantId);
+        const access = await verifyAccess(supabase, userId, restaurantId, sessionToken);
         if (!access.valid) return json({ error: "Non autorizzato" }, 403);
 
         switch (action) {

@@ -184,7 +184,6 @@ export function SettingsView({
     const [takeawayEnabled, setTakeawayEnabled] = useState(false)
     const [dineInEnabled, setDineInEnabled] = useState(true)
     const [takeawayRequireStripe, setTakeawayRequireStripe] = useState(false)
-    const [takeawayEstimatedMinutes, setTakeawayEstimatedMinutes] = useState(20)
     const [takeawayPickupNotice, setTakeawayPickupNotice] = useState('')
     const [savingTakeaway, setSavingTakeaway] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
@@ -250,7 +249,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_estimated_minutes, takeaway_pickup_notice')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -262,7 +261,6 @@ export function SettingsView({
                 setTakeawayEnabled((data as any).takeaway_enabled ?? false)
                 setDineInEnabled((data as any).dine_in_enabled ?? true)
                 setTakeawayRequireStripe((data as any).takeaway_require_stripe ?? false)
-                setTakeawayEstimatedMinutes((data as any).takeaway_estimated_minutes ?? 20)
                 setTakeawayPickupNotice((data as any).takeaway_pickup_notice || '')
 
                 // If account exists but is not marked as enabled, check with Stripe API directly once
@@ -358,7 +356,6 @@ export function SettingsView({
         takeaway_enabled: boolean
         dine_in_enabled: boolean
         takeaway_require_stripe: boolean
-        takeaway_estimated_minutes: number
         takeaway_pickup_notice: string
     }>) => {
         if (patch.takeaway_require_stripe === true && !stripeReadyForTakeaway) {
@@ -1240,22 +1237,15 @@ export function SettingsView({
                                         Tempi & avvisi
                                     </h3>
                                     <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
-                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
+                                        <div className="flex items-start justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Tempo preparazione</p>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Minuti mostrati al cliente dopo l'ordine.</p>
+                                                <p className="text-[15px] font-semibold text-white">Stima preparazione automatica</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
+                                                    Non si imposta più a mano: Minthi calcola il tempo medio dai piatti preparati negli ultimi ordini asporto e somma le stime del carrello.
+                                                </p>
                                             </div>
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <Input
-                                                    type="number"
-                                                    min={5}
-                                                    max={120}
-                                                    value={takeawayEstimatedMinutes}
-                                                    onChange={e => setTakeawayEstimatedMinutes(Math.max(5, Math.min(120, Number(e.target.value) || 20)))}
-                                                    onBlur={() => saveTakeawaySettings({ takeaway_estimated_minutes: takeawayEstimatedMinutes })}
-                                                    className="bg-black/20 border-white/10 h-9 w-20 text-center text-sm font-semibold"
-                                                />
-                                                <span className="text-[13px] text-zinc-500">min</span>
+                                            <div className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-200">
+                                                Auto
                                             </div>
                                         </div>
                                         <div className="px-5 py-4">

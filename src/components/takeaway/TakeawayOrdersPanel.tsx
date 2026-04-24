@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -7,28 +7,30 @@ import type { Order } from '@/services/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard } from '@phosphor-icons/react'
+import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard, MagnifyingGlass, CalendarBlank, XCircle } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import TakeawayPaymentDialog from './TakeawayPaymentDialog'
-import TakeawayQRPosterButton from './TakeawayQRPosterButton'
 
 interface Props {
     restaurantId: string
     restaurantName?: string
     takeawayRequireStripe?: boolean
-    onPrintOrder?: (order: Order) => void
+    onPrintKitchenOrder?: (order: Order) => void
+    onAutoPrintKitchenOrder?: (order: Order) => void
+    onPrintReceipt?: (order: Order) => void
 }
 
 type Tab = 'active' | 'archive'
 type StatusFilter = 'all' | 'preparing' | 'ready'
 type SortOrder = 'oldest' | 'newest'
+type ArchiveRange = 'today' | '7d' | '30d' | 'custom' | 'all'
+type ArchiveStatusFilter = 'all' | 'paid' | 'picked_up' | 'cancelled' | 'unpaid'
 
 const ACTIVE_STATUSES = new Set(['PENDING', 'PREPARING', 'READY'])
-const ARCHIVE_STATUSES = new Set(['PAID', 'PICKED_UP'])
-// Hard cap on displayed archive to avoid DOM explosion — ordered by closed_at DESC, so
-// older archived orders fall off the visible list but remain queryable via the dialog/history
-const ARCHIVE_DISPLAY_LIMIT = 80
+const ARCHIVE_STATUSES = new Set(['PAID', 'PICKED_UP', 'CANCELLED'])
+const ARCHIVE_DISPLAY_LIMIT = 160
 
 const statusMeta: Record<string, { label: string; color: string; ring: string }> = {
     PENDING: { label: 'In attesa', color: 'bg-amber-500/20 text-amber-200 border-amber-500/40', ring: 'border-amber-500 text-amber-300 bg-amber-500/15' },
@@ -55,7 +57,25 @@ function formatMinutes(mins: number) {
     return `${m}'`
 }
 
-export default function TakeawayOrdersPanel({ restaurantId, restaurantName, takeawayRequireStripe = false, onPrintOrder }: Props) {
+function toInputDate(date: Date) {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+}
+
+function orderArchiveDate(order: Order) {
+    return new Date(order.closed_at || order.picked_up_at || order.ready_at || order.created_at)
+}
+
+function archiveItemsLabel(order: Order) {
+    const items = order.items || []
+    if (items.length === 0) return 'Nessun piatto'
+    const first = items.slice(0, 2).map((it: any) => `${it.quantity}x ${it.dish?.name || 'Piatto'}`).join(' · ')
+    return items.length > 2 ? `${first} +${items.length - 2}` : first
+}
+
+export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStripe = false, onPrintKitchenOrder, onAutoPrintKitchenOrder, onPrintReceipt }: Props) {
     const [orders, setOrders] = useState<Order[]>([])
     const [loading, setLoading] = useState(true)
     const [tab, setTab] = useState<Tab>('active')
@@ -66,6 +86,13 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
     const [forceStripePayment, setForceStripePayment] = useState(false)
     const [detailOpen, setDetailOpen] = useState(false)
     const [now, setNow] = useState(Date.now())
+    const [archiveRange, setArchiveRange] = useState<ArchiveRange>('today')
+    const [archiveFrom, setArchiveFrom] = useState(() => toInputDate(new Date()))
+    const [archiveTo, setArchiveTo] = useState(() => toInputDate(new Date()))
+    const [archiveSearch, setArchiveSearch] = useState('')
+    const [archiveStatus, setArchiveStatus] = useState<ArchiveStatusFilter>('all')
+    const knownKitchenPrintIdsRef = useRef<Set<string>>(new Set())
+    const initialKitchenPrintLoadRef = useRef(true)
 
     // Re-render every 30s so the "N minuti fa" timer stays accurate
     useEffect(() => {
@@ -76,11 +103,23 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
     const refresh = useCallback(async () => {
         try {
             const data = await DatabaseService.getTakeawayOrders(restaurantId)
-            setOrders(data as Order[])
+            const nextOrders = data as Order[]
+            setOrders(nextOrders)
+
+            const printable = nextOrders.filter(o => o.status === 'PREPARING' || o.status === 'READY')
+            if (onAutoPrintKitchenOrder && !initialKitchenPrintLoadRef.current) {
+                for (const order of printable) {
+                    if (!knownKitchenPrintIdsRef.current.has(order.id)) {
+                        onAutoPrintKitchenOrder(order)
+                    }
+                }
+            }
+            knownKitchenPrintIdsRef.current = new Set(printable.map(o => o.id))
+            initialKitchenPrintLoadRef.current = false
         } catch (e: any) {
             console.error('[takeaway-panel] refresh error', e)
         }
-    }, [restaurantId])
+    }, [restaurantId, onAutoPrintKitchenOrder])
 
     useEffect(() => {
         let alive = true
@@ -122,7 +161,48 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
 
     const visible = useMemo(() => {
         if (tab === 'archive') {
-            return [...archive]
+            let list = [...archive]
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+            let from: Date | null = null
+            let to: Date | null = null
+
+            if (archiveRange === 'today') {
+                from = today
+                to = new Date(today)
+                to.setDate(to.getDate() + 1)
+            } else if (archiveRange === '7d' || archiveRange === '30d') {
+                from = new Date(today)
+                from.setDate(from.getDate() - (archiveRange === '7d' ? 6 : 29))
+                to = new Date(today)
+                to.setDate(to.getDate() + 1)
+            } else if (archiveRange === 'custom') {
+                if (archiveFrom) from = new Date(`${archiveFrom}T00:00:00`)
+                if (archiveTo) to = new Date(`${archiveTo}T23:59:59.999`)
+            }
+
+            if (from) list = list.filter(o => orderArchiveDate(o).getTime() >= from!.getTime())
+            if (to) list = list.filter(o => orderArchiveDate(o).getTime() <= to!.getTime())
+
+            if (archiveStatus === 'paid') list = list.filter(o => o.status === 'PAID')
+            else if (archiveStatus === 'picked_up') list = list.filter(o => o.status === 'PICKED_UP')
+            else if (archiveStatus === 'cancelled') list = list.filter(o => o.status === 'CANCELLED')
+            else if (archiveStatus === 'unpaid') list = list.filter(o => orderDue(o) > 0.01)
+
+            const q = archiveSearch.trim().toLowerCase()
+            if (q) {
+                list = list.filter(o => {
+                    const haystack = [
+                        String(o.pickup_number || '').padStart(3, '0'),
+                        o.customer_name || '',
+                        o.customer_phone || '',
+                        archiveItemsLabel(o),
+                    ].join(' ').toLowerCase()
+                    return haystack.includes(q)
+                })
+            }
+
+            return list
                 .sort((a, b) => new Date(b.closed_at || b.created_at).getTime() - new Date(a.closed_at || a.created_at).getTime())
                 .slice(0, ARCHIVE_DISPLAY_LIMIT)
         }
@@ -135,7 +215,15 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
             return sortOrder === 'oldest' ? ta - tb : tb - ta
         })
         return sorted
-    }, [tab, active, archive, statusFilter, sortOrder])
+    }, [tab, active, archive, statusFilter, sortOrder, archiveRange, archiveFrom, archiveTo, archiveSearch, archiveStatus])
+
+    const archiveStats = useMemo(() => {
+        const revenue = visible.reduce((sum, o) => o.status === 'CANCELLED' ? sum : sum + Number(o.paid_amount || o.total_amount || 0), 0)
+        return {
+            count: tab === 'archive' ? visible.length : archive.length,
+            revenue: Math.round(revenue * 100) / 100,
+        }
+    }, [visible, archive.length, tab])
 
     const changeStatus = async (o: Order, next: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') => {
         try {
@@ -169,11 +257,6 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
                     <Package size={26} className="text-amber-400" weight="fill" /> Ordini asporto
                 </h2>
                 <div className="ml-auto flex items-center gap-2 flex-wrap">
-                    <TakeawayQRPosterButton
-                        restaurantId={restaurantId}
-                        restaurantName={restaurantName || 'Il mio locale'}
-                        className="border-white/10 text-zinc-300 hover:text-amber-300 hover:bg-amber-500/5"
-                    />
                     <div className="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
                         <TabButton
                             active={tab === 'active'}
@@ -233,6 +316,70 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
                 </div>
             )}
 
+            {tab === 'archive' && (
+                <div className="space-y-3 rounded-xl bg-zinc-900/50 border border-white/10 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-1.5 text-zinc-400 text-sm font-medium px-1">
+                            <CalendarBlank size={16} /> Periodo:
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                            <FilterPill active={archiveRange === 'today'} onClick={() => setArchiveRange('today')}>Oggi</FilterPill>
+                            <FilterPill active={archiveRange === '7d'} onClick={() => setArchiveRange('7d')}>7 giorni</FilterPill>
+                            <FilterPill active={archiveRange === '30d'} onClick={() => setArchiveRange('30d')}>30 giorni</FilterPill>
+                            <FilterPill active={archiveRange === 'all'} onClick={() => setArchiveRange('all')}>Tutti</FilterPill>
+                            <FilterPill active={archiveRange === 'custom'} onClick={() => setArchiveRange('custom')}>Personalizzato</FilterPill>
+                        </div>
+                        <div className="ml-auto flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-zinc-300">
+                            <span className="font-bold text-white">{archiveStats.count}</span> ordini
+                            <span className="text-zinc-600">·</span>
+                            <span className="font-bold text-emerald-300">€{archiveStats.revenue.toFixed(2)}</span>
+                        </div>
+                    </div>
+
+                    {archiveRange === 'custom' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <Input type="date" value={archiveFrom} onChange={e => setArchiveFrom(e.target.value)} className="bg-black/20 border-white/10 h-9 text-sm" />
+                            <Input type="date" value={archiveTo} onChange={e => setArchiveTo(e.target.value)} className="bg-black/20 border-white/10 h-9 text-sm" />
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative flex-1 min-w-[220px]">
+                            <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                            <Input
+                                value={archiveSearch}
+                                onChange={e => setArchiveSearch(e.target.value)}
+                                placeholder="Cerca numero, cliente, telefono o piatto"
+                                className="pl-9 bg-black/20 border-white/10 h-9 text-sm"
+                            />
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                            <FilterPill active={archiveStatus === 'all'} onClick={() => setArchiveStatus('all')}>Tutti</FilterPill>
+                            <FilterPill active={archiveStatus === 'paid'} onClick={() => setArchiveStatus('paid')}>Chiusi</FilterPill>
+                            <FilterPill active={archiveStatus === 'picked_up'} onClick={() => setArchiveStatus('picked_up')}>Ritirati</FilterPill>
+                            <FilterPill active={archiveStatus === 'cancelled'} onClick={() => setArchiveStatus('cancelled')}>Annullati</FilterPill>
+                            <FilterPill active={archiveStatus === 'unpaid'} onClick={() => setArchiveStatus('unpaid')} color="amber">Residuo</FilterPill>
+                        </div>
+                        {(archiveSearch || archiveStatus !== 'all' || archiveRange !== 'today') && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                    setArchiveRange('today')
+                                    setArchiveFrom(toInputDate(new Date()))
+                                    setArchiveTo(toInputDate(new Date()))
+                                    setArchiveSearch('')
+                                    setArchiveStatus('all')
+                                }}
+                                className="text-zinc-400 hover:text-white hover:bg-white/5"
+                            >
+                                <XCircle size={16} className="mr-1" /> Reset
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Orders grid */}
             {loading ? (
                 <div className="text-center text-zinc-500 py-20 text-base">Caricamento...</div>
@@ -245,29 +392,42 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
                 </div>
             ) : (
                 <>
-                    {tab === 'archive' && archive.length > ARCHIVE_DISPLAY_LIMIT && (
+                    {tab === 'archive' && visible.length >= ARCHIVE_DISPLAY_LIMIT && (
                         <div className="text-center text-xs text-zinc-500 px-4 py-2 bg-white/[0.02] border border-white/10 rounded-lg">
-                            Mostro i {ARCHIVE_DISPLAY_LIMIT} ordini più recenti su {archive.length}. Gli ordini più vecchi restano salvati.
+                            Mostro i primi {ARCHIVE_DISPLAY_LIMIT} risultati: restringi periodo o ricerca per trovare gli altri ordini.
                         </div>
                     )}
-                    <div
-                        className="grid gap-3 content-start pb-20"
-                        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}
-                    >
-                        <AnimatePresence mode="popLayout">
+                    {tab === 'archive' ? (
+                        <div className="rounded-xl border border-white/10 bg-zinc-900/40 divide-y divide-white/10 overflow-hidden pb-0">
                             {visible.map(o => (
-                                <TakeawayCard
+                                <TakeawayArchiveRow
                                     key={o.id}
                                     order={o}
-                                    now={now}
-                                    onStatus={changeStatus}
-                                    onPay={openPayment}
                                     onDetail={openDetail}
-                                    takeawayRequireStripe={takeawayRequireStripe}
+                                    onPrint={onPrintKitchenOrder}
                                 />
                             ))}
-                        </AnimatePresence>
-                    </div>
+                        </div>
+                    ) : (
+                        <div
+                            className="grid gap-3 content-start pb-20"
+                            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}
+                        >
+                            <AnimatePresence mode="popLayout">
+                                {visible.map(o => (
+                                    <TakeawayCard
+                                        key={o.id}
+                                        order={o}
+                                        now={now}
+                                        onStatus={changeStatus}
+                                        onPay={openPayment}
+                                        onDetail={openDetail}
+                                        takeawayRequireStripe={takeawayRequireStripe}
+                                    />
+                                ))}
+                            </AnimatePresence>
+                        </div>
+                    )}
                 </>
             )}
 
@@ -276,7 +436,7 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
                 onOpenChange={setPayOpen}
                 order={selected}
                 onPaid={refresh}
-                onPrintReceipt={onPrintOrder}
+                onPrintReceipt={onPrintReceipt}
                 forceStripeOnly={forceStripePayment}
             />
 
@@ -309,7 +469,7 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
                                 )}
                             </div>
                             <div className="flex gap-2">
-                                {onPrintOrder && <Button size="sm" onClick={() => onPrintOrder(selected)} variant="outline" className="border-white/10"><Receipt size={14} className="mr-1" />Stampa</Button>}
+                                {onPrintKitchenOrder && <Button size="sm" onClick={() => onPrintKitchenOrder(selected)} variant="outline" className="border-white/10"><Receipt size={14} className="mr-1" />Stampa comanda</Button>}
                                 {selected.status !== 'PAID' && selected.status !== 'CANCELLED' && selected.status !== 'PICKED_UP' && (
                                     <Button size="sm" variant="outline" className="border-red-500/30 text-red-400 hover:bg-red-500/10 ml-auto" onClick={async () => {
                                         if (!confirm('Annullare questo ordine?')) return
@@ -341,6 +501,57 @@ interface TakeawayCardProps {
     onPay: (o: Order, forceStripeOnly?: boolean) => void
     onDetail: (o: Order) => void
     takeawayRequireStripe: boolean
+}
+
+function TakeawayArchiveRow({
+    order,
+    onDetail,
+    onPrint,
+}: {
+    order: Order
+    onDetail: (o: Order) => void
+    onPrint?: (order: Order) => void
+}) {
+    const meta = statusMeta[order.status] || statusMeta.PAID
+    const due = orderDue(order)
+    const date = orderArchiveDate(order)
+    return (
+        <div className="grid grid-cols-[auto,1fr] sm:grid-cols-[84px,1fr,120px,150px] gap-3 items-center px-3 sm:px-4 py-3 hover:bg-white/[0.03] transition-colors">
+            <div className="flex items-center justify-center w-16 h-16 rounded-xl border border-white/10 bg-black/30 text-amber-300 font-mono font-black text-xl">
+                #{String(order.pickup_number || 0).padStart(2, '0')}
+            </div>
+            <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <Badge className={`${meta.color} border text-[10px] uppercase font-bold tracking-wide px-2 py-0.5`}>
+                        {meta.label}
+                    </Badge>
+                    <span className="text-xs text-zinc-500">
+                        {date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} · {date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                </div>
+                <div className="font-semibold text-white truncate">{order.customer_name || 'Cliente'}</div>
+                <div className="text-xs text-zinc-400 truncate">{archiveItemsLabel(order)}</div>
+            </div>
+            <div className="col-start-2 sm:col-start-auto text-sm sm:text-right">
+                <div className="font-black text-white">€{Number(order.total_amount || 0).toFixed(2)}</div>
+                {due > 0.01 ? (
+                    <div className="text-xs font-semibold text-amber-300">Residuo €{due.toFixed(2)}</div>
+                ) : (
+                    <div className="text-xs text-emerald-300">Pagato</div>
+                )}
+            </div>
+            <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-2">
+                {onPrint && order.status !== 'CANCELLED' && (
+                    <Button size="sm" variant="outline" onClick={() => onPrint(order)} className="h-9 border-white/10 text-zinc-300 hover:bg-white/5">
+                        <Receipt size={14} className="mr-1" /> Comanda
+                    </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => onDetail(order)} className="h-9 text-zinc-300 hover:text-white hover:bg-white/5">
+                    Dettagli <CaretRight size={14} className="ml-1" />
+                </Button>
+            </div>
+        </div>
+    )
 }
 
 function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequireStripe }: TakeawayCardProps) {

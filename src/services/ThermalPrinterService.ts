@@ -81,6 +81,7 @@ class ThermalPrinterService extends EventTarget {
   // USB state
   private usbDevice: any = null
   private usbEndpoint: number = 1
+  private usbInterfaceNumber: number = 0
   private usbDisconnectHandler: ((e: any) => void) | null = null
 
   // Network (WebSocket relay) state
@@ -228,11 +229,32 @@ class ThermalPrinterService extends EventTarget {
   private async _usbOpenDevice(device: any): Promise<void> {
     await device.open()
     if (device.configuration === null) await device.selectConfiguration(1)
-    await device.claimInterface(0)
 
-    const ep = device.configuration!.interfaces[0].alternates[0].endpoints
-      .find((e: any) => e.direction === 'out' && e.type === 'bulk')
-    this.usbEndpoint = ep?.endpointNumber ?? 1
+    let chosen: { interfaceNumber: number; alternateSetting: number; endpointNumber: number } | null = null
+    for (const iface of device.configuration!.interfaces || []) {
+      for (const alt of iface.alternates || []) {
+        const ep = (alt.endpoints || []).find((e: any) => e.direction === 'out' && e.type === 'bulk')
+        if (ep) {
+          chosen = {
+            interfaceNumber: iface.interfaceNumber,
+            alternateSetting: alt.alternateSetting ?? 0,
+            endpointNumber: ep.endpointNumber,
+          }
+          break
+        }
+      }
+      if (chosen) break
+    }
+
+    if (!chosen) throw new Error('Endpoint USB bulk OUT non trovato')
+
+    await device.claimInterface(chosen.interfaceNumber)
+    if (chosen.alternateSetting && typeof device.selectAlternateInterface === 'function') {
+      await device.selectAlternateInterface(chosen.interfaceNumber, chosen.alternateSetting)
+    }
+
+    this.usbInterfaceNumber = chosen.interfaceNumber
+    this.usbEndpoint = chosen.endpointNumber
     this.usbDevice = device
 
     this._usbRemoveDisconnectListener()
@@ -405,9 +427,15 @@ class ThermalPrinterService extends EventTarget {
     for (const item of items) {
       const name = item.dish?.name || `Piatto #${item.dish_id.slice(0, 6)}`
       buf.push(...CMD.SIZE_TALL, ...CMD.BOLD_ON)
-      buf.push(...this._text(` ${item.quantity}x  ${name}`))
+      for (const line of this._wrapText(`${item.quantity}x  ${name}`, COLS - 1)) {
+        buf.push(...this._text(` ${line}`))
+      }
       buf.push(...CMD.SIZE_NORMAL, ...CMD.BOLD_OFF)
-      if (item.note) buf.push(...this._text(`     > ${item.note}`))
+      if (item.note) {
+        for (const line of this._wrapText(String(item.note), COLS - 7)) {
+          buf.push(...this._text(`     > ${line}`))
+        }
+      }
     }
   }
 
@@ -449,9 +477,12 @@ class ThermalPrinterService extends EventTarget {
       const lineTotal = unit * it.quantity
       const left = `${it.quantity}x ${name}`
       const right = `€${lineTotal.toFixed(2)}`
-      const pad = Math.max(1, COLS - left.length - right.length)
-      buf.push(...this._text(left.slice(0, COLS - right.length - 1) + ' '.repeat(pad) + right))
-      if (it.note) buf.push(...this._text(`    > ${it.note}`))
+      for (const line of this._moneyLines(left, right)) buf.push(...this._text(line))
+      if (it.note) {
+        for (const line of this._wrapText(String(it.note), COLS - 6)) {
+          buf.push(...this._text(`    > ${line}`))
+        }
+      }
     }
 
     // Totals
@@ -471,8 +502,7 @@ class ThermalPrinterService extends EventTarget {
         const label = p.label ? ` (${p.label})` : ''
         const leftP = `  ${method}${label}`
         const rightP = `€${Number(p.amount).toFixed(2)}`
-        const padP = Math.max(1, COLS - leftP.length - rightP.length)
-        buf.push(...this._text(leftP.slice(0, COLS - rightP.length - 1) + ' '.repeat(padP) + rightP))
+        for (const line of this._moneyLines(leftP, rightP)) buf.push(...this._text(line))
       }
       if (due < 0.01) {
         buf.push(...CMD.BOLD_ON)
@@ -571,7 +601,7 @@ class ThermalPrinterService extends EventTarget {
 
   private _text(str: string): number[] {
     const bytes: number[] = []
-    for (const ch of str) {
+    for (const ch of this._normalizeText(str)) {
       bytes.push(CP858[ch] !== undefined ? CP858[ch] : (ch.charCodeAt(0) < 128 ? ch.charCodeAt(0) : 0x3F))
     }
     bytes.push(LF)
@@ -579,6 +609,57 @@ class ThermalPrinterService extends EventTarget {
   }
 
   private _line(char: string): string { return char.repeat(COLS) }
+
+  private _normalizeText(str: string): string {
+    return String(str)
+      .replace(/[’‘]/g, "'")
+      .replace(/[“”]/g, '"')
+      .replace(/[–—]/g, '-')
+      .replace(/…/g, '...')
+      .replace(/×/g, 'x')
+      .replace(/•/g, '*')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+  }
+
+  private _wrapText(str: string, width: number): string[] {
+    const clean = this._normalizeText(str).replace(/\s+/g, ' ').trim()
+    if (!clean) return ['']
+    const max = Math.max(8, width)
+    const words = clean.split(' ')
+    const lines: string[] = []
+    let line = ''
+
+    for (const word of words) {
+      if (word.length > max) {
+        if (line) {
+          lines.push(line)
+          line = ''
+        }
+        for (let i = 0; i < word.length; i += max) lines.push(word.slice(i, i + max))
+        continue
+      }
+      const next = line ? `${line} ${word}` : word
+      if (next.length > max) {
+        if (line) lines.push(line)
+        line = word
+      } else {
+        line = next
+      }
+    }
+    if (line) lines.push(line)
+    return lines
+  }
+
+  private _moneyLines(left: string, right: string): string[] {
+    const rightClean = this._normalizeText(right)
+    const leftWidth = Math.max(10, COLS - rightClean.length - 1)
+    const lines = this._wrapText(left, leftWidth)
+    const first = lines[0] || ''
+    const out = [first + ' '.repeat(Math.max(1, COLS - first.length - rightClean.length)) + rightClean]
+    for (const line of lines.slice(1)) out.push(line)
+    return out
+  }
 
   private _cut(): number[] {
     return this._settings.protocol === 'custom' ? CMD.CUSTOM_CUT : CMD.FEED_CUT

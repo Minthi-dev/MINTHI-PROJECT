@@ -88,6 +88,35 @@ async function createTakeawayCheckoutSession(args: {
     );
 }
 
+async function estimateTakeawayMinutes(orderId: string, restaurantId: string, fallbackMinutes: number): Promise<number> {
+    try {
+        const { data: orderItems } = await supabase
+            .from("order_items")
+            .select("dish_id, quantity")
+            .eq("order_id", orderId);
+        if (!orderItems || orderItems.length === 0) return Math.max(5, fallbackMinutes || 8);
+
+        const { data: stats } = await supabase.rpc("get_takeaway_dish_prep_stats", {
+            p_restaurant_id: restaurantId,
+            p_days: 45,
+        });
+        const { data: restaurantEstimate } = await supabase.rpc("get_takeaway_restaurant_prep_estimate", {
+            p_restaurant_id: restaurantId,
+        });
+
+        const fallback = Math.max(2, Number(restaurantEstimate || fallbackMinutes || 8));
+        const statMap = new Map((stats || []).map((s: any) => [s.dish_id, Number(s.estimate_minutes) || fallback]));
+        const total = orderItems.reduce((sum: number, item: any) => {
+            const each = statMap.get(item.dish_id) || fallback;
+            return sum + each * (Number(item.quantity) || 1);
+        }, 0);
+        return Math.max(5, Math.min(120, Math.ceil(total || fallback)));
+    } catch (e) {
+        console.warn("[TAKEAWAY] estimate prep minutes fallback:", e);
+        return Math.max(5, fallbackMinutes || 8);
+    }
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -212,12 +241,13 @@ serve(async (req) => {
                 Math.round((Number(existingOrder.total_amount || 0) - Number(existingOrder.paid_amount || 0)) * 100) / 100
             );
             if (remaining <= 0.01) {
+                const estimatedMinutes = await estimateTakeawayMinutes(existingOrder.id, restaurantId, restaurant.takeaway_estimated_minutes);
                 return json({
                     success: true,
                     orderId: existingOrder.id,
                     pickupNumber: existingOrder.pickup_number,
                     pickupCode: existingOrder.pickup_code,
-                    estimatedMinutes: restaurant.takeaway_estimated_minutes,
+                    estimatedMinutes,
                     paymentMethod: "stripe",
                     paymentRequired: false,
                     deduplicated: true,
@@ -247,12 +277,13 @@ serve(async (req) => {
                 ],
             });
 
+            const estimatedMinutes = await estimateTakeawayMinutes(existingOrder.id, restaurantId, restaurant.takeaway_estimated_minutes);
             return json({
                 success: true,
                 orderId: existingOrder.id,
                 pickupNumber: existingOrder.pickup_number,
                 pickupCode: existingOrder.pickup_code,
-                estimatedMinutes: restaurant.takeaway_estimated_minutes,
+                estimatedMinutes,
                 paymentMethod: "stripe",
                 checkoutUrl: session.url,
                 sessionId: session.id,
@@ -361,6 +392,8 @@ serve(async (req) => {
             return json({ error: "Errore creazione righe ordine" }, 500);
         }
 
+        const estimatedMinutes = await estimateTakeawayMinutes(newOrder.id, restaurantId, restaurant.takeaway_estimated_minutes);
+
         // --- Cash flow: return pickup info --------------------------------------
         if (chosenMethod !== "stripe") {
             return json({
@@ -368,7 +401,7 @@ serve(async (req) => {
                 orderId: newOrder.id,
                 pickupNumber,
                 pickupCode,
-                estimatedMinutes: restaurant.takeaway_estimated_minutes,
+                estimatedMinutes,
                 paymentRequired: true,
                 paymentMethod: "pay_on_pickup",
             });
@@ -410,7 +443,7 @@ serve(async (req) => {
                 orderId: newOrder.id,
                 pickupNumber,
                 pickupCode,
-                estimatedMinutes: restaurant.takeaway_estimated_minutes,
+                estimatedMinutes,
                 paymentMethod: "stripe",
                 checkoutUrl: session.url,
                 sessionId: session.id,

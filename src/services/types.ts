@@ -185,6 +185,9 @@ export interface Dish {
     is_ayce?: boolean
     allergens?: string[]
     ayce_max_orders_per_person?: number | null
+    prep_estimated_minutes?: number
+    prep_sample_count?: number
+    prep_confidence?: 'high' | 'medium' | 'restaurant_fallback' | 'default' | string
 }
 
 export interface Table {
@@ -192,6 +195,7 @@ export interface Table {
     number: string
     restaurant_id: string
     token: string
+    pin?: string
     seats?: number
     room_id?: string
     created_at?: string

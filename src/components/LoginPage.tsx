@@ -58,6 +58,8 @@ export default function LoginPage({ onLogin }: Props) {
       } else {
         const loggedUser: User = data.user
         localStorage.setItem('minthi_user', JSON.stringify(loggedUser))
+        if (data.sessionToken) localStorage.setItem('minthi_session_token', data.sessionToken)
+        if (data.sessionExpiresAt) localStorage.setItem('minthi_session_expires_at', data.sessionExpiresAt)
         onLogin(loggedUser)
         toast.success(data.restaurant_name ? `Benvenuto, ${data.restaurant_name}` : `Benvenuto ${loggedUser.name || 'Utente'}`)
       }

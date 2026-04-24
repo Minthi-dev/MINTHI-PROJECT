@@ -30,7 +30,7 @@ serve(async (req) => {
         new Response(JSON.stringify(b), { status: s, headers: { ...cors, "Content-Type": "application/json" } });
 
     try {
-        const { userId, orderId, nextStatus } = await req.json();
+        const { userId, orderId, nextStatus, sessionToken } = await req.json();
         if (!userId || !orderId || !nextStatus) return json({ error: "Parametri mancanti" }, 400);
         if (typeof orderId !== "string" || orderId.length !== 36) return json({ error: "orderId non valido" }, 400);
 
@@ -42,7 +42,7 @@ serve(async (req) => {
         if (oErr || !order) return json({ error: "Ordine non trovato" }, 404);
         if (order.order_type !== "takeaway") return json({ error: "Non è un ordine asporto" }, 400);
 
-        const access = await verifyAccess(supabase, userId, order.restaurant_id);
+        const access = await verifyAccess(supabase, userId, order.restaurant_id, sessionToken);
         if (!access.valid) return json({ error: "Non autorizzato" }, 403);
 
         const { data: restaurant } = await supabase

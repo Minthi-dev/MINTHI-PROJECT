@@ -28,14 +28,14 @@ serve(async (req) => {
     }
 
     try {
-        const { userId, restaurantId, discountPercent, discountDuration, discountDurationMonths, reason, grantedBy } = await req.json();
+        const { userId, restaurantId, discountPercent, discountDuration, discountDurationMonths, reason, grantedBy, sessionToken } = await req.json();
 
         if (!userId) {
             return new Response(JSON.stringify({ error: "Authentication required" }), {
                 status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
         }
-        const access = await verifyAccess(supabase, userId);
+        const access = await verifyAccess(supabase, userId, undefined, sessionToken);
         if (!access.valid || !access.isAdmin) {
             return new Response(JSON.stringify({ error: "Non autorizzato — solo admin" }), {
                 status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },

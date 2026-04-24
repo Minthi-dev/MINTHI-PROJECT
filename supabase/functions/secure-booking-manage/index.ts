@@ -13,7 +13,7 @@ serve(async (req) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
     try {
-        const { userId, action, bookingId, restaurantId, data } = await req.json();
+        const { userId, action, bookingId, restaurantId, data, sessionToken } = await req.json();
         const json = (body: any, status = 200) =>
             new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
@@ -62,7 +62,7 @@ serve(async (req) => {
         if (!userId) return json({ error: "userId richiesto" }, 400);
         if (!targetRestaurantId) return json({ error: "Contesto ristorante non trovato" }, 400);
 
-        const access = await verifyAccess(supabase, userId, targetRestaurantId);
+        const access = await verifyAccess(supabase, userId, targetRestaurantId, sessionToken);
         if (!access.valid) return json({ error: "Non autorizzato" }, 403);
 
         switch (action) {
