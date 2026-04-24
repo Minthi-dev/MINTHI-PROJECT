@@ -40,6 +40,8 @@ $$;
 REVOKE ALL ON FUNCTION public.get_takeaway_display(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_takeaway_display(uuid) TO anon, authenticated, service_role;
 
+DROP FUNCTION IF EXISTS public.get_takeaway_order_status(uuid, text);
+
 CREATE OR REPLACE FUNCTION public.get_takeaway_order_status(
     p_restaurant_id uuid,
     p_pickup_code text
