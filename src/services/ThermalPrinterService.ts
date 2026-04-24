@@ -1,5 +1,5 @@
 /**
- * ThermalPrinterService — Epson TM-T20III (and compatible)
+ * ThermalPrinterService — Epson TM-T20III, Custom and compatible printers
  * Supports two connection modes:
  *   - 'usb'     : WebUSB (stampante collegata via cavo USB al PC)
  *   - 'network' : WebSocket → printer-relay.js → TCP 9100 (stampante WiFi/LAN)
@@ -7,7 +7,7 @@
 
 import type { Order } from './types'
 
-// --- ESC/POS Constants ---
+// --- ESC/POS / CUSTOM Constants ---
 const ESC = 0x1B
 const GS  = 0x1D
 const LF  = 0x0A
@@ -24,6 +24,7 @@ const CMD = {
   SIZE_WIDE:    [GS, 0x21, 0x10],
   SIZE_TALL:    [GS, 0x21, 0x01],
   FEED_CUT:     [GS, 0x56, 66, 3],
+  CUSTOM_CUT:   [GS, 0x56, 0],
   FEED_LINES:   (n: number) => [ESC, 0x64, n],
 }
 
@@ -40,10 +41,12 @@ const COLS = 48 // Characters per line on 80mm paper (Font A)
 
 // --- Types ---
 export type PrinterMode = 'usb' | 'network'
+export type PrinterProtocol = 'escpos' | 'custom'
 
 export interface PrinterSettings {
   enabled: boolean
   mode: PrinterMode
+  protocol: PrinterProtocol
   networkRelayUrl: string  // es. "ws://localhost:8765"
   autoPrint: boolean
   autoCut: boolean
@@ -53,6 +56,7 @@ export interface PrinterSettings {
 const DEFAULT_SETTINGS: PrinterSettings = {
   enabled: false,
   mode: 'usb',
+  protocol: 'escpos',
   networkRelayUrl: 'ws://localhost:8765',
   autoPrint: true,
   autoCut: true,
@@ -360,7 +364,7 @@ class ThermalPrinterService extends EventTarget {
       for (let i = 0; i < sortedCourses.length; i++) {
         const [courseNum, courseItems] = sortedCourses[i]
         if (i > 0) {
-          buf.push(...CMD.FEED_CUT)
+          buf.push(...this._cut())
           buf.push(...CMD.RESET, ...CMD.CODEPAGE_858)
           buf.push(...CMD.ALIGN_CENTER, ...CMD.SIZE_DOUBLE, ...CMD.BOLD_ON)
           buf.push(...this._text('COMANDA'))
@@ -392,7 +396,7 @@ class ThermalPrinterService extends EventTarget {
 
     buf.push(...this._text(this._line('=')))
     buf.push(...CMD.FEED_LINES(2))
-    if (this._settings.autoCut) buf.push(...CMD.FEED_CUT)
+    if (this._settings.autoCut) buf.push(...this._cut())
 
     await this._send(new Uint8Array(buf))
   }
@@ -487,7 +491,7 @@ class ThermalPrinterService extends EventTarget {
     buf.push(...CMD.ALIGN_CENTER)
     buf.push(...this._text('Grazie e buon appetito!'))
     buf.push(...CMD.FEED_LINES(2))
-    if (this._settings.autoCut) buf.push(...CMD.FEED_CUT)
+    if (this._settings.autoCut) buf.push(...this._cut())
 
     await this._send(new Uint8Array(buf))
   }
@@ -502,11 +506,12 @@ class ThermalPrinterService extends EventTarget {
     buf.push(...this._text('Stampante collegata!'))
     buf.push(...this._text('Test di stampa OK'))
     buf.push(...this._text(`Modalita: ${this._settings.mode === 'network' ? 'Rete WiFi/LAN' : 'USB'}`))
+    buf.push(...this._text(`Protocollo: ${this._settings.protocol === 'custom' ? 'CUSTOM' : 'ESC/POS'}`))
     buf.push(...this._text(''))
     buf.push(...this._text(`${new Date().toLocaleString('it-IT')}`))
     buf.push(...this._text(this._line('=')))
     buf.push(...CMD.FEED_LINES(3))
-    buf.push(...CMD.FEED_CUT)
+    if (this._settings.autoCut) buf.push(...this._cut())
     await this._send(new Uint8Array(buf))
   }
 
@@ -574,6 +579,10 @@ class ThermalPrinterService extends EventTarget {
   }
 
   private _line(char: string): string { return char.repeat(COLS) }
+
+  private _cut(): number[] {
+    return this._settings.protocol === 'custom' ? CMD.CUSTOM_CUT : CMD.FEED_CUT
+  }
 
   private _notify(): void { this.dispatchEvent(new Event('change')) }
 }

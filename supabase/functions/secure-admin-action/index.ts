@@ -220,23 +220,35 @@ serve(async (req) => {
                 const freeMonths = data?.free_months || 0;
                 const discountPercent = data?.discount_percent || 0;
                 const discountDuration = data?.discount_duration || "once";
+                const discountDurationMonths = data?.discount_duration_months || null;
                 const stripeCouponId = data?.stripe_coupon_id || null;
 
                 // Check if token with same params already exists
-                const { data: existing } = await supabase
+                let existingQuery = supabase
                     .from("registration_tokens")
                     .select("id, token")
                     .eq("free_months", freeMonths)
                     .eq("discount_percent", discountPercent)
                     .eq("discount_duration", discountDuration)
-                    .gt("expires_at", new Date().toISOString())
+                    .gt("expires_at", new Date().toISOString());
+                existingQuery = discountDurationMonths === null
+                    ? existingQuery.is("discount_duration_months", null)
+                    : existingQuery.eq("discount_duration_months", discountDurationMonths);
+                const { data: existing } = await existingQuery
                     .maybeSingle();
                 if (existing) return json({ success: true, data: existing });
 
                 const token = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 6);
                 const { data: newToken, error } = await supabase
                     .from("registration_tokens")
-                    .insert({ token, free_months: freeMonths, discount_percent: discountPercent, discount_duration: discountDuration, stripe_coupon_id: stripeCouponId })
+                    .insert({
+                        token,
+                        free_months: freeMonths,
+                        discount_percent: discountPercent,
+                        discount_duration: discountDuration,
+                        discount_duration_months: discountDurationMonths,
+                        stripe_coupon_id: stripeCouponId,
+                    })
                     .select("id, token")
                     .single();
                 if (error) return json({ error: error.message }, 500);

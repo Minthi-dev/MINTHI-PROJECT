@@ -50,6 +50,7 @@ export default function TakeawayMenu() {
     const [paymentChoice, setPaymentChoice] = useState<'stripe' | 'pay_on_pickup'>('stripe')
     const [loadError, setLoadError] = useState<string | null>(null)
     const [idempotencyKey, setIdempotencyKey] = useState<string>(() => makeIdempotencyKey())
+    const [pendingDish, setPendingDish] = useState<Dish | null>(null)
 
     useEffect(() => {
         if (!restaurantId) return
@@ -105,7 +106,7 @@ export default function TakeawayMenu() {
         return Math.round(t * 100) / 100
     }, [cart])
 
-    const addToCart = (dish: Dish) => {
+    const addToCartDirect = (dish: Dish) => {
         setCart(prev => {
             const idx = prev.findIndex(c => c.dish.id === dish.id && !c.note)
             if (idx >= 0) {
@@ -116,6 +117,12 @@ export default function TakeawayMenu() {
             return [...prev, { dish, quantity: 1 }]
         })
         toast.success(`+1 ${dish.name}`, { duration: 900 })
+    }
+    const requestAddToCart = (dish: Dish) => setPendingDish(dish)
+    const confirmAddToCart = () => {
+        if (!pendingDish) return
+        addToCartDirect(pendingDish)
+        setPendingDish(null)
     }
     const decrement = (idx: number) => {
         setCart(prev => {
@@ -270,7 +277,7 @@ export default function TakeawayMenu() {
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.3) }}
-                                            onClick={() => addToCart(d)}
+                                            onClick={() => requestAddToCart(d)}
                                             className="flex items-center gap-4 p-4 rounded-xl bg-zinc-900/70 border border-amber-500/10 shadow-lg hover:border-amber-500/40 transition-all duration-500 cursor-pointer group active:scale-[0.98] backdrop-blur-sm"
                                         >
                                             {hasImage && (
@@ -303,7 +310,7 @@ export default function TakeawayMenu() {
                                             <Button
                                                 size="icon"
                                                 className="rounded-full shrink-0 bg-amber-500/10 hover:bg-amber-500 hover:text-black border border-amber-500/40 text-amber-400 transition-all duration-300 hover:scale-110"
-                                                onClick={(e) => { e.stopPropagation(); addToCart(d) }}
+                                                onClick={(e) => { e.stopPropagation(); requestAddToCart(d) }}
                                                 aria-label={`Aggiungi ${d.name}`}
                                             >
                                                 <Plus size={20} weight="bold" />
@@ -350,7 +357,7 @@ export default function TakeawayMenu() {
                                 <div className="flex items-center gap-1">
                                     <Button size="icon" variant="ghost" onClick={() => decrement(idx)} className="h-8 w-8 text-white"><Minus size={14} /></Button>
                                     <span className="w-6 text-center">{line.quantity}</span>
-                                    <Button size="icon" variant="ghost" onClick={() => addToCart(line.dish)} className="h-8 w-8 text-white"><Plus size={14} /></Button>
+                                    <Button size="icon" variant="ghost" onClick={() => addToCartDirect(line.dish)} className="h-8 w-8 text-white"><Plus size={14} /></Button>
                                     <Button size="icon" variant="ghost" onClick={() => removeLine(idx)} className="h-8 w-8 text-red-400"><Trash size={14} /></Button>
                                 </div>
                             </div>
@@ -444,6 +451,44 @@ export default function TakeawayMenu() {
                             <ArrowLeft size={14} /> Torna al carrello
                         </button>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add dish confirmation */}
+            <Dialog open={!!pendingDish} onOpenChange={(open) => { if (!open) setPendingDish(null) }}>
+                <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Plus size={20} className="text-amber-400" weight="bold" />
+                            Aggiungere al carrello?
+                        </DialogTitle>
+                    </DialogHeader>
+                    {pendingDish && (
+                        <div className="space-y-4">
+                            <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                                <div className="font-semibold text-base leading-tight">{pendingDish.name}</div>
+                                {pendingDish.description && (
+                                    <p className="text-sm text-zinc-400 mt-1 line-clamp-2">{pendingDish.description}</p>
+                                )}
+                                <div className="text-amber-400 font-bold mt-3">€{Number(pendingDish.price).toFixed(2)}</div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setPendingDish(null)}
+                                    className="border-white/10 text-zinc-200 hover:bg-white/5"
+                                >
+                                    Annulla
+                                </Button>
+                                <Button
+                                    onClick={confirmAddToCart}
+                                    className="bg-amber-500 hover:bg-amber-400 text-black font-bold"
+                                >
+                                    Aggiungi
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </DialogContent>
             </Dialog>
         </div>

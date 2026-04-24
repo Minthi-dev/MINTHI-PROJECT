@@ -251,6 +251,11 @@ serve(async (req) => {
                     }
                 } else {
                     // === ATTIVAZIONE ABBONAMENTO ===
+                    if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+                        console.warn(`[WEBHOOK] subscription checkout ${session.id} completato ma payment_status=${session.payment_status}; attendo invoice.paid`);
+                        break;
+                    }
+
                     const pendingRegistrationId = session.metadata?.pendingRegistrationId;
                     const restaurantId = session.metadata?.restaurantId || (!pendingRegistrationId ? session.client_reference_id : null);
                     const customerId = session.customer;
@@ -374,6 +379,44 @@ serve(async (req) => {
                         .eq("stripe_customer_id", customerId)
                         .single();
                     restaurant = retryRestaurant;
+                }
+
+                // Se Checkout era completato ma non ancora pagato, completiamo la
+                // registrazione qui usando i metadata copiati sulla Subscription.
+                if (!restaurant && invoice.subscription) {
+                    try {
+                        const subscription = await stripe.subscriptions.retrieve(String(invoice.subscription));
+                        const pendingRegistrationId = subscription.metadata?.pendingRegistrationId;
+                        const metadataRestaurantId = subscription.metadata?.restaurantId;
+
+                        if (pendingRegistrationId) {
+                            const { data: rpcResult, error: rpcError } = await supabase.rpc("complete_pending_registration", {
+                                p_pending_id: pendingRegistrationId,
+                                p_stripe_customer_id: customerId,
+                                p_stripe_subscription_id: subscription.id,
+                            });
+                            if (rpcError) {
+                                console.error(`[WEBHOOK] invoice.paid complete_pending_registration failed:`, JSON.stringify(rpcError));
+                            } else if (rpcResult?.restaurant_id) {
+                                restaurant = { id: rpcResult.restaurant_id };
+                                console.log(`[WEBHOOK] invoice.paid created restaurant ${restaurant.id} from pending ${pendingRegistrationId}`);
+                            }
+                        } else if (metadataRestaurantId) {
+                            await supabase
+                                .from("restaurants")
+                                .update({
+                                    stripe_customer_id: customerId,
+                                    stripe_subscription_id: subscription.id,
+                                    is_active: true,
+                                    suspension_reason: null,
+                                    subscription_status: "active",
+                                })
+                                .eq("id", metadataRestaurantId);
+                            restaurant = { id: metadataRestaurantId };
+                        }
+                    } catch (subscriptionErr) {
+                        console.error(`[WEBHOOK] invoice.paid subscription metadata fallback failed:`, subscriptionErr);
+                    }
                 }
 
                 if (!restaurant) {

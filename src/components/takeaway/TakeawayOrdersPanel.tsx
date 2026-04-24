@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Copy, Package, User as UserIcon, Check, ArrowsDownUp, FunnelSimple, CreditCard } from '@phosphor-icons/react'
+import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import TakeawayPaymentDialog from './TakeawayPaymentDialog'
 import TakeawayQRPosterButton from './TakeawayQRPosterButton'
@@ -161,13 +161,6 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
     }
     const openDetail = (o: Order) => { setSelected(o); setDetailOpen(true) }
 
-    const copyPickupLink = (o: Order) => {
-        const url = `${window.location.origin}/client/takeaway/${restaurantId}/order/${o.pickup_code}`
-        navigator.clipboard.writeText(url)
-            .then(() => toast.success('Link copiato'))
-            .catch(() => toast.error('Copia non riuscita'))
-    }
-
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -270,7 +263,6 @@ export default function TakeawayOrdersPanel({ restaurantId, restaurantName, take
                                     onStatus={changeStatus}
                                     onPay={openPayment}
                                     onDetail={openDetail}
-                                    onCopy={copyPickupLink}
                                     takeawayRequireStripe={takeawayRequireStripe}
                                 />
                             ))}
@@ -348,11 +340,10 @@ interface TakeawayCardProps {
     onStatus: (o: Order, next: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') => void
     onPay: (o: Order, forceStripeOnly?: boolean) => void
     onDetail: (o: Order) => void
-    onCopy: (o: Order) => void
     takeawayRequireStripe: boolean
 }
 
-function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy, takeawayRequireStripe }: TakeawayCardProps) {
+function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequireStripe }: TakeawayCardProps) {
     const due = orderDue(o)
     const meta = statusMeta[o.status] || statusMeta.PREPARING
     const minutesAgo = Math.floor((now - new Date(o.created_at).getTime()) / 60000)
@@ -374,27 +365,26 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy, takeaw
                 isArchive ? 'bg-zinc-900/40 border-white/5' : isReady ? 'bg-zinc-900 border-emerald-500/40 shadow-emerald-500/10' : 'bg-zinc-900 border-white/10 hover:border-amber-500/40'
             )}>
                 <CardHeader className="pb-3 pt-4 px-4 border-b border-white/10 shrink-0">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-center gap-3">
                         <div className={cn(
-                            'flex-shrink-0 w-[72px] h-[72px] rounded-2xl border-2 flex flex-col items-center justify-center font-mono font-bold shadow-inner',
+                            'flex-shrink-0 w-[78px] h-[78px] rounded-2xl border-2 flex flex-col items-center justify-center font-mono font-bold shadow-inner',
                             meta.ring
                         )}>
                             <span className="text-[10px] uppercase tracking-widest opacity-70 leading-none mt-0.5">N°</span>
-                            <span className="text-[26px] leading-tight">#{String(o.pickup_number || 0).padStart(2, '0')}</span>
+                            <span className="text-[28px] leading-tight">#{String(o.pickup_number || 0).padStart(2, '0')}</span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 text-base font-semibold text-zinc-100 truncate">
-                                <UserIcon size={14} className="text-zinc-400 flex-shrink-0" weight="fill" />
-                                <span className="truncate">{o.customer_name || '—'}</span>
-                            </div>
-                            <div className="text-sm text-zinc-400 font-mono tracking-tight">{o.customer_phone || ''}</div>
-                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <div className="flex-1 min-w-0 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                                 <Badge className={`${meta.color} border text-xs uppercase font-bold tracking-wide px-2 py-0.5`}>
                                     {lockedForStripePrepay ? 'Attesa Stripe' : meta.label}
                                 </Badge>
-                                <span className="text-xs text-zinc-400 flex items-center gap-1 font-medium">
-                                    <Clock size={12} weight="fill" />{formatMinutes(minutesAgo)}
-                                </span>
+                            </div>
+                            <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-zinc-100">
+                                <Clock size={17} weight="fill" className="text-amber-400" />
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold leading-none">Attesa</div>
+                                    <div className="text-lg font-black leading-tight text-white">{formatMinutes(minutesAgo)}</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -497,17 +487,9 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, onCopy, takeaw
                             size="sm"
                             variant="ghost"
                             onClick={() => onDetail(o)}
-                            className="text-zinc-300 hover:text-white hover:bg-white/5 h-9 text-sm font-medium"
+                            className="text-zinc-300 hover:text-white hover:bg-white/5 h-10 text-sm font-medium col-span-2"
                         >
-                            <CaretRight size={14} className="mr-1" />Dettagli
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onCopy(o)}
-                            className="text-zinc-300 hover:text-white hover:bg-white/5 h-9 text-sm font-medium"
-                        >
-                            <Copy size={14} className="mr-1" />Link
+                            <CaretRight size={14} className="mr-1" />Dettagli cliente
                         </Button>
                     </div>
                 </CardContent>

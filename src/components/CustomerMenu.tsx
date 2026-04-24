@@ -72,7 +72,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Category, Dish, Order, TableSession, Restaurant } from '../services/types'
-import { getCurrentCopertoPrice } from '../utils/pricingUtils'
+import { getCurrentAyceSettings, getCurrentCopertoPrice } from '../utils/pricingUtils'
 import { isRestaurantOpen } from '../utils/timeUtils'
 
 // Fixed amber dark theme — no color customization
@@ -1135,7 +1135,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
     const { data: orders } = await supabase
       .from('orders')
-      .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at, dish:dishes(id, name, price, category_id, image_url))')
+      .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at, paid_online_at, paid_online_session_id, dish:dishes(id, name, price, category_id, image_url))')
       .eq('table_session_id', sessionId)
       .order('created_at', { ascending: false })
 
@@ -1870,7 +1870,12 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   // Helper: check if AYCE is enabled for the session
   const ayceInfo = useMemo(() => {
     if (!activeSession?.ayce_enabled || !fullRestaurant) return { enabled: false, price: 0 }
-    return { enabled: true, price: (fullRestaurant as any).ayce_price_per_person || 0 }
+    const currentAyce = getCurrentAyceSettings(
+      fullRestaurant,
+      fullRestaurant.lunch_time_start || '12:00',
+      fullRestaurant.dinner_time_start || '19:00'
+    )
+    return { enabled: currentAyce.enabled, price: currentAyce.price || 0 }
   }, [activeSession, fullRestaurant])
 
   // Total for all unpaid items, minus any partial payments already registered in the session
@@ -1910,14 +1915,12 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         payableItems.filter(pi => selectedPaymentItems.has(pi.id)).forEach(pi => {
           items.push({ name: pi.name, price: pi.price, quantity: pi.quantity })
         })
-        // Check if coperto items were selected
-        if (selectedPaymentItems.has('coperto') && copertoInfo.enabled) {
-          // Count how many coperti are selected (stored as coperto_1, coperto_2, etc.)
-          const selectedCopertiCount = Array.from(selectedPaymentItems).filter(id => id.startsWith('coperto')).length
+        const selectedCopertiCount = Array.from(selectedPaymentItems).filter(id => id.startsWith('coperto')).length
+        if (selectedCopertiCount > 0 && copertoInfo.enabled) {
           items.push({ name: 'Coperto', price: copertoInfo.price, quantity: selectedCopertiCount })
         }
-        if (selectedPaymentItems.has('ayce') && ayceInfo.enabled && ayceInfo.price > 0) {
-          const selectedAyceCount = Array.from(selectedPaymentItems).filter(id => id.startsWith('ayce')).length
+        const selectedAyceCount = Array.from(selectedPaymentItems).filter(id => id.startsWith('ayce')).length
+        if (selectedAyceCount > 0 && ayceInfo.enabled && ayceInfo.price > 0) {
           items.push({ name: 'All You Can Eat', price: ayceInfo.price, quantity: selectedAyceCount })
         }
         splitLabel = 'Pagamento parziale (per piatti)'

@@ -22,7 +22,7 @@ export default function RegisterSuccessPage() {
 
     const checkReady = async () => {
       const { data } = await supabase
-        .from('users')
+        .from('users_safe')
         .select('id')
         .eq('name', pendingUsername)
         .maybeSingle()

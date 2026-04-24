@@ -24,6 +24,17 @@ const http = require('http')
 const PRINTER_IP   = process.argv[2] || '192.168.1.100'
 const PRINTER_PORT = 9100
 const WS_PORT      = parseInt(process.argv[3] || '8765', 10)
+const ALLOWED_ORIGINS = (process.env.MINTHI_PRINTER_ALLOWED_ORIGINS || [
+  'https://minthi.it',
+  'https://www.minthi.it',
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:4173',
+].join(','))
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
 
 // --- Carica ws (WebSocket) ---
 let WebSocketServer
@@ -46,6 +57,12 @@ console.log(`   In attesa di connessione dal browser...\n`)
 wss.on('connection', (ws, req) => {
   const origin = req.headers.origin || '(no origin)'
   console.log(`[WS] Browser connesso da ${origin}`)
+
+  if (req.headers.origin && !ALLOWED_ORIGINS.includes(req.headers.origin)) {
+    console.warn(`[WS] Origine rifiutata: ${req.headers.origin}`)
+    ws.close(1008, 'Origin not allowed')
+    return
+  }
 
   // Apri connessione TCP alla stampante
   const tcpClient = new net.Socket()

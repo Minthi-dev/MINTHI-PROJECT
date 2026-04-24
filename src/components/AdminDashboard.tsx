@@ -33,7 +33,14 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     undefined,
     (r: any) => ({ ...r, isActive: r.is_active })
   )
-  const [users, , refreshUsers] = useSupabaseData<User>('users', [])
+  const [users, , refreshUsers] = useSupabaseData<User>(
+    'users_safe',
+    [],
+    undefined,
+    undefined,
+    undefined,
+    { realtimeEnabled: false }
+  )
   const [salesByRestaurant, setSalesByRestaurant] = useState<Record<string, number>>({})
   const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin'>('restaurants')
 

@@ -1765,6 +1765,42 @@ export function SettingsView({
                             )}
                         </section>
 
+                        {/* Protocollo stampante */}
+                        <section>
+                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
+                                Protocollo
+                            </h3>
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
+                                <div className="grid grid-cols-2 divide-x divide-white/[0.05]">
+                                    {[
+                                        { id: 'escpos', label: 'ESC/POS', desc: 'Epson e compatibili' },
+                                        { id: 'custom', label: 'CUSTOM', desc: 'Stampanti Custom' },
+                                    ].map(({ id, label, desc }) => {
+                                        const active = printer.settings.protocol === id;
+                                        return (
+                                            <button
+                                                key={id}
+                                                onClick={() => printer.updateSettings({ protocol: id as 'escpos' | 'custom' })}
+                                                className={`relative flex items-center gap-3 px-4 py-4 transition-colors ${active
+                                                    ? 'bg-amber-500/[0.06]'
+                                                    : 'hover:bg-white/[0.02]'
+                                                    }`}
+                                            >
+                                                <Printer size={18} weight={active ? 'fill' : 'regular'} className={active ? 'text-amber-400' : 'text-zinc-500'} />
+                                                <div className="text-left min-w-0">
+                                                    <p className={`text-sm font-medium ${active ? 'text-amber-200' : 'text-zinc-200'}`}>{label}</p>
+                                                    <p className="text-[13px] text-zinc-500 mt-0.5">{desc}</p>
+                                                </div>
+                                                {active && (
+                                                    <CheckCircle size={14} weight="fill" className="ml-auto text-amber-400 shrink-0" />
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </section>
+
                         {/* Stato connessione */}
                         {printer.isSupported && (
                             <section>
@@ -1885,7 +1921,7 @@ export function SettingsView({
                                                 <li>Fai una stampa di prova per verificare</li>
                                             </ol>
                                             <p className="text-[12px] text-zinc-500 mt-3">
-                                                Compatibile con Epson, Star, MUNBYN e tutte le stampanti termiche ESC/POS. Richiede Chrome o Edge.
+                                                Compatibile con stampanti termiche ESC/POS e CUSTOM. Richiede Chrome o Edge.
                                             </p>
                                         </>
                                     ) : (
@@ -1900,7 +1936,7 @@ export function SettingsView({
                                                 <li>Fai una stampa di prova</li>
                                             </ol>
                                             <p className="text-[12px] text-zinc-500 mt-3">
-                                                Il relay va fatto girare sul PC della cassa. Compatibile con Epson TM-T20III, Star, MUNBYN e altre stampanti di rete.
+                                                Il relay va fatto girare sul PC della cassa. Compatibile con stampanti di rete ESC/POS e CUSTOM su porta 9100.
                                             </p>
                                         </>
                                     )}

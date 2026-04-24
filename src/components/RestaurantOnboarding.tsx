@@ -211,7 +211,7 @@ export default function RestaurantOnboarding() {
                                 {tokenData.discount_percent}% di sconto
                                 {tokenData.discount_duration === 'forever' ? ' per sempre'
                                     : tokenData.discount_duration === 'once' ? ' per 1 mese'
-                                        : ` per ${tokenData.discount_duration} mesi`}
+                                        : ` per ${tokenData.discount_duration_months || 1} mesi`}
                             </div>
                         )}
                     </div>

@@ -14,7 +14,7 @@ function _getCurrentUserId(): string | null {
 export const DatabaseService = {
     // Users
     async getUsers() {
-        const { data, error } = await supabase.from('users').select('id, email, name, role, created_at')
+        const { data, error } = await supabase.from('users_safe').select('id, email, name, role, created_at')
         if (error) throw error
         return data as unknown as User[]
     },
@@ -613,7 +613,7 @@ export const DatabaseService = {
             .from('orders')
             .select(`
                 id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method,
-                items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at,
+                items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at, paid_online_at, paid_online_session_id,
                     dish:dishes(id, name, price, category_id)
                 )
             `)
@@ -631,7 +631,7 @@ export const DatabaseService = {
             .from('orders')
             .select(`
                 id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, payment_method,
-                items:order_items(id, order_id, dish_id, quantity, status, note, course_number, ready_at,
+                items:order_items(id, order_id, dish_id, quantity, status, note, course_number, ready_at, paid_online_at, paid_online_session_id,
                     dish:dishes(id, name, price, category_id)
                 )
             `)
@@ -666,7 +666,7 @@ export const DatabaseService = {
 
         let query = supabase
             .from('orders')
-            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number), restaurant:restaurants(name)', { count: 'exact' })
+            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number, paid_online_at, paid_online_session_id), restaurant:restaurants(name)', { count: 'exact' })
             .order('created_at', { ascending: false })
             .range(from, to)
 
@@ -1136,7 +1136,7 @@ export const DatabaseService = {
     async getSessionOrders(sessionId: string) {
         const { data, error } = await supabase
             .from('orders')
-            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at, dish:dishes(id, name, price, category_id, image_url))')
+            .select('id, status, total_amount, created_at, closed_at, table_session_id, restaurant_id, items:order_items(id, order_id, dish_id, quantity, status, note, course_number, created_at, ready_at, paid_online_at, paid_online_session_id, dish:dishes(id, name, price, category_id, image_url))')
             .eq('table_session_id', sessionId)
             .order('created_at', { ascending: false })
         if (error) throw error
@@ -1572,7 +1572,13 @@ export const DatabaseService = {
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
             body: {
                 userId, action: 'create_registration_token',
-                data: { free_months: freeMonths, discount_percent: discountPercent, discount_duration: discountDuration, stripe_coupon_id: stripeCouponId }
+                data: {
+                    free_months: freeMonths,
+                    discount_percent: discountPercent,
+                    discount_duration: discountDuration,
+                    discount_duration_months: discountDurationMonths || null,
+                    stripe_coupon_id: stripeCouponId,
+                }
             }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore creazione token')
@@ -1580,16 +1586,10 @@ export const DatabaseService = {
     },
 
     async validateRegistrationToken(token: string) {
-        const { data, error } = await supabase
-            .from('registration_tokens')
-            .select('*')
-            .eq('token', token)
-            .maybeSingle()
+        const { data, error } = await supabase.rpc('validate_registration_token', { p_token: token })
         if (error) throw error
-        if (!data) return null
-        // Tokens are never invalidated after use - they stay active forever
-        if (data.expires_at && new Date(data.expires_at) < new Date()) return null
-        return data
+        const row = Array.isArray(data) ? data[0] : data
+        return row || null
     },
 
     async markTokenUsed(tokenId: string, restaurantId: string) {

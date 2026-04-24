@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import Stripe from "https://esm.sh/stripe@20.4.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
-    apiVersion: "2024-04-10" as any,
+    apiVersion: "2026-02-25.clover" as any,
     httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -24,7 +24,7 @@ serve(async (req) => {
     try {
         const { action, amount_cents, userId } = await req.json();
 
-        // "set" action requires admin auth; "get" is read-only (admin panel only)
+        // "create" requires admin auth; "get" is read-only (admin panel only)
         if (userId) {
             const access = await verifyAccess(supabase, userId);
             if (!access.valid || !access.isAdmin) {
@@ -32,7 +32,7 @@ serve(async (req) => {
                     status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
                 });
             }
-        } else if (action === "set") {
+        } else if (action === "create") {
             return new Response(JSON.stringify({ error: "Authentication required" }), {
                 status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
             });

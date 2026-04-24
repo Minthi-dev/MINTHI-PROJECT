@@ -121,7 +121,7 @@ const AppContent = () => {
           try {
             let valid = false
             if (parsedUser.role === 'ADMIN' || parsedUser.role === 'OWNER') {
-              const { data } = await supabase.from('users').select('id, role').eq('id', parsedUser.id).single()
+              const { data } = await supabase.from('users_safe').select('id, role').eq('id', parsedUser.id).single()
               valid = !!(data && data.role === parsedUser.role)
             } else if (parsedUser.role === 'STAFF') {
               valid = await DatabaseService.verifyStaffSession(parsedUser.id)
