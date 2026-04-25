@@ -978,10 +978,11 @@ export const DatabaseService = {
         if (error) {
             let msg = 'Errore aggiornamento ordine'
             try {
-                if (data?.error) msg = data.error
-                else if ((error as any).context) {
+                if (data?.error) {
+                    msg = data.error + (data.reason ? ` — ${data.reason}` : '')
+                } else if ((error as any).context) {
                     const body = await (error as any).context.json()
-                    if (body?.error) msg = body.error
+                    if (body?.error) msg = body.error + (body.reason ? ` — ${body.reason}` : '')
                 } else if (error.message && !error.message.includes('non-2xx')) {
                     msg = error.message
                 }
