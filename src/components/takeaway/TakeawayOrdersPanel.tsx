@@ -465,7 +465,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                             onClick={() => setStatusFilter('ready')}
                             color="emerald"
                         >
-                            <Bell size={14} className="mr-1" /> Pronti <span className="opacity-60">({counts.ready})</span>
+                            <Bell size={14} className="mr-1" /> Da consegnare <span className="opacity-60">({counts.ready})</span>
                         </FilterPill>
                     </div>
                     <div className="ml-auto flex items-center gap-1.5">
