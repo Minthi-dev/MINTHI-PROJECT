@@ -138,7 +138,7 @@ export const DatabaseService = {
             'auto_deliver_ready_dishes',
             'enable_stripe_payments', 'vat_number', 'billing_name',
             'takeaway_enabled', 'dine_in_enabled', 'takeaway_require_stripe',
-            'takeaway_pickup_notice', 'takeaway_auto_print', 'takeaway_max_orders_per_hour',
+            'takeaway_pickup_notice', 'takeaway_auto_print', 'takeaway_auto_pickup_enabled', 'takeaway_max_orders_per_hour',
         ]
 
         // Copia solo i campi presenti nell'oggetto input

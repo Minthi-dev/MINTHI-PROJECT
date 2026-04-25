@@ -3,13 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { DatabaseService } from '@/services/DatabaseService'
-import type { Order } from '@/services/types'
+import type { Category, Order } from '@/services/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard, MagnifyingGlass, CalendarBlank, XCircle } from '@phosphor-icons/react'
+import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard, MagnifyingGlass, CalendarBlank, XCircle, Plus, Minus } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import TakeawayPaymentDialog from './TakeawayPaymentDialog'
 
@@ -17,6 +17,7 @@ interface Props {
     restaurantId: string
     restaurantName?: string
     takeawayRequireStripe?: boolean
+    takeawayAutoPickupEnabled?: boolean
     onPrintKitchenOrder?: (order: Order) => void
     onAutoPrintKitchenOrder?: (order: Order) => void
     onPrintReceipt?: (order: Order) => void
@@ -27,15 +28,59 @@ type StatusFilter = 'all' | 'preparing' | 'ready'
 type SortOrder = 'oldest' | 'newest'
 type ArchiveRange = 'today' | '7d' | '30d' | 'custom' | 'all'
 type ArchiveStatusFilter = 'all' | 'paid' | 'picked_up' | 'cancelled' | 'unpaid'
+type CardSize = 'compact' | 'normal' | 'large'
 
 const ACTIVE_STATUSES = new Set(['PENDING', 'PREPARING', 'READY'])
 const ARCHIVE_STATUSES = new Set(['PAID', 'PICKED_UP', 'CANCELLED'])
 const ARCHIVE_DISPLAY_LIMIT = 160
+const AUTO_PICKUP_MS = 2 * 60 * 1000
+
+const cardSizeConfig: Record<CardSize, {
+    minWidth: number
+    numberBox: string
+    numberText: string
+    header: string
+    content: string
+    itemText: string
+    actionHeight: string
+    listMax: string
+}> = {
+    compact: {
+        minWidth: 250,
+        numberBox: 'w-14 h-14 rounded-xl',
+        numberText: 'text-[22px]',
+        header: 'p-3',
+        content: 'p-3 gap-2.5',
+        itemText: 'text-base',
+        actionHeight: 'h-10',
+        listMax: 'max-h-28',
+    },
+    normal: {
+        minWidth: 310,
+        numberBox: 'w-16 h-16 rounded-2xl',
+        numberText: 'text-[25px]',
+        header: 'p-3.5',
+        content: 'p-3.5 gap-3',
+        itemText: 'text-[17px]',
+        actionHeight: 'h-11',
+        listMax: 'max-h-36',
+    },
+    large: {
+        minWidth: 390,
+        numberBox: 'w-[76px] h-[76px] rounded-2xl',
+        numberText: 'text-[30px]',
+        header: 'p-4',
+        content: 'p-4 gap-3.5',
+        itemText: 'text-lg',
+        actionHeight: 'h-12',
+        listMax: 'max-h-44',
+    },
+}
 
 const statusMeta: Record<string, { label: string; color: string; ring: string }> = {
     PENDING: { label: 'In attesa', color: 'bg-amber-500/20 text-amber-200 border-amber-500/40', ring: 'border-amber-500 text-amber-300 bg-amber-500/15' },
     PREPARING: { label: 'In cucina', color: 'bg-amber-500/20 text-amber-200 border-amber-500/40', ring: 'border-amber-500 text-amber-300 bg-amber-500/15' },
-    READY: { label: 'Pronto', color: 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40', ring: 'border-emerald-500 text-emerald-300 bg-emerald-500/15' },
+    READY: { label: 'Da consegnare', color: 'bg-emerald-500/25 text-emerald-100 border-emerald-400/60', ring: 'border-emerald-400 text-emerald-200 bg-emerald-500/20' },
     PICKED_UP: { label: 'Ritirato', color: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30', ring: 'border-zinc-600 text-zinc-400 bg-zinc-800/40' },
     PAID: { label: 'Chiuso', color: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30', ring: 'border-zinc-600 text-zinc-400 bg-zinc-800/40' },
     CANCELLED: { label: 'Annullato', color: 'bg-red-500/20 text-red-300 border-red-500/30', ring: 'border-red-500 text-red-300 bg-red-500/15' },
@@ -75,12 +120,33 @@ function archiveItemsLabel(order: Order) {
     return items.length > 2 ? `${first} +${items.length - 2}` : first
 }
 
-export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStripe = false, onPrintKitchenOrder, onAutoPrintKitchenOrder, onPrintReceipt }: Props) {
+function orderMatchesCategories(order: Order, categoryIds: string[]) {
+    if (categoryIds.length === 0) return true
+    return (order.items || []).some((it: any) => it.dish?.category_id && categoryIds.includes(it.dish.category_id))
+}
+
+function readySince(order: Order) {
+    const raw = order.ready_at || order.created_at
+    return raw ? new Date(raw).getTime() : null
+}
+
+function formatCountdown(ms: number) {
+    const total = Math.max(0, Math.ceil(ms / 1000))
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
+    if (minutes <= 0) return `${seconds}s`
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`
+}
+
+export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStripe = false, takeawayAutoPickupEnabled = false, onPrintKitchenOrder, onAutoPrintKitchenOrder, onPrintReceipt }: Props) {
     const [orders, setOrders] = useState<Order[]>([])
+    const [categories, setCategories] = useState<Category[]>([])
     const [loading, setLoading] = useState(true)
     const [tab, setTab] = useState<Tab>('active')
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
     const [sortOrder, setSortOrder] = useState<SortOrder>('oldest')
+    const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
+    const [cardSize, setCardSize] = useState<CardSize>('compact')
     const [selected, setSelected] = useState<Order | null>(null)
     const [payOpen, setPayOpen] = useState(false)
     const [forceStripePayment, setForceStripePayment] = useState(false)
@@ -93,10 +159,11 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     const [archiveStatus, setArchiveStatus] = useState<ArchiveStatusFilter>('all')
     const knownKitchenPrintIdsRef = useRef<Set<string>>(new Set())
     const initialKitchenPrintLoadRef = useRef(true)
+    const autoPickupInFlightRef = useRef<Set<string>>(new Set())
 
-    // Re-render every 30s so the "N minuti fa" timer stays accurate
+    // Re-render often enough for the ready countdown and auto-pickup timer.
     useEffect(() => {
-        const t = setInterval(() => setNow(Date.now()), 30000)
+        const t = setInterval(() => setNow(Date.now()), 5000)
         return () => clearInterval(t)
     }, [])
 
@@ -142,6 +209,43 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         }
     }, [restaurantId, refresh])
 
+    useEffect(() => {
+        let alive = true
+        DatabaseService.getCategoriesForMenu(restaurantId)
+            .then(data => {
+                if (alive) setCategories(data || [])
+            })
+            .catch(e => {
+                console.error('[takeaway-panel] categories error', e)
+            })
+        return () => { alive = false }
+    }, [restaurantId])
+
+    useEffect(() => {
+        if (!takeawayAutoPickupEnabled) return
+
+        for (const order of orders) {
+            if (order.status !== 'READY') continue
+            if (orderDue(order) > 0.01) continue
+            const readyAt = readySince(order)
+            if (!readyAt || now - readyAt < AUTO_PICKUP_MS) continue
+            if (autoPickupInFlightRef.current.has(order.id)) continue
+
+            autoPickupInFlightRef.current.add(order.id)
+            DatabaseService.updateTakeawayStatus(order.id, 'PICKED_UP')
+                .then(() => {
+                    toast.success(`#${String(order.pickup_number || 0).padStart(3, '0')} chiuso automaticamente`)
+                    refresh()
+                })
+                .catch((e: any) => {
+                    toast.error(e?.message || 'Errore chiusura automatica')
+                })
+                .finally(() => {
+                    autoPickupInFlightRef.current.delete(order.id)
+                })
+        }
+    }, [orders, now, takeawayAutoPickupEnabled, refresh])
+
     // Partition orders once; filter/sort applied below based on UI state
     const { active, archive, counts } = useMemo(() => {
         const activeAll: Order[] = []
@@ -159,9 +263,23 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         return { active: activeAll, archive: archiveAll, counts }
     }, [orders])
 
+    const categoryCounts = useMemo(() => {
+        const map = new Map<string, number>()
+        for (const o of active) {
+            const seen = new Set<string>()
+            for (const it of o.items || []) {
+                const categoryId = (it as any).dish?.category_id
+                if (categoryId) seen.add(categoryId)
+            }
+            seen.forEach(id => map.set(id, (map.get(id) || 0) + 1))
+        }
+        return map
+    }, [active])
+
     const visible = useMemo(() => {
         if (tab === 'archive') {
             let list = [...archive]
+            if (selectedCategoryIds.length > 0) list = list.filter(o => orderMatchesCategories(o, selectedCategoryIds))
             const today = new Date()
             today.setHours(0, 0, 0, 0)
             let from: Date | null = null
@@ -207,6 +325,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                 .slice(0, ARCHIVE_DISPLAY_LIMIT)
         }
         let list = active
+        if (selectedCategoryIds.length > 0) list = list.filter(o => orderMatchesCategories(o, selectedCategoryIds))
         if (statusFilter === 'preparing') list = list.filter(o => o.status === 'PREPARING')
         else if (statusFilter === 'ready') list = list.filter(o => o.status === 'READY')
         const sorted = [...list].sort((a, b) => {
@@ -215,7 +334,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             return sortOrder === 'oldest' ? ta - tb : tb - ta
         })
         return sorted
-    }, [tab, active, archive, statusFilter, sortOrder, archiveRange, archiveFrom, archiveTo, archiveSearch, archiveStatus])
+    }, [tab, active, archive, selectedCategoryIds, statusFilter, sortOrder, archiveRange, archiveFrom, archiveTo, archiveSearch, archiveStatus])
 
     const archiveStats = useMemo(() => {
         const revenue = visible.reduce((sum, o) => o.status === 'CANCELLED' ? sum : sum + Number(o.paid_amount || o.total_amount || 0), 0)
@@ -272,6 +391,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     <Package size={26} className="text-amber-400" weight="fill" /> Ordini asporto
                 </h2>
                 <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    <CardSizeControl value={cardSize} onChange={setCardSize} />
                     <div className="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
                         <TabButton
                             active={tab === 'active'}
@@ -292,6 +412,36 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     </div>
                 </div>
             </div>
+
+            {categories.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 bg-black/30 border border-white/10 rounded-xl p-2">
+                    <div className="flex items-center gap-1.5 text-zinc-400 text-sm font-medium px-2">
+                        <FunnelSimple size={16} /> Piatti:
+                    </div>
+                    <FilterPill active={selectedCategoryIds.length === 0} onClick={() => setSelectedCategoryIds([])}>
+                        Tutte
+                    </FilterPill>
+                    {categories.map(cat => (
+                        <FilterPill
+                            key={cat.id}
+                            active={selectedCategoryIds.includes(cat.id)}
+                            onClick={() => {
+                                setSelectedCategoryIds(prev =>
+                                    prev.includes(cat.id)
+                                        ? prev.filter(id => id !== cat.id)
+                                        : [...prev, cat.id]
+                                )
+                            }}
+                            color="amber"
+                        >
+                            {cat.name}
+                            {categoryCounts.has(cat.id) && (
+                                <span className="ml-1 opacity-60">({categoryCounts.get(cat.id)})</span>
+                            )}
+                        </FilterPill>
+                    ))}
+                </div>
+            )}
 
             {/* Active filters bar */}
             {tab === 'active' && (
@@ -425,8 +575,8 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                         </div>
                     ) : (
                         <div
-                            className="grid gap-3 content-start pb-20"
-                            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}
+                            className={cn('grid content-start pb-20', cardSize === 'compact' ? 'gap-2.5' : 'gap-3')}
+                            style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSizeConfig[cardSize].minWidth}px, 1fr))` }}
                         >
                             <AnimatePresence mode="popLayout">
                                 {visible.map(o => (
@@ -438,6 +588,8 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                                         onPay={openPayment}
                                         onDetail={openDetail}
                                         takeawayRequireStripe={takeawayRequireStripe}
+                                        takeawayAutoPickupEnabled={takeawayAutoPickupEnabled}
+                                        cardSize={cardSize}
                                     />
                                 ))}
                             </AnimatePresence>
@@ -516,6 +668,8 @@ interface TakeawayCardProps {
     onPay: (o: Order, forceStripeOnly?: boolean) => void
     onDetail: (o: Order) => void
     takeawayRequireStripe: boolean
+    takeawayAutoPickupEnabled: boolean
+    cardSize: CardSize
 }
 
 function TakeawayArchiveRow({
@@ -531,12 +685,12 @@ function TakeawayArchiveRow({
     const due = orderDue(order)
     const date = orderArchiveDate(order)
     return (
-        <div className="grid grid-cols-[auto,1fr] sm:grid-cols-[84px,1fr,120px,150px] gap-3 items-center px-3 sm:px-4 py-3 hover:bg-white/[0.03] transition-colors">
-            <div className="flex items-center justify-center w-16 h-16 rounded-xl border border-white/10 bg-black/30 text-amber-300 font-mono font-black text-xl">
+        <div className="grid grid-cols-[auto,1fr] sm:grid-cols-[68px,1fr,96px,132px] gap-2.5 items-center px-3 py-2.5 hover:bg-white/[0.03] transition-colors">
+            <div className="flex items-center justify-center w-14 h-14 rounded-xl border border-white/10 bg-black/30 text-amber-300 font-mono font-black text-lg">
                 #{String(order.pickup_number || 0).padStart(2, '0')}
             </div>
             <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
+                <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
                     <Badge className={`${meta.color} border text-[10px] uppercase font-bold tracking-wide px-2 py-0.5`}>
                         {meta.label}
                     </Badge>
@@ -544,8 +698,8 @@ function TakeawayArchiveRow({
                         {date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} · {date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                 </div>
-                <div className="font-semibold text-white truncate">{order.customer_name || 'Cliente'}</div>
-                <div className="text-xs text-zinc-400 truncate">{archiveItemsLabel(order)}</div>
+                <div className="font-semibold text-white text-sm truncate">{order.customer_name || 'Cliente'}</div>
+                <div className="text-[13px] text-zinc-300 truncate">{archiveItemsLabel(order)}</div>
             </div>
             <div className="col-start-2 sm:col-start-auto text-sm sm:text-right">
                 <div className="font-black text-white">€{Number(order.total_amount || 0).toFixed(2)}</div>
@@ -557,11 +711,11 @@ function TakeawayArchiveRow({
             </div>
             <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-2">
                 {onPrint && order.status !== 'CANCELLED' && (
-                    <Button size="sm" variant="outline" onClick={() => onPrint(order)} className="h-9 border-white/10 text-zinc-300 hover:bg-white/5">
+                    <Button size="sm" variant="outline" onClick={() => onPrint(order)} className="h-8 border-white/10 text-zinc-300 hover:bg-white/5">
                         <Receipt size={14} className="mr-1" /> Comanda
                     </Button>
                 )}
-                <Button size="sm" variant="ghost" onClick={() => onDetail(order)} className="h-9 text-zinc-300 hover:text-white hover:bg-white/5">
+                <Button size="sm" variant="ghost" onClick={() => onDetail(order)} className="h-8 text-zinc-300 hover:text-white hover:bg-white/5">
                     Dettagli <CaretRight size={14} className="ml-1" />
                 </Button>
             </div>
@@ -569,7 +723,7 @@ function TakeawayArchiveRow({
     )
 }
 
-function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequireStripe }: TakeawayCardProps) {
+function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequireStripe, takeawayAutoPickupEnabled, cardSize }: TakeawayCardProps) {
     const due = orderDue(o)
     const meta = statusMeta[o.status] || statusMeta.PREPARING
     const minutesAgo = Math.floor((now - new Date(o.created_at).getTime()) / 60000)
@@ -577,6 +731,9 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
     const isReady = o.status === 'READY'
     const itemsCount = (o.items || []).reduce((s: number, it: any) => s + (it.quantity || 0), 0)
     const lockedForStripePrepay = takeawayRequireStripe && o.status === 'PENDING' && due > 0.01
+    const cfg = cardSizeConfig[cardSize]
+    const readyAt = readySince(o)
+    const autoPickupRemainingMs = readyAt ? Math.max(0, AUTO_PICKUP_MS - (now - readyAt)) : AUTO_PICKUP_MS
 
     return (
         <motion.div
@@ -588,8 +745,9 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
         >
             <Card className={cn(
                 'relative flex flex-col rounded-2xl border shadow-lg transition-all duration-300 overflow-hidden h-full',
-                isArchive ? 'bg-zinc-900/40 border-white/5' : isReady ? 'bg-zinc-900 border-emerald-500/40 shadow-emerald-500/10' : 'bg-zinc-900 border-white/10 hover:border-amber-500/40'
+                isArchive ? 'bg-zinc-900/40 border-white/5' : isReady ? 'bg-emerald-950/30 border-emerald-400/70 shadow-emerald-500/15 ring-1 ring-emerald-400/25' : 'bg-zinc-900 border-amber-500/20 hover:border-amber-500/50'
             )}>
+                <div className={cn('h-1.5 w-full shrink-0', isReady ? 'bg-emerald-400' : lockedForStripePrepay ? 'bg-zinc-600' : 'bg-amber-500')} />
                 {!isArchive && o.status !== 'CANCELLED' && (
                     <button
                         type="button"
@@ -604,45 +762,51 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         <XCircle size={17} weight="bold" />
                     </button>
                 )}
-                <CardHeader className="pb-3 pt-4 px-4 border-b border-white/10 shrink-0">
-                    <div className="flex items-center gap-3">
+                <CardHeader className={cn('border-b border-white/10 shrink-0', cfg.header)}>
+                    <div className="flex items-center gap-2.5">
                         <div className={cn(
-                            'flex-shrink-0 w-[78px] h-[78px] rounded-2xl border-2 flex flex-col items-center justify-center font-mono font-bold shadow-inner',
+                            'flex-shrink-0 border-2 flex flex-col items-center justify-center font-mono font-bold shadow-inner',
+                            cfg.numberBox,
                             meta.ring
                         )}>
                             <span className="text-[10px] uppercase tracking-widest opacity-70 leading-none mt-0.5">N°</span>
-                            <span className="text-[28px] leading-tight">#{String(o.pickup_number || 0).padStart(2, '0')}</span>
+                            <span className={cn('leading-tight', cfg.numberText)}>#{String(o.pickup_number || 0).padStart(2, '0')}</span>
                         </div>
-                        <div className="flex-1 min-w-0 space-y-2">
+                        <div className="flex-1 min-w-0 space-y-1.5 pr-8">
                             <div className="flex items-center gap-2 flex-wrap">
-                                <Badge className={`${meta.color} border text-xs uppercase font-bold tracking-wide px-2 py-0.5`}>
+                                <Badge className={`${meta.color} border text-[11px] uppercase font-black tracking-wide px-2.5 py-1`}>
                                     {lockedForStripePrepay ? 'Attesa Stripe' : meta.label}
                                 </Badge>
+                                {isReady && (
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-200">
+                                        consegna ora
+                                    </span>
+                                )}
                             </div>
-                            <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-zinc-100">
+                            <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-2.5 py-1.5 text-zinc-100">
                                 <Clock size={17} weight="fill" className="text-amber-400" />
                                 <div>
                                     <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold leading-none">Attesa</div>
-                                    <div className="text-lg font-black leading-tight text-white">{formatMinutes(minutesAgo)}</div>
+                                    <div className="text-base font-black leading-tight text-white">{formatMinutes(minutesAgo)}</div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 p-4 flex flex-col gap-3">
+                <CardContent className={cn('flex-1 flex flex-col', cfg.content)}>
                     {/* Item list — bigger text */}
-                    <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1 -mr-1">
+                    <div className={cn('space-y-1 overflow-y-auto pr-1 -mr-1', cfg.listMax)}>
                         {lockedForStripePrepay && (
                             <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-100">
                                 Ordine non inviato in cucina: pagamento online obbligatorio non ancora confermato.
                             </div>
                         )}
                         {(o.items || []).map((it: any) => (
-                            <div key={it.id} className="flex items-start justify-between gap-2 text-sm">
+                            <div key={it.id} className={cn('flex items-start justify-between gap-2', cfg.itemText)}>
                                 <div className="flex items-start gap-2 min-w-0 flex-1">
-                                    <span className="text-amber-400 font-bold font-mono shrink-0">{it.quantity}×</span>
-                                    <span className="text-zinc-200 leading-tight truncate">{it.dish?.name || '—'}</span>
+                                    <span className="text-amber-400 font-black font-mono shrink-0">{it.quantity}×</span>
+                                    <span className="text-zinc-100 font-semibold leading-tight truncate">{it.dish?.name || '—'}</span>
                                 </div>
                                 {it.note && (
                                     <span className="text-amber-400/90 text-xs italic font-medium shrink-0" title={it.note}>
@@ -657,15 +821,15 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                     </div>
 
                     {/* Totale / residuo */}
-                    <div className="flex justify-between items-center pt-2.5 border-t border-white/10">
+                    <div className="flex justify-between items-center pt-2 border-t border-white/10">
                         <div>
                             <div className="text-zinc-500 text-xs uppercase tracking-widest font-semibold">Totale</div>
-                            <div className="font-bold text-lg text-zinc-100">€{Number(o.total_amount).toFixed(2)}</div>
+                            <div className="font-bold text-[17px] text-zinc-100">€{Number(o.total_amount).toFixed(2)}</div>
                         </div>
                         {due > 0.01 ? (
                             <div className="text-right">
                                 <div className="text-amber-400 text-xs uppercase tracking-widest font-semibold">Residuo</div>
-                                <div className="text-amber-300 font-bold text-lg">€{due.toFixed(2)}</div>
+                                <div className="text-amber-300 font-bold text-[17px]">€{due.toFixed(2)}</div>
                             </div>
                         ) : (
                             <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-500/40 border text-sm font-bold px-2.5 py-1">
@@ -679,7 +843,7 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         {o.status === 'PENDING' && lockedForStripePrepay && (
                             <Button
                                 disabled
-                                className="bg-zinc-800 text-zinc-400 border border-white/10 col-span-2 h-11 text-base"
+                                className={cn('bg-zinc-800 text-zinc-400 border border-white/10 col-span-2 text-base', cfg.actionHeight)}
                             >
                                 <CreditCard size={18} weight="fill" className="mr-2" />Attesa pagamento Stripe
                             </Button>
@@ -687,7 +851,7 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         {o.status === 'PENDING' && !lockedForStripePrepay && (
                             <Button
                                 onClick={() => onStatus(o, 'PREPARING')}
-                                className="bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 h-11 text-base shadow-lg shadow-amber-500/20"
+                                className={cn('bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 text-base shadow-lg shadow-amber-500/20', cfg.actionHeight)}
                             >
                                 <ForkKnife size={18} weight="fill" className="mr-2" />Avvia preparazione
                             </Button>
@@ -695,12 +859,24 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         {o.status === 'PREPARING' && (
                             <Button
                                 onClick={() => onStatus(o, 'READY')}
-                                className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2 h-11 text-base shadow-lg shadow-emerald-500/20"
+                                className={cn('bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2 text-base shadow-lg shadow-emerald-500/20', cfg.actionHeight)}
                             >
                                 <Bell size={18} weight="fill" className="mr-2" />Segna pronto
                             </Button>
                         )}
-                        {o.status === 'READY' && (
+                        {o.status === 'READY' && takeawayAutoPickupEnabled && (
+                            <div className="col-span-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-center">
+                                <div className="text-sm font-black uppercase tracking-wide text-emerald-100">
+                                    Da consegnare
+                                </div>
+                                <div className="text-xs font-semibold text-emerald-200/80">
+                                    {due > 0.01
+                                        ? 'Incassa il residuo: non si chiude automaticamente'
+                                        : `Chiusura automatica tra ${formatCountdown(autoPickupRemainingMs)}`}
+                                </div>
+                            </div>
+                        )}
+                        {o.status === 'READY' && !takeawayAutoPickupEnabled && (
                             <Button
                                 onClick={() => {
                                     if (due > 0.01) {
@@ -708,9 +884,9 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                                     }
                                     onStatus(o, 'PICKED_UP')
                                 }}
-                                className="bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2 h-12 text-base shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-400/50 animate-[pulse_3s_ease-in-out_infinite]"
+                                className={cn('bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2 text-base shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-400/50 animate-[pulse_3s_ease-in-out_infinite]', cfg.actionHeight)}
                             >
-                                <CheckCircle size={20} weight="fill" className="mr-2" />Consegnato al cliente
+                                <CheckCircle size={20} weight="fill" className="mr-2" />Consegna ora
                             </Button>
                         )}
                         {due > 0.01 && o.status !== 'CANCELLED' && o.status !== 'PICKED_UP' && (
@@ -718,7 +894,7 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                                 size="sm"
                                 onClick={() => onPay(o, lockedForStripePrepay)}
                                 variant="outline"
-                                className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 col-span-2 h-10 text-sm font-semibold"
+                                className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 col-span-2 h-9 text-sm font-semibold"
                             >
                                 <Receipt size={16} className="mr-1.5" /> {lockedForStripePrepay ? 'Apri pagamento Stripe' : 'Gestisci pagamento'}
                             </Button>
@@ -727,7 +903,7 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                             size="sm"
                             variant="ghost"
                             onClick={() => onDetail(o)}
-                            className="text-zinc-300 hover:text-white hover:bg-white/5 h-10 text-sm font-medium col-span-2"
+                            className="text-zinc-300 hover:text-white hover:bg-white/5 h-9 text-sm font-medium col-span-2"
                         >
                             <CaretRight size={14} className="mr-1" />Dettagli cliente
                         </Button>
@@ -769,6 +945,46 @@ function TabButton({
                 active ? 'bg-black/20' : 'bg-white/10'
             )}>{count}</span>
         </button>
+    )
+}
+
+function CardSizeControl({
+    value,
+    onChange,
+}: {
+    value: CardSize
+    onChange: (value: CardSize) => void
+}) {
+    const sizes: CardSize[] = ['compact', 'normal', 'large']
+    const index = sizes.indexOf(value)
+    const label = value === 'compact' ? 'Compatti' : value === 'normal' ? 'Medi' : 'Grandi'
+
+    return (
+        <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl border border-white/10 backdrop-blur-sm">
+            <button
+                type="button"
+                onClick={() => onChange(sizes[Math.max(0, index - 1)])}
+                disabled={index === 0}
+                className="h-8 w-8 rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Blocchi più piccoli"
+                aria-label="Blocchi più piccoli"
+            >
+                <Minus size={14} className="mx-auto" />
+            </button>
+            <span className="w-16 text-center text-[11px] font-black uppercase tracking-wide text-zinc-400">
+                {label}
+            </span>
+            <button
+                type="button"
+                onClick={() => onChange(sizes[Math.min(sizes.length - 1, index + 1)])}
+                disabled={index === sizes.length - 1}
+                className="h-8 w-8 rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                title="Blocchi più grandi"
+                aria-label="Blocchi più grandi"
+            >
+                <Plus size={14} className="mx-auto" />
+            </button>
+        </div>
     )
 }
 

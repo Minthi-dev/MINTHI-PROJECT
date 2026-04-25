@@ -100,6 +100,7 @@ export interface Restaurant {
     takeaway_estimated_minutes?: number
     takeaway_pickup_notice?: string
     takeaway_auto_print?: boolean
+    takeaway_auto_pickup_enabled?: boolean
     takeaway_max_orders_per_hour?: number | null
 }
 

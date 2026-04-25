@@ -186,6 +186,7 @@ export function SettingsView({
     const [takeawayRequireStripe, setTakeawayRequireStripe] = useState(false)
     const [takeawayPickupNotice, setTakeawayPickupNotice] = useState('')
     const [takeawayAutoPrint, setTakeawayAutoPrint] = useState(false)
+    const [takeawayAutoPickupEnabled, setTakeawayAutoPickupEnabled] = useState(false)
     const [takeawayMaxOrdersPerHour, setTakeawayMaxOrdersPerHour] = useState<number | ''>('')
     const [savingTakeaway, setSavingTakeaway] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
@@ -251,7 +252,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_auto_print, takeaway_max_orders_per_hour')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_auto_print, takeaway_auto_pickup_enabled, takeaway_max_orders_per_hour')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -265,6 +266,7 @@ export function SettingsView({
                 setTakeawayRequireStripe((data as any).takeaway_require_stripe ?? false)
                 setTakeawayPickupNotice((data as any).takeaway_pickup_notice || '')
                 setTakeawayAutoPrint((data as any).takeaway_auto_print ?? false)
+                setTakeawayAutoPickupEnabled((data as any).takeaway_auto_pickup_enabled ?? false)
                 setTakeawayMaxOrdersPerHour((data as any).takeaway_max_orders_per_hour ?? '')
 
                 // If account exists but is not marked as enabled, check with Stripe API directly once
@@ -362,6 +364,7 @@ export function SettingsView({
         takeaway_require_stripe: boolean
         takeaway_pickup_notice: string
         takeaway_auto_print: boolean
+        takeaway_auto_pickup_enabled: boolean
         takeaway_max_orders_per_hour: number | null
     }>) => {
         if (patch.takeaway_require_stripe === true && !stripeReadyForTakeaway) {
@@ -1239,6 +1242,23 @@ export function SettingsView({
                                                 onCheckedChange={(v) => {
                                                     setTakeawayAutoPrint(v)
                                                     saveTakeawaySettings({ takeaway_auto_print: v })
+                                                }}
+                                                className="data-[state=checked]:bg-amber-500 shrink-0"
+                                            />
+                                        </div>
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
+                                            <div className="min-w-0">
+                                                <p className="text-[15px] font-semibold text-white">Ritiro automatico dopo 2 minuti</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
+                                                    Dopo “Segna pronto” l'ordine pagato viene chiuso da solo, così non serve il secondo pulsante “consegna”.
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                checked={takeawayAutoPickupEnabled}
+                                                disabled={savingTakeaway}
+                                                onCheckedChange={(v) => {
+                                                    setTakeawayAutoPickupEnabled(v)
+                                                    saveTakeawaySettings({ takeaway_auto_pickup_enabled: v })
                                                 }}
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
