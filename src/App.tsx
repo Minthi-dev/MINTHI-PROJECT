@@ -115,6 +115,19 @@ const AppContent = () => {
       try {
         const parsedUser = JSON.parse(savedUser)
 
+        // Stale-session guard: utenti loggati prima del rollout del session
+        // token (commit 77c1d81) hanno minthi_user ma non minthi_session_token.
+        // Le edge function ora richiedono il token → tutti i loro click
+        // falliscono "Non autorizzato". Forziamo subito un logout pulito.
+        const hasToken = !!localStorage.getItem('minthi_session_token')
+        if (!hasToken) {
+          localStorage.removeItem('minthi_user')
+          localStorage.removeItem('minthi_session_expires_at')
+          setUser(null)
+          setLoading(false)
+          return
+        }
+
         // Server-side session validation BEFORE granting access.
         // A forged localStorage user without the opaque token is rejected.
         const validate = async () => {
