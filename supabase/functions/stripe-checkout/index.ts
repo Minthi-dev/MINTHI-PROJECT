@@ -46,6 +46,54 @@ serve(async (req) => {
             });
         }
 
+        const { data: configuredPrice } = await supabase
+            .from("app_config")
+            .select("value")
+            .eq("key", "stripe_price_id")
+            .maybeSingle();
+
+        if (!configuredPrice?.value || priceId !== configuredPrice.value) {
+            return new Response(JSON.stringify({ error: "Prezzo Stripe non valido" }), {
+                status: 400,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
+
+        if (pendingRegistrationId) {
+            const { data: pending, error: pendingError } = await supabase
+                .from("pending_registrations")
+                .select("id, registration_token, completed, expires_at")
+                .eq("id", pendingRegistrationId)
+                .maybeSingle();
+
+            if (pendingError || !pending || pending.completed || new Date(pending.expires_at).getTime() <= Date.now()) {
+                return new Response(JSON.stringify({ error: "Registrazione non valida o scaduta" }), {
+                    status: 400,
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                });
+            }
+
+            if (couponId) {
+                const { data: tokenRow, error: tokenError } = await supabase
+                    .from("registration_tokens")
+                    .select("stripe_coupon_id, expires_at")
+                    .eq("token", pending.registration_token)
+                    .maybeSingle();
+
+                if (
+                    tokenError ||
+                    !tokenRow ||
+                    tokenRow.stripe_coupon_id !== couponId ||
+                    (tokenRow.expires_at && new Date(tokenRow.expires_at).getTime() <= Date.now())
+                ) {
+                    return new Response(JSON.stringify({ error: "Coupon Stripe non valido per questa registrazione" }), {
+                        status: 400,
+                        headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    });
+                }
+            }
+        }
+
         const origin = req.headers.get("origin") || "https://minthi.it";
 
         // Metadati: distingue registrazione nuova (pending) da ristorante esistente

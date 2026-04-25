@@ -138,7 +138,7 @@ export const DatabaseService = {
             'auto_deliver_ready_dishes',
             'enable_stripe_payments', 'vat_number', 'billing_name',
             'takeaway_enabled', 'dine_in_enabled', 'takeaway_require_stripe',
-            'takeaway_pickup_notice',
+            'takeaway_pickup_notice', 'takeaway_auto_print', 'takeaway_max_orders_per_hour',
         ]
 
         // Copia solo i campi presenti nell'oggetto input
@@ -870,12 +870,22 @@ export const DatabaseService = {
     },
 
     async getTakeawayOrderStatus(restaurantId: string, pickupCode: string) {
-        const { data, error } = await supabase.rpc('get_takeaway_order_status', {
-            p_restaurant_id: restaurantId,
-            p_pickup_code: pickupCode,
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/takeaway-order-status`
+        const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                apikey: anon,
+                Authorization: `Bearer ${anon}`,
+            },
+            body: JSON.stringify({ restaurantId, pickupCode }),
+            cache: 'no-store',
         })
-        if (error) throw error
-        return (Array.isArray(data) ? data[0] : data) as {
+        let payload: any = null
+        try { payload = await res.json() } catch { /* ignore */ }
+        if (!res.ok) throw new Error(payload?.error || `Errore server (${res.status})`)
+        return (payload?.order || null) as {
             id: string
             pickup_number: number
             status: string
@@ -972,8 +982,10 @@ export const DatabaseService = {
     async updateTakeawayStatus(orderId: string, nextStatus: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _getCurrentSessionToken()
+        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
         const { data, error } = await supabase.functions.invoke('takeaway-update-status', {
-            body: { userId, orderId, nextStatus },
+            body: { userId, orderId, nextStatus, sessionToken },
         })
         if (error) {
             let msg = 'Errore aggiornamento ordine'
@@ -996,8 +1008,10 @@ export const DatabaseService = {
     async registerTakeawayPayment(orderId: string, method: 'cash' | 'card_pos', amount: number, label?: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _getCurrentSessionToken()
+        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
-            body: { userId, orderId, action: 'register_payment', method, amount, label },
+            body: { userId, orderId, action: 'register_payment', method, amount, label, sessionToken },
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore pagamento')
         if (data?.error) throw new Error(data.error)
@@ -1007,8 +1021,10 @@ export const DatabaseService = {
     async createTakeawayStripeCheckout(orderId: string, amount: number, label?: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _getCurrentSessionToken()
+        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
-            body: { userId, orderId, action: 'create_stripe_checkout', amount, label },
+            body: { userId, orderId, action: 'create_stripe_checkout', amount, label, sessionToken },
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore checkout')
         if (data?.error) throw new Error(data.error)
@@ -1018,8 +1034,10 @@ export const DatabaseService = {
     async refundLastTakeawayPayment(orderId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _getCurrentSessionToken()
+        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
-            body: { userId, orderId, action: 'refund_last' },
+            body: { userId, orderId, action: 'refund_last', sessionToken },
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore')
         if (data?.error) throw new Error(data.error)
@@ -1029,8 +1047,10 @@ export const DatabaseService = {
     async cancelTakeawayOrder(orderId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _getCurrentSessionToken()
+        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
-            body: { userId, orderId, action: 'cancel_order' },
+            body: { userId, orderId, action: 'cancel_order', sessionToken },
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore')
         if (data?.error) throw new Error(data.error)

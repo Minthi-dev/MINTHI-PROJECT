@@ -47,6 +47,30 @@ function randomCode(len = 6): string {
     return out;
 }
 
+function clientIp(req: Request): string {
+    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    return forwarded ||
+        req.headers.get("cf-connecting-ip") ||
+        req.headers.get("x-real-ip") ||
+        "unknown";
+}
+
+async function enforceRateLimit(req: Request, restaurantId: string): Promise<{ allowed: boolean; retryAfter: number }> {
+    const { data, error } = await supabase.rpc("check_takeaway_rate_limit", {
+        p_action: "takeaway_create_order",
+        p_restaurant_id: restaurantId,
+        p_ip: clientIp(req),
+        p_window_seconds: 3600,
+        p_max_attempts: 10,
+    });
+    if (error) {
+        console.error("[TAKEAWAY] rate limit error:", error);
+        return { allowed: false, retryAfter: 60 };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return { allowed: row?.allowed !== false, retryAfter: Number(row?.retry_after_seconds || 3600) };
+}
+
 async function createTakeawayCheckoutSession(args: {
     req: Request;
     restaurantId: string;
@@ -121,10 +145,10 @@ serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
-    const json = (body: unknown, status = 200) =>
+    const json = (body: unknown, status = 200, extraHeaders: Record<string, string> = {}) =>
         new Response(JSON.stringify(body), {
             status,
-            headers: { ...cors, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json", ...extraHeaders },
         });
 
     let payload: any;
@@ -177,17 +201,6 @@ serve(async (req) => {
                 .eq("idempotency_key", cleanIdempotencyKey)
                 .maybeSingle();
             if (existing) {
-                if (chosenMethod !== "stripe") {
-                    return json({
-                        success: true,
-                        orderId: existing.id,
-                        pickupNumber: existing.pickup_number,
-                        pickupCode: existing.pickup_code,
-                        paymentMethod: "pay_on_pickup",
-                        paymentRequired: true,
-                        deduplicated: true,
-                    });
-                }
                 existingOrder = existing;
             }
         }
@@ -213,7 +226,7 @@ serve(async (req) => {
         const { data: restaurant, error: rErr } = await supabase
             .from("restaurants")
             .select(
-                "id, name, is_active, takeaway_enabled, takeaway_require_stripe, takeaway_estimated_minutes, enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled"
+                "id, name, is_active, takeaway_enabled, takeaway_require_stripe, takeaway_estimated_minutes, takeaway_max_orders_per_hour, enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled"
             )
             .eq("id", restaurantId)
             .maybeSingle();
@@ -233,6 +246,20 @@ serve(async (req) => {
             if (!restaurant.stripe_connect_account_id || !restaurant.stripe_connect_enabled) {
                 return json({ error: "Il ristorante non ha ancora completato la configurazione per ricevere pagamenti" }, 403);
             }
+        }
+
+        if (existingOrder && chosenMethod !== "stripe") {
+            const estimatedMinutes = await estimateTakeawayMinutes(existingOrder.id, restaurantId, restaurant.takeaway_estimated_minutes);
+            return json({
+                success: true,
+                orderId: existingOrder.id,
+                pickupNumber: existingOrder.pickup_number,
+                pickupCode: existingOrder.pickup_code,
+                estimatedMinutes,
+                paymentMethod: "pay_on_pickup",
+                paymentRequired: true,
+                deduplicated: true,
+            });
         }
 
         if (existingOrder && chosenMethod === "stripe") {
@@ -290,6 +317,34 @@ serve(async (req) => {
                 paymentRequired: true,
                 deduplicated: true,
             });
+        }
+
+        const rate = await enforceRateLimit(req, restaurantId);
+        if (!rate.allowed) {
+            return json(
+                { error: "Troppi ordini da questo dispositivo. Riprova più tardi." },
+                429,
+                { "Retry-After": String(rate.retryAfter) }
+            );
+        }
+
+        const maxOrdersPerHour = Number((restaurant as any).takeaway_max_orders_per_hour || 0);
+        if (maxOrdersPerHour > 0) {
+            const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+            const { count, error: countErr } = await supabase
+                .from("orders")
+                .select("id", { count: "exact", head: true })
+                .eq("restaurant_id", restaurantId)
+                .eq("order_type", "takeaway")
+                .gte("created_at", since)
+                .neq("status", "CANCELLED");
+            if (countErr) {
+                console.error("[TAKEAWAY] max orders count error:", countErr);
+                return json({ error: "Errore controllo capacità cucina" }, 500);
+            }
+            if ((count || 0) >= maxOrdersPerHour) {
+                return json({ error: "Troppe ordinazioni in questo momento. Riprova tra poco." }, 429);
+            }
         }
 
         // --- Load dishes and authoritatively compute total --------------------

@@ -99,6 +99,8 @@ export interface Restaurant {
     takeaway_require_stripe?: boolean
     takeaway_estimated_minutes?: number
     takeaway_pickup_notice?: string
+    takeaway_auto_print?: boolean
+    takeaway_max_orders_per_hour?: number | null
 }
 
 export interface DayMealConfig {

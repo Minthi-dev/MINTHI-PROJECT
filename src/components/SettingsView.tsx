@@ -185,6 +185,8 @@ export function SettingsView({
     const [dineInEnabled, setDineInEnabled] = useState(true)
     const [takeawayRequireStripe, setTakeawayRequireStripe] = useState(false)
     const [takeawayPickupNotice, setTakeawayPickupNotice] = useState('')
+    const [takeawayAutoPrint, setTakeawayAutoPrint] = useState(false)
+    const [takeawayMaxOrdersPerHour, setTakeawayMaxOrdersPerHour] = useState<number | ''>('')
     const [savingTakeaway, setSavingTakeaway] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
     const [isStaffLoading, setIsStaffLoading] = useState(false)
@@ -249,7 +251,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_auto_print, takeaway_max_orders_per_hour')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -262,6 +264,8 @@ export function SettingsView({
                 setDineInEnabled((data as any).dine_in_enabled ?? true)
                 setTakeawayRequireStripe((data as any).takeaway_require_stripe ?? false)
                 setTakeawayPickupNotice((data as any).takeaway_pickup_notice || '')
+                setTakeawayAutoPrint((data as any).takeaway_auto_print ?? false)
+                setTakeawayMaxOrdersPerHour((data as any).takeaway_max_orders_per_hour ?? '')
 
                 // If account exists but is not marked as enabled, check with Stripe API directly once
                 if (data.stripe_connect_account_id && !data.stripe_connect_enabled) {
@@ -357,6 +361,8 @@ export function SettingsView({
         dine_in_enabled: boolean
         takeaway_require_stripe: boolean
         takeaway_pickup_notice: string
+        takeaway_auto_print: boolean
+        takeaway_max_orders_per_hour: number | null
     }>) => {
         if (patch.takeaway_require_stripe === true && !stripeReadyForTakeaway) {
             setTakeawayRequireStripe(false)
@@ -1219,6 +1225,50 @@ export function SettingsView({
                                                 }}
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
+                                        </div>
+                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
+                                            <div className="min-w-0">
+                                                <p className="text-[15px] font-semibold text-white">Stampa automatica comande asporto</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
+                                                    Quando un ordine asporto entra in cucina, stampa subito la comanda se la stampante è connessa.
+                                                </p>
+                                            </div>
+                                            <Switch
+                                                checked={takeawayAutoPrint}
+                                                disabled={savingTakeaway}
+                                                onCheckedChange={(v) => {
+                                                    setTakeawayAutoPrint(v)
+                                                    saveTakeawaySettings({ takeaway_auto_print: v })
+                                                }}
+                                                className="data-[state=checked]:bg-amber-500 shrink-0"
+                                            />
+                                        </div>
+                                        <div className="px-5 py-4">
+                                            <div className="mb-2">
+                                                <p className="text-[15px] font-semibold text-white">Limite ordini/ora</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
+                                                    Utile negli eventi: se la cucina raggiunge il limite, il cliente vede un messaggio e riprova più tardi.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Input
+                                                    type="number"
+                                                    min={1}
+                                                    max={500}
+                                                    value={takeawayMaxOrdersPerHour}
+                                                    onChange={e => {
+                                                        const value = e.target.value
+                                                        if (!value) return setTakeawayMaxOrdersPerHour('')
+                                                        setTakeawayMaxOrdersPerHour(Math.max(1, Math.min(500, Number(value) || 1)))
+                                                    }}
+                                                    onBlur={() => saveTakeawaySettings({
+                                                        takeaway_max_orders_per_hour: takeawayMaxOrdersPerHour === '' ? null : Number(takeawayMaxOrdersPerHour)
+                                                    })}
+                                                    placeholder="Nessun limite"
+                                                    className="bg-black/20 border-white/10 h-9 w-40 text-sm"
+                                                />
+                                                <span className="text-[13px] text-zinc-500">ordini/ora</span>
+                                            </div>
                                         </div>
                                     </div>
                                     {!stripeReadyForTakeaway && (

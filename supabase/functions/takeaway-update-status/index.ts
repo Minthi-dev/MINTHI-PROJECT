@@ -17,8 +17,8 @@ const ALLOWED: Record<string, string[]> = {
     PENDING: ["PREPARING", "CANCELLED"],
     PREPARING: ["READY", "CANCELLED"],
     READY: ["PICKED_UP", "PREPARING"],
-    PICKED_UP: [],
-    PAID: ["PICKED_UP"],
+    PICKED_UP: ["READY"],
+    PAID: ["READY"],
     CANCELLED: [],
 };
 
@@ -36,7 +36,7 @@ serve(async (req) => {
 
         const { data: order, error: oErr } = await supabase
             .from("orders")
-            .select("id, restaurant_id, status, order_type, paid_amount, total_amount")
+            .select("id, restaurant_id, status, order_type, paid_amount, total_amount, ready_at")
             .eq("id", orderId)
             .maybeSingle();
         if (oErr || !order) return json({ error: "Ordine non trovato" }, 404);
@@ -86,7 +86,11 @@ serve(async (req) => {
 
         const updates: Record<string, unknown> = { status: nextStatus };
         const now = new Date().toISOString();
-        if (nextStatus === "READY") updates.ready_at = now;
+        if (nextStatus === "READY") {
+            updates.ready_at = order.status === "READY" ? order.ready_at : now;
+            updates.picked_up_at = null;
+            updates.closed_at = null;
+        }
         if (nextStatus === "PICKED_UP") {
             updates.picked_up_at = now;
             // Closure automatica SOLO se l'ordine è effettivamente saldato

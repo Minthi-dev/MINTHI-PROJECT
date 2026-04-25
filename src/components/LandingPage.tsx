@@ -141,159 +141,6 @@ function FloatingBadge({ children, className = '', delay = 0 }: {
   )
 }
 
-function LivePhonePreview({ className = '' }: { className?: string }) {
-  const dishes = [
-    ['Smash burger', '8 min', '€9.50'],
-    ['Bao pulled pork', '6 min', '€7.00'],
-    ['Patate lime', '4 min', '€4.50'],
-  ]
-  return (
-    <motion.div
-      animate={{ y: [0, -10, 0] }}
-      transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-      className={`relative rounded-[2rem] border-[3px] border-zinc-700 bg-black p-2 shadow-2xl shadow-black/70 ${className}`}
-    >
-      <div className="absolute left-1/2 top-3 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black" />
-      <div className="overflow-hidden rounded-[1.55rem] bg-zinc-950">
-        <div className="bg-[url('/landing/menu-mobile.png')] bg-cover bg-top h-28 opacity-80" />
-        <div className="space-y-3 p-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400">Food truck 12</p>
-            <h3 className="text-lg font-bold text-white">Ordina e salta la coda</h3>
-          </div>
-          {dishes.map((dish, i) => (
-            <motion.div
-              key={dish[0]}
-              animate={{ opacity: [0.78, 1, 0.78] }}
-              transition={{ duration: 3.2, delay: i * 0.35, repeat: Infinity, ease: 'easeInOut' }}
-              className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] p-3"
-            >
-              <div>
-                <p className="text-sm font-semibold text-white">{dish[0]}</p>
-                <p className="text-[11px] text-zinc-500">tempo medio {dish[1]}</p>
-              </div>
-              <p className="text-sm font-black text-amber-400">{dish[2]}</p>
-            </motion.div>
-          ))}
-          <div className="rounded-full bg-amber-500 px-4 py-3 text-center text-sm font-black text-black">
-            Paga €21.00 · pronto ~18 min
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-function LiveDashboardPreview({ className = '' }: { className?: string }) {
-  const rows = [
-    ['#03', 'In cucina', '18 min', 'Spaghetti · Filetto'],
-    ['#04', 'Pagato', 'Stripe', 'Smash · Patate'],
-    ['#05', 'Pronto', '2 min', 'Bao · Gyoza'],
-  ]
-  return (
-    <motion.div
-      animate={{ y: [0, 8, 0] }}
-      transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-      className={`relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl shadow-black/70 ${className}`}
-    >
-      <div className="flex h-9 items-center gap-2 border-b border-white/10 bg-zinc-900 px-4">
-        <span className="h-3 w-3 rounded-full bg-red-500/80" />
-        <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
-        <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
-        <span className="ml-auto text-[11px] text-zinc-500">MINTHI festival dashboard</span>
-      </div>
-      <div className="grid gap-4 p-5 sm:grid-cols-[1fr,0.7fr]">
-        <div className="space-y-3">
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-amber-400">Asporto live</p>
-              <h3 className="text-2xl font-light text-white">Ordini in tempo reale</h3>
-            </div>
-            <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-200">Stripe ok</div>
-          </div>
-          {rows.map((row, i) => (
-            <motion.div
-              key={row[0]}
-              animate={{ x: [0, i === 1 ? 5 : -3, 0] }}
-              transition={{ duration: 5, delay: i * 0.5, repeat: Infinity, ease: 'easeInOut' }}
-              className="grid grid-cols-[58px,1fr,70px] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3"
-            >
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 py-2 text-center font-mono text-lg font-black text-amber-300">{row[0]}</div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-white">{row[1]}</p>
-                <p className="truncate text-xs text-zinc-500">{row[3]}</p>
-              </div>
-              <p className="text-right text-xs font-bold text-zinc-300">{row[2]}</p>
-            </motion.div>
-          ))}
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-          <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.25em] text-zinc-500">Coda stimata</p>
-          <div className="space-y-3">
-            {[72, 48, 86, 34].map((w, i) => (
-              <div key={i}>
-                <div className="mb-1 flex justify-between text-xs text-zinc-500">
-                  <span>Truck {i + 1}</span><span>{Math.round(w / 6)} ordini</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                  <motion.div
-                    className="h-full rounded-full bg-amber-500"
-                    initial={{ width: 0 }}
-                    whileInView={{ width: `${w}%` }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1.2, delay: i * 0.12 }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-function HeroDeviceShowcase() {
-  return (
-    <div className="relative mx-auto mt-14 max-w-6xl">
-      <LiveDashboardPreview className="mx-auto w-full max-w-4xl" />
-      <LivePhonePreview className="absolute -bottom-12 right-0 hidden w-56 md:block lg:right-10" />
-      <LivePhonePreview className="mx-auto mt-6 w-56 md:hidden" />
-    </div>
-  )
-}
-
-function FestivalFlowSection() {
-  return (
-    <section className="border-y border-white/5 bg-zinc-950/60 py-20">
-      <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 lg:grid-cols-[0.9fr,1.1fr]">
-        <FadeIn direction="left">
-          <p className="mb-4 text-[13px] font-medium uppercase tracking-[0.4em] text-amber-500">Festival ready</p>
-          <h2 className="text-4xl font-extralight tracking-tight md:text-6xl">Ogni food truck ha la sua regia.</h2>
-          <p className="mt-6 max-w-xl text-lg font-light leading-relaxed text-zinc-400">
-            QR code pubblico, pagamento Stripe, coda asporto, display ritiro e statistiche: Minthi resta semplice anche quando il volume sale.
-          </p>
-        </FadeIn>
-        <FadeIn direction="right">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {[
-              ['1', 'Scansione', 'Il cliente apre il menu del truck giusto.'],
-              ['2', 'Pagamento', 'Se obbligatorio, l’ordine resta fermo finché Stripe conferma.'],
-              ['3', 'Cucina', 'La comanda entra in preparazione con tempi stimati dai dati.'],
-            ].map(step => (
-              <div key={step[0]} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500 text-lg font-black text-black">{step[0]}</div>
-                <h3 className="mb-2 text-lg font-semibold text-white">{step[1]}</h3>
-                <p className="text-sm leading-relaxed text-zinc-400">{step[2]}</p>
-              </div>
-            ))}
-          </div>
-        </FadeIn>
-      </div>
-    </section>
-  )
-}
-
 export default function LandingPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -516,67 +363,74 @@ export default function LandingPage() {
       </nav>
 
       {/* ════════ HERO ════════ */}
-      <section ref={heroRef} className="relative min-h-[92svh] overflow-hidden px-6 pt-24 pb-20">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:72px_72px] opacity-25" />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.2)_0%,rgba(9,9,11,0.78)_72%,#000_100%)]" />
-        <div className="absolute inset-x-0 top-14 h-px bg-gradient-to-r from-transparent via-amber-400/40 to-transparent" />
-
-        <div className="relative mx-auto max-w-7xl">
-          <motion.div style={{ opacity: heroOpacity, scale: heroScale, y: heroY }} className="text-center">
-            {/* Promo badge */}
-            {(bonusMonths > 0 || discountPercent > 0) && (
-              <FloatingBadge delay={0} className="mb-8">
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-5 py-2.5 backdrop-blur-md">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  <span className="text-amber-300 text-sm font-medium">
-                    {bonusMonths > 0 && `${bonusMonths} ${bonusMonths === 1 ? 'mese' : 'mesi'} gratis`}
-                    {bonusMonths > 0 && discountPercent > 0 && ' + '}
-                    {discountPercent > 0 && `${discountPercent}% di sconto`}
-                  </span>
-                </div>
-              </FloatingBadge>
-            )}
-
-            <FadeIn delay={0.1}>
-              <p className="text-amber-500 text-[13px] font-medium tracking-[0.4em] uppercase mb-6">
-                Il sistema QR per ristoranti, festival e food truck
-              </p>
-            </FadeIn>
-
-            <FadeIn delay={0.2}>
-              <h1 className="text-6xl sm:text-7xl md:text-9xl font-extralight tracking-tight leading-[0.9] mb-8">
-                <span className="text-white">MIN</span><span className="text-amber-500">THI</span>
-              </h1>
-            </FadeIn>
-
-            <FadeIn delay={0.35}>
-              <p className="text-zinc-300 text-lg sm:text-2xl font-light max-w-3xl mx-auto leading-relaxed mb-10">
-                Ordini dal tavolo, asporto salta-coda, pagamenti Stripe e comande in cucina in un’unica esperienza veloce, pulita, pronta per alti volumi.
-              </p>
-            </FadeIn>
-
-            <FadeIn delay={0.45}>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <button
-                  onClick={handleCTA}
-                  className="px-8 py-4 bg-amber-500 text-black font-semibold rounded-full text-base hover:bg-amber-400 transition-all hover:shadow-[0_0_40px_-10px_rgba(245,158,11,0.4)] hover:scale-105 active:scale-95"
-                >
-                  {token ? 'Registrati Gratis' : 'Inizia Ora'}
-                </button>
-                <a
-                  href="#funzioni"
-                  className="px-8 py-4 border border-white/10 text-white rounded-full text-base hover:bg-white/5 transition-all font-light hover:border-white/20"
-                >
-                  Guarda l'app
-                </a>
-              </div>
-            </FadeIn>
-
-            <FadeIn delay={0.6}>
-              <HeroDeviceShowcase />
-            </FadeIn>
-          </motion.div>
+      <section ref={heroRef} className="relative min-h-screen flex items-center justify-center px-6 pt-20 pb-10">
+        {/* Background effects */}
+        <div className="absolute inset-0">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-amber-500/[0.04] rounded-full blur-[120px]" />
+          <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-amber-600/[0.02] rounded-full blur-[100px]" />
         </div>
+
+        <motion.div style={{ opacity: heroOpacity, scale: heroScale, y: heroY }} className="relative text-center max-w-4xl mx-auto">
+          {/* Promo badge */}
+          {(bonusMonths > 0 || discountPercent > 0) && (
+            <FloatingBadge delay={0} className="mb-8">
+              <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 backdrop-blur-md">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-amber-300 text-sm font-medium">
+                  {bonusMonths > 0 && `${bonusMonths} ${bonusMonths === 1 ? 'mese' : 'mesi'} gratis`}
+                  {bonusMonths > 0 && discountPercent > 0 && ' + '}
+                  {discountPercent > 0 && `${discountPercent}% di sconto`}
+                </span>
+              </div>
+            </FloatingBadge>
+          )}
+
+          <FadeIn delay={0.1}>
+            <p className="text-amber-500 text-[13px] font-medium tracking-[0.4em] uppercase mb-6">
+              Il futuro della ristorazione
+            </p>
+          </FadeIn>
+
+          <FadeIn delay={0.2}>
+            <h1 className="text-5xl sm:text-6xl md:text-8xl font-extralight tracking-tight leading-[0.9] mb-8">
+              <span className="text-white">Gestisci il tuo</span>
+              <br />
+              <span className="text-amber-500 font-light">ristorante</span>
+              <br />
+              <span className="text-white">come mai prima.</span>
+            </h1>
+          </FadeIn>
+
+          <FadeIn delay={0.4}>
+            <p className="text-zinc-400 text-lg sm:text-xl font-light max-w-2xl mx-auto leading-relaxed mb-12">
+              Menu digitale, ordini in tempo reale, analitiche avanzate e app camerieri.
+              <br className="hidden sm:block" />
+              Tutto in un'unica piattaforma elegante e potente.
+            </p>
+          </FadeIn>
+
+          <FadeIn delay={0.5}>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button
+                onClick={handleCTA}
+                className="px-8 py-4 bg-amber-500 text-black font-semibold rounded-full text-base hover:bg-amber-400 transition-all hover:shadow-[0_0_40px_-10px_rgba(245,158,11,0.4)] hover:scale-105 active:scale-95"
+              >
+                {token ? 'Registrati Gratis' : 'Inizia Ora'}
+              </button>
+              <a
+                href="#funzioni"
+                className="px-8 py-4 border border-white/10 text-white rounded-full text-base hover:bg-white/5 transition-all font-light hover:border-white/20"
+              >
+                Scopri le funzioni
+              </a>
+            </div>
+          </FadeIn>
+
+          {/* Hero screenshot */}
+          <FadeIn delay={0.7} className="mt-20">
+            <DesktopMockup src="/landing/tavoli-desktop.png" alt="MINTHI Dashboard" />
+          </FadeIn>
+        </motion.div>
       </section>
 
       {/* ════════ STATS BAR ════════ */}
@@ -596,8 +450,6 @@ export default function LandingPage() {
           ))}
         </StaggerChildren>
       </section>
-
-      <FestivalFlowSection />
 
       {/* ════════ FEATURES ════════ */}
       <section id="funzioni" className="py-24 md:py-32">

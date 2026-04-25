@@ -200,9 +200,14 @@ serve(async (req) => {
                         break;
                     }
 
+                    const idempotencyMarker = `[stripe:${(session as any).id}]`;
                     const currentPaid = currentSession.paid_amount || 0;
                     const existingNotes = currentSession.notes || '';
-                    const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`;
+                    if (typeof existingNotes === "string" && existingNotes.includes(idempotencyMarker)) {
+                        console.log(`[WEBHOOK] customer_order: pagamento ${(session as any).id} già registrato`);
+                        break;
+                    }
+                    const paymentNote = `💳 ${splitLabel}: €${amountPaid.toFixed(2)} (${new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}) ${idempotencyMarker}`;
                     const newNotes = existingNotes ? `${existingNotes}\n${paymentNote}` : paymentNote;
                     const newPaidAmount = currentPaid + amountPaid;
 
@@ -237,7 +242,8 @@ serve(async (req) => {
                                         paid_online_at: new Date().toISOString(),
                                         paid_online_session_id: (session as any).id,
                                     })
-                                    .in("id", paidItemIds);
+                                    .in("id", paidItemIds)
+                                    .is("paid_online_at", null);
 
                                 if (itemUpdateError) {
                                     console.error(`[WEBHOOK] Errore flagging paid_online_at:`, itemUpdateError);
@@ -472,6 +478,16 @@ serve(async (req) => {
 
                 if (!restaurant) {
                     console.error(`[WEBHOOK] invoice.payment_failed: ristorante non trovato per customer=${customerId}, invoice=${invoice.id}`);
+                    break;
+                }
+
+                const { data: existingFailedPayment } = await supabase
+                    .from("subscription_payments")
+                    .select("id")
+                    .eq("stripe_invoice_id", invoice.id)
+                    .limit(1);
+                if (existingFailedPayment && existingFailedPayment.length > 0) {
+                    console.log(`[WEBHOOK] invoice.payment_failed skipped: invoice ${invoice.id} already registered`);
                     break;
                 }
 

@@ -2519,7 +2519,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   }}
                   onAutoPrintKitchenOrder={async (order) => {
                     const settings = thermalPrinter.settings
-                    if (!thermalPrinter.connected || !settings.enabled || !settings.autoPrint) return
+                    if (!currentRestaurant?.takeaway_auto_print || !thermalPrinter.connected || !settings.enabled || !settings.autoPrint) return
                     try {
                       await thermalPrinter.printKitchenOrder({
                         order,

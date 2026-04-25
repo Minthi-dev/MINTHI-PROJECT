@@ -229,7 +229,21 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         try {
             await DatabaseService.updateTakeawayStatus(o.id, next)
             if (next === 'PICKED_UP') {
-                toast.success(`#${String(o.pickup_number || 0).padStart(3, '0')} consegnato`, { duration: 2500 })
+                toast.success(`#${String(o.pickup_number || 0).padStart(3, '0')} consegnato`, {
+                    duration: 5000,
+                    action: {
+                        label: 'Annulla',
+                        onClick: async () => {
+                            try {
+                                await DatabaseService.updateTakeawayStatus(o.id, 'READY')
+                                toast.success('Consegna annullata')
+                                refresh()
+                            } catch (err: any) {
+                                toast.error(err?.message || 'Impossibile annullare')
+                            }
+                        },
+                    },
+                })
             } else if (next === 'READY') {
                 toast.success(`#${String(o.pickup_number || 0).padStart(3, '0')} pronto al ritiro`)
             } else if (next === 'PREPARING') {
@@ -237,6 +251,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             } else {
                 toast.success('Stato aggiornato')
             }
+            refresh()
         } catch (e: any) {
             toast.error(e?.message || 'Errore')
         }
@@ -572,9 +587,23 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
             transition={{ duration: 0.2 }}
         >
             <Card className={cn(
-                'flex flex-col rounded-2xl border shadow-lg transition-all duration-300 overflow-hidden h-full',
+                'relative flex flex-col rounded-2xl border shadow-lg transition-all duration-300 overflow-hidden h-full',
                 isArchive ? 'bg-zinc-900/40 border-white/5' : isReady ? 'bg-zinc-900 border-emerald-500/40 shadow-emerald-500/10' : 'bg-zinc-900 border-white/10 hover:border-amber-500/40'
             )}>
+                {!isArchive && o.status !== 'CANCELLED' && (
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (!confirm(`Annullare l'ordine asporto #${String(o.pickup_number || 0).padStart(3, '0')}?`)) return
+                            onStatus(o, 'CANCELLED')
+                        }}
+                        className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/40 text-zinc-400 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
+                        title="Annulla ordine"
+                        aria-label="Annulla ordine"
+                    >
+                        <XCircle size={17} weight="bold" />
+                    </button>
+                )}
                 <CardHeader className="pb-3 pt-4 px-4 border-b border-white/10 shrink-0">
                     <div className="flex items-center gap-3">
                         <div className={cn(

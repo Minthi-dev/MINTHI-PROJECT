@@ -13,6 +13,83 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function json(body: unknown, status: number, corsHeaders: Record<string, string>) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+}
+
+function money(value: unknown): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return NaN;
+    return Math.round(n * 100) / 100;
+}
+
+function normalizeUuidArray(value: unknown, max: number): string[] | null {
+    if (!Array.isArray(value) || value.length === 0 || value.length > max) return null;
+    const ids = [...new Set(value.filter((v) => typeof v === "string").map((v) => v.trim()))];
+    if (ids.length === 0 || ids.length > max || ids.some((id) => !UUID_RE.test(id))) return null;
+    return ids;
+}
+
+function oneRelation(row: any): any {
+    return Array.isArray(row) ? row[0] : row;
+}
+
+function safeText(value: unknown, fallback: string, max = 80): string {
+    if (typeof value !== "string") return fallback;
+    const cleaned = value.replace(/[\r\n\t]+/g, " ").trim();
+    return (cleaned || fallback).slice(0, max);
+}
+
+function scheduledPrice(args: {
+    schedule: any;
+    fallback: number;
+    lunchStart?: string | null;
+    dinnerStart?: string | null;
+}): number {
+    const schedule = args.schedule;
+    if (!schedule) return Math.max(0, money(args.fallback) || 0);
+    if (schedule.enabled === false) return 0;
+    if (!schedule.useWeeklySchedule) return Math.max(0, money(schedule.defaultPrice) || 0);
+
+    // Use the maximum configured price as a server-side cap. Edge functions
+    // run in UTC, while the customer UI uses the restaurant/browser timezone;
+    // a max cap avoids rejecting a legitimate dinner/lunch payment because of
+    // timezone drift, while still preventing arbitrary overpayments.
+    let maxPrice = Math.max(0, money(schedule.defaultPrice) || 0);
+    for (const day of Object.values(schedule.schedule || {}) as any[]) {
+        for (const meal of [day?.lunch, day?.dinner]) {
+            if (meal && meal.enabled !== false) maxPrice = Math.max(maxPrice, money(meal.price) || 0);
+        }
+    }
+    return maxPrice;
+}
+
+function copertoPrice(restaurant: any): number {
+    return scheduledPrice({
+        schedule: restaurant.weekly_coperto,
+        fallback: Number(restaurant.cover_charge_per_person || 0),
+        lunchStart: restaurant.lunch_time_start,
+        dinnerStart: restaurant.dinner_time_start,
+    });
+}
+
+function aycePrice(restaurant: any): number {
+    const legacy = typeof restaurant.all_you_can_eat === "object" && restaurant.all_you_can_eat
+        ? Number(restaurant.all_you_can_eat.pricePerPerson || 0)
+        : 0;
+    return scheduledPrice({
+        schedule: restaurant.weekly_ayce,
+        fallback: legacy,
+        lunchStart: restaurant.lunch_time_start,
+        dinnerStart: restaurant.dinner_time_start,
+    });
+}
+
 serve(async (req) => {
     const corsHeaders = getCorsHeaders(req);
 
@@ -31,7 +108,7 @@ serve(async (req) => {
             restaurantId,
             tableSessionId,
             orderIds,
-            items, // Array of { name, price, quantity }
+            items, // Legacy client summary. Prices are not trusted.
             totalAmount,
             customerEmail,
             splitLabel, // e.g. "Pagamento completo", "Alla romana (1/4)", "Pagamento parziale"
@@ -41,44 +118,57 @@ serve(async (req) => {
             paidOrderItemIds, // Array of order_item IDs when paying per-piatto
         } = await req.json();
 
-        if (!restaurantId || !Array.isArray(orderIds) || orderIds.length === 0 || !Array.isArray(items) || items.length === 0) {
-            return new Response(
-                JSON.stringify({ error: "Parametri mancanti (restaurantId, orderIds, items)" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+        const orderIdsList = normalizeUuidArray(orderIds, 80);
+        const paidOrderItemIdsList = Array.isArray(paidOrderItemIds)
+            ? normalizeUuidArray(paidOrderItemIds, 120)
+            : [];
+        if (!UUID_RE.test(String(restaurantId || "")) || !UUID_RE.test(String(tableSessionId || "")) || !orderIdsList || !paidOrderItemIdsList) {
+            return json({ error: "Parametri mancanti o non validi" }, 400, corsHeaders);
+        }
+
+        const clientItemsTotal = Array.isArray(items)
+            ? items.reduce(
+                (sum: number, item: { price: number; quantity: number }) =>
+                    sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
+                0
+            )
+            : 0;
+        const requestedTotal = money(totalAmount ?? clientItemsTotal);
+        if (!Number.isFinite(requestedTotal) || requestedTotal <= 0 || requestedTotal > 10000) {
+            return json({ error: "Importo non valido" }, 400, corsHeaders);
         }
 
         // Verifica che il ristorante abbia i pagamenti Stripe abilitati
         const { data: restaurant, error: restaurantError } = await supabase
             .from("restaurants")
-            .select("id, name, enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled")
+            .select("id, name, enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled, cover_charge_per_person, weekly_coperto, all_you_can_eat, weekly_ayce, lunch_time_start, dinner_time_start")
             .eq("id", restaurantId)
             .single();
 
         if (restaurantError || !restaurant) {
             console.error("Restaurant lookup error:", restaurantError);
-            return new Response(
-                JSON.stringify({ error: "Ristorante non trovato" }),
-                { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            return json({ error: "Ristorante non trovato" }, 404, corsHeaders);
         }
 
         if (!restaurant.enable_stripe_payments) {
-            return new Response(
-                JSON.stringify({ error: "Pagamenti online non abilitati per questo ristorante" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            return json({ error: "Pagamenti online non abilitati per questo ristorante" }, 400, corsHeaders);
         }
 
         if (!restaurant.stripe_connect_account_id || !restaurant.stripe_connect_enabled) {
-            return new Response(
-                JSON.stringify({ error: "Il ristorante non ha ancora completato la configurazione per ricevere pagamenti" }),
-                { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            return json({ error: "Il ristorante non ha ancora completato la configurazione per ricevere pagamenti" }, 403, corsHeaders);
         }
 
-        const orderIdsList = orderIds;
-        const paidOrderItemIdsList = Array.isArray(paidOrderItemIds) ? paidOrderItemIds : [];
+        const { data: tableSession, error: tableSessionError } = await supabase
+            .from("table_sessions")
+            .select("id, restaurant_id, status, paid_amount, customer_count, coperto_enabled, ayce_enabled")
+            .eq("id", tableSessionId)
+            .eq("restaurant_id", restaurantId)
+            .maybeSingle();
+
+        if (tableSessionError || !tableSession || tableSession.status === "CLOSED") {
+            return json({ error: "Sessione tavolo non valida o chiusa" }, 409, corsHeaders);
+        }
+
         const { data: dbOrders, error: ordersError } = await supabase
             .from("orders")
             .select("id, restaurant_id, table_session_id, status")
@@ -87,89 +177,85 @@ serve(async (req) => {
 
         if (ordersError || !dbOrders || dbOrders.length !== orderIdsList.length) {
             console.error("Order validation error:", ordersError);
-            return new Response(
-                JSON.stringify({ error: "Ordini non validi per questo ristorante" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            return json({ error: "Ordini non validi per questo ristorante" }, 400, corsHeaders);
         }
 
-        if (tableSessionId && dbOrders.some((o: any) => o.table_session_id !== tableSessionId)) {
-            return new Response(
-                JSON.stringify({ error: "Gli ordini non appartengono a questa sessione tavolo" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+        if (dbOrders.some((o: any) => o.table_session_id !== tableSessionId)) {
+            return json({ error: "Gli ordini non appartengono a questa sessione tavolo" }, 400, corsHeaders);
         }
 
         if (dbOrders.some((o: any) => o.status === "PAID" || o.status === "CANCELLED")) {
-            return new Response(
-                JSON.stringify({ error: "Uno o più ordini non sono più pagabili" }),
-                { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+            return json({ error: "Uno o più ordini non sono più pagabili" }, 409, corsHeaders);
         }
 
-        const clientTotal = items.reduce(
-            (sum: number, item: { price: number; quantity: number }) =>
-                sum + (Number(item.price) || 0) * (Number(item.quantity) || 0),
-            0
-        );
+        const { data: dbItems, error: itemsError } = await supabase
+            .from("order_items")
+            .select("id, quantity, status, order_id, paid_online_at, dish:dishes(id, name, price)")
+            .in("order_id", orderIdsList);
+
+        if (itemsError || !dbItems) {
+            console.error("Order item validation error:", itemsError);
+            return json({ error: "Impossibile verificare i piatti da pagare" }, 500, corsHeaders);
+        }
+
+        const payableItems = dbItems.filter((it: any) => it.status !== "PAID" && it.status !== "CANCELLED" && !it.paid_online_at);
+        const dishesDue = payableItems.reduce((sum: number, it: any) => {
+            const dish = oneRelation(it.dish);
+            return sum + (Number(dish?.price) || 0) * (Number(it.quantity) || 0);
+        }, 0);
+        const customers = Math.max(1, Number(tableSession.customer_count || 1));
+        const coverDue = tableSession.coperto_enabled ? copertoPrice(restaurant) * customers : 0;
+        const ayceDue = tableSession.ayce_enabled ? aycePrice(restaurant) * customers : 0;
+        const serverTotal = money(dishesDue + coverDue + ayceDue);
+        const remainingDue = money(Math.max(0, serverTotal - Number(tableSession.paid_amount || 0)));
+
+        if (remainingDue <= 0.01) {
+            return json({ error: "Il conto risulta già saldato" }, 409, corsHeaders);
+        }
+        if (requestedTotal > remainingDue + 0.01) {
+            return json({ error: `Importo superiore al residuo da pagare (€${remainingDue.toFixed(2)})` }, 400, corsHeaders);
+        }
 
         if (paidOrderItemIdsList.length > 0) {
-            const { data: dbItems, error: itemsError } = await supabase
-                .from("order_items")
-                .select("id, quantity, status, order_id, paid_online_at, dish:dishes(id, name, price)")
-                .in("id", paidOrderItemIdsList)
-                .in("order_id", orderIdsList);
+            const selectedSet = new Set(paidOrderItemIdsList);
+            const selectedItems = dbItems.filter((it: any) => selectedSet.has(it.id));
 
-            if (itemsError || !dbItems || dbItems.length !== paidOrderItemIdsList.length) {
-                console.error("Paid item validation error:", itemsError);
-                return new Response(
-                    JSON.stringify({ error: "Piatti selezionati non validi" }),
-                    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-                );
+            if (selectedItems.length !== paidOrderItemIdsList.length) {
+                return json({ error: "Piatti selezionati non validi" }, 400, corsHeaders);
             }
 
-            if (dbItems.some((it: any) => it.status === "PAID" || it.status === "CANCELLED" || it.paid_online_at)) {
-                return new Response(
-                    JSON.stringify({ error: "Uno o più piatti sono già pagati o non pagabili" }),
-                    { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-                );
+            if (selectedItems.some((it: any) => it.status === "PAID" || it.status === "CANCELLED" || it.paid_online_at)) {
+                return json({ error: "Uno o più piatti sono già pagati o non pagabili" }, 409, corsHeaders);
             }
 
-            const selectedItemsTotal = dbItems.reduce((sum: number, it: any) => {
-                const dish = Array.isArray(it.dish) ? it.dish[0] : it.dish;
+            const selectedItemsTotal = selectedItems.reduce((sum: number, it: any) => {
+                const dish = oneRelation(it.dish);
                 return sum + (Number(dish?.price) || 0) * (Number(it.quantity) || 0);
             }, 0);
 
-            if (clientTotal + 0.01 < selectedItemsTotal) {
-                return new Response(
-                    JSON.stringify({ error: "Importo inferiore al totale dei piatti selezionati" }),
-                    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-                );
+            if (requestedTotal + 0.01 < selectedItemsTotal) {
+                return json({ error: "Importo inferiore al totale dei piatti selezionati" }, 400, corsHeaders);
             }
         }
 
-        // Crea le line items per Stripe, escludendo elementi con prezzo 0
-        const lineItems = items
-            .filter((item: { name: string; price: number; quantity: number }) => item.price > 0)
-            .map((item: { name: string; price: number; quantity: number }) => ({
-                price_data: {
-                    currency: "eur",
-                    product_data: {
-                        name: item.name,
-                    },
-                    unit_amount: Math.round(item.price * 100),
+        const safeLabel = safeText(splitLabel, "Pagamento", 60);
+        const lineItems = [{
+            price_data: {
+                currency: "eur",
+                product_data: {
+                    name: safeText(`${safeLabel} — ${restaurant.name}`, "Pagamento tavolo", 120),
                 },
-                quantity: item.quantity,
-            }));
+                unit_amount: Math.round(requestedTotal * 100),
+            },
+            quantity: 1,
+        }];
 
-        if (lineItems.length === 0) {
-            return new Response(
-                JSON.stringify({ error: "Il totale da pagare tramite Stripe deve essere maggiore di 0€" }),
-                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+        const paidItemsMetadata = JSON.stringify(paidOrderItemIdsList);
+        if (paidOrderItemIdsList.length > 0 && paidItemsMetadata.length > 500) {
+            return json({ error: "Troppi piatti selezionati per un singolo pagamento" }, 400, corsHeaders);
         }
 
-        const orderIdsStr = JSON.stringify(orderIds);
+        const orderIdsStr = JSON.stringify(orderIdsList);
         const safeOrderIdsMetadata = orderIdsStr.length > 500 ? "multiple_orders_overflow" : orderIdsStr;
 
         const origin = req.headers.get("origin") || "https://minthi.it";
@@ -187,12 +273,14 @@ serve(async (req) => {
                     restaurantId,
                     tableSessionId: tableSessionId || "",
                     orderIds: safeOrderIdsMetadata,
-                    splitLabel: splitLabel || "Pagamento",
+                    splitLabel: safeLabel,
                     ...(paidOrderItemIdsList.length > 0
-                        ? { paidOrderItemIds: JSON.stringify(paidOrderItemIdsList).slice(0, 500) }
+                        ? { paidOrderItemIds: paidItemsMetadata }
                         : {}),
                 },
-                ...(customerEmail ? { customer_email: customerEmail } : {}),
+                ...(typeof customerEmail === "string" && customerEmail.length > 3 && customerEmail.length < 120
+                    ? { customer_email: customerEmail }
+                    : {}),
             },
             {
                 stripeAccount: restaurant.stripe_connect_account_id,
@@ -205,9 +293,6 @@ serve(async (req) => {
         );
     } catch (error) {
         console.error("Errore Stripe Customer Payment:", error);
-        return new Response(
-            JSON.stringify({ error: error.message }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
-        );
+        return json({ error: error.message }, 500, corsHeaders);
     }
 });
