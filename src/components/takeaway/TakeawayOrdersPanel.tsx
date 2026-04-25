@@ -5,10 +5,11 @@ import { supabase } from '@/lib/supabase'
 import { DatabaseService } from '@/services/DatabaseService'
 import type { Category, Order } from '@/services/types'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard, MagnifyingGlass, CalendarBlank, XCircle, Plus, Minus } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import TakeawayPaymentDialog from './TakeawayPaymentDialog'
@@ -37,6 +38,7 @@ const AUTO_PICKUP_MS = 2 * 60 * 1000
 
 const cardSizeConfig: Record<CardSize, {
     minWidth: number
+    minHeight: number
     numberBox: string
     numberText: string
     header: string
@@ -46,34 +48,37 @@ const cardSizeConfig: Record<CardSize, {
     listMax: string
 }> = {
     compact: {
-        minWidth: 250,
-        numberBox: 'w-14 h-14 rounded-xl',
-        numberText: 'text-[22px]',
+        minWidth: 260,
+        minHeight: 292,
+        numberBox: 'min-w-[76px]',
+        numberText: 'text-[34px]',
         header: 'p-3',
-        content: 'p-3 gap-2.5',
+        content: 'p-3 gap-2',
         itemText: 'text-base',
         actionHeight: 'h-10',
-        listMax: 'max-h-28',
+        listMax: 'max-h-32',
     },
     normal: {
-        minWidth: 310,
-        numberBox: 'w-16 h-16 rounded-2xl',
-        numberText: 'text-[25px]',
+        minWidth: 330,
+        minHeight: 340,
+        numberBox: 'min-w-[88px]',
+        numberText: 'text-[40px]',
         header: 'p-3.5',
-        content: 'p-3.5 gap-3',
+        content: 'p-3.5 gap-2.5',
         itemText: 'text-[17px]',
         actionHeight: 'h-11',
-        listMax: 'max-h-36',
+        listMax: 'max-h-40',
     },
     large: {
-        minWidth: 390,
-        numberBox: 'w-[76px] h-[76px] rounded-2xl',
-        numberText: 'text-[30px]',
+        minWidth: 420,
+        minHeight: 398,
+        numberBox: 'min-w-[104px]',
+        numberText: 'text-[48px]',
         header: 'p-4',
-        content: 'p-4 gap-3.5',
+        content: 'p-4 gap-3',
         itemText: 'text-lg',
         actionHeight: 'h-12',
-        listMax: 'max-h-44',
+        listMax: 'max-h-52',
     },
 }
 
@@ -391,6 +396,14 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     <Package size={26} className="text-amber-400" weight="fill" /> Ordini asporto
                 </h2>
                 <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    {categories.length > 0 && (
+                        <CategoryFilterButton
+                            categories={categories}
+                            selectedCategoryIds={selectedCategoryIds}
+                            counts={categoryCounts}
+                            onChange={setSelectedCategoryIds}
+                        />
+                    )}
                     <CardSizeControl value={cardSize} onChange={setCardSize} />
                     <div className="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
                         <TabButton
@@ -412,36 +425,6 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     </div>
                 </div>
             </div>
-
-            {categories.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2 bg-black/30 border border-white/10 rounded-xl p-2">
-                    <div className="flex items-center gap-1.5 text-zinc-400 text-sm font-medium px-2">
-                        <FunnelSimple size={16} /> Piatti:
-                    </div>
-                    <FilterPill active={selectedCategoryIds.length === 0} onClick={() => setSelectedCategoryIds([])}>
-                        Tutte
-                    </FilterPill>
-                    {categories.map(cat => (
-                        <FilterPill
-                            key={cat.id}
-                            active={selectedCategoryIds.includes(cat.id)}
-                            onClick={() => {
-                                setSelectedCategoryIds(prev =>
-                                    prev.includes(cat.id)
-                                        ? prev.filter(id => id !== cat.id)
-                                        : [...prev, cat.id]
-                                )
-                            }}
-                            color="amber"
-                        >
-                            {cat.name}
-                            {categoryCounts.has(cat.id) && (
-                                <span className="ml-1 opacity-60">({categoryCounts.get(cat.id)})</span>
-                            )}
-                        </FilterPill>
-                    ))}
-                </div>
-            )}
 
             {/* Active filters bar */}
             {tab === 'active' && (
@@ -687,7 +670,7 @@ function TakeawayArchiveRow({
     return (
         <div className="grid grid-cols-[auto,1fr] sm:grid-cols-[68px,1fr,96px,132px] gap-2.5 items-center px-3 py-2.5 hover:bg-white/[0.03] transition-colors">
             <div className="flex items-center justify-center w-14 h-14 rounded-xl border border-white/10 bg-black/30 text-amber-300 font-mono font-black text-lg">
-                #{String(order.pickup_number || 0).padStart(2, '0')}
+                #{String(order.pickup_number || 0).padStart(3, '0')}
             </div>
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
@@ -729,6 +712,7 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
     const minutesAgo = Math.floor((now - new Date(o.created_at).getTime()) / 60000)
     const isArchive = o.status === 'PAID' || o.status === 'PICKED_UP'
     const isReady = o.status === 'READY'
+    const isPreparing = o.status === 'PREPARING'
     const itemsCount = (o.items || []).reduce((s: number, it: any) => s + (it.quantity || 0), 0)
     const lockedForStripePrepay = takeawayRequireStripe && o.status === 'PENDING' && due > 0.01
     const cfg = cardSizeConfig[cardSize]
@@ -744,10 +728,13 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
             transition={{ duration: 0.2 }}
         >
             <Card className={cn(
-                'relative flex flex-col rounded-2xl border shadow-lg transition-all duration-300 overflow-hidden h-full',
-                isArchive ? 'bg-zinc-900/40 border-white/5' : isReady ? 'bg-emerald-950/30 border-emerald-400/70 shadow-emerald-500/15 ring-1 ring-emerald-400/25' : 'bg-zinc-900 border-amber-500/20 hover:border-amber-500/50'
-            )}>
-                <div className={cn('h-1.5 w-full shrink-0', isReady ? 'bg-emerald-400' : lockedForStripePrepay ? 'bg-zinc-600' : 'bg-amber-500')} />
+                'relative flex h-full flex-col overflow-hidden rounded-xl border bg-zinc-950/80 shadow-sm transition-all duration-200',
+                isArchive ? 'border-white/5 opacity-80' : isReady ? 'border-emerald-400/70 ring-1 ring-emerald-400/25 shadow-emerald-500/10' : 'border-white/10 hover:border-amber-500/45',
+                isPreparing && 'border-amber-500/35'
+            )}
+                style={{ minHeight: cfg.minHeight }}
+            >
+                <div className={cn('h-1 w-full shrink-0', isReady ? 'bg-emerald-400' : lockedForStripePrepay ? 'bg-zinc-600' : 'bg-amber-500')} />
                 {!isArchive && o.status !== 'CANCELLED' && (
                     <button
                         type="button"
@@ -759,59 +746,57 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         title="Annulla ordine"
                         aria-label="Annulla ordine"
                     >
-                        <XCircle size={17} weight="bold" />
+                        <XCircle size={16} weight="bold" />
                     </button>
                 )}
-                <CardHeader className={cn('border-b border-white/10 shrink-0', cfg.header)}>
-                    <div className="flex items-center gap-2.5">
-                        <div className={cn(
-                            'flex-shrink-0 border-2 flex flex-col items-center justify-center font-mono font-bold shadow-inner',
-                            cfg.numberBox,
-                            meta.ring
-                        )}>
-                            <span className="text-[10px] uppercase tracking-widest opacity-70 leading-none mt-0.5">N°</span>
-                            <span className={cn('leading-tight', cfg.numberText)}>#{String(o.pickup_number || 0).padStart(2, '0')}</span>
-                        </div>
-                        <div className="flex-1 min-w-0 space-y-1.5 pr-8">
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <Badge className={`${meta.color} border text-[11px] uppercase font-black tracking-wide px-2.5 py-1`}>
-                                    {lockedForStripePrepay ? 'Attesa Stripe' : meta.label}
-                                </Badge>
-                                {isReady && (
-                                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-200">
-                                        consegna ora
-                                    </span>
-                                )}
+                <CardContent className={cn('flex flex-1 flex-col', cfg.content)}>
+                    <div className="flex items-start gap-3 border-b border-white/10 pb-2.5 pr-8">
+                        <div className={cn('shrink-0 font-mono leading-none', cfg.numberBox)}>
+                            <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">N°</div>
+                            <div className={cn(
+                                'mt-1 font-black tracking-tight',
+                                cfg.numberText,
+                                isReady ? 'text-emerald-300' : lockedForStripePrepay ? 'text-zinc-400' : 'text-amber-300'
+                            )}>
+                                #{String(o.pickup_number || 0).padStart(3, '0')}
                             </div>
-                            <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/35 px-2.5 py-1.5 text-zinc-100">
-                                <Clock size={17} weight="fill" className="text-amber-400" />
-                                <div>
-                                    <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold leading-none">Attesa</div>
-                                    <div className="text-base font-black leading-tight text-white">{formatMinutes(minutesAgo)}</div>
-                                </div>
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-2">
+                            <Badge className={`${meta.color} border text-[11px] uppercase font-black tracking-wide px-2.5 py-1`}>
+                                {lockedForStripePrepay ? 'Attesa Stripe' : meta.label}
+                            </Badge>
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-400">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <Clock size={14} weight="fill" className="text-zinc-500" />
+                                    attesa {formatMinutes(minutesAgo)}
+                                </span>
+                                <span className={cn(
+                                    'inline-flex rounded-full border px-2 py-0.5 font-bold',
+                                    due > 0.01 ? 'border-amber-500/30 text-amber-300' : 'border-emerald-500/30 text-emerald-300'
+                                )}>
+                                    {due > 0.01 ? `Residuo €${due.toFixed(2)}` : 'Pagato'}
+                                </span>
                             </div>
                         </div>
                     </div>
-                </CardHeader>
 
-                <CardContent className={cn('flex-1 flex flex-col', cfg.content)}>
-                    {/* Item list — bigger text */}
-                    <div className={cn('space-y-1 overflow-y-auto pr-1 -mr-1', cfg.listMax)}>
+                    <div className={cn('flex-1 space-y-1.5 overflow-y-auto pr-1 -mr-1', cfg.listMax)}>
                         {lockedForStripePrepay && (
                             <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-100">
                                 Ordine non inviato in cucina: pagamento online obbligatorio non ancora confermato.
                             </div>
                         )}
                         {(o.items || []).map((it: any) => (
-                            <div key={it.id} className={cn('flex items-start justify-between gap-2', cfg.itemText)}>
-                                <div className="flex items-start gap-2 min-w-0 flex-1">
-                                    <span className="text-amber-400 font-black font-mono shrink-0">{it.quantity}×</span>
-                                    <span className="text-zinc-100 font-semibold leading-tight truncate">{it.dish?.name || '—'}</span>
+                            <div key={it.id} className={cn('grid grid-cols-[auto,1fr,auto] items-start gap-2 rounded-lg px-1.5 py-1', cfg.itemText)}>
+                                <span className="font-mono font-black text-amber-300">{it.quantity}×</span>
+                                <div className="min-w-0">
+                                    <div className="truncate font-semibold leading-tight text-zinc-100">{it.dish?.name || '—'}</div>
+                                    {it.note && (
+                                        <div className="mt-0.5 truncate text-xs font-medium text-amber-300/90">{it.note}</div>
+                                    )}
                                 </div>
                                 {it.note && (
-                                    <span className="text-amber-400/90 text-xs italic font-medium shrink-0" title={it.note}>
-                                        ⚠ nota
-                                    </span>
+                                    <span className="rounded border border-amber-500/25 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300">nota</span>
                                 )}
                             </div>
                         ))}
@@ -820,25 +805,11 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         )}
                     </div>
 
-                    {/* Totale / residuo */}
-                    <div className="flex justify-between items-center pt-2 border-t border-white/10">
-                        <div>
-                            <div className="text-zinc-500 text-xs uppercase tracking-widest font-semibold">Totale</div>
-                            <div className="font-bold text-[17px] text-zinc-100">€{Number(o.total_amount).toFixed(2)}</div>
-                        </div>
-                        {due > 0.01 ? (
-                            <div className="text-right">
-                                <div className="text-amber-400 text-xs uppercase tracking-widest font-semibold">Residuo</div>
-                                <div className="text-amber-300 font-bold text-[17px]">€{due.toFixed(2)}</div>
-                            </div>
-                        ) : (
-                            <Badge className="bg-emerald-500/20 text-emerald-200 border-emerald-500/40 border text-sm font-bold px-2.5 py-1">
-                                <Check size={14} weight="bold" className="mr-1" /> Pagato
-                            </Badge>
-                        )}
+                    <div className="flex items-center justify-between border-t border-white/10 pt-2">
+                        <div className="text-xs font-black uppercase tracking-widest text-zinc-500">Totale</div>
+                        <div className="text-lg font-black text-white">€{Number(o.total_amount).toFixed(2)}</div>
                     </div>
 
-                    {/* Actions */}
                     <div className="grid grid-cols-2 gap-2 mt-auto">
                         {o.status === 'PENDING' && lockedForStripePrepay && (
                             <Button
@@ -865,8 +836,8 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                             </Button>
                         )}
                         {o.status === 'READY' && takeawayAutoPickupEnabled && (
-                            <div className="col-span-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-center">
-                                <div className="text-sm font-black uppercase tracking-wide text-emerald-100">
+                            <div className="col-span-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-center">
+                                <div className="text-sm font-black uppercase tracking-wide text-emerald-200">
                                     Da consegnare
                                 </div>
                                 <div className="text-xs font-semibold text-emerald-200/80">
@@ -948,6 +919,80 @@ function TabButton({
     )
 }
 
+function CategoryFilterButton({
+    categories,
+    selectedCategoryIds,
+    counts,
+    onChange,
+}: {
+    categories: Category[]
+    selectedCategoryIds: string[]
+    counts: Map<string, number>
+    onChange: (ids: string[]) => void
+}) {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button
+                    variant={selectedCategoryIds.length > 0 ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-10 border-white/10 bg-black/40 hover:bg-zinc-900/60 backdrop-blur-sm text-zinc-300"
+                >
+                    <FunnelSimple size={16} className={selectedCategoryIds.length > 0 ? 'mr-2 text-amber-500' : 'mr-2'} />
+                    Filtra
+                    {selectedCategoryIds.length > 0 && (
+                        <span className="ml-1.5 rounded-full bg-amber-500 text-black font-bold w-4 h-4 text-[10px] flex items-center justify-center">
+                            {selectedCategoryIds.length}
+                        </span>
+                    )}
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-60 p-0 bg-zinc-950 border-zinc-800 text-zinc-100 shadow-xl" align="end">
+                <div className="p-2 border-b border-white/10">
+                    <h4 className="font-medium text-xs text-zinc-500 uppercase tracking-wider">Categorie piatti</h4>
+                </div>
+                <div className="p-2 max-h-64 overflow-y-auto space-y-1">
+                    {categories.map(cat => {
+                        const active = selectedCategoryIds.includes(cat.id)
+                        return (
+                            <button
+                                key={cat.id}
+                                type="button"
+                                className="flex w-full items-center gap-2 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors text-left"
+                                onClick={() => {
+                                    onChange(
+                                        active
+                                            ? selectedCategoryIds.filter(id => id !== cat.id)
+                                            : [...selectedCategoryIds, cat.id]
+                                    )
+                                }}
+                            >
+                                <span className={cn(
+                                    'w-4 h-4 rounded-sm border flex items-center justify-center transition-colors shrink-0',
+                                    active ? 'bg-amber-500 border-amber-500 text-black' : 'border-zinc-700 bg-black/40'
+                                )}>
+                                    {active && <Check size={10} weight="bold" />}
+                                </span>
+                                <span className="text-sm text-zinc-300 truncate flex-1">{cat.name}</span>
+                                {counts.has(cat.id) && (
+                                    <span className="text-xs font-mono text-zinc-500">{counts.get(cat.id)}</span>
+                                )}
+                            </button>
+                        )
+                    })}
+                </div>
+                {selectedCategoryIds.length > 0 && (
+                    <div className="p-2 border-t border-white/10">
+                        <Button variant="ghost" size="sm" className="w-full h-8 text-xs text-zinc-400 hover:text-white" onClick={() => onChange([])}>
+                            Resetta filtri
+                        </Button>
+                    </div>
+                )}
+            </PopoverContent>
+        </Popover>
+    )
+}
+
 function CardSizeControl({
     value,
     onChange,
@@ -957,33 +1002,35 @@ function CardSizeControl({
 }) {
     const sizes: CardSize[] = ['compact', 'normal', 'large']
     const index = sizes.indexOf(value)
-    const label = value === 'compact' ? 'Compatti' : value === 'normal' ? 'Medi' : 'Grandi'
+    const label = value === 'compact' ? '80%' : value === 'normal' ? '100%' : '120%'
 
     return (
         <div className="flex items-center gap-1 bg-black/50 p-1 rounded-xl border border-white/10 backdrop-blur-sm">
-            <button
-                type="button"
+            <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => onChange(sizes[Math.max(0, index - 1)])}
                 disabled={index === 0}
-                className="h-8 w-8 rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                className="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg disabled:opacity-30"
                 title="Blocchi più piccoli"
                 aria-label="Blocchi più piccoli"
             >
-                <Minus size={14} className="mx-auto" />
-            </button>
-            <span className="w-16 text-center text-[11px] font-black uppercase tracking-wide text-zinc-400">
+                <Minus size={14} />
+            </Button>
+            <span className="w-10 text-center text-xs font-bold font-mono text-zinc-500">
                 {label}
             </span>
-            <button
-                type="button"
+            <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => onChange(sizes[Math.min(sizes.length - 1, index + 1)])}
                 disabled={index === sizes.length - 1}
-                className="h-8 w-8 rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                className="h-8 w-8 p-0 text-zinc-400 hover:text-white hover:bg-white/5 rounded-lg disabled:opacity-30"
                 title="Blocchi più grandi"
                 aria-label="Blocchi più grandi"
             >
-                <Plus size={14} className="mx-auto" />
-            </button>
+                <Plus size={14} />
+            </Button>
         </div>
     )
 }

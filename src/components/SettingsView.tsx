@@ -366,18 +366,20 @@ export function SettingsView({
         takeaway_auto_print: boolean
         takeaway_auto_pickup_enabled: boolean
         takeaway_max_orders_per_hour: number | null
-    }>) => {
+    }>): Promise<boolean> => {
         if (patch.takeaway_require_stripe === true && !stripeReadyForTakeaway) {
             setTakeawayRequireStripe(false)
             toast.error('Prima attiva i pagamenti online e completa Stripe Connect.')
-            return
+            return false
         }
         setSavingTakeaway(true)
         try {
             await DatabaseService.updateRestaurant({ id: restaurantId, ...patch })
             toast.success('Impostazioni asporto aggiornate')
+            return true
         } catch (e: any) {
             toast.error('Errore: ' + (e?.message || 'Impossibile salvare'))
+            return false
         } finally {
             setSavingTakeaway(false)
         }
@@ -1181,7 +1183,12 @@ export function SettingsView({
                                     <Switch
                                         checked={takeawayEnabled}
                                         disabled={savingTakeaway}
-                                        onCheckedChange={(v) => { setTakeawayEnabled(v); saveTakeawaySettings({ takeaway_enabled: v }) }}
+                                        onCheckedChange={async (v) => {
+                                            const previous = takeawayEnabled
+                                            setTakeawayEnabled(v)
+                                            const ok = await saveTakeawaySettings({ takeaway_enabled: v })
+                                            if (!ok) setTakeawayEnabled(previous)
+                                        }}
                                         className="data-[state=checked]:bg-amber-500 shrink-0"
                                     />
                                 </div>
@@ -1210,7 +1217,12 @@ export function SettingsView({
                                             <Switch
                                                 checked={dineInEnabled}
                                                 disabled={savingTakeaway}
-                                                onCheckedChange={(v) => { setDineInEnabled(v); saveTakeawaySettings({ dine_in_enabled: v }) }}
+                                                onCheckedChange={async (v) => {
+                                                    const previous = dineInEnabled
+                                                    setDineInEnabled(v)
+                                                    const ok = await saveTakeawaySettings({ dine_in_enabled: v })
+                                                    if (!ok) setDineInEnabled(previous)
+                                                }}
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
                                         </div>
@@ -1222,9 +1234,11 @@ export function SettingsView({
                                             <Switch
                                                 checked={takeawayRequireStripe}
                                                 disabled={savingTakeaway || (!stripeReadyForTakeaway && !takeawayRequireStripe)}
-                                                onCheckedChange={(v) => {
+                                                onCheckedChange={async (v) => {
+                                                    const previous = takeawayRequireStripe
                                                     setTakeawayRequireStripe(v)
-                                                    saveTakeawaySettings({ takeaway_require_stripe: v })
+                                                    const ok = await saveTakeawaySettings({ takeaway_require_stripe: v })
+                                                    if (!ok) setTakeawayRequireStripe(previous)
                                                 }}
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
@@ -1239,9 +1253,11 @@ export function SettingsView({
                                             <Switch
                                                 checked={takeawayAutoPrint}
                                                 disabled={savingTakeaway}
-                                                onCheckedChange={(v) => {
+                                                onCheckedChange={async (v) => {
+                                                    const previous = takeawayAutoPrint
                                                     setTakeawayAutoPrint(v)
-                                                    saveTakeawaySettings({ takeaway_auto_print: v })
+                                                    const ok = await saveTakeawaySettings({ takeaway_auto_print: v })
+                                                    if (!ok) setTakeawayAutoPrint(previous)
                                                 }}
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
@@ -1256,9 +1272,11 @@ export function SettingsView({
                                             <Switch
                                                 checked={takeawayAutoPickupEnabled}
                                                 disabled={savingTakeaway}
-                                                onCheckedChange={(v) => {
+                                                onCheckedChange={async (v) => {
+                                                    const previous = takeawayAutoPickupEnabled
                                                     setTakeawayAutoPickupEnabled(v)
-                                                    saveTakeawaySettings({ takeaway_auto_pickup_enabled: v })
+                                                    const ok = await saveTakeawaySettings({ takeaway_auto_pickup_enabled: v })
+                                                    if (!ok) setTakeawayAutoPickupEnabled(previous)
                                                 }}
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />

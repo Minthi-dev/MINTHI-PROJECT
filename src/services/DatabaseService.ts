@@ -19,6 +19,25 @@ function _getCurrentSessionToken(): string | null {
     }
 }
 
+function _requireCurrentSessionToken(): string {
+    const sessionToken = _getCurrentSessionToken()
+    if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
+    return sessionToken
+}
+
+async function _edgeFunctionErrorMessage(data: any, error: any, fallback: string) {
+    if (data?.error) return data.error
+    if (error?.context && typeof error.context.json === 'function') {
+        try {
+            const body = await error.context.json()
+            if (body?.error) return body.error
+            if (body?.message) return body.message
+        } catch { /* ignore */ }
+    }
+    if (error?.message && !error.message.includes('non-2xx')) return error.message
+    return fallback
+}
+
 export const DatabaseService = {
     async validateCurrentSession(user: Pick<User, 'id' | 'role' | 'restaurant_id'>) {
         const sessionToken = _getCurrentSessionToken()
@@ -167,17 +186,21 @@ export const DatabaseService = {
 
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
-            body: { userId, restaurantId: restaurant.id, data: payload }
+            body: { userId, restaurantId: restaurant.id, data: payload, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ristorante')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento ristorante'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async adminUpdateRestaurant(restaurantId: string, updates: Partial<any>, adminUser: User) {
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
-            body: { userId: adminUser.id, restaurantId, data: updates }
+            body: { userId: adminUser.id, restaurantId, data: updates, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ristorante')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento ristorante'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Rooms
@@ -982,8 +1005,7 @@ export const DatabaseService = {
     async updateTakeawayStatus(orderId: string, nextStatus: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
-        const sessionToken = _getCurrentSessionToken()
-        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('takeaway-update-status', {
             body: { userId, orderId, nextStatus, sessionToken },
         })
@@ -1008,8 +1030,7 @@ export const DatabaseService = {
     async registerTakeawayPayment(orderId: string, method: 'cash' | 'card_pos', amount: number, label?: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
-        const sessionToken = _getCurrentSessionToken()
-        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
             body: { userId, orderId, action: 'register_payment', method, amount, label, sessionToken },
         })
@@ -1021,8 +1042,7 @@ export const DatabaseService = {
     async createTakeawayStripeCheckout(orderId: string, amount: number, label?: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
-        const sessionToken = _getCurrentSessionToken()
-        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
             body: { userId, orderId, action: 'create_stripe_checkout', amount, label, sessionToken },
         })
@@ -1034,8 +1054,7 @@ export const DatabaseService = {
     async refundLastTakeawayPayment(orderId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
-        const sessionToken = _getCurrentSessionToken()
-        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
             body: { userId, orderId, action: 'refund_last', sessionToken },
         })
@@ -1047,8 +1066,7 @@ export const DatabaseService = {
     async cancelTakeawayOrder(orderId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
-        const sessionToken = _getCurrentSessionToken()
-        if (!sessionToken) throw new Error('Sessione scaduta. Accedi di nuovo.')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('takeaway-pay', {
             body: { userId, orderId, action: 'cancel_order', sessionToken },
         })
@@ -1406,82 +1424,75 @@ export const DatabaseService = {
     async toggleStripePayments(restaurantId: string, enabled: boolean) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
-            body: { userId, restaurantId, data: { enable_stripe_payments: enabled } }
+            body: { userId, restaurantId, data: { enable_stripe_payments: enabled }, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento pagamenti')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento pagamenti'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Stripe - Billing Portal (gestisci abbonamento, scarica fatture, cambia metodo pagamento)
     async createBillingPortalSession(restaurantId: string) {
         const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('stripe-billing-portal', {
             body: {
                 userId,
                 restaurantId,
                 returnUrl: `${window.location.origin}/?section=settings`,
+                sessionToken,
             }
         });
-        if (error) throw new Error(data?.error || error.message || 'Errore portale di fatturazione');
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore portale di fatturazione'));
+        if (data?.error) throw new Error(data.error)
         return data as { url: string };
     },
 
     // Stripe Connect - Crea account Express (senza redirect, per embedded onboarding)
     async createStripeConnectOnboarding(restaurantId: string, returnUrl?: string) {
         const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('stripe-connect-onboarding', {
-            body: { userId, restaurantId, returnUrl }
+            body: { userId, restaurantId, returnUrl, sessionToken }
         });
         if (error) {
-            let errorMsg = 'Errore connessione Stripe';
-            try {
-                if (data?.error) {
-                    errorMsg = data.error;
-                } else if ((error as any).context) {
-                    const body = await (error as any).context.json();
-                    if (body?.error) errorMsg = body.error;
-                } else if (error.message && !error.message.includes('non-2xx')) {
-                    errorMsg = error.message;
-                }
-            } catch { /* ignore parse errors */ }
-            throw new Error(errorMsg);
+            throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore connessione Stripe'));
         }
+        if (data?.error) throw new Error(data.error)
         return data as { accountId: string; url: string };
     },
 
     // Stripe Connect - Aggiorna lo stato charges_enabled su richiesta
     async refreshStripeConnectStatus(restaurantId: string) {
         const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('stripe-connect-refresh-status', {
-            body: { userId, restaurantId }
+            body: { userId, restaurantId, sessionToken }
         });
         if (error) {
-            console.error('Errore refresh stripe connect:', error)
+            console.error('Errore refresh stripe connect:', await _edgeFunctionErrorMessage(data, error, 'Errore verifica Stripe Connect'))
             return false;
         }
+        if (data?.error) return false
         return data as { enabled: boolean };
     },
 
     // Stripe Connect - Crea Account Session per embedded components
     async createStripeAccountSession(restaurantId: string) {
         const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('stripe-account-session', {
-            body: { userId, restaurantId }
+            body: { userId, restaurantId, sessionToken }
         });
         if (error) {
-            let errorMsg = 'Errore sessione account Stripe';
-            try {
-                if (data?.error) {
-                    errorMsg = data.error;
-                } else if ((error as any).context) {
-                    const body = await (error as any).context.json();
-                    if (body?.error) errorMsg = body.error;
-                } else if (error.message && !error.message.includes('non-2xx')) {
-                    errorMsg = error.message;
-                }
-            } catch { /* ignore parse errors */ }
-            throw new Error(errorMsg);
+            throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore sessione account Stripe'));
         }
+        if (data?.error) throw new Error(data.error)
         return data as { clientSecret: string };
     },
 
@@ -1489,19 +1500,24 @@ export const DatabaseService = {
     async updateRestaurantPaymentInfo(restaurantId: string, info: { vat_number?: string; billing_name?: string }) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-restaurant-update', {
-            body: { userId, restaurantId, data: info }
+            body: { userId, restaurantId, data: info, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento dati fiscali')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento dati fiscali'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Stripe Connect - Open Express Dashboard for payout management
     async openExpressDashboard(restaurantId: string) {
         const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('stripe-express-dashboard', {
-            body: { userId, restaurantId }
+            body: { userId, restaurantId, sessionToken }
         });
-        if (error) throw new Error(data?.error || error.message || 'Errore apertura dashboard');
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore apertura dashboard'));
+        if (data?.error) throw new Error(data.error)
         return data as { url: string };
     },
 

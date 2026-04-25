@@ -1,7 +1,6 @@
 import React, { useEffect, useState, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import { SessionProvider } from './context/SessionContext'
 
 import { lazyImportRetry } from './utils/lazyImportRetry'
 
@@ -19,6 +18,7 @@ const PublicReservationPage = lazyImportRetry(() => import('./components/reserva
 const RestaurantOnboarding = lazyImportRetry(() => import('./components/RestaurantOnboarding'))
 const RegisterSuccessPage = lazyImportRetry(() => import('./components/RegisterSuccessPage'))
 const LandingPage = lazyImportRetry(() => import('./components/LandingPage'))
+const LazySessionProvider = lazyImportRetry(() => import('./context/SessionContext').then(mod => ({ default: mod.SessionProvider })))
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -257,7 +257,7 @@ const AppContent = () => {
           />
 
           {/* CUSTOMER ROUTES */}
-          <Route path="/client/table/:tableId" element={<CustomerMenu />} />
+          <Route path="/client/table/:tableId" element={<LazySessionProvider><CustomerMenu /></LazySessionProvider>} />
           {/* TAKEAWAY (asporto) */}
           <Route path="/client/takeaway/:restaurantId" element={<TakeawayMenu />} />
           <Route path="/client/takeaway/:restaurantId/order/:pickupCode" element={<TakeawayOrderStatus />} />
@@ -294,9 +294,7 @@ function App() {
   }
 
   return (
-    <SessionProvider>
-      <AppContent />
-    </SessionProvider>
+    <AppContent />
   )
 }
 
