@@ -793,7 +793,19 @@ export const DatabaseService = {
             const { data, error } = await supabase.functions.invoke('secure-order-manage', {
                 body: { userId, action: 'update_order_item', itemId, data: updates }
             })
-            if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento item')
+            if (error) {
+                let msg = 'Errore aggiornamento item'
+                try {
+                    if (data?.error) msg = data.error
+                    else if ((error as any).context) {
+                        const body = await (error as any).context.json()
+                        if (body?.error) msg = body.error
+                    } else if (error.message && !error.message.includes('non-2xx')) {
+                        msg = error.message
+                    }
+                } catch { /* ignore */ }
+                throw new Error(msg)
+            }
             return
         }
         const { error } = await supabase.from('order_items').update(updates).eq('id', itemId)
@@ -963,7 +975,19 @@ export const DatabaseService = {
         const { data, error } = await supabase.functions.invoke('takeaway-update-status', {
             body: { userId, orderId, nextStatus },
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ordine')
+        if (error) {
+            let msg = 'Errore aggiornamento ordine'
+            try {
+                if (data?.error) msg = data.error
+                else if ((error as any).context) {
+                    const body = await (error as any).context.json()
+                    if (body?.error) msg = body.error
+                } else if (error.message && !error.message.includes('non-2xx')) {
+                    msg = error.message
+                }
+            } catch { /* ignore */ }
+            throw new Error(msg)
+        }
         if (data?.error) throw new Error(data.error)
         return data
     },

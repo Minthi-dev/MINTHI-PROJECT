@@ -63,6 +63,12 @@ serve(async (req) => {
             return json({ error: "Pagamento online obbligatorio: l'ordine entra in cucina solo dopo Stripe" }, 409);
         }
 
+        // Idempotenza: se lo stato richiesto è uguale all'attuale, non è un errore.
+        // Capita facilmente con doppio-tap o click ripetuto sul tablet della cucina.
+        if (order.status === nextStatus) {
+            return json({ success: true, idempotent: true });
+        }
+
         const allowed = ALLOWED[order.status] ?? [];
         if (!allowed.includes(nextStatus)) {
             return json({ error: `Transizione non consentita da ${order.status} a ${nextStatus}` }, 400);
