@@ -44,34 +44,15 @@ serve(async (req) => {
 
         const access = await verifyAccess(supabase, userId, order.restaurant_id, sessionToken);
         if (!access.valid) {
-            // Diagnostica: identifica esattamente perché l'auth fallisce.
-            // Rimuovere dopo aver capito la causa.
-            const reasons: string[] = [];
-            if (!sessionToken) reasons.push("sessionToken assente nel body");
-            else if (typeof sessionToken !== "string" || sessionToken.length < 32) reasons.push(`sessionToken malformato (len=${(sessionToken as any)?.length ?? 0})`);
-            else {
-                const { data: rawUser } = await supabase
-                    .from("users").select("id, role").eq("id", userId).maybeSingle();
-                if (!rawUser) {
-                    const { data: staff } = await supabase
-                        .from("restaurant_staff").select("id, restaurant_id, is_active")
-                        .eq("id", userId).maybeSingle();
-                    if (!staff) reasons.push("userId non trovato né in users né in restaurant_staff");
-                    else if (!staff.is_active) reasons.push("staff disattivato");
-                    else if (staff.restaurant_id !== order.restaurant_id) reasons.push(`staff appartiene al ristorante ${staff.restaurant_id} ma l'ordine è del ${order.restaurant_id}`);
-                    else reasons.push("staff trovato ma sessione non valida (scaduta/revocata o role mismatch)");
-                } else {
-                    if (rawUser.role !== "OWNER" && rawUser.role !== "ADMIN") reasons.push(`role utente: ${rawUser.role}, atteso OWNER/ADMIN`);
-                    else {
-                        const { data: rest } = await supabase
-                            .from("restaurants").select("owner_id").eq("id", order.restaurant_id).maybeSingle();
-                        if (!rest) reasons.push("ristorante non trovato");
-                        else if (rest.owner_id !== userId && rawUser.role === "OWNER") reasons.push(`il ristorante è di proprietà di ${rest.owner_id}, non di ${userId}`);
-                        else reasons.push("user trovato ma sessione non valida (scaduta/revocata o role mismatch nella sessione)");
-                    }
-                }
-            }
-            return json({ error: "Non autorizzato", reason: reasons.join("; ") || "sconosciuto" }, 403);
+            // Logghiamo internamente per debugging ma non riveliamo nulla
+            // al chiamante: messaggio generico che non aiuta l'attaccante
+            // a mappare utenti/ristoranti/ownership.
+            console.warn("[TAKEAWAY-STATUS] auth denied", {
+                hasToken: !!sessionToken,
+                userId: userId?.slice(0, 8),
+                restaurantId: order.restaurant_id?.slice(0, 8),
+            });
+            return json({ error: "Non autorizzato" }, 403);
         }
 
         const { data: restaurant } = await supabase
