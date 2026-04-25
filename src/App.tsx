@@ -1,10 +1,7 @@
-import React, { useEffect, useState, Suspense, lazy } from 'react'
-import { motion } from 'framer-motion'
+import React, { useEffect, useState, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { SessionProvider } from './context/SessionContext'
-import { supabase } from './lib/supabase'
-import { DatabaseService } from './services/DatabaseService'
 
 import { lazyImportRetry } from './utils/lazyImportRetry'
 
@@ -23,6 +20,22 @@ const RestaurantOnboarding = lazyImportRetry(() => import('./components/Restaura
 const RegisterSuccessPage = lazyImportRetry(() => import('./components/RegisterSuccessPage'))
 const LandingPage = lazyImportRetry(() => import('./components/LandingPage'))
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('timeout')), ms)
+    promise.then(
+      value => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      error => {
+        window.clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
+
 // Loading spinner component
 const LoadingSpinner = () => (
   <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
@@ -31,46 +44,26 @@ const LoadingSpinner = () => (
       <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[60%] bg-amber-500/5 rounded-full blur-[150px] opacity-40" />
     </div>
 
-    <motion.div
-      initial={{ scale: 0.8, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="relative z-10 flex flex-col items-center gap-6"
-    >
-      <motion.div
-        initial={{ rotate: -20 }}
-        animate={{ rotate: 0 }}
-        transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.2 }}
-        className="w-24 h-24 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-[0_0_50px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md"
-      >
+    <div className="relative z-10 flex flex-col items-center gap-6 animate-in fade-in zoom-in-95 duration-500">
+      <div className="w-24 h-24 rounded-full bg-zinc-900/50 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-[0_0_50px_-10px_rgba(52,211,153,0.3)] backdrop-blur-md">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="48" height="48" fill="currentColor">
           <path d="M240,32a16,16,0,0,0-16-16A168.21,168.21,0,0,0,55.77,65.23L44.47,53.94A8,8,0,0,0,33.16,65.25L46.61,78.7A168.16,168.16,0,0,0,16.21,247.45a8,8,0,0,0,.3,11.3,8,8,0,0,0,5.65,2.35,8.15,8.15,0,0,0,5.66-2.35l50.88-50.86A168.16,168.16,0,0,0,247.45,39.66a8,8,0,0,0,2.35-5.65A16.06,16.06,0,0,0,240,32Zm-44,82.34L113.66,196.69a152.17,152.17,0,0,1-81-81L115,33.34A152.17,152.17,0,0,1,196,114.34Z"></path>
         </svg>
-      </motion.div>
+      </div>
 
-      <motion.h1
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1"
-      >
+      <h1 className="text-3xl font-light tracking-[0.25em] text-white uppercase flex items-center justify-center gap-1">
         min<span className="font-bold text-emerald-400">thi</span>
-      </motion.h1>
+      </h1>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.6 }}
-        className="flex flex-col items-center gap-4 mt-2"
-      >
+      <div className="flex flex-col items-center gap-4 mt-2">
         <div className="flex gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "0ms" }} />
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "150ms" }} />
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
         <p className="text-xs text-zinc-500 uppercase tracking-widest mt-2">Caricamento in corso...</p>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   </div>
 )
 
@@ -109,6 +102,8 @@ const AppContent = () => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
+
     // Check localStorage for saved user first
     const savedUser = localStorage.getItem('minthi_user')
     if (savedUser) {
@@ -132,8 +127,10 @@ const AppContent = () => {
         // A forged localStorage user without the opaque token is rejected.
         const validate = async () => {
           try {
-            const valid = await DatabaseService.validateCurrentSession(parsedUser)
+            const { DatabaseService } = await import('./services/DatabaseService')
+            const valid = await withTimeout(DatabaseService.validateCurrentSession(parsedUser), 4500)
 
+            if (cancelled) return
             if (valid) {
               setUser(parsedUser)
             } else {
@@ -142,15 +139,16 @@ const AppContent = () => {
               localStorage.removeItem('minthi_session_expires_at')
             }
           } catch {
+            if (cancelled) return
             localStorage.removeItem('minthi_user')
             localStorage.removeItem('minthi_session_token')
             localStorage.removeItem('minthi_session_expires_at')
           } finally {
-            setLoading(false)
+            if (!cancelled) setLoading(false)
           }
         }
         validate()
-        return
+        return () => { cancelled = true }
       } catch (e) {
         localStorage.removeItem('minthi_user')
         localStorage.removeItem('minthi_session_token')
@@ -159,24 +157,40 @@ const AppContent = () => {
     }
 
     // Fallback to Supabase auth
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    let unsubscribe: (() => void) | undefined
+    ;(async () => {
+      try {
+        const { supabase } = await import('./lib/supabase')
+        const result = await withTimeout(supabase.auth.getSession(), 3000)
+        if (!cancelled) setUser(result.data.session?.user ?? null)
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-    return () => subscription.unsubscribe()
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          setUser(session?.user ?? null)
+          setLoading(false)
+        })
+        unsubscribe = () => subscription.unsubscribe()
+      } catch {
+        if (!cancelled) setUser(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
   }, [])
 
   const handleLogout = () => {
-    DatabaseService.logoutCurrentSession()
+    import('./services/DatabaseService')
+      .then(({ DatabaseService }) => DatabaseService.logoutCurrentSession())
+      .catch(() => { })
     localStorage.removeItem('minthi_user')
     localStorage.removeItem('minthi_session_token')
     localStorage.removeItem('minthi_session_expires_at')
-    supabase.auth.signOut()
+    import('./lib/supabase')
+      .then(({ supabase }) => supabase.auth.signOut())
+      .catch(() => { })
     setUser(null)
   }
 
