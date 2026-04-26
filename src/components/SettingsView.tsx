@@ -586,8 +586,8 @@ export function SettingsView({
                             <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                 <div data-tour="settings-sound-toggle" className="flex items-center justify-between gap-4 px-5 py-4">
                                     <div className="min-w-0">
-                                        <p className="text-[15px] font-semibold text-white">Suono nuovi ordini</p>
-                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Effetto sonoro all'arrivo di una comanda in cucina.</p>
+                                        <p className="text-[15px] font-semibold text-white">Suono per le nuove comande</p>
+                                        <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Riproduce un avviso sonoro quando arriva un nuovo ordine. Tieni il volume alto in cucina.</p>
                                     </div>
                                     <Switch
                                         checked={soundEnabled}
@@ -598,8 +598,8 @@ export function SettingsView({
                                 {soundEnabled && (
                                     <div className="flex items-center justify-between gap-4 px-5 py-4 animate-in slide-in-from-top-2">
                                         <div className="min-w-0">
-                                            <p className="text-[15px] font-semibold text-white">Tono di notifica</p>
-                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Scegli il suono e ascolta l'anteprima.</p>
+                                            <p className="text-[15px] font-semibold text-white">Suono da riprodurre</p>
+                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Scegli il tono e premi l'icona per ascoltarlo.</p>
                                         </div>
                                         <div className="flex gap-2 shrink-0">
                                             <Select value={selectedSound} onValueChange={(val) => setSelectedSound(val as SoundType)}>
@@ -885,8 +885,8 @@ export function SettingsView({
                                         </div>
                                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Consegna automatica piatti pronti</p>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Quando un piatto è pronto in cucina, viene considerato consegnato senza notifica al cameriere.</p>
+                                                <p className="text-[15px] font-semibold text-white">Salta passaggio cameriere</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Quando la cucina segna un piatto pronto, risulta automaticamente servito al tavolo. Utile in locali piccoli senza camerieri dedicati.</p>
                                             </div>
                                             <Switch
                                                 checked={autoDeliverReady}
@@ -1211,8 +1211,8 @@ export function SettingsView({
                                     <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Servizio ai tavoli</p>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Disattiva se fai solo asporto.</p>
+                                                <p className="text-[15px] font-semibold text-white">Servizio al tavolo</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Permetti ai clienti di ordinare al tavolo tramite QR. Disattiva se gestisci solo asporto.</p>
                                             </div>
                                             <Switch
                                                 checked={dineInEnabled}
@@ -1228,8 +1228,8 @@ export function SettingsView({
                                         </div>
                                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Pagamento online obbligatorio</p>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Il cliente paga con carta prima che l'ordine arrivi in cucina.</p>
+                                                <p className="text-[15px] font-semibold text-white">Pagamento anticipato obbligatorio</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Il cliente deve pagare con carta prima che l'ordine entri in cucina. Niente "paga al ritiro".</p>
                                             </div>
                                             <Switch
                                                 checked={takeawayRequireStripe}
@@ -1245,9 +1245,9 @@ export function SettingsView({
                                         </div>
                                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Stampa automatica comande asporto</p>
+                                                <p className="text-[15px] font-semibold text-white">Stampa automatica comande</p>
                                                 <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
-                                                    Quando un ordine asporto entra in cucina, stampa subito la comanda se la stampante è connessa.
+                                                    Stampa la comanda asporto in cucina appena arriva. Richiede stampante collegata.
                                                 </p>
                                             </div>
                                             <Switch
@@ -1264,9 +1264,9 @@ export function SettingsView({
                                         </div>
                                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Ritiro automatico dopo 2 minuti</p>
+                                                <p className="text-[15px] font-semibold text-white">Chiusura automatica ordini pronti</p>
                                                 <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
-                                                    Dopo “Segna pronto” l'ordine pagato viene chiuso da solo, così non serve il secondo pulsante “consegna”.
+                                                    Gli ordini già pagati si chiudono da soli 2 minuti dopo "Segna pronto". Salta il passaggio "Consegna ora".
                                                 </p>
                                             </div>
                                             <Switch
@@ -1283,9 +1283,9 @@ export function SettingsView({
                                         </div>
                                         <div className="px-5 py-4">
                                             <div className="mb-2">
-                                                <p className="text-[15px] font-semibold text-white">Limite ordini/ora</p>
+                                                <p className="text-[15px] font-semibold text-white">Tetto massimo ordini all'ora</p>
                                                 <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
-                                                    Utile negli eventi: se la cucina raggiunge il limite, il cliente vede un messaggio e riprova più tardi.
+                                                    Quando viene raggiunto, il menù pubblico mostra "ordini sospesi" e ripristina automaticamente l'ora successiva. Lascia vuoto per nessun limite.
                                                 </p>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -1327,9 +1327,9 @@ export function SettingsView({
                                     <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                         <div className="flex items-start justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Stima preparazione automatica</p>
+                                                <p className="text-[15px] font-semibold text-white">Stima tempi di preparazione</p>
                                                 <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
-                                                    Non si imposta più a mano: Minthi calcola il tempo medio dai piatti preparati negli ultimi ordini asporto e somma le stime del carrello.
+                                                    Calcolata in automatico dai tempi reali degli ordini asporto recenti. Più ordini fai, più la stima diventa precisa.
                                                 </p>
                                             </div>
                                             <div className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-200">
@@ -1338,8 +1338,8 @@ export function SettingsView({
                                         </div>
                                         <div className="px-5 py-4">
                                             <div className="mb-2">
-                                                <p className="text-[15px] font-semibold text-white">Nota per il ritiro</p>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Visibile al cliente nella schermata di conferma ordine.</p>
+                                                <p className="text-[15px] font-semibold text-white">Istruzioni per il ritiro</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Mostrate al cliente dopo la conferma. Esempio: dove ritirare, orario apertura, contatti.</p>
                                             </div>
                                             <Input
                                                 value={takeawayPickupNotice}
@@ -1816,8 +1816,8 @@ export function SettingsView({
                                 {printer.settings.mode === 'network' && (
                                     <div className="border-t border-white/[0.05] px-5 py-4">
                                         <div className="mb-2">
-                                            <p className="text-[15px] font-semibold text-white">URL Relay</p>
-                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Lascia il default se il relay gira sullo stesso PC.</p>
+                                            <p className="text-[15px] font-semibold text-white">Indirizzo del relay</p>
+                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">L'app del relay deve essere avviata sul PC dove è collegata la stampante. Lascia il valore predefinito se relay e dashboard girano sullo stesso PC.</p>
                                         </div>
                                         <Input
                                             value={printer.settings.networkRelayUrl}
@@ -1895,10 +1895,10 @@ export function SettingsView({
                                                 </p>
                                                 <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
                                                     {printer.connected
-                                                        ? 'Pronta per stampare'
+                                                        ? 'Pronta a ricevere comande.'
                                                         : printer.settings.mode === 'network'
-                                                            ? 'Avvia il relay sul PC della cucina, poi clicca Connetti'
-                                                            : 'Collega la stampante via cavo USB al PC'
+                                                            ? 'Apri l\'app del relay sul PC della cucina, poi premi Connetti.'
+                                                            : 'Collega la stampante con il cavo USB e premi Collega.'
                                                     }
                                                 </p>
                                             </div>
@@ -1963,9 +1963,9 @@ export function SettingsView({
                                 </h3>
                                 <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                     {[
-                                        { key: 'autoPrint', label: 'Stampa automatica', desc: 'Le nuove comande vengono stampate automaticamente.' },
-                                        { key: 'autoCut', label: 'Taglio automatico', desc: 'Taglia la carta dopo ogni comanda.' },
-                                        { key: 'courseSeparate', label: 'Scontrino separato per portata', desc: 'Ogni portata su un foglio diverso.' },
+                                        { key: 'autoPrint', label: 'Stampa automatica', desc: 'Ogni nuova comanda viene stampata appena arriva, senza intervento manuale.' },
+                                        { key: 'autoCut', label: 'Taglio automatico', desc: 'La stampante taglia il foglio alla fine di ogni comanda.' },
+                                        { key: 'courseSeparate', label: 'Foglio separato per portata', desc: 'Antipasti, primi e secondi escono su scontrini distinti.' },
                                     ].map(({ key, label, desc }) => (
                                         <div key={key} className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
