@@ -135,7 +135,7 @@ export default function TakeawayMenu() {
             }
             return [...prev, { dish, quantity: 1 }]
         })
-        toast.success(`${dish.name} aggiunto · stima cucina +${dishPrepMinutes(dish)} min`, { duration: 1600 })
+        toast.success(`${dish.name} aggiunto`, { duration: 1400 })
     }
     const requestAddToCart = (dish: Dish) => setPendingDish(dish)
     const confirmAddToCart = () => {
@@ -251,9 +251,7 @@ export default function TakeawayMenu() {
                         <h1 className="font-bold text-lg truncate">{restaurant.name}</h1>
                         <p className="text-xs text-amber-400/90 uppercase tracking-widest">Ordina e ritira</p>
                     </div>
-                    <div className="text-right text-xs">
-                        <div className="flex items-center justify-end gap-1 text-zinc-400"><Clock size={12} /> stima ~{cartPrepMinutes} min</div>
-                    </div>
+                    {/* Tempo di cottura mostrato solo nel carrello/checkout per evitare ripetizioni */}
                 </div>
                 {/* Categories */}
                 {categories.length > 0 && (
@@ -286,18 +284,14 @@ export default function TakeawayMenu() {
                         <section key={cat.id} id={`cat-${cat.id}`}>
                             <h2 className="text-amber-400/90 font-semibold uppercase tracking-wider text-sm mb-3">{cat.name}</h2>
                             <div className="space-y-2">
-                                {catDishes.map((d, index) => {
+                                {catDishes.map((d) => {
                                     const hasImage = !!d.image_url?.trim()
                                     const hasAllergens = !!d.allergens && d.allergens.length > 0
                                     return (
-                                        <motion.div
+                                        <div
                                             key={d.id}
-                                            layout
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.3) }}
                                             onClick={() => requestAddToCart(d)}
-                                            className="flex items-center gap-4 p-4 rounded-xl bg-zinc-900/70 border border-amber-500/10 shadow-lg hover:border-amber-500/40 transition-all duration-500 cursor-pointer group active:scale-[0.98] backdrop-blur-sm"
+                                            className="flex items-center gap-4 p-4 rounded-xl bg-zinc-900/70 border border-amber-500/10 shadow-lg hover:border-amber-500/40 transition-colors duration-200 cursor-pointer group active:scale-[0.98] backdrop-blur-sm"
                                         >
                                             {hasImage && (
                                                 <div className="w-[72px] h-[72px] shrink-0 relative rounded-lg overflow-hidden shadow-inner border border-white/5 bg-gradient-to-br from-zinc-900 to-zinc-950">
@@ -337,7 +331,7 @@ export default function TakeawayMenu() {
                                             >
                                                 <Plus size={20} weight="bold" />
                                             </Button>
-                                        </motion.div>
+                                        </div>
                                     )
                                 })}
                             </div>
@@ -355,7 +349,7 @@ export default function TakeawayMenu() {
                             className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-full py-3 px-6 shadow-2xl flex items-center gap-3 max-w-md w-full justify-between"
                         >
                             <span className="flex items-center gap-2"><ShoppingBag size={20} weight="bold" /> {cart.reduce((s, c) => s + c.quantity, 0)} piatti</span>
-                            <span className="flex items-center gap-2">~{cartPrepMinutes} min · €{total.toFixed(2)}<ForkKnife size={18} weight="bold" /></span>
+                            <span className="flex items-center gap-2">€{total.toFixed(2)}<ForkKnife size={18} weight="bold" /></span>
                         </button>
                     </motion.div>
                 )}
@@ -366,7 +360,7 @@ export default function TakeawayMenu() {
                 <DrawerContent className="bg-zinc-950 border-white/10">
                     <DrawerHeader>
                         <DrawerTitle className="text-white">Il tuo ordine</DrawerTitle>
-                        <DrawerDescription className="text-zinc-400 text-xs">Ritiro in negozio · stima cucina ~{cartPrepMinutes} min</DrawerDescription>
+                        <DrawerDescription className="text-zinc-400 text-xs">Ritiro in negozio</DrawerDescription>
                     </DrawerHeader>
                     <div className="px-4 pb-4 max-h-[55vh] overflow-y-auto space-y-2">
                         {cart.length === 0 && <p className="text-zinc-500 text-sm text-center py-8">Carrello vuoto</p>}
@@ -374,7 +368,7 @@ export default function TakeawayMenu() {
                             <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
                                 <div className="flex-1 min-w-0">
                                     <div className="font-medium text-sm truncate">{line.dish.name}</div>
-                                    <div className="text-xs text-zinc-400">€{Number(line.dish.price).toFixed(2)} × {line.quantity} · ~{dishPrepMinutes(line.dish) * line.quantity} min</div>
+                                    <div className="text-xs text-zinc-400">€{Number(line.dish.price).toFixed(2)} × {line.quantity}</div>
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <Button size="icon" variant="ghost" onClick={() => decrement(idx)} className="h-8 w-8 text-white"><Minus size={14} /></Button>
@@ -464,10 +458,6 @@ export default function TakeawayMenu() {
 
                         <div className="flex justify-between text-lg font-bold pt-3 border-t border-white/5">
                             <span>Totale</span><span className="text-amber-400">€{total.toFixed(2)}</span>
-                        </div>
-                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100 flex items-center justify-between gap-3">
-                            <span className="inline-flex items-center gap-2"><Clock size={16} weight="fill" /> Stima preparazione</span>
-                            <span className="font-black">~{cartPrepMinutes} min</span>
                         </div>
 
                         <Button

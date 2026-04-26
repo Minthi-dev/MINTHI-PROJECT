@@ -31,7 +31,10 @@ type ArchiveRange = 'today' | '7d' | '30d' | 'custom' | 'all'
 type ArchiveStatusFilter = 'all' | 'paid' | 'picked_up' | 'cancelled' | 'unpaid'
 type CardSize = 'compact' | 'normal' | 'large'
 
-const ACTIVE_STATUSES = new Set(['PENDING', 'PREPARING', 'READY'])
+// PENDING è escluso: gli ordini Stripe entrano in PENDING durante il
+// checkout e diventano PREPARING solo dopo pagamento confermato. Lo
+// staff non deve vedere ordini "in attesa pagamento Stripe" in cucina.
+const ACTIVE_STATUSES = new Set(['PREPARING', 'READY'])
 const ARCHIVE_STATUSES = new Set(['PAID', 'PICKED_UP', 'CANCELLED'])
 const ARCHIVE_DISPLAY_LIMIT = 160
 const AUTO_PICKUP_MS = 2 * 60 * 1000
@@ -172,11 +175,22 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         return () => clearInterval(t)
     }, [])
 
+    // Hash veloce dello stato ordini per evitare setOrders quando i dati
+    // sono identici → previene flicker di AnimatePresence quando il
+    // realtime e il polling fired insieme producono lo stesso risultato.
+    const ordersSignatureRef = useRef<string>('')
+
     const refresh = useCallback(async () => {
         try {
             const data = await DatabaseService.getTakeawayOrders(restaurantId)
             const nextOrders = data as Order[]
-            setOrders(nextOrders)
+            const signature = nextOrders
+                .map(o => `${o.id}:${o.status}:${o.paid_amount}:${(o.items || []).length}`)
+                .join('|')
+            if (signature !== ordersSignatureRef.current) {
+                ordersSignatureRef.current = signature
+                setOrders(nextOrders)
+            }
 
             const printable = nextOrders.filter(o => o.status === 'PREPARING' || o.status === 'READY')
             if (onAutoPrintKitchenOrder && !initialKitchenPrintLoadRef.current) {
@@ -195,20 +209,43 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
 
     useEffect(() => {
         let alive = true
+        let pendingRefresh: ReturnType<typeof setTimeout> | null = null
+
+        // Debounce: il realtime può sparare 5+ eventi in 200ms quando un
+        // ordine cambia stato + items vengono toccati. Coalisce tutto in
+        // una singola fetch dopo 250ms di quiete.
+        const scheduleRefresh = () => {
+            if (pendingRefresh) clearTimeout(pendingRefresh)
+            pendingRefresh = setTimeout(() => {
+                pendingRefresh = null
+                if (alive) refresh()
+            }, 250)
+        }
+
         ;(async () => {
             setLoading(true)
             await refresh()
             if (alive) setLoading(false)
         })()
+
         const channel = supabase.channel(`takeaway_panel_${restaurantId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` }, (payload: any) => {
-                if (payload.new?.order_type === 'takeaway' || payload.old?.order_type === 'takeaway') refresh()
+                if (payload.new?.order_type === 'takeaway' || payload.old?.order_type === 'takeaway') scheduleRefresh()
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => refresh())
+            // order_items non ha filter restaurant_id (la tabella non lo
+            // espone), ma il check su orders.restaurant_id sopra basta a
+            // intercettare i cambi rilevanti — qui solo come backup.
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => scheduleRefresh())
             .subscribe()
-        const interval = setInterval(refresh, 15000)
+
+        // Polling di sicurezza più lento: il realtime gestisce gli update
+        // immediati, il polling serve solo come fallback se la subscription
+        // si stacca (sleep tablet, perdita rete, ecc.).
+        const interval = setInterval(scheduleRefresh, 30000)
+
         return () => {
             alive = false
+            if (pendingRefresh) clearTimeout(pendingRefresh)
             supabase.removeChannel(channel)
             clearInterval(interval)
         }
@@ -749,65 +786,62 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         <XCircle size={16} weight="bold" />
                     </button>
                 )}
-                <CardContent className={cn('flex flex-1 flex-col', cfg.content)}>
-                    <div className="flex items-start gap-3 border-b border-white/10 pb-2.5 pr-8">
-                        <div className={cn('shrink-0 font-mono leading-none', cfg.numberBox)}>
-                            <div className="text-[10px] font-black uppercase tracking-[0.24em] text-zinc-500">N°</div>
-                            <div className={cn(
-                                'mt-1 font-black tracking-tight',
-                                cfg.numberText,
-                                isReady ? 'text-emerald-300' : lockedForStripePrepay ? 'text-zinc-400' : 'text-amber-300'
-                            )}>
-                                #{String(o.pickup_number || 0).padStart(3, '0')}
-                            </div>
+                <CardContent className={cn('flex flex-1 flex-col gap-2.5', cfg.content)}>
+                    {/* Header compatto: ordine # in evidenza + meta inline (attesa, pagamento) */}
+                    <div className="flex items-baseline gap-3 pr-8">
+                        <div className={cn(
+                            'font-mono font-black tracking-tight leading-none',
+                            cfg.numberText,
+                            isReady ? 'text-emerald-300' : lockedForStripePrepay ? 'text-zinc-400' : 'text-amber-300'
+                        )}>
+                            #{String(o.pickup_number || 0).padStart(3, '0')}
                         </div>
-                        <div className="min-w-0 flex-1 space-y-2">
-                            <Badge className={`${meta.color} border text-[11px] uppercase font-black tracking-wide px-2.5 py-1`}>
-                                {lockedForStripePrepay ? 'Attesa Stripe' : meta.label}
-                            </Badge>
-                            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-400">
-                                <span className="inline-flex items-center gap-1.5">
-                                    <Clock size={14} weight="fill" className="text-zinc-500" />
-                                    attesa {formatMinutes(minutesAgo)}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-zinc-400">
+                            <span className="inline-flex items-center gap-1">
+                                <Clock size={13} weight="fill" />
+                                {formatMinutes(minutesAgo)}
+                            </span>
+                            <span className={cn(
+                                'font-bold',
+                                due > 0.01 ? 'text-amber-300' : 'text-emerald-300'
+                            )}>
+                                {due > 0.01 ? `−€${due.toFixed(2)}` : 'Pagato'}
+                            </span>
+                            {lockedForStripePrepay && (
+                                <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-amber-200">
+                                    attesa Stripe
                                 </span>
-                                <span className={cn(
-                                    'inline-flex rounded-full border px-2 py-0.5 font-bold',
-                                    due > 0.01 ? 'border-amber-500/30 text-amber-300' : 'border-emerald-500/30 text-emerald-300'
-                                )}>
-                                    {due > 0.01 ? `Residuo €${due.toFixed(2)}` : 'Pagato'}
-                                </span>
-                            </div>
+                            )}
                         </div>
                     </div>
 
-                    <div className={cn('flex-1 space-y-1.5 overflow-y-auto pr-1 -mr-1', cfg.listMax)}>
+                    {/* Lista piatti — il contenuto principale, in evidenza */}
+                    <div className={cn('flex-1 space-y-1 overflow-y-auto pr-1 -mr-1', cfg.listMax)}>
                         {lockedForStripePrepay && (
                             <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-100">
-                                Ordine non inviato in cucina: pagamento online obbligatorio non ancora confermato.
+                                Pagamento Stripe non ancora confermato.
                             </div>
                         )}
                         {(o.items || []).map((it: any) => (
-                            <div key={it.id} className={cn('grid grid-cols-[auto,1fr,auto] items-start gap-2 rounded-lg px-1.5 py-1', cfg.itemText)}>
-                                <span className="font-mono font-black text-amber-300">{it.quantity}×</span>
-                                <div className="min-w-0">
-                                    <div className="truncate font-semibold leading-tight text-zinc-100">{it.dish?.name || '—'}</div>
+                            <div key={it.id} className={cn('flex items-baseline gap-2', cfg.itemText)}>
+                                <span className="font-mono font-black text-amber-300 shrink-0">{it.quantity}×</span>
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-semibold text-white leading-snug break-words">{it.dish?.name || '—'}</div>
                                     {it.note && (
-                                        <div className="mt-0.5 truncate text-xs font-medium text-amber-300/90">{it.note}</div>
+                                        <div className="mt-0.5 text-xs font-medium text-amber-300/90 leading-snug">⚠ {it.note}</div>
                                     )}
                                 </div>
-                                {it.note && (
-                                    <span className="rounded border border-amber-500/25 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300">nota</span>
-                                )}
                             </div>
                         ))}
                         {itemsCount === 0 && (
-                            <div className="text-xs text-zinc-500 italic">Nessun piatto</div>
+                            <div className="text-sm text-zinc-500 italic">Nessun piatto</div>
                         )}
                     </div>
 
-                    <div className="flex items-center justify-between border-t border-white/10 pt-2">
-                        <div className="text-xs font-black uppercase tracking-widest text-zinc-500">Totale</div>
-                        <div className="text-lg font-black text-white">€{Number(o.total_amount).toFixed(2)}</div>
+                    {/* Totale compatto — singola riga, niente sezione separata */}
+                    <div className="flex items-center justify-between text-sm">
+                        <span className="font-bold uppercase tracking-wider text-zinc-500">Totale</span>
+                        <span className="text-lg font-black text-white">€{Number(o.total_amount).toFixed(2)}</span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mt-auto">
@@ -830,7 +864,7 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         {o.status === 'PREPARING' && (
                             <Button
                                 onClick={() => onStatus(o, 'READY')}
-                                className={cn('bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2 text-base shadow-lg shadow-emerald-500/20', cfg.actionHeight)}
+                                className={cn('bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 text-base shadow-lg shadow-amber-500/20', cfg.actionHeight)}
                             >
                                 <Bell size={18} weight="fill" className="mr-2" />Segna pronto
                             </Button>
@@ -855,9 +889,9 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                                     }
                                     onStatus(o, 'PICKED_UP')
                                 }}
-                                className={cn('bg-emerald-500 hover:bg-emerald-400 text-white font-bold col-span-2 text-base shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-400/50 animate-[pulse_3s_ease-in-out_infinite]', cfg.actionHeight)}
+                                className={cn('bg-emerald-500 hover:bg-emerald-400 text-white font-black col-span-2 text-base shadow-xl shadow-emerald-500/40 ring-2 ring-emerald-300/70 animate-[pulse_2s_ease-in-out_infinite]', cfg.actionHeight)}
                             >
-                                <CheckCircle size={20} weight="fill" className="mr-2" />Consegna ora
+                                <CheckCircle size={22} weight="fill" className="mr-2" />Consegna ora
                             </Button>
                         )}
                         {due > 0.01 && o.status !== 'CANCELLED' && o.status !== 'PICKED_UP' && (

@@ -212,9 +212,11 @@ const AppContent = () => {
           <Route
             path="/"
             element={
-              !user
-                ? <LoginPage onLogin={(u) => setUser(u)} />
-                : <Navigate to={getRedirectPath(user)} replace />
+              loading
+                ? <LoadingSpinner />
+                : !user
+                  ? <LoginPage onLogin={(u) => setUser(u)} />
+                  : <Navigate to={getRedirectPath(user)} replace />
             }
           />
 
