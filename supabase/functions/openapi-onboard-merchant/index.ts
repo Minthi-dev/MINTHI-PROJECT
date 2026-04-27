@@ -19,9 +19,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import {
     createConfiguration,
-    getConfiguration,
     updateConfiguration,
-    deleteConfiguration,
     isOpenApiConfigured,
     isValidVatIT,
     isValidTaxCodeIT,
@@ -71,64 +69,25 @@ function isOpenApiNotRegisteredError(error: unknown): boolean {
 }
 
 /**
- * Robust onboarding that handles all sandbox quirks:
- *  - If GET says "exists" → PATCH (refresh credentials/callbacks)
- *  - If GET says "not found" → POST
- *  - If POST says "already exists" → PATCH (config exists despite GET 404)
- *  - If PATCH also fails with 404 → DELETE + POST (fully recreate, last resort)
- *
- * The "truth" is always what OpenAPI says, never what our DB remembers.
+ * Clean onboarding: POST first; if the config already exists, PATCH it.
+ * That's it. No GET probes, no DELETE recoveries — those caused more issues
+ * than they solved on the OpenAPI sandbox.
  */
 async function ensureOpenApiConfiguration(
     fiscalId: string,
     input: Parameters<typeof createConfiguration>[0],
 ): Promise<"created" | "updated"> {
-    const remote = await getConfiguration(fiscalId).catch((err) => {
-        if (isOpenApiNotRegisteredError(err)) return null;
-        throw err;
-    });
-
-    if (remote) {
-        // Config visible → PATCH to refresh the AdE credentials hash/callbacks
-        try {
-            await updateConfiguration(fiscalId, input);
-            return "updated";
-        } catch (patchErr) {
-            if (!isOpenApiNotRegisteredError(patchErr)) throw patchErr;
-            // GET said yes but PATCH says 404 → continue to POST below
-        }
-    }
-
-    // Try POST first (typical fresh activation path)
     try {
         await createConfiguration(input);
         return "created";
     } catch (createErr) {
         if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
+        console.log("[openapi-onboard] POST=exists → PATCH per aggiornare credenziali");
     }
 
-    // POST said "already exists". Try PATCH on the (apparently existing) config.
-    try {
-        await updateConfiguration(fiscalId, input);
-        return "updated";
-    } catch (patchErr) {
-        if (!isOpenApiNotRegisteredError(patchErr) && !isOpenApiAlreadyExistsError(patchErr)) {
-            throw patchErr;
-        }
-    }
-
-    // Last resort: DELETE the ghost config + POST fresh.
-    // Sandbox can keep "deleted" entries that block re-creation.
-    console.warn("[openapi-onboard] config in stato ambiguo (POST=exists, GET=null) — DELETE + POST recovery");
-    try {
-        await deleteConfiguration(fiscalId);
-    } catch (delErr) {
-        // Ignore: maybe nothing to delete, or DELETE returns 404. Continue to POST.
-        console.warn("[openapi-onboard] DELETE recovery fallito (continuo):", delErr);
-    }
-    await new Promise(r => setTimeout(r, 1500));
-    await createConfiguration(input);
-    return "created";
+    // The config exists on OpenAPI's side (per the POST response). Refresh it.
+    await updateConfiguration(fiscalId, input);
+    return "updated";
 }
 
 serve(async (req) => {
