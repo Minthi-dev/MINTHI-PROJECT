@@ -180,6 +180,21 @@ export interface OpenApiConfigurationInput {
     };
 }
 
+export async function getConfiguration(fiscalId: string): Promise<{ raw: any } | null> {
+    const res = await openapiRequest(
+        `/IT-configurations/${encodeURIComponent(fiscalId)}`,
+        { method: "GET" }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 404) return null;
+    if (!res.ok) {
+        throw new Error(
+            `[OpenAPI] lettura configurazione fallita: ${res.status} ${JSON.stringify(json)}`
+        );
+    }
+    return { raw: json };
+}
+
 function receiptCallbacks(successUrl?: string, errorUrl?: string): Array<Record<string, unknown>> {
     const secret = getOpenApiWebhookSecret();
     const makeCallback = (url: string) => ({
@@ -250,15 +265,12 @@ export async function updateConfiguration(
     fiscalId: string,
     patch: Partial<OpenApiConfigurationInput>
 ): Promise<{ raw: any }> {
-    const body: Record<string, unknown> = {};
-    if (patch.name) body.name = patch.name;
-    // OpenAPI documents the configuration email as immutable after creation.
-    // Keep the local billing email editable in Minthi, but avoid sending it in
-    // PATCH requests because changing it can make an otherwise valid rotation fail.
+    const body: Record<string, unknown> = {
+        receipts: true,
+    };
     if (patch.receipts_authentication) {
         body.receipts_authentication = patch.receipts_authentication;
     }
-    if (patch.merchant_address) body.merchant_address = patch.merchant_address;
     if (patch.callback_receipt_url || patch.callback_receipt_error_url) {
         body.api_configurations = receiptCallbacks(
             patch.callback_receipt_url,

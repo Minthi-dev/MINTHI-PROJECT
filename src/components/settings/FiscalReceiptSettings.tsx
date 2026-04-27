@@ -102,6 +102,8 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const [emailToCustomer, setEmailToCustomer] = useState(true)
     const [savingPrefs, setSavingPrefs] = useState(false)
     const [testingReceipt, setTestingReceipt] = useState(false)
+    const [setupOpen, setSetupOpen] = useState(false)
+    const [credentialsOpen, setCredentialsOpen] = useState(false)
 
     const [saving, setSaving] = useState(false)
     const [stats, setStats] = useState<{ sent_count: number; failed_count: number; voided_count: number; revenue_total: number } | null>(null)
@@ -124,6 +126,9 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 setEnableAuto(!!r.fiscal_receipts_enabled)
                 setDefaultVatRate(r.default_vat_rate_code || '10')
                 setEmailToCustomer(r.fiscal_email_to_customer !== false)
+                const configured = r.openapi_status && r.openapi_status !== 'not_configured'
+                setSetupOpen(Boolean(configured || r.fiscal_receipts_enabled))
+                setCredentialsOpen(r.openapi_status !== 'active')
                 setStats(dashboard.stats || null)
             }
         } finally {
@@ -161,6 +166,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
 
     const status = restaurant.openapi_status || 'not_configured'
     const isActive = status === 'active'
+    const setupVisible = setupOpen || status !== 'not_configured'
 
     const credentialsExpiresAt = restaurant.ade_credentials_expire_at
         ? new Date(restaurant.ade_credentials_expire_at)
@@ -254,30 +260,55 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-10 max-w-3xl"
         >
-            {/* === GUIDA RAPIDA === */}
-            <div className="rounded-xl bg-blue-500/5 border border-blue-500/30 p-4">
-                <div className="flex items-start gap-3">
-                    <Question size={20} className="text-blue-400 mt-0.5 shrink-0" weight="fill" />
-                    <div className="text-sm text-blue-100/90 leading-relaxed">
-                        <div className="font-semibold text-blue-100">Come funziona</div>
-                        <ol className="text-[13px] mt-2 space-y-1 list-decimal list-inside text-blue-100/80">
-                            <li>Compili sotto i tuoi dati fiscali (P.IVA, indirizzo) — 2 minuti.</li>
-                            <li>Inserisci credenziali AdE (le stesse del portale "Fatture e Corrispettivi"). Le rinnovi ogni 90 giorni.</li>
-                            <li>Imposti l'aliquota IVA principale (in genere <strong>10%</strong> per i ristoranti).</li>
-                            <li>Attivi l'emissione automatica: <strong>ogni pagamento Stripe genera lo scontrino e arriva al cliente via email</strong>.</li>
-                        </ol>
+            <section className="rounded-xl bg-zinc-900/70 border border-white/10 overflow-hidden">
+                <div className="flex items-center justify-between gap-4 px-4 py-4">
+                    <div className="flex items-start gap-3 min-w-0">
+                        <Receipt size={22} className={isActive ? 'text-emerald-400 mt-0.5' : 'text-zinc-400 mt-0.5'} weight="fill" />
+                        <div>
+                            <div className="text-white font-semibold">Scontrino fiscale digitale</div>
+                            <div className="text-[12px] text-zinc-400 mt-0.5">
+                                Attiva OpenAPI per generare PDF fiscale automatico sui pagamenti Stripe.
+                            </div>
+                        </div>
                     </div>
+                    <Switch
+                        checked={setupVisible}
+                        disabled={status !== 'not_configured'}
+                        onCheckedChange={(v) => {
+                            setSetupOpen(v)
+                            if (v && !isActive) setCredentialsOpen(true)
+                        }}
+                    />
                 </div>
-            </div>
+                {setupVisible && (
+                    <div className="border-t border-white/5 px-4 py-3 text-[12px] text-zinc-400 flex items-start gap-2">
+                        <Question size={16} className="text-zinc-500 mt-0.5 shrink-0" />
+                        <span>
+                            Flusso: dati fiscali, credenziali AdE, IVA default. Le credenziali non vengono salvate da Minthi.
+                        </span>
+                    </div>
+                )}
+            </section>
 
             {/* === STATUS BANNER === */}
-            <StatusBanner
-                status={status}
-                lastError={restaurant.openapi_last_error}
-                expiresAt={credentialsExpiresAt}
-                daysLeft={credentialsDaysLeft}
-                expiringSoon={credentialsExpiringSoon}
-            />
+            {setupVisible && (
+                <StatusBanner
+                    status={status}
+                    lastError={restaurant.openapi_last_error}
+                    expiresAt={credentialsExpiresAt}
+                    daysLeft={credentialsDaysLeft}
+                    expiringSoon={credentialsExpiringSoon}
+                />
+            )}
+
+            {!setupVisible && (
+                <div className="rounded-xl bg-zinc-900/40 border border-white/10 px-4 py-4 text-sm text-zinc-400">
+                    Attiva l'interruttore per configurare dati fiscali e collegamento OpenAPI.
+                </div>
+            )}
+
+            {setupVisible && (
+                <>
 
             {/* === STATS LAST 30 DAYS === */}
             {isActive && stats && (
@@ -353,6 +384,25 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
             </section>
 
             {/* === CREDENZIALI ADE === */}
+            {isActive && !credentialsOpen && (
+                <section className="rounded-xl bg-zinc-900/60 border border-white/10 px-4 py-4 flex items-center justify-between gap-3">
+                    <div>
+                        <div className="text-[14px] font-semibold text-white">Credenziali AdE collegate</div>
+                        <div className="text-[12px] text-zinc-400 mt-0.5">
+                            Scadenza: {credentialsDaysLeft !== null ? `tra ${credentialsDaysLeft} giorni` : 'non disponibile'}
+                        </div>
+                    </div>
+                    <Button
+                        variant="secondary"
+                        className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
+                        onClick={() => setCredentialsOpen(true)}
+                    >
+                        Aggiorna
+                    </Button>
+                </section>
+            )}
+
+            {credentialsOpen && (
             <section>
                 <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                     <Key size={18} className="opacity-70" />
@@ -421,6 +471,16 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 </div>
 
                 <div className="flex justify-end mt-3">
+                    {isActive && (
+                        <Button
+                            onClick={() => setCredentialsOpen(false)}
+                            disabled={saving}
+                            variant="ghost"
+                            className="mr-2 text-zinc-400 hover:text-zinc-100"
+                        >
+                            Chiudi
+                        </Button>
+                    )}
                     <Button
                         onClick={() => handleSave(true)}
                         disabled={saving}
@@ -433,6 +493,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                     </Button>
                 </div>
             </section>
+            )}
 
             {/* === EMISSIONE AUTOMATICA === */}
             {isActive && (
@@ -554,6 +615,8 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                         )}
                     </div>
                 </section>
+            )}
+                </>
             )}
         </motion.div>
     )

@@ -19,6 +19,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import {
     createConfiguration,
+    getConfiguration,
     updateConfiguration,
     isOpenApiConfigured,
     isValidVatIT,
@@ -66,6 +67,39 @@ function isOpenApiNotRegisteredError(error: unknown): boolean {
         message.includes("error\":424") ||
         message.includes(" 404 ")
     );
+}
+
+async function ensureOpenApiConfiguration(
+    fiscalId: string,
+    input: Parameters<typeof createConfiguration>[0],
+): Promise<"created" | "updated" | "attached"> {
+    const remote = await getConfiguration(fiscalId).catch((err) => {
+        if (isOpenApiNotRegisteredError(err)) return null;
+        throw err;
+    });
+
+    if (remote) {
+        try {
+            await updateConfiguration(fiscalId, input);
+            return "updated";
+        } catch (updateErr) {
+            if (!isOpenApiNotRegisteredError(updateErr)) throw updateErr;
+            // Sandbox can drift: continue with a fresh create below.
+        }
+    }
+
+    try {
+        await createConfiguration(input);
+        return "created";
+    } catch (createErr) {
+        if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
+
+        // If OpenAPI says the fiscal_id already exists but refuses PATCH, avoid
+        // bouncing the user forever. Attach locally and let receipt issuance
+        // prove the configuration in the next step/test.
+        console.warn("[openapi-onboard] fiscal_id già presente su OpenAPI, aggancio locale senza PATCH");
+        return "attached";
+    }
 }
 
 serve(async (req) => {
@@ -306,39 +340,7 @@ serve(async (req) => {
                 callback_receipt_error_url: callbackBase || undefined,
             };
 
-            if (!hasOpenApiConfiguration) {
-                // Prima volta → POST /IT-configurations
-                try {
-                    await createConfiguration(configurationInput);
-                } catch (createErr) {
-                    if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
-
-                    // Sandbox/previous attempts can leave the provider config
-                    // already created while our DB still says "pending/failed".
-                    // In that case, rotate credentials/callbacks with PATCH and
-                    // attach the existing provider configuration to this row.
-                    console.warn("[openapi-onboard] configurazione già presente su OpenAPI, eseguo PATCH di riaggancio");
-                    await updateConfiguration(cleanVat, configurationInput);
-                }
-            } else {
-                // Già configurato → PATCH (rotazione credenziali / aggiornamento)
-                try {
-                    await updateConfiguration(existing!.openapi_fiscal_id, configurationInput);
-                } catch (updateErr) {
-                    if (!isOpenApiNotRegisteredError(updateErr)) throw updateErr;
-
-                    // Il DB può dire "active/configured" dopo test o reset, ma
-                    // OpenAPI può non avere più quella configurazione sandbox.
-                    // In quel caso riconciliamo creando una nuova configurazione.
-                    console.warn("[openapi-onboard] configurazione assente su OpenAPI nonostante DB attivo, eseguo nuova registrazione");
-                    try {
-                        await createConfiguration(configurationInput);
-                    } catch (createErr) {
-                        if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
-                        await updateConfiguration(cleanVat, configurationInput);
-                    }
-                }
-            }
+            const remoteAction = await ensureOpenApiConfiguration(cleanVat, configurationInput);
 
             const now = new Date();
             const expireAt = new Date(now.getTime() + 88 * 24 * 60 * 60 * 1000); // 88gg buffer
@@ -359,7 +361,9 @@ serve(async (req) => {
                 openapiStatus: "active",
                 fiscalId: cleanVat,
                 adeCredentialsExpireAt: expireAt.toISOString(),
-                message: "Integrazione attivata. Gli scontrini fiscali saranno emessi automaticamente sui pagamenti Stripe.",
+                message: remoteAction === "created"
+                    ? "Integrazione attivata. Gli scontrini fiscali saranno emessi automaticamente sui pagamenti Stripe."
+                    : "Configurazione fiscale agganciata. Gli scontrini fiscali saranno emessi automaticamente sui pagamenti Stripe.",
             });
         } catch (apiErr: any) {
             console.error("[openapi-onboard] OpenAPI error:", apiErr);
@@ -372,8 +376,9 @@ serve(async (req) => {
                 })
                 .eq("restaurant_id", restaurantId);
             return json({
-                error: "Attivazione fallita: " + errMsg,
-                hint: "Verifica P.IVA e credenziali Area Privata AdE. Le credenziali AdE scadono ogni 90 giorni.",
+                error: "OpenAPI non ha accettato l'attivazione. Verifica P.IVA e credenziali AdE, poi riprova.",
+                detail: errMsg,
+                hint: "In sandbox usa una P.IVA test non già usata in altre prove se OpenAPI segnala conflitti.",
             }, 502);
         }
     } catch (err: any) {
