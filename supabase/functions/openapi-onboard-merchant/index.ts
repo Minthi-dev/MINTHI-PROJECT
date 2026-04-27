@@ -48,6 +48,16 @@ function splitItalianAddress(raw: string): { street_address: string; street_numb
     };
 }
 
+function isOpenApiAlreadyExistsError(error: unknown): boolean {
+    const message = String((error as any)?.message || error || "").toLowerCase();
+    return (
+        message.includes("already exists") ||
+        message.includes('"error":111') ||
+        message.includes("error\":111") ||
+        message.includes(" 410 ")
+    );
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -171,6 +181,19 @@ serve(async (req) => {
             }, 400);
         }
 
+        const { data: configuredElsewhere } = await supabase
+            .from("restaurant_fiscal_settings")
+            .select("restaurant_id")
+            .eq("openapi_fiscal_id", cleanVat)
+            .neq("restaurant_id", restaurantId)
+            .in("openapi_status", ["active", "pending"])
+            .maybeSingle();
+        if (configuredElsewhere) {
+            return json({
+                error: "Questa Partita IVA risulta già collegata a un altro ristorante Minthi. Per evitare errori fiscali, contatta l'assistenza prima di riutilizzarla.",
+            }, 409);
+        }
+
         // --- Salva sempre i dati fiscali, anche prima di chiamare OpenAPI.
         //     Questo permette al ristoratore di iniziare il setup gradualmente.
         const restaurantFiscalUpdate: Record<string, unknown> = {
@@ -259,36 +282,37 @@ serve(async (req) => {
             province: cleanProvince,
         };
         try {
+            const configurationInput = {
+                fiscal_id: cleanVat,
+                name: cleanBusinessName,
+                email: cleanEmail,
+                merchant_address,
+                receipts_authentication: {
+                    taxCode: cleanAdeTaxCode,
+                    password: cleanAdePassword,
+                    pin: cleanAdePin,
+                },
+                callback_receipt_url: callbackBase || undefined,
+                callback_receipt_error_url: callbackBase || undefined,
+            };
+
             if (!hasOpenApiConfiguration) {
                 // Prima volta → POST /IT-configurations
-                await createConfiguration({
-                    fiscal_id: cleanVat,
-                    name: cleanBusinessName,
-                    email: cleanEmail,
-                    merchant_address,
-                    receipts_authentication: {
-                        taxCode: cleanAdeTaxCode,
-                        password: cleanAdePassword,
-                        pin: cleanAdePin,
-                    },
-                    callback_receipt_url: callbackBase || undefined,
-                    callback_receipt_error_url: callbackBase || undefined,
-                });
+                try {
+                    await createConfiguration(configurationInput);
+                } catch (createErr) {
+                    if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
+
+                    // Sandbox/previous attempts can leave the provider config
+                    // already created while our DB still says "pending/failed".
+                    // In that case, rotate credentials/callbacks with PATCH and
+                    // attach the existing provider configuration to this row.
+                    console.warn("[openapi-onboard] configurazione già presente su OpenAPI, eseguo PATCH di riaggancio");
+                    await updateConfiguration(cleanVat, configurationInput);
+                }
             } else {
                 // Già configurato → PATCH (rotazione credenziali / aggiornamento)
-                await updateConfiguration(existing!.openapi_fiscal_id, {
-                    fiscal_id: cleanVat,
-                    name: cleanBusinessName,
-                    email: cleanEmail,
-                    merchant_address,
-                    receipts_authentication: {
-                        taxCode: cleanAdeTaxCode,
-                        password: cleanAdePassword,
-                        pin: cleanAdePin,
-                    },
-                    callback_receipt_url: callbackBase || undefined,
-                    callback_receipt_error_url: callbackBase || undefined,
-                });
+                await updateConfiguration(existing!.openapi_fiscal_id, configurationInput);
             }
 
             const now = new Date();
@@ -297,6 +321,7 @@ serve(async (req) => {
                 .from("restaurant_fiscal_settings")
                 .update({
                     openapi_status: "active",
+                    openapi_fiscal_id: cleanVat,
                     openapi_configured_at: now.toISOString(),
                     openapi_last_error: null,
                     ade_credentials_set_at: now.toISOString(),

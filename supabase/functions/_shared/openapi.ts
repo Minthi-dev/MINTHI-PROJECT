@@ -186,7 +186,10 @@ function receiptCallbacks(successUrl?: string, errorUrl?: string): Array<Record<
 
     const callbacks: Array<Record<string, unknown>> = [];
     if (successUrl) {
-        for (const event of ["receipt", "receipt-retry", "receipt-credentials"]) {
+        // OpenAPI recommends listening to all receipt lifecycle events so our
+        // local audit log can reflect retries, credential updates, and the
+        // appointee/assignment flow as well as successful receipts.
+        for (const event of ["receipt", "receipt-retry", "receipt-credentials", "appointee"]) {
             callbacks.push({ event, callback: makeCallback(successUrl) });
         }
     }
@@ -245,7 +248,9 @@ export async function updateConfiguration(
 ): Promise<{ raw: any }> {
     const body: Record<string, unknown> = {};
     if (patch.name) body.name = patch.name;
-    if (patch.email) body.email = patch.email;
+    // OpenAPI documents the configuration email as immutable after creation.
+    // Keep the local billing email editable in Minthi, but avoid sending it in
+    // PATCH requests because changing it can make an otherwise valid rotation fail.
     if (patch.receipts_authentication) {
         body.receipts_authentication = patch.receipts_authentication;
     }
