@@ -127,6 +127,19 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restaurantId])
 
+    const formIsValid = useMemo(() => {
+        return (
+            isValidVatIT(vatNumber.replace(/\s/g, '')) &&
+            (!taxCode || isValidTaxCodeIT(taxCode)) &&
+            businessName.trim().length >= 2 &&
+            billingAddress.trim().length > 0 &&
+            billingCity.trim().length > 0 &&
+            /^[A-Z]{2}$/i.test(billingProvince.trim()) &&
+            /^\d{5}$/.test(billingPostalCode.trim()) &&
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fiscalEmail.trim())
+        )
+    }, [vatNumber, taxCode, businessName, billingAddress, billingCity, billingProvince, billingPostalCode, fiscalEmail])
+
     if (loading || !restaurant) {
         return (
             <div className="text-zinc-500 text-sm py-12 text-center">
@@ -145,19 +158,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
         ? Math.max(0, Math.round((credentialsExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
         : null
     const credentialsExpiringSoon = credentialsDaysLeft !== null && credentialsDaysLeft <= 14
-
-    const formIsValid = useMemo(() => {
-        return (
-            isValidVatIT(vatNumber.replace(/\s/g, '')) &&
-            (!taxCode || isValidTaxCodeIT(taxCode)) &&
-            businessName.trim().length >= 2 &&
-            billingAddress.trim().length > 0 &&
-            billingCity.trim().length > 0 &&
-            /^[A-Z]{2}$/i.test(billingProvince.trim()) &&
-            /^\d{5}$/.test(billingPostalCode.trim()) &&
-            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fiscalEmail.trim())
-        )
-    }, [vatNumber, taxCode, businessName, billingAddress, billingCity, billingProvince, billingPostalCode, fiscalEmail])
 
     const credentialsProvided = adeTaxCode && adePassword && adePin
 
