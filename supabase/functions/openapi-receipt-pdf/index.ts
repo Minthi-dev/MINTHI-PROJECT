@@ -23,7 +23,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
-import { fetchReceiptPdf } from "../_shared/openapi.ts";
+import { fetchReceipt, fetchReceiptPdf } from "../_shared/openapi.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -164,7 +164,29 @@ serve(async (req) => {
             }
             return json({ error: "Scontrino non trovato per questo ordine" }, 404);
         }
+
+        if (row.openapi_receipt_id && row.openapi_status !== "ready") {
+            row = await refreshReceiptStatus(row);
+        }
+
         if (!row.openapi_receipt_id || row.openapi_status !== "ready") {
+            if (row.openapi_status === "failed" || row.openapi_status === "voided") {
+                const failureMessage = row.openapi_status === "voided"
+                    ? "Lo scontrino risulta annullato."
+                    : "Lo scontrino risulta fallito. Controlla il log fiscale nelle impostazioni.";
+                if (probeOnly) {
+                    return json({
+                        ready: false,
+                        pending: false,
+                        openapiStatus: row.openapi_status,
+                        message: failureMessage,
+                    });
+                }
+                return json({
+                    error: failureMessage,
+                    openapiStatus: row.openapi_status,
+                }, 409);
+            }
             if (probeOnly) {
                 return json({
                     ready: false,
@@ -210,3 +232,51 @@ serve(async (req) => {
         });
     }
 });
+
+async function refreshReceiptStatus(row: any): Promise<any> {
+    try {
+        const latest = await fetchReceipt(row.openapi_receipt_id);
+        const data = latest?.data ?? latest;
+        const status = normalizeOpenApiStatus(data?.status || row.openapi_status);
+        if (!status || status === row.openapi_status) return row;
+
+        const patch: Record<string, unknown> = {
+            openapi_status: status,
+            openapi_response: latest,
+        };
+        if (status === "ready") {
+            patch.ready_at = new Date().toISOString();
+        }
+        if (status === "failed") {
+            const { data: current } = await supabase
+                .from("fiscal_receipts")
+                .select("error_log, retry_count")
+                .eq("id", row.id)
+                .maybeSingle();
+            const log = Array.isArray(current?.error_log) ? current.error_log : [];
+            const errMsg = String(data?.error_message || data?.message || "Scontrino fallito su OpenAPI").slice(0, 500);
+            patch.error_log = [...log, { at: new Date().toISOString(), error: errMsg, source: "status-refresh" }];
+            patch.retry_count = (current?.retry_count || 0) + 1;
+        }
+
+        await supabase
+            .from("fiscal_receipts")
+            .update(patch)
+            .eq("id", row.id);
+
+        return {
+            ...row,
+            openapi_status: status,
+        };
+    } catch (err) {
+        console.warn("[openapi-receipt-pdf] status refresh skipped:", err);
+        return row;
+    }
+}
+
+function normalizeOpenApiStatus(status: unknown): string {
+    const value = String(status || "").toLowerCase();
+    if (value === "new") return "submitted";
+    if (["submitted", "ready", "failed", "voided", "retry"].includes(value)) return value;
+    return "";
+}

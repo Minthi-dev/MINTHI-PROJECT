@@ -70,6 +70,7 @@ serve(async (req) => {
         const event = String(payload?.event || payload?.type || payload?.data?.event || payload?.data?.type || "");
         const data = unwrapReceiptData(payload);
         const openapiReceiptId = String(data?.id || data?.receipt_id || data?.receiptId || "");
+        const incomingStatus = normalizeOpenApiStatus(data?.status);
 
         if (!openapiReceiptId) {
             console.warn("[openapi-webhook] payload senza id:", JSON.stringify(payload).slice(0, 500));
@@ -87,7 +88,7 @@ serve(async (req) => {
             return json({ ok: true });
         }
 
-        if (event === "receipt-retry" || data?.status === "retry") {
+        if (event === "receipt-retry" || incomingStatus === "retry") {
             const { data: current } = await supabase
                 .from("fiscal_receipts")
                 .select("error_log, retry_count")
@@ -107,7 +108,7 @@ serve(async (req) => {
             return json({ ok: true, status: "retry" });
         }
 
-        if (event === "receipt-error" || data?.status === "failed") {
+        if (event === "receipt-error" || incomingStatus === "failed") {
             const errMsg = String(data?.error_message || data?.message || "Errore AdE").slice(0, 500);
             const { data: current } = await supabase
                 .from("fiscal_receipts")
@@ -128,7 +129,38 @@ serve(async (req) => {
             return json({ ok: true, status: "failed" });
         }
 
-        // Event: receipt → success
+        if (incomingStatus === "voided") {
+            await supabase
+                .from("fiscal_receipts")
+                .update({
+                    openapi_status: "voided",
+                    openapi_response: data,
+                    voided_at: new Date().toISOString(),
+                })
+                .eq("id", row.id);
+            return json({ ok: true, status: "voided" });
+        }
+
+        if (incomingStatus === "submitted") {
+            await supabase
+                .from("fiscal_receipts")
+                .update({
+                    openapi_status: "submitted",
+                    openapi_response: data,
+                })
+                .eq("id", row.id);
+            return json({ ok: true, status: "submitted" });
+        }
+
+        if (event && event !== "receipt" && incomingStatus !== "ready") {
+            await supabase
+                .from("fiscal_receipts")
+                .update({ openapi_response: data })
+                .eq("id", row.id);
+            return json({ ok: true, ignoredEvent: event });
+        }
+
+        // Event: receipt or status ready → success
         if (row.openapi_status !== "ready") {
             await supabase
                 .from("fiscal_receipts")
@@ -141,6 +173,13 @@ serve(async (req) => {
         }
 
         // Email PDF al cliente (best-effort, non blocca il webhook)
+        if (row.customer_email && !row.customer_email_sent_at && !RESEND_API_KEY) {
+            await supabase
+                .from("fiscal_receipts")
+                .update({ customer_email_error: "RESEND_API_KEY non configurato: email PDF non inviata" })
+                .eq("id", row.id);
+        }
+
         if (row.customer_email && !row.customer_email_sent_at && RESEND_API_KEY) {
             try {
                 const { data: rest } = await supabase
@@ -221,6 +260,13 @@ function unwrapReceiptData(payload: any): any {
     const first = payload?.data ?? payload;
     if (first?.data && typeof first.data === "object") return first.data;
     return first;
+}
+
+function normalizeOpenApiStatus(status: unknown): string {
+    const value = String(status || "").toLowerCase();
+    if (value === "new") return "submitted";
+    if (["submitted", "ready", "failed", "voided", "retry"].includes(value)) return value;
+    return "";
 }
 
 function base64FromBytes(bytes: Uint8Array): string {

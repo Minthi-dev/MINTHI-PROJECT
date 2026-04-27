@@ -1996,6 +1996,20 @@ export const DatabaseService = {
         window.open(url, '_blank', 'noopener')
     },
 
+    async printFiscalReceiptPdfForTakeaway(params: {
+        restaurantId: string
+        pickupCode: string
+    }): Promise<void> {
+        const url = await DatabaseService._invokePdfEdgeFunction(
+            'openapi-receipt-pdf',
+            {
+                restaurantId: params.restaurantId,
+                pickupCode: params.pickupCode,
+            }
+        )
+        await DatabaseService._printBlobUrl(url)
+    },
+
     async openFiscalReceiptPdfForDineIn(params: {
         restaurantId: string
         tableSessionId: string
@@ -2010,6 +2024,22 @@ export const DatabaseService = {
             }
         )
         window.open(url, '_blank', 'noopener')
+    },
+
+    async printFiscalReceiptPdfForDineIn(params: {
+        restaurantId: string
+        tableSessionId: string
+        stripeSessionId?: string
+    }): Promise<void> {
+        const url = await DatabaseService._invokePdfEdgeFunction(
+            'openapi-receipt-pdf',
+            {
+                restaurantId: params.restaurantId,
+                tableSessionId: params.tableSessionId,
+                stripeSessionId: params.stripeSessionId,
+            }
+        )
+        await DatabaseService._printBlobUrl(url)
     },
 
     async openFiscalReceiptPdfForReceipt(params: {
@@ -2028,6 +2058,24 @@ export const DatabaseService = {
             }
         )
         window.open(url, '_blank', 'noopener')
+    },
+
+    async printFiscalReceiptPdfForReceipt(params: {
+        restaurantId: string
+        receiptId: string
+    }): Promise<void> {
+        const userId = _getCurrentUserId()
+        const sessionToken = _getCurrentSessionToken()
+        const url = await DatabaseService._invokePdfEdgeFunction(
+            'openapi-receipt-pdf',
+            {
+                userId,
+                sessionToken,
+                restaurantId: params.restaurantId,
+                receiptId: params.receiptId,
+            }
+        )
+        await DatabaseService._printBlobUrl(url)
     },
 
     /** Internal helper that calls the PDF edge function and returns a blob URL. */
@@ -2056,6 +2104,41 @@ export const DatabaseService = {
         }
         const blob = await res.blob()
         return URL.createObjectURL(blob)
+    },
+
+    async _printBlobUrl(url: string): Promise<void> {
+        if (typeof window === 'undefined' || typeof document === 'undefined') return
+        await new Promise<void>((resolve, reject) => {
+            const iframe = document.createElement('iframe')
+            iframe.style.position = 'fixed'
+            iframe.style.right = '0'
+            iframe.style.bottom = '0'
+            iframe.style.width = '0'
+            iframe.style.height = '0'
+            iframe.style.border = '0'
+            iframe.onload = () => {
+                try {
+                    iframe.contentWindow?.focus()
+                    iframe.contentWindow?.print()
+                    setTimeout(() => {
+                        URL.revokeObjectURL(url)
+                        iframe.remove()
+                        resolve()
+                    }, 1000)
+                } catch (err) {
+                    URL.revokeObjectURL(url)
+                    iframe.remove()
+                    reject(err)
+                }
+            }
+            iframe.onerror = () => {
+                URL.revokeObjectURL(url)
+                iframe.remove()
+                reject(new Error('Impossibile stampare il PDF dello scontrino'))
+            }
+            iframe.src = url
+            document.body.appendChild(iframe)
+        })
     },
 
     /**

@@ -25,6 +25,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import {
+    fetchReceiptPdf,
     getOpenApiEnv,
     issueReceipt,
     isValidTaxCodeIT,
@@ -38,6 +39,8 @@ const supabase = createClient(
 );
 
 const INTERNAL_KEY = Deno.env.get("MINTHI_INTERNAL_KEY") || "";
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
+const FROM_EMAIL = Deno.env.get("RESEND_FROM_EMAIL") || "Minthi <onboarding@resend.dev>";
 
 interface IssueRequestPayload {
     // Auth (client)
@@ -139,7 +142,7 @@ serve(async (req) => {
         // --- Carica restaurant ---
         const { data: restaurant } = await supabase
             .from("restaurants")
-            .select("id")
+            .select("id, name")
             .eq("id", restaurantId)
             .maybeSingle();
 
@@ -147,7 +150,7 @@ serve(async (req) => {
 
         const { data: fiscalSettings } = await supabase
             .from("restaurant_fiscal_settings")
-            .select("openapi_fiscal_id, openapi_status, fiscal_receipts_enabled, default_vat_rate_code")
+            .select("openapi_fiscal_id, openapi_status, fiscal_receipts_enabled, fiscal_email_to_customer, default_vat_rate_code")
             .eq("restaurant_id", restaurantId)
             .maybeSingle();
 
@@ -360,6 +363,16 @@ serve(async (req) => {
                 })
                 .eq("id", receiptRowId);
 
+            if (result.status === "ready") {
+                await sendReceiptEmailIfPossible({
+                    receiptRowId,
+                    openapiReceiptId: result.id,
+                    customerEmail: cleanCustomerEmail,
+                    restaurantName: restaurant.name || "Ristorante",
+                    emailEnabled: fiscalSettings.fiscal_email_to_customer !== false,
+                });
+            }
+
             return json({
                 success: true,
                 receiptId: receiptRowId,
@@ -405,4 +418,92 @@ serve(async (req) => {
 function round2(n?: number | null): number {
     if (typeof n !== "number" || !Number.isFinite(n)) return 0;
     return Math.round(n * 100) / 100;
+}
+
+async function sendReceiptEmailIfPossible(params: {
+    receiptRowId: string;
+    openapiReceiptId: string;
+    customerEmail: string;
+    restaurantName: string;
+    emailEnabled: boolean;
+}) {
+    if (!params.customerEmail || !params.emailEnabled) return;
+
+    if (!RESEND_API_KEY) {
+        await supabase
+            .from("fiscal_receipts")
+            .update({ customer_email_error: "RESEND_API_KEY non configurato: email PDF non inviata" })
+            .eq("id", params.receiptRowId);
+        return;
+    }
+
+    try {
+        const pdfBytes = await fetchReceiptPdf(params.openapiReceiptId);
+        const emailRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${RESEND_API_KEY}`,
+            },
+            body: JSON.stringify({
+                from: FROM_EMAIL,
+                to: [params.customerEmail],
+                subject: `Scontrino fiscale - ${params.restaurantName}`,
+                html: receiptEmailHtml(params.restaurantName),
+                text: `Grazie per averci scelto. In allegato lo scontrino fiscale di ${params.restaurantName}.`,
+                attachments: [{
+                    filename: `scontrino-${params.openapiReceiptId}.pdf`,
+                    content: base64FromBytes(pdfBytes),
+                }],
+            }),
+        });
+
+        if (emailRes.ok) {
+            await supabase
+                .from("fiscal_receipts")
+                .update({ customer_email_sent_at: new Date().toISOString(), customer_email_error: null })
+                .eq("id", params.receiptRowId);
+            return;
+        }
+
+        const txt = await emailRes.text().catch(() => "");
+        await supabase
+            .from("fiscal_receipts")
+            .update({ customer_email_error: `Resend ${emailRes.status}: ${txt}`.slice(0, 500) })
+            .eq("id", params.receiptRowId);
+    } catch (err: any) {
+        console.error("[openapi-issue] email error:", err);
+        await supabase
+            .from("fiscal_receipts")
+            .update({ customer_email_error: String(err?.message || err).slice(0, 500) })
+            .eq("id", params.receiptRowId);
+    }
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+}
+
+function receiptEmailHtml(restaurantName: string): string {
+    return `
+<!doctype html>
+<html lang="it"><body style="margin:0;padding:0;background:#f6f6f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">
+  <div style="max-width:560px;margin:32px auto;background:white;border-radius:14px;padding:32px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+    <h1 style="font-size:20px;color:#111;margin:0 0 16px;">Grazie per averci scelto</h1>
+    <p style="color:#444;line-height:1.55;margin:0 0 16px;">
+      In allegato trovi lo <strong>scontrino fiscale</strong> della tua spesa presso
+      <strong>${restaurantName}</strong>.
+    </p>
+    <p style="color:#666;font-size:13px;line-height:1.5;margin:0;">
+      Lo scontrino e stato trasmesso all'Agenzia delle Entrate. Conservalo se intendi richiedere garanzia o cambio.
+    </p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />
+    <p style="color:#999;font-size:12px;margin:0;">Inviato automaticamente da Minthi.</p>
+  </div>
+</body></html>`;
 }

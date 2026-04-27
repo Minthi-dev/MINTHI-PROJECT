@@ -57,7 +57,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 // Icons
-import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users, Receipt, Timer } from '@phosphor-icons/react'
+import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users, Receipt, Timer, DownloadSimple, Printer } from '@phosphor-icons/react'
 import {
   ShoppingBasket, Utensils, ChefHat, Search,
   RefreshCw, AlertCircle, ChevronUp, ChevronDown, Layers, ArrowLeft, Send,
@@ -1071,6 +1071,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [lastStripeSessionId, setLastStripeSessionId] = useState<string | null>(null)
   const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
+  const [printingReceipt, setPrintingReceipt] = useState(false)
 
   // Bottom nav tab
   const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>('menu')
@@ -2791,27 +2792,53 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                 </p>
                 <div className="pt-4 w-full max-w-xs space-y-3">
                   {fiscalReceiptStatus === 'ready' ? (
-                    <Button
-                      onClick={async () => {
-                        if (!restaurantId || !sessionId) return
-                        setDownloadingReceipt(true)
-                        try {
-                          await DatabaseService.openFiscalReceiptPdfForDineIn({
-                            restaurantId,
-                            tableSessionId: sessionId,
-                            stripeSessionId: lastStripeSessionId || undefined,
-                          })
-                        } catch (err: any) {
-                          toast.error(err?.message || 'Scontrino non ancora disponibile')
-                        } finally {
-                          setDownloadingReceipt(false)
-                        }
-                      }}
-                      disabled={downloadingReceipt}
-                      className="w-full h-12 rounded-xl font-bold shadow-lg bg-emerald-500 hover:bg-emerald-400 text-black"
-                    >
-                      📄 {downloadingReceipt ? 'Apertura…' : 'Scarica scontrino fiscale'}
-                    </Button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        onClick={async () => {
+                          if (!restaurantId || !sessionId) return
+                          setDownloadingReceipt(true)
+                          try {
+                            await DatabaseService.openFiscalReceiptPdfForDineIn({
+                              restaurantId,
+                              tableSessionId: sessionId,
+                              stripeSessionId: lastStripeSessionId || undefined,
+                            })
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Scontrino non ancora disponibile')
+                          } finally {
+                            setDownloadingReceipt(false)
+                          }
+                        }}
+                        disabled={downloadingReceipt || printingReceipt}
+                        className="h-12 rounded-xl font-bold shadow-lg bg-emerald-500 hover:bg-emerald-400 text-black"
+                      >
+                        <DownloadSimple size={18} className="mr-2" weight="bold" />
+                        {downloadingReceipt ? 'Apertura…' : 'Scarica'}
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (!restaurantId || !sessionId) return
+                          setPrintingReceipt(true)
+                          try {
+                            await DatabaseService.printFiscalReceiptPdfForDineIn({
+                              restaurantId,
+                              tableSessionId: sessionId,
+                              stripeSessionId: lastStripeSessionId || undefined,
+                            })
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Scontrino non ancora stampabile')
+                          } finally {
+                            setPrintingReceipt(false)
+                          }
+                        }}
+                        disabled={downloadingReceipt || printingReceipt}
+                        className="h-12 rounded-xl font-bold shadow-lg"
+                        style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}`, color: theme.textPrimary }}
+                      >
+                        <Printer size={18} className="mr-2" weight="bold" />
+                        {printingReceipt ? 'Stampa…' : 'Stampa'}
+                      </Button>
+                    </div>
                   ) : fiscalReceiptStatus === 'pending' ? (
                     <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
                       <p className="text-[11px]" style={{ color: theme.textMuted }}>

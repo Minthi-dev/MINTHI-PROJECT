@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { DatabaseService } from '@/services/DatabaseService'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { CheckCircle, Clock, ForkKnife, Bell, Storefront, Warning, House, Receipt, DownloadSimple } from '@phosphor-icons/react'
+import { CheckCircle, Clock, ForkKnife, Bell, Storefront, Warning, House, Receipt, DownloadSimple, Printer } from '@phosphor-icons/react'
 
 type Status = 'PENDING' | 'PREPARING' | 'READY' | 'PICKED_UP' | 'PAID' | 'CANCELLED'
 
@@ -40,6 +40,7 @@ export default function TakeawayOrderStatus() {
     const [verifyingPayment, setVerifyingPayment] = useState(false)
     const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
     const [downloadingReceipt, setDownloadingReceipt] = useState(false)
+    const [printingReceipt, setPrintingReceipt] = useState(false)
 
     useEffect(() => {
         const justCreated = searchParams.get('created') === '1'
@@ -147,6 +148,21 @@ export default function TakeawayOrderStatus() {
             toast.error(err?.message || 'Scontrino non ancora disponibile, riprova fra poco')
         } finally {
             setDownloadingReceipt(false)
+        }
+    }
+
+    const handlePrintReceipt = async () => {
+        if (!restaurantId || !pickupCode) return
+        setPrintingReceipt(true)
+        try {
+            await DatabaseService.printFiscalReceiptPdfForTakeaway({
+                restaurantId,
+                pickupCode,
+            })
+        } catch (err: any) {
+            toast.error(err?.message || 'Scontrino non ancora stampabile, riprova fra poco')
+        } finally {
+            setPrintingReceipt(false)
         }
     }
 
@@ -279,15 +295,27 @@ export default function TakeawayOrderStatus() {
                                         <div className="text-xs text-emerald-100/70 mt-0.5 mb-3">
                                             Trasmesso all'Agenzia delle Entrate. Scaricalo per i tuoi documenti.
                                         </div>
-                                        <Button
-                                            onClick={handleDownloadReceipt}
-                                            disabled={downloadingReceipt}
-                                            size="sm"
-                                            className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold w-full"
-                                        >
-                                            <DownloadSimple size={16} className="mr-2" weight="bold" />
-                                            {downloadingReceipt ? 'Apertura…' : 'Scarica scontrino fiscale (PDF)'}
-                                        </Button>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Button
+                                                onClick={handleDownloadReceipt}
+                                                disabled={downloadingReceipt || printingReceipt}
+                                                size="sm"
+                                                className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold"
+                                            >
+                                                <DownloadSimple size={16} className="mr-2" weight="bold" />
+                                                {downloadingReceipt ? 'Apertura…' : 'Scarica'}
+                                            </Button>
+                                            <Button
+                                                onClick={handlePrintReceipt}
+                                                disabled={downloadingReceipt || printingReceipt}
+                                                size="sm"
+                                                variant="secondary"
+                                                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10 font-semibold"
+                                            >
+                                                <Printer size={16} className="mr-2" weight="bold" />
+                                                {printingReceipt ? 'Stampa…' : 'Stampa'}
+                                            </Button>
+                                        </div>
                                     </>
                                 ) : (
                                     <div className="text-xs text-emerald-100/70 mt-0.5">

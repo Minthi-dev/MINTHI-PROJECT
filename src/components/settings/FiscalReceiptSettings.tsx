@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { DatabaseService } from '@/services/DatabaseService'
-import type { Restaurant } from '@/services/types'
+import type { FiscalReceipt, Restaurant } from '@/services/types'
 import { toast } from 'sonner'
 import {
     CheckCircle,
@@ -32,6 +32,9 @@ import {
     Question,
     TestTube,
     Percent,
+    DownloadSimple,
+    Printer,
+    EnvelopeSimple,
 } from '@phosphor-icons/react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
@@ -107,11 +110,12 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
 
     const [saving, setSaving] = useState(false)
     const [stats, setStats] = useState<{ sent_count: number; failed_count: number; voided_count: number; revenue_total: number } | null>(null)
+    const [recentReceipts, setRecentReceipts] = useState<FiscalReceipt[]>([])
 
     const loadRestaurant = async () => {
         setLoading(true)
         try {
-            const dashboard = await DatabaseService.getOpenApiFiscalDashboard(restaurantId, false)
+            const dashboard = await DatabaseService.getOpenApiFiscalDashboard(restaurantId, true, 8)
             if (dashboard?.restaurant) {
                 const r = dashboard.restaurant as unknown as Restaurant
                 setRestaurant(r)
@@ -130,6 +134,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 setSetupOpen(Boolean(configured || r.fiscal_receipts_enabled))
                 setCredentialsOpen(r.openapi_status !== 'active')
                 setStats(dashboard.stats || null)
+                setRecentReceipts(dashboard.receipts || [])
             }
         } finally {
             setLoading(false)
@@ -254,6 +259,25 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
         }
     }
 
+    async function handleReceiptPdf(receipt: FiscalReceipt, mode: 'download' | 'print') {
+        try {
+            if (mode === 'print') {
+                await DatabaseService.printFiscalReceiptPdfForReceipt({
+                    restaurantId,
+                    receiptId: receipt.id,
+                })
+                toast.success('Dialogo di stampa aperto')
+                return
+            }
+            await DatabaseService.openFiscalReceiptPdfForReceipt({
+                restaurantId,
+                receiptId: receipt.id,
+            })
+        } catch (err: any) {
+            toast.error(err?.message || 'PDF scontrino non disponibile')
+        }
+    }
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -320,6 +344,86 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                         <StatCard label="Emessi" value={stats.sent_count} accent="emerald" />
                         <StatCard label="Falliti" value={stats.failed_count} accent={stats.failed_count > 0 ? 'red' : 'zinc'} />
                         <StatCard label="Fatturato" value={`€${(stats.revenue_total || 0).toFixed(2)}`} accent="amber" />
+                    </div>
+                </section>
+            )}
+
+            {isActive && (
+                <section>
+                    <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
+                        <Receipt size={18} className="opacity-70" />
+                        Ultimi scontrini
+                    </h3>
+                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 overflow-hidden divide-y divide-white/5">
+                        {recentReceipts.length === 0 ? (
+                            <div className="px-4 py-4 text-[13px] text-zinc-500">
+                                Nessuno scontrino emesso finora.
+                            </div>
+                        ) : recentReceipts.map(receipt => {
+                            const meta = fiscalReceiptStatusMeta(receipt.openapi_status)
+                            const emailMessage = receipt.customer_email
+                                ? receipt.customer_email_sent_at
+                                    ? 'Email inviata al cliente'
+                                    : receipt.customer_email_error
+                                        ? `Email non inviata: ${receipt.customer_email_error}`
+                                        : 'Email in attesa'
+                                : 'Email cliente assente'
+                            return (
+                                <div key={receipt.id} className="px-4 py-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-[14px] font-semibold text-white">
+                                                    {receiptPrimaryLabel(receipt)}
+                                                </span>
+                                                <span className={`text-[11px] px-2 py-0.5 rounded-full border ${meta.className}`}>
+                                                    {meta.label}
+                                                </span>
+                                            </div>
+                                            <div className="text-[12px] text-zinc-400 mt-1 flex items-center gap-2 flex-wrap">
+                                                <span>{formatEuro(receipt.total_amount)}</span>
+                                                <span>·</span>
+                                                <span>{formatReceiptDate(receipt.created_at)}</span>
+                                                <span>·</span>
+                                                <span className="inline-flex items-center gap-1">
+                                                    <EnvelopeSimple size={13} />
+                                                    {emailMessage}
+                                                </span>
+                                            </div>
+                                            {receipt.error_log && receipt.error_log.length > 0 && (
+                                                <div className="mt-1 text-[11px] text-red-300/90 line-clamp-2">
+                                                    {receipt.error_log[receipt.error_log.length - 1]?.error}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {receipt.openapi_status === 'ready' && (
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    onClick={() => handleReceiptPdf(receipt, 'download')}
+                                                    className="h-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
+                                                >
+                                                    <DownloadSimple size={15} className="mr-1.5" />
+                                                    PDF
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    onClick={() => handleReceiptPdf(receipt, 'print')}
+                                                    className="h-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
+                                                >
+                                                    <Printer size={15} className="mr-1.5" />
+                                                    Stampa
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
                 </section>
             )}
@@ -712,6 +816,45 @@ function friendlyFiscalError(raw?: string | null): string {
         return 'Le credenziali AdE non sono state accettate. Controlla codice fiscale, password e PIN.'
     }
     return 'OpenAPI non ha accettato l’attivazione. Controlla P.IVA, indirizzo e credenziali AdE.'
+}
+
+function fiscalReceiptStatusMeta(status: FiscalReceipt['openapi_status']) {
+    if (status === 'ready') {
+        return { label: 'Pronto', className: 'text-emerald-200 bg-emerald-500/10 border-emerald-500/30' }
+    }
+    if (status === 'failed') {
+        return { label: 'Fallito', className: 'text-red-200 bg-red-500/10 border-red-500/30' }
+    }
+    if (status === 'retry') {
+        return { label: 'Riprova', className: 'text-amber-200 bg-amber-500/10 border-amber-500/30' }
+    }
+    if (status === 'voided') {
+        return { label: 'Annullato', className: 'text-zinc-300 bg-zinc-700/50 border-white/10' }
+    }
+    return { label: 'In invio', className: 'text-sky-200 bg-sky-500/10 border-sky-500/30' }
+}
+
+function receiptPrimaryLabel(receipt: FiscalReceipt): string {
+    if (receipt.openapi_receipt_id) return `OpenAPI ${receipt.openapi_receipt_id.slice(-8)}`
+    if (receipt.stripe_session_id) return `Stripe ${receipt.stripe_session_id.slice(-8)}`
+    return `Scontrino ${receipt.id.slice(0, 8)}`
+}
+
+function formatReceiptDate(value?: string | null): string {
+    if (!value) return '-'
+    return new Intl.DateTimeFormat('it-IT', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(new Date(value))
+}
+
+function formatEuro(value?: number | null): string {
+    return new Intl.NumberFormat('it-IT', {
+        style: 'currency',
+        currency: 'EUR',
+    }).format(Number(value || 0))
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
