@@ -19,7 +19,9 @@
  *   - DELETE /IT-receipts/{id}            — void a receipt
  *
  * Authentication:
- *   Token endpoint: POST https://oauth.openapi.it/token
+ *   Token endpoint:
+ *     production: POST https://oauth.openapi.it/token
+ *     sandbox:    POST https://test.oauth.openapi.it/token
  *     Body: { scopes: [...], ttl: <seconds> }
  *     Auth header: Basic base64(EMAIL:APIKEY)
  *   Returned: { token: "Bearer...", expires_at, ... }
@@ -33,7 +35,13 @@ export const OPENAPI_BASE_URL = ENV === "production"
     ? "https://invoice.openapi.com"
     : "https://test.invoice.openapi.com";
 
-const OAUTH_BASE_URL = "https://oauth.openapi.it";
+const OPENAPI_API_DOMAIN = ENV === "production"
+    ? "invoice.openapi.com"
+    : "test.invoice.openapi.com";
+
+const OAUTH_BASE_URL = ENV === "production"
+    ? "https://oauth.openapi.it"
+    : "https://test.oauth.openapi.it";
 
 const OPENAPI_EMAIL = Deno.env.get("OPENAPI_EMAIL") || "";
 const OPENAPI_API_KEY = Deno.env.get("OPENAPI_API_KEY") || "";
@@ -51,15 +59,17 @@ const TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 const REQUIRED_SCOPES = [
     // IT-configurations
-    "POST:/IT-configurations",
-    "PATCH:/IT-configurations/{fiscal_id}",
-    "GET:/IT-configurations/{fiscal_id}",
-    "DELETE:/IT-configurations/{fiscal_id}",
+    `POST:${OPENAPI_API_DOMAIN}/IT-configurations`,
+    `PATCH:${OPENAPI_API_DOMAIN}/IT-configurations/{fiscal_id}`,
+    `GET:${OPENAPI_API_DOMAIN}/IT-configurations`,
+    `GET:${OPENAPI_API_DOMAIN}/IT-configurations/{fiscal_id}`,
+    `DELETE:${OPENAPI_API_DOMAIN}/IT-configurations/{fiscal_id}`,
     // IT-receipts
-    "POST:/IT-receipts",
-    "GET:/IT-receipts/{id}",
-    "PATCH:/IT-receipts/{id}",
-    "DELETE:/IT-receipts/{id}",
+    `POST:${OPENAPI_API_DOMAIN}/IT-receipts`,
+    `GET:${OPENAPI_API_DOMAIN}/IT-receipts`,
+    `GET:${OPENAPI_API_DOMAIN}/IT-receipts/{id}`,
+    `PATCH:${OPENAPI_API_DOMAIN}/IT-receipts/{id}`,
+    `DELETE:${OPENAPI_API_DOMAIN}/IT-receipts/{id}`,
 ];
 
 export function isOpenApiConfigured(): boolean {
@@ -113,12 +123,13 @@ export async function getOpenApiToken(): Promise<string> {
     if (!token) {
         throw new Error("[OpenAPI] login senza token nella risposta");
     }
+    const normalizedToken = String(token).replace(/^Bearer\s+/i, "");
 
     tokenCache = {
-        token,
+        token: normalizedToken,
         expiresAt: now + (TOKEN_TTL_SECONDS - 3600) * 1000, // -1h safety
     };
-    return token;
+    return normalizedToken;
 }
 
 /**
@@ -128,7 +139,7 @@ async function openapiRequest(path: string, init: RequestInit & { acceptPdf?: bo
     const token = await getOpenApiToken();
     const headers: Record<string, string> = {
         "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
+        "Content-Type": init.acceptPdf ? "application/pdf" : "application/json",
         ...((init.headers as Record<string, string>) || {}),
     };
     if (init.acceptPdf) {
@@ -156,6 +167,33 @@ export interface OpenApiConfigurationInput {
     };
     callback_receipt_url?: string;   // webhook URL per evento receipt (success)
     callback_receipt_error_url?: string; // webhook URL per evento receipt-error
+    merchant_address?: {
+        street_address: string;
+        street_number: string;
+        zip_code: string;
+        city: string;
+        province: string;
+    };
+}
+
+function receiptCallbacks(successUrl?: string, errorUrl?: string): Array<Record<string, unknown>> {
+    const secret = getOpenApiWebhookSecret();
+    const makeCallback = (url: string) => ({
+        url,
+        method: "JSON",
+        ...(secret ? { headers: { "x-openapi-secret": secret } } : {}),
+    });
+
+    const callbacks: Array<Record<string, unknown>> = [];
+    if (successUrl) {
+        for (const event of ["receipt", "receipt-retry", "receipt-credentials"]) {
+            callbacks.push({ event, callback: makeCallback(successUrl) });
+        }
+    }
+    if (errorUrl) {
+        callbacks.push({ event: "receipt-error", callback: makeCallback(errorUrl) });
+    }
+    return callbacks;
 }
 
 /**
@@ -175,23 +213,12 @@ export async function createConfiguration(input: OpenApiConfigurationInput): Pro
         legal_storage: false,
         signature: false,
         receipts_authentication: input.receipts_authentication,
+        ...(input.merchant_address ? { merchant_address: input.merchant_address } : {}),
     };
 
-    const callbacks: Array<Record<string, unknown>> = [];
-    if (input.callback_receipt_url) {
-        callbacks.push({
-            event: "receipt",
-            callback: { url: input.callback_receipt_url, method: "POST" },
-        });
-    }
-    if (input.callback_receipt_error_url) {
-        callbacks.push({
-            event: "receipt-error",
-            callback: { url: input.callback_receipt_error_url, method: "POST" },
-        });
-    }
+    const callbacks = receiptCallbacks(input.callback_receipt_url, input.callback_receipt_error_url);
     if (callbacks.length > 0) {
-        body.callbacks = callbacks;
+        body.api_configurations = callbacks;
     }
 
     const res = await openapiRequest("/IT-configurations", {
@@ -222,21 +249,12 @@ export async function updateConfiguration(
     if (patch.receipts_authentication) {
         body.receipts_authentication = patch.receipts_authentication;
     }
+    if (patch.merchant_address) body.merchant_address = patch.merchant_address;
     if (patch.callback_receipt_url || patch.callback_receipt_error_url) {
-        const callbacks: Array<Record<string, unknown>> = [];
-        if (patch.callback_receipt_url) {
-            callbacks.push({
-                event: "receipt",
-                callback: { url: patch.callback_receipt_url, method: "POST" },
-            });
-        }
-        if (patch.callback_receipt_error_url) {
-            callbacks.push({
-                event: "receipt-error",
-                callback: { url: patch.callback_receipt_error_url, method: "POST" },
-            });
-        }
-        body.callbacks = callbacks;
+        body.api_configurations = receiptCallbacks(
+            patch.callback_receipt_url,
+            patch.callback_receipt_error_url
+        );
     }
 
     const res = await openapiRequest(
@@ -430,8 +448,25 @@ export function isValidVatIT(vat: string): boolean {
 export function isValidTaxCodeIT(cf: string): boolean {
     if (!cf) return false;
     const upper = cf.toUpperCase();
-    return /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(upper)
-        || /^\d{11}$/.test(upper);
+    if (/^\d{11}$/.test(upper)) return isValidVatIT(upper);
+    if (!/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(upper)) return false;
+
+    const odd: Record<string, number> = {
+        "0": 1, "1": 0, "2": 5, "3": 7, "4": 9, "5": 13, "6": 15, "7": 17, "8": 19, "9": 21,
+        A: 1, B: 0, C: 5, D: 7, E: 9, F: 13, G: 15, H: 17, I: 19, J: 21, K: 2, L: 4, M: 18,
+        N: 20, O: 11, P: 3, Q: 6, R: 8, S: 12, T: 14, U: 16, V: 10, W: 22, X: 25, Y: 24, Z: 23,
+    };
+    const even: Record<string, number> = {};
+    "0123456789".split("").forEach((c, i) => even[c] = i);
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((c, i) => even[c] = i);
+
+    let sum = 0;
+    for (let i = 0; i < 15; i++) {
+        const c = upper[i];
+        sum += i % 2 === 0 ? odd[c] : even[c];
+    }
+    const expected = String.fromCharCode("A".charCodeAt(0) + (sum % 26));
+    return upper[15] === expected;
 }
 
 /**

@@ -26,6 +26,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import {
     issueReceipt,
+    isValidTaxCodeIT,
     vatRateCode,
     type OpenApiReceiptItem,
 } from "../_shared/openapi.ts";
@@ -132,20 +133,26 @@ serve(async (req) => {
         // --- Carica restaurant ---
         const { data: restaurant } = await supabase
             .from("restaurants")
-            .select("id, openapi_fiscal_id, openapi_status, fiscal_receipts_enabled, fiscal_email_to_customer, default_vat_rate_code")
+            .select("id")
             .eq("id", restaurantId)
             .maybeSingle();
 
         if (!restaurant) return json({ error: "Ristorante non trovato" }, 404);
 
-        if (!restaurant.fiscal_receipts_enabled) {
+        const { data: fiscalSettings } = await supabase
+            .from("restaurant_fiscal_settings")
+            .select("openapi_fiscal_id, openapi_status, fiscal_receipts_enabled, default_vat_rate_code")
+            .eq("restaurant_id", restaurantId)
+            .maybeSingle();
+
+        if (!fiscalSettings?.fiscal_receipts_enabled) {
             return json({
                 skipped: true,
                 reason: "fiscal_receipts_disabled",
                 message: "Emissione scontrini disabilitata per questo ristorante.",
             }, 200);
         }
-        if (restaurant.openapi_status !== "active" || !restaurant.openapi_fiscal_id) {
+        if (fiscalSettings.openapi_status !== "active" || !fiscalSettings.openapi_fiscal_id) {
             return json({
                 skipped: true,
                 reason: "openapi_not_active",
@@ -154,6 +161,29 @@ serve(async (req) => {
         }
 
         // --- Idempotency ---
+        const idempotencyKey = stripeSessionId
+            ? `stripe:${restaurantId}:${stripeSessionId}`
+            : orderId
+                ? `order:${restaurantId}:${orderId}:${issuedVia}`
+                : tableSessionId
+                    ? `table-session:${restaurantId}:${tableSessionId}:${issuedVia}:${Date.now()}`
+                    : `manual:${restaurantId}:${crypto.randomUUID()}`;
+
+        const { data: existingByKey } = await supabase
+            .from("fiscal_receipts")
+            .select("id, openapi_receipt_id, openapi_status")
+            .eq("idempotency_key", idempotencyKey)
+            .maybeSingle();
+        if (existingByKey) {
+            return json({
+                success: true,
+                alreadyIssued: true,
+                receiptId: existingByKey.id,
+                openapiReceiptId: existingByKey.openapi_receipt_id,
+                openapiStatus: existingByKey.openapi_status,
+            });
+        }
+
         // 1) Se per stesso stripe_session_id esiste già scontrino non-failed → skip
         if (stripeSessionId) {
             const { data: existing } = await supabase
@@ -193,8 +223,21 @@ serve(async (req) => {
         }
 
         // --- Calcolo totali ---
-        const defaultRate = restaurant.default_vat_rate_code || "22";
-        const acubeItems: OpenApiReceiptItem[] = items.map(it => {
+        const cleanCustomerEmail = customerEmail ? String(customerEmail).trim().toLowerCase() : "";
+        const cleanCustomerTaxCode = customerTaxCode ? String(customerTaxCode).trim().toUpperCase() : "";
+        const cleanCustomerLotteryCode = customerLotteryCode ? String(customerLotteryCode).trim().toUpperCase() : "";
+        if (cleanCustomerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanCustomerEmail)) {
+            return json({ error: "Email cliente non valida" }, 400);
+        }
+        if (cleanCustomerTaxCode && !isValidTaxCodeIT(cleanCustomerTaxCode)) {
+            return json({ error: "Codice fiscale cliente non valido" }, 400);
+        }
+        if (cleanCustomerLotteryCode && !/^[A-Z0-9]{8}$/.test(cleanCustomerLotteryCode)) {
+            return json({ error: "Codice lotteria scontrini non valido" }, 400);
+        }
+
+        const defaultRate = fiscalSettings.default_vat_rate_code || "10";
+        const receiptItems: OpenApiReceiptItem[] = items.map(it => {
             const rate = it.vatRate !== undefined ? vatRateCode(it.vatRate) : defaultRate;
             return {
                 description: String(it.description || "Voce").slice(0, 1000),
@@ -207,7 +250,7 @@ serve(async (req) => {
             };
         });
 
-        const grossSum = acubeItems.reduce((s, it) => {
+        const grossSum = receiptItems.reduce((s, it) => {
             const lineGross = it.unit_price * it.quantity - (it.discount || 0);
             return s + (it.complimentary ? 0 : lineGross);
         }, 0);
@@ -221,6 +264,14 @@ serve(async (req) => {
                 error: `Incoerenza importi: items €${itemsTotal.toFixed(2)} ≠ pagamenti €${paidTotal.toFixed(2)}`,
             }, 400);
         }
+        if (
+            cleanCustomerLotteryCode &&
+            (itemsTotal < 1 || Number(cashAmount) > 0 || Number(ticketRestaurantAmount) > 0 || Number(electronicAmount) + 0.01 < itemsTotal - Number(discount))
+        ) {
+            return json({
+                error: "Il codice lotteria è ammesso solo per pagamenti interamente elettronici da almeno €1,00",
+            }, 400);
+        }
 
         // --- Insert pending row ---
         const { data: pendingRow, error: insErr } = await supabase
@@ -231,17 +282,18 @@ serve(async (req) => {
                 table_session_id: tableSessionId || null,
                 stripe_session_id: stripeSessionId || null,
                 stripe_payment_intent_id: stripePaymentIntentId || null,
+                idempotency_key: idempotencyKey,
                 openapi_status: "pending",
-                items: acubeItems,
+                items: receiptItems,
                 cash_payment_amount: round2(cashAmount),
                 electronic_payment_amount: round2(electronicAmount),
                 ticket_restaurant_amount: round2(ticketRestaurantAmount),
                 ticket_restaurant_quantity: Number(ticketRestaurantQuantity) || 0,
                 discount_amount: round2(discount),
                 total_amount: itemsTotal,
-                customer_email: customerEmail || null,
-                customer_tax_code: customerTaxCode || null,
-                customer_lottery_code: customerLotteryCode || null,
+                customer_email: cleanCustomerEmail || null,
+                customer_tax_code: cleanCustomerTaxCode || null,
+                customer_lottery_code: cleanCustomerLotteryCode || null,
                 issued_by_user_id: !isInternal ? userId : null,
                 issued_via: issuedVia,
             })
@@ -250,6 +302,22 @@ serve(async (req) => {
 
         if (insErr || !pendingRow) {
             console.error("[openapi-issue] insert pending failed:", insErr);
+            if ((insErr as any)?.code === "23505") {
+                const { data: existing } = await supabase
+                    .from("fiscal_receipts")
+                    .select("id, openapi_receipt_id, openapi_status")
+                    .eq("idempotency_key", idempotencyKey)
+                    .maybeSingle();
+                if (existing) {
+                    return json({
+                        success: true,
+                        alreadyIssued: true,
+                        receiptId: existing.id,
+                        openapiReceiptId: existing.openapi_receipt_id,
+                        openapiStatus: existing.openapi_status,
+                    });
+                }
+            }
             return json({ error: "Errore creazione record scontrino" }, 500);
         }
 
@@ -258,15 +326,15 @@ serve(async (req) => {
         // --- Chiamata OpenAPI ---
         try {
             const result = await issueReceipt({
-                fiscal_id: restaurant.openapi_fiscal_id,
-                items: acubeItems,
+                fiscal_id: fiscalSettings.openapi_fiscal_id,
+                items: receiptItems,
                 cash_payment_amount: cashAmount,
                 electronic_payment_amount: electronicAmount,
                 ticket_restaurant_payment_amount: ticketRestaurantAmount,
                 ticket_restaurant_quantity: ticketRestaurantQuantity,
                 discount,
-                lottery_code: customerLotteryCode || undefined,
-                customer_tax_code: customerTaxCode || undefined,
+                lottery_code: cleanCustomerLotteryCode || undefined,
+                customer_tax_code: cleanCustomerTaxCode || undefined,
                 invoice_issuing: !!invoiceIssuing,
                 idempotency_key: receiptRowId,
             });
@@ -313,7 +381,6 @@ serve(async (req) => {
             return json({
                 error: "Emissione fallita, verrà riprovata.",
                 receiptId: receiptRowId,
-                detail: errMsg,
             }, 502);
         }
     } catch (err: any) {

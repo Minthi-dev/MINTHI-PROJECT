@@ -63,11 +63,13 @@ serve(async (req) => {
     }
 
     try {
-        const payload = await req.json();
-        // OpenAPI tipicamente invia: { event: "receipt" | "receipt-error", data: {...} }
-        const event = payload?.event || payload?.type || "";
-        const data = payload?.data || payload;
-        const openapiReceiptId = String(data?.id || data?.receipt_id || "");
+        const payload = await parseWebhookPayload(req);
+        // OpenAPI callbacks can be { event, data }, { data: { data: ... } },
+        // or form-encoded when a callback is misconfigured. Be deliberately
+        // tolerant so production callbacks do not get lost.
+        const event = String(payload?.event || payload?.type || payload?.data?.event || payload?.data?.type || "");
+        const data = unwrapReceiptData(payload);
+        const openapiReceiptId = String(data?.id || data?.receipt_id || data?.receiptId || "");
 
         if (!openapiReceiptId) {
             console.warn("[openapi-webhook] payload senza id:", JSON.stringify(payload).slice(0, 500));
@@ -83,6 +85,26 @@ serve(async (req) => {
         if (!row) {
             console.warn(`[openapi-webhook] receipt ${openapiReceiptId} non trovato in DB`);
             return json({ ok: true });
+        }
+
+        if (event === "receipt-retry" || data?.status === "retry") {
+            const { data: current } = await supabase
+                .from("fiscal_receipts")
+                .select("error_log, retry_count")
+                .eq("id", row.id)
+                .single();
+            const log = Array.isArray(current?.error_log) ? current!.error_log : [];
+            log.push({ at: new Date().toISOString(), status: "retry", source: "webhook", payload: data });
+            await supabase
+                .from("fiscal_receipts")
+                .update({
+                    openapi_status: "retry",
+                    error_log: log,
+                    retry_count: (current?.retry_count || 0) + 1,
+                    openapi_response: data,
+                })
+                .eq("id", row.id);
+            return json({ ok: true, status: "retry" });
         }
 
         if (event === "receipt-error" || data?.status === "failed") {
@@ -122,11 +144,16 @@ serve(async (req) => {
         if (row.customer_email && !row.customer_email_sent_at && RESEND_API_KEY) {
             try {
                 const { data: rest } = await supabase
-                    .from("restaurants")
-                    .select("name, fiscal_email_to_customer")
+                .from("restaurants")
+                    .select("name")
                     .eq("id", row.restaurant_id)
                     .maybeSingle();
-                if (rest?.fiscal_email_to_customer !== false) {
+                const { data: fiscalSettings } = await supabase
+                    .from("restaurant_fiscal_settings")
+                    .select("fiscal_email_to_customer")
+                    .eq("restaurant_id", row.restaurant_id)
+                    .maybeSingle();
+                if (fiscalSettings?.fiscal_email_to_customer !== false) {
                     const pdfBytes = await fetchReceiptPdf(openapiReceiptId);
                     const base64 = base64FromBytes(pdfBytes);
                     const restaurantName = rest?.name || "Ristorante";
@@ -178,6 +205,23 @@ serve(async (req) => {
         return json({ error: err?.message || "Errore interno" }, 500);
     }
 });
+
+async function parseWebhookPayload(req: Request): Promise<any> {
+    const contentType = (req.headers.get("content-type") || "").toLowerCase();
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+        const form = await req.formData();
+        const raw = form.get("data") || form.get("payload") || "";
+        if (typeof raw === "string" && raw.trim().startsWith("{")) return JSON.parse(raw);
+        return Object.fromEntries(form.entries());
+    }
+    return await req.json();
+}
+
+function unwrapReceiptData(payload: any): any {
+    const first = payload?.data ?? payload;
+    if (first?.data && typeof first.data === "object") return first.data;
+    return first;
+}
 
 function base64FromBytes(bytes: Uint8Array): string {
     let binary = "";

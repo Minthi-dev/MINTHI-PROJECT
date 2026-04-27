@@ -217,6 +217,12 @@ serve(async (req) => {
                                 .select("customer_email, customer_tax_code, customer_lottery_code")
                                 .eq("id", orderId)
                                 .maybeSingle();
+                            const electronicReceiptAmount = newPayments
+                                .filter((p: any) => p?.method === "stripe")
+                                .reduce((sum: number, p: any) => sum + (Number(p?.amount) || 0), 0);
+                            const cashReceiptAmount = newPayments
+                                .filter((p: any) => p?.method === "cash" || p?.method === "pay_on_pickup")
+                                .reduce((sum: number, p: any) => sum + (Number(p?.amount) || 0), 0);
                             await tryEmitFiscalReceipt({
                                 restaurantId,
                                 orderId,
@@ -224,8 +230,9 @@ serve(async (req) => {
                                 stripePaymentIntentId: (session as any).payment_intent || null,
                                 issuedVia: 'auto_takeaway_stripe',
                                 items,
-                                electronicAmount: Number(newPaid),
-                                customerEmail: orderMeta?.customer_email || undefined,
+                                cashAmount: Math.round(cashReceiptAmount * 100) / 100,
+                                electronicAmount: Math.round(electronicReceiptAmount * 100) / 100,
+                                customerEmail: orderMeta?.customer_email || (session.customer_details as any)?.email || undefined,
                                 customerTaxCode: orderMeta?.customer_tax_code || undefined,
                                 customerLotteryCode: orderMeta?.customer_lottery_code || undefined,
                             });

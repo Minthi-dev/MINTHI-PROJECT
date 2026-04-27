@@ -38,6 +38,16 @@ function buildWebhookUrl(): string {
     return `${SUPABASE_FN_BASE}/functions/v1/openapi-receipt-webhook`;
 }
 
+function splitItalianAddress(raw: string): { street_address: string; street_number: string } | null {
+    const normalized = raw.trim().replace(/\s+/g, " ");
+    const match = normalized.match(/^(.+?)[,\s]+(\d+[A-Z]?(?:\/[A-Z0-9]+)?)$/i);
+    if (!match) return null;
+    return {
+        street_address: match[1].replace(/,$/, "").trim(),
+        street_number: match[2].trim(),
+    };
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -100,6 +110,10 @@ serve(async (req) => {
         if (!cleanAddress || !cleanCity || !cleanProvince || !cleanPostalCode) {
             return json({ error: "Indirizzo, città, provincia e CAP obbligatori" }, 400);
         }
+        const merchantStreet = splitItalianAddress(cleanAddress);
+        if (!merchantStreet) {
+            return json({ error: "Indirizzo non valido: inserisci anche il numero civico, es. Via Roma 12" }, 400);
+        }
         if (!/^[A-Z]{2}$/.test(cleanProvince)) {
             return json({ error: "Provincia: 2 lettere (es. MI, RM, NA)" }, 400);
         }
@@ -129,23 +143,33 @@ serve(async (req) => {
         }
 
         // --- Carica restaurant ---
-        const { data: existing } = await supabase
+        const { data: restaurantRow } = await supabase
             .from("restaurants")
-            .select("id, openapi_fiscal_id, openapi_status")
+            .select("id")
             .eq("id", restaurantId)
             .maybeSingle();
 
-        if (!existing) return json({ error: "Ristorante non trovato" }, 404);
+        if (!restaurantRow) return json({ error: "Ristorante non trovato" }, 404);
+
+        const { data: existing } = await supabase
+            .from("restaurant_fiscal_settings")
+            .select("restaurant_id, openapi_fiscal_id, openapi_status")
+            .eq("restaurant_id", restaurantId)
+            .maybeSingle();
 
         // --- Salva sempre i dati fiscali, anche prima di chiamare OpenAPI.
         //     Questo permette al ristoratore di iniziare il setup gradualmente.
-        const fiscalUpdate: Record<string, unknown> = {
+        const restaurantFiscalUpdate: Record<string, unknown> = {
             vat_number: cleanVat,
-            tax_code: cleanTaxCode || null,
             billing_name: cleanBusinessName,
             billing_address: cleanAddress,
             billing_city: cleanCity,
             billing_province: cleanProvince,
+            billing_cap: cleanPostalCode,
+        };
+        const settingsUpdate: Record<string, unknown> = {
+            restaurant_id: restaurantId,
+            tax_code: cleanTaxCode || null,
             billing_postal_code: cleanPostalCode,
             fiscal_billing_email: cleanEmail,
             openapi_fiscal_id: cleanVat, // usiamo P.IVA come fiscal_id su OpenAPI
@@ -153,28 +177,36 @@ serve(async (req) => {
 
         // toggle auto-emission solo se esplicitamente passato
         if (typeof enableAutoEmission === "boolean") {
-            fiscalUpdate.fiscal_receipts_enabled = enableAutoEmission;
+            settingsUpdate.fiscal_receipts_enabled = enableAutoEmission;
         }
 
-        const { error: saveErr } = await supabase
+        const { error: saveRestaurantErr } = await supabase
             .from("restaurants")
-            .update(fiscalUpdate)
+            .update(restaurantFiscalUpdate)
             .eq("id", restaurantId);
-        if (saveErr) {
-            console.error("[openapi-onboard] errore salvataggio fiscali:", saveErr);
-            return json({ error: "Errore salvataggio dati fiscali: " + saveErr.message }, 500);
+        if (saveRestaurantErr) {
+            console.error("[openapi-onboard] errore salvataggio fiscali restaurant:", saveRestaurantErr);
+            return json({ error: "Errore salvataggio dati fiscali: " + saveRestaurantErr.message }, 500);
+        }
+
+        const { error: saveSettingsErr } = await supabase
+            .from("restaurant_fiscal_settings")
+            .upsert(settingsUpdate, { onConflict: "restaurant_id" });
+        if (saveSettingsErr) {
+            console.error("[openapi-onboard] errore salvataggio fiscali settings:", saveSettingsErr);
+            return json({ error: "Errore salvataggio impostazioni fiscali: " + saveSettingsErr.message }, 500);
         }
 
         // --- Se OpenAPI non è configurato a livello piattaforma, salviamo
         //     solo i dati fiscali e segnaliamo "pending".
         if (!isOpenApiConfigured()) {
             await supabase
-                .from("restaurants")
+                .from("restaurant_fiscal_settings")
                 .update({
                     openapi_status: "pending",
                     openapi_last_error: null,
                 })
-                .eq("id", restaurantId);
+                .eq("restaurant_id", restaurantId);
             return json({
                 success: true,
                 openapiStatus: "pending",
@@ -184,14 +216,14 @@ serve(async (req) => {
 
         // --- Se non ci sono credenziali AdE in questa chiamata, fermati.
         //     Servono al primo onboarding o al rinnovo (ogni 90gg).
-        if (!adeProvided && !existing.openapi_fiscal_id) {
+        if (!adeProvided && !existing?.openapi_fiscal_id) {
             return json({
                 success: true,
                 openapiStatus: "pending",
                 message: "Dati fiscali salvati. Inserisci ora le credenziali Agenzia Entrate per attivare lo scontrino elettronico.",
             });
         }
-        if (!adeProvided && existing.openapi_fiscal_id) {
+        if (!adeProvided && existing?.openapi_fiscal_id) {
             // Solo aggiornamento dati anagrafici, no rotazione credenziali
             return json({
                 success: true,
@@ -203,13 +235,20 @@ serve(async (req) => {
 
         // --- Chiamata OpenAPI ---
         const callbackBase = buildWebhookUrl();
+        const merchant_address = {
+            ...merchantStreet,
+            zip_code: cleanPostalCode,
+            city: cleanCity,
+            province: cleanProvince,
+        };
         try {
-            if (!existing.openapi_fiscal_id) {
+            if (!existing?.openapi_fiscal_id) {
                 // Prima volta → POST /IT-configurations
                 await createConfiguration({
                     fiscal_id: cleanVat,
                     name: cleanBusinessName,
                     email: cleanEmail,
+                    merchant_address,
                     receipts_authentication: {
                         taxCode: cleanAdeTaxCode,
                         password: cleanAdePassword,
@@ -224,6 +263,7 @@ serve(async (req) => {
                     fiscal_id: cleanVat,
                     name: cleanBusinessName,
                     email: cleanEmail,
+                    merchant_address,
                     receipts_authentication: {
                         taxCode: cleanAdeTaxCode,
                         password: cleanAdePassword,
@@ -237,7 +277,7 @@ serve(async (req) => {
             const now = new Date();
             const expireAt = new Date(now.getTime() + 88 * 24 * 60 * 60 * 1000); // 88gg buffer
             await supabase
-                .from("restaurants")
+                .from("restaurant_fiscal_settings")
                 .update({
                     openapi_status: "active",
                     openapi_configured_at: now.toISOString(),
@@ -245,7 +285,7 @@ serve(async (req) => {
                     ade_credentials_set_at: now.toISOString(),
                     ade_credentials_expire_at: expireAt.toISOString(),
                 })
-                .eq("id", restaurantId);
+                .eq("restaurant_id", restaurantId);
 
             return json({
                 success: true,
@@ -258,12 +298,12 @@ serve(async (req) => {
             console.error("[openapi-onboard] OpenAPI error:", apiErr);
             const errMsg = String(apiErr?.message || apiErr).slice(0, 500);
             await supabase
-                .from("restaurants")
+                .from("restaurant_fiscal_settings")
                 .update({
                     openapi_status: "failed",
                     openapi_last_error: errMsg,
                 })
-                .eq("id", restaurantId);
+                .eq("restaurant_id", restaurantId);
             return json({
                 error: "Attivazione fallita: " + errMsg,
                 hint: "Verifica P.IVA e credenziali Area Privata AdE. Le credenziali AdE scadono ogni 90 giorni.",

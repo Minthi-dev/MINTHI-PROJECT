@@ -17,7 +17,6 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { DatabaseService } from '@/services/DatabaseService'
-import { supabase } from '@/lib/supabase'
 import type { Restaurant } from '@/services/types'
 import { toast } from 'sonner'
 import {
@@ -35,9 +34,6 @@ import {
 interface Props {
     restaurantId: string
 }
-
-const FISCAL_RESTAURANT_FIELDS =
-    'id, name, email, vat_number, tax_code, billing_name, billing_address, billing_city, billing_province, billing_postal_code, fiscal_billing_email, openapi_fiscal_id, openapi_status, openapi_configured_at, openapi_last_error, ade_credentials_set_at, ade_credentials_expire_at, fiscal_receipts_enabled, fiscal_email_to_customer, default_vat_rate_code'
 
 function isValidVatIT(vat: string): boolean {
     if (!/^\d{11}$/.test(vat)) return false
@@ -58,7 +54,22 @@ function isValidVatIT(vat: string): boolean {
 function isValidTaxCodeIT(cf: string): boolean {
     if (!cf) return false
     const upper = cf.toUpperCase()
-    return /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(upper) || /^\d{11}$/.test(upper)
+    if (/^\d{11}$/.test(upper)) return isValidVatIT(upper)
+    if (!/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(upper)) return false
+    const odd: Record<string, number> = {
+        '0': 1, '1': 0, '2': 5, '3': 7, '4': 9, '5': 13, '6': 15, '7': 17, '8': 19, '9': 21,
+        A: 1, B: 0, C: 5, D: 7, E: 9, F: 13, G: 15, H: 17, I: 19, J: 21, K: 2, L: 4, M: 18,
+        N: 20, O: 11, P: 3, Q: 6, R: 8, S: 12, T: 14, U: 16, V: 10, W: 22, X: 25, Y: 24, Z: 23,
+    }
+    const even: Record<string, number> = {}
+    '0123456789'.split('').forEach((c, i) => { even[c] = i })
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach((c, i) => { even[c] = i })
+    let sum = 0
+    for (let i = 0; i < 15; i++) {
+        const c = upper[i]
+        sum += i % 2 === 0 ? odd[c] : even[c]
+    }
+    return upper[15] === String.fromCharCode('A'.charCodeAt(0) + (sum % 26))
 }
 
 export function FiscalReceiptSettings({ restaurantId }: Props) {
@@ -90,13 +101,9 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const loadRestaurant = async () => {
         setLoading(true)
         try {
-            const { data } = await supabase
-                .from('restaurants')
-                .select(FISCAL_RESTAURANT_FIELDS)
-                .eq('id', restaurantId)
-                .maybeSingle()
-            if (data) {
-                const r = data as unknown as Restaurant
+            const dashboard = await DatabaseService.getOpenApiFiscalDashboard(restaurantId, false)
+            if (dashboard?.restaurant) {
+                const r = dashboard.restaurant as unknown as Restaurant
                 setRestaurant(r)
                 setVatNumber(r.vat_number || '')
                 setTaxCode(r.tax_code || '')
@@ -107,6 +114,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 setBillingPostalCode(r.billing_postal_code || (r as any).billing_cap || '')
                 setFiscalEmail(r.fiscal_billing_email || r.email || '')
                 setEnableAuto(!!r.fiscal_receipts_enabled)
+                setStats(dashboard.stats || null)
             }
         } finally {
             setLoading(false)
@@ -116,7 +124,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     useEffect(() => {
         if (!restaurantId) return
         loadRestaurant()
-        DatabaseService.getFiscalReceiptStats30d(restaurantId).then(setStats).catch(() => null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restaurantId])
 

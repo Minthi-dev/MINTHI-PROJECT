@@ -758,8 +758,9 @@ export const DatabaseService = {
     async updateSessionReceiptIssued(sessionId: string, issued: boolean) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-session-manage', {
-            body: { userId, action: 'update_receipt', sessionId, data: { receipt_issued: issued } }
+            body: { userId, sessionToken, action: 'update_receipt', sessionId, data: { receipt_issued: issued } }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ricevuta')
     },
@@ -1906,18 +1907,26 @@ export const DatabaseService = {
         return data
     },
 
+    async getOpenApiFiscalDashboard(restaurantId: string, includeReceipts = false, limit = 50) {
+        const userId = _getCurrentUserId()
+        const sessionToken = _requireCurrentSessionToken()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('openapi-fiscal-dashboard', {
+            body: { userId, sessionToken, restaurantId, includeReceipts, limit },
+        })
+        if (error || (data && data.error)) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore lettura scontrini fiscali')
+            throw new Error(msg)
+        }
+        return data
+    },
+
     /**
-     * Lista degli scontrini fiscali del ristorante (RLS-safe).
+     * Lista degli scontrini fiscali del ristorante.
      */
     async getFiscalReceipts(restaurantId: string, limit = 50) {
-        const { data, error } = await supabase
-            .from('fiscal_receipts')
-            .select('*')
-            .eq('restaurant_id', restaurantId)
-            .order('created_at', { ascending: false })
-            .limit(limit)
-        if (error) throw error
-        return data || []
+        const data = await DatabaseService.getOpenApiFiscalDashboard(restaurantId, true, limit)
+        return data?.receipts || []
     },
 
     async getFiscalReceiptStats30d(restaurantId: string): Promise<{
@@ -1926,15 +1935,8 @@ export const DatabaseService = {
         voided_count: number
         revenue_total: number
     }> {
-        const { data, error } = await supabase
-            .from('fiscal_receipts_stats_30d')
-            .select('*')
-            .eq('restaurant_id', restaurantId)
-            .maybeSingle()
-        if (error) {
-            console.warn('getFiscalReceiptStats30d:', error.message)
-        }
-        return data || { sent_count: 0, failed_count: 0, voided_count: 0, revenue_total: 0 }
+        const data = await DatabaseService.getOpenApiFiscalDashboard(restaurantId, false)
+        return data?.stats || { sent_count: 0, failed_count: 0, voided_count: 0, revenue_total: 0 }
     },
 
     /**
