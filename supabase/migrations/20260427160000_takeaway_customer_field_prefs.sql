@@ -25,6 +25,9 @@ COMMENT ON COLUMN public.restaurants.takeaway_email_required IS
 
 -- Extend the public takeaway info RPC so the customer menu sees the new
 -- field preferences without an extra round-trip.
+-- DROP first because Postgres refuses to change return type via CREATE OR REPLACE.
+DROP FUNCTION IF EXISTS public.get_takeaway_restaurant_info(uuid);
+
 CREATE OR REPLACE FUNCTION public.get_takeaway_restaurant_info(p_restaurant_id uuid)
 RETURNS TABLE(
     id uuid,
