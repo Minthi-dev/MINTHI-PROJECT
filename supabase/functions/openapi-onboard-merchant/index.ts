@@ -153,9 +153,19 @@ serve(async (req) => {
 
         const { data: existing } = await supabase
             .from("restaurant_fiscal_settings")
-            .select("restaurant_id, openapi_fiscal_id, openapi_status")
+            .select("restaurant_id, openapi_fiscal_id, openapi_status, openapi_configured_at")
             .eq("restaurant_id", restaurantId)
             .maybeSingle();
+
+        if (
+            existing?.openapi_fiscal_id &&
+            existing.openapi_fiscal_id !== cleanVat &&
+            (existing.openapi_status === "active" || existing.openapi_configured_at)
+        ) {
+            return json({
+                error: "Partita IVA già configurata su OpenAPI. Per cambiarla serve una nuova configurazione fiscale: contatta l'assistenza prima di emettere altri scontrini.",
+            }, 400);
+        }
 
         // --- Salva sempre i dati fiscali, anche prima di chiamare OpenAPI.
         //     Questo permette al ristoratore di iniziare il setup gradualmente.
