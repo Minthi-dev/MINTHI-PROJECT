@@ -127,18 +127,19 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [restaurantId])
 
-    const formIsValid = useMemo(() => {
-        return (
-            isValidVatIT(vatNumber.replace(/\s/g, '')) &&
-            (!taxCode || isValidTaxCodeIT(taxCode)) &&
-            businessName.trim().length >= 2 &&
-            billingAddress.trim().length > 0 &&
-            billingCity.trim().length > 0 &&
-            /^[A-Z]{2}$/i.test(billingProvince.trim()) &&
-            /^\d{5}$/.test(billingPostalCode.trim()) &&
-            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fiscalEmail.trim())
-        )
+    const formValidationErrors = useMemo(() => {
+        const errors: string[] = []
+        if (!isValidVatIT(vatNumber.replace(/\s/g, ''))) errors.push('Partita IVA non valida')
+        if (taxCode && !isValidTaxCodeIT(taxCode)) errors.push('Codice fiscale non valido')
+        if (businessName.trim().length < 2) errors.push('Ragione sociale obbligatoria')
+        if (!billingAddress.trim()) errors.push('Indirizzo obbligatorio')
+        if (!billingCity.trim()) errors.push('Città obbligatoria')
+        if (!/^[A-Z]{2}$/i.test(billingProvince.trim())) errors.push('Provincia non valida')
+        if (!/^\d{5}$/.test(billingPostalCode.trim())) errors.push('CAP non valido')
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fiscalEmail.trim())) errors.push('Email aziendale non valida')
+        return errors
     }, [vatNumber, taxCode, businessName, billingAddress, billingCity, billingProvince, billingPostalCode, fiscalEmail])
+    const formIsValid = formValidationErrors.length === 0
 
     if (loading || !restaurant) {
         return (
@@ -164,7 +165,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     async function handleSave(includeCredentials: boolean) { /* eslint-disable @typescript-eslint/no-unused-vars */
         // Restaurant always defined here because of the loading guard above.
         if (!formIsValid) {
-            toast.error('Compila correttamente i dati anagrafici prima di salvare')
+            toast.error(formValidationErrors[0] || 'Compila correttamente i dati anagrafici prima di salvare')
             return
         }
         if (includeCredentials && !credentialsProvided) {
@@ -281,11 +282,11 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 <div className="flex justify-end mt-3">
                     <Button
                         onClick={() => handleSave(false)}
-                        disabled={!formIsValid || saving}
+                        disabled={saving}
                         variant="secondary"
                         className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
                     >
-                        Salva dati anagrafici
+                        {saving ? 'Salvataggio…' : 'Salva dati anagrafici'}
                     </Button>
                 </div>
             </section>
@@ -361,10 +362,10 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 <div className="flex justify-end mt-3">
                     <Button
                         onClick={() => handleSave(true)}
-                        disabled={!formIsValid || !credentialsProvided || saving}
+                        disabled={saving}
                         className="bg-amber-500 hover:bg-amber-400 text-black font-semibold"
                     >
-                        {restaurant.openapi_fiscal_id
+                        {restaurant.openapi_status === 'active'
                             ? <><ArrowsClockwise size={16} className="mr-2" weight="bold" />Aggiorna credenziali AdE</>
                             : <>Attiva scontrino fiscale</>
                         }

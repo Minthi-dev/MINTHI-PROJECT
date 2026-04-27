@@ -156,9 +156,13 @@ serve(async (req) => {
             .select("restaurant_id, openapi_fiscal_id, openapi_status, openapi_configured_at")
             .eq("restaurant_id", restaurantId)
             .maybeSingle();
+        const hasOpenApiConfiguration = Boolean(
+            existing?.openapi_fiscal_id &&
+            (existing.openapi_status === "active" || existing.openapi_configured_at)
+        );
 
         if (
-            existing?.openapi_fiscal_id &&
+            hasOpenApiConfiguration &&
             existing.openapi_fiscal_id !== cleanVat &&
             (existing.openapi_status === "active" || existing.openapi_configured_at)
         ) {
@@ -182,7 +186,10 @@ serve(async (req) => {
             tax_code: cleanTaxCode || null,
             billing_postal_code: cleanPostalCode,
             fiscal_billing_email: cleanEmail,
-            openapi_fiscal_id: cleanVat, // usiamo P.IVA come fiscal_id su OpenAPI
+            // We write openapi_fiscal_id only after OpenAPI confirms the
+            // configuration. Saving draft fiscal data must not turn the next
+            // activation into a PATCH against a non-existing provider config.
+            openapi_fiscal_id: hasOpenApiConfiguration ? cleanVat : null,
         };
 
         // toggle auto-emission solo se esplicitamente passato
@@ -226,14 +233,14 @@ serve(async (req) => {
 
         // --- Se non ci sono credenziali AdE in questa chiamata, fermati.
         //     Servono al primo onboarding o al rinnovo (ogni 90gg).
-        if (!adeProvided && !existing?.openapi_fiscal_id) {
+        if (!adeProvided && !hasOpenApiConfiguration) {
             return json({
                 success: true,
                 openapiStatus: "pending",
                 message: "Dati fiscali salvati. Inserisci ora le credenziali Agenzia Entrate per attivare lo scontrino elettronico.",
             });
         }
-        if (!adeProvided && existing?.openapi_fiscal_id) {
+        if (!adeProvided && hasOpenApiConfiguration) {
             // Solo aggiornamento dati anagrafici, no rotazione credenziali
             return json({
                 success: true,
@@ -252,7 +259,7 @@ serve(async (req) => {
             province: cleanProvince,
         };
         try {
-            if (!existing?.openapi_fiscal_id) {
+            if (!hasOpenApiConfiguration) {
                 // Prima volta → POST /IT-configurations
                 await createConfiguration({
                     fiscal_id: cleanVat,
@@ -269,7 +276,7 @@ serve(async (req) => {
                 });
             } else {
                 // Già configurato → PATCH (rotazione credenziali / aggiornamento)
-                await updateConfiguration(existing.openapi_fiscal_id, {
+                await updateConfiguration(existing!.openapi_fiscal_id, {
                     fiscal_id: cleanVat,
                     name: cleanBusinessName,
                     email: cleanEmail,
