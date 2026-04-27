@@ -857,6 +857,14 @@ export const DatabaseService = {
             takeaway_pickup_notice: string | null
             enable_stripe_payments: boolean
             stripe_connect_enabled: boolean
+            takeaway_collect_first_name?: boolean
+            takeaway_first_name_required?: boolean
+            takeaway_collect_last_name?: boolean
+            takeaway_last_name_required?: boolean
+            takeaway_collect_phone?: boolean
+            takeaway_phone_required?: boolean
+            takeaway_collect_email?: boolean
+            takeaway_email_required?: boolean
         } | null
     },
 
@@ -927,9 +935,12 @@ export const DatabaseService = {
         restaurantId: string
         items: Array<{ dish_id: string; quantity: number; note?: string }>
         customerName: string
+        customerLastName?: string
         customerPhone: string
         customerNotes?: string
         customerEmail?: string
+        customerTaxCode?: string
+        customerLotteryCode?: string
         paymentMethod: 'stripe' | 'pay_on_pickup'
         idempotencyKey?: string
     }) {

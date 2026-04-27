@@ -43,6 +43,7 @@ export default function TakeawayMenu() {
     const [cartOpen, setCartOpen] = useState(false)
     const [checkoutOpen, setCheckoutOpen] = useState(false)
     const [customerName, setCustomerName] = useState('')
+    const [customerLastName, setCustomerLastName] = useState('')
     const [customerPhone, setCustomerPhone] = useState('')
     const [customerEmail, setCustomerEmail] = useState('')
     const [customerNotes, setCustomerNotes] = useState('')
@@ -162,8 +163,20 @@ export default function TakeawayMenu() {
     const submitOrder = async () => {
         if (!restaurantId) return
         if (cart.length === 0) return toast.error('Il carrello è vuoto')
-        if (!customerName.trim()) return toast.error('Inserisci il tuo nome')
-        if (!customerPhone.trim()) return toast.error('Inserisci un numero di telefono')
+
+        const collectFirstName = restaurant?.takeaway_collect_first_name !== false
+        const firstNameRequired = restaurant?.takeaway_first_name_required !== false
+        const collectLastName = !!restaurant?.takeaway_collect_last_name
+        const lastNameRequired = !!restaurant?.takeaway_last_name_required
+        const collectPhone = restaurant?.takeaway_collect_phone !== false
+        const phoneRequired = restaurant?.takeaway_phone_required !== false
+        const collectEmail = restaurant?.takeaway_collect_email !== false
+        const emailRequired = !!restaurant?.takeaway_email_required
+
+        if (collectFirstName && firstNameRequired && !customerName.trim()) return toast.error('Inserisci il tuo nome')
+        if (collectLastName && lastNameRequired && !customerLastName.trim()) return toast.error('Inserisci il cognome')
+        if (collectPhone && phoneRequired && !customerPhone.trim()) return toast.error('Inserisci un numero di telefono')
+        if (collectEmail && emailRequired && !customerEmail.trim()) return toast.error("Inserisci l'email per ricevere lo scontrino")
         if (paymentChoice === 'stripe' && !canPayStripe) return toast.error('Pagamento online non disponibile')
         if (paymentChoice === 'pay_on_pickup' && !canPayOnPickup) return toast.error('Questo ristorante richiede il pagamento online')
 
@@ -177,6 +190,7 @@ export default function TakeawayMenu() {
                     note: c.note,
                 })),
                 customerName: customerName.trim(),
+                customerLastName: customerLastName.trim() || undefined,
                 customerPhone: customerPhone.trim(),
                 customerEmail: customerEmail.trim() || undefined,
                 customerNotes: customerNotes.trim() || undefined,
@@ -401,18 +415,37 @@ export default function TakeawayMenu() {
                         <DialogTitle className="flex items-center gap-2"><CheckCircle size={20} className="text-amber-400" /> Conferma ordine</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3">
-                        <div>
-                            <label className="text-xs text-zinc-400 uppercase tracking-wider">Nome *</label>
-                            <Input value={customerName} onChange={e => setCustomerName(e.target.value)} maxLength={80} placeholder="Es. Mario Rossi" className="bg-white/5 border-white/10 mt-1" />
-                        </div>
-                        <div>
-                            <label className="text-xs text-zinc-400 uppercase tracking-wider">Telefono *</label>
-                            <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} maxLength={32} placeholder="Es. +39 333 1234567" inputMode="tel" className="bg-white/5 border-white/10 mt-1" />
-                        </div>
-                        {paymentChoice === 'stripe' && (
+                        {restaurant?.takeaway_collect_first_name !== false && (
                             <div>
-                                <label className="text-xs text-zinc-400 uppercase tracking-wider">Email (ricevuta Stripe)</label>
+                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
+                                    Nome {restaurant?.takeaway_first_name_required !== false && '*'}
+                                </label>
+                                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} maxLength={80} placeholder="Es. Mario" className="bg-white/5 border-white/10 mt-1" />
+                            </div>
+                        )}
+                        {restaurant?.takeaway_collect_last_name && (
+                            <div>
+                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
+                                    Cognome {restaurant?.takeaway_last_name_required && '*'}
+                                </label>
+                                <Input value={customerLastName} onChange={e => setCustomerLastName(e.target.value)} maxLength={80} placeholder="Es. Rossi" className="bg-white/5 border-white/10 mt-1" />
+                            </div>
+                        )}
+                        {restaurant?.takeaway_collect_phone !== false && (
+                            <div>
+                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
+                                    Telefono {restaurant?.takeaway_phone_required !== false && '*'}
+                                </label>
+                                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} maxLength={32} placeholder="Es. +39 333 1234567" inputMode="tel" className="bg-white/5 border-white/10 mt-1" />
+                            </div>
+                        )}
+                        {restaurant?.takeaway_collect_email !== false && (
+                            <div>
+                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
+                                    Email {restaurant?.takeaway_email_required && '*'}
+                                </label>
                                 <Input value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} type="email" maxLength={120} placeholder="nome@esempio.it" className="bg-white/5 border-white/10 mt-1" />
+                                <p className="text-[11px] text-zinc-500 mt-1">Ricevi ricevuta Stripe e scontrino fiscale digitale</p>
                             </div>
                         )}
                         <div>

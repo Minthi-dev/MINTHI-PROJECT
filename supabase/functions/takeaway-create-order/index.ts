@@ -181,19 +181,50 @@ serve(async (req) => {
             return json({ error: "Elenco piatti non valido" }, 400);
         }
         const cleanName = sanitizeStr(customerName, MAX_NAME_LEN);
+        const cleanLastName = sanitizeStr((payload as any)?.customerLastName, MAX_NAME_LEN);
         const cleanPhone = sanitizeStr(customerPhone, MAX_PHONE_LEN);
         const cleanNotes = sanitizeStr(customerNotes, MAX_NOTE_LEN);
         const cleanEmail = (sanitizeStr(customerEmail, 120) || "").toLowerCase();
         const customerTaxCode = (sanitizeStr((payload as any)?.customerTaxCode, 16) || "").toUpperCase();
         const customerLotteryCode = (sanitizeStr((payload as any)?.customerLotteryCode, 8) || "").toUpperCase();
-        if (!cleanName) return json({ error: "Nome cliente obbligatorio" }, 400);
-        if (!cleanPhone) return json({ error: "Telefono obbligatorio" }, 400);
+
+        // Per-restaurant customer field preferences. Defaults preserve the
+        // historical behaviour (name + phone required, others optional).
+        const { data: prefsRow } = await supabase
+            .from("restaurants")
+            .select("takeaway_collect_first_name, takeaway_first_name_required, takeaway_collect_last_name, takeaway_last_name_required, takeaway_collect_phone, takeaway_phone_required, takeaway_collect_email, takeaway_email_required")
+            .eq("id", restaurantId)
+            .maybeSingle();
+        const prefs = {
+            collectFirstName: prefsRow?.takeaway_collect_first_name !== false,
+            firstNameRequired: prefsRow?.takeaway_first_name_required !== false,
+            collectLastName: !!prefsRow?.takeaway_collect_last_name,
+            lastNameRequired: !!prefsRow?.takeaway_last_name_required,
+            collectPhone: prefsRow?.takeaway_collect_phone !== false,
+            phoneRequired: prefsRow?.takeaway_phone_required !== false,
+            collectEmail: prefsRow?.takeaway_collect_email !== false,
+            emailRequired: !!prefsRow?.takeaway_email_required,
+        };
+
+        if (prefs.collectFirstName && prefs.firstNameRequired && !cleanName) {
+            return json({ error: "Nome cliente obbligatorio" }, 400);
+        }
+        if (prefs.collectLastName && prefs.lastNameRequired && !cleanLastName) {
+            return json({ error: "Cognome cliente obbligatorio" }, 400);
+        }
+        if (prefs.collectPhone && prefs.phoneRequired && !cleanPhone) {
+            return json({ error: "Telefono obbligatorio" }, 400);
+        }
+        if (prefs.collectEmail && prefs.emailRequired && !cleanEmail) {
+            return json({ error: "Email obbligatoria" }, 400);
+        }
         if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
             return json({ error: "Email cliente non valida" }, 400);
         }
         if (customerLotteryCode && !/^[A-Z0-9]{8}$/.test(customerLotteryCode)) {
             return json({ error: "Codice lotteria scontrini non valido (8 caratteri)" }, 400);
         }
+        const displayName = [cleanName, cleanLastName].filter(Boolean).join(" ").trim() || null;
 
         const chosenMethod = paymentMethod === "stripe" ? "stripe" : "pay_on_pickup";
         const cleanIdempotencyKey = sanitizeStr(idempotencyKey, 64);
@@ -423,7 +454,7 @@ serve(async (req) => {
                 total_amount: total,
                 pickup_number: pickupNumber,
                 pickup_code: pickupCode,
-                customer_name: cleanName,
+                customer_name: displayName,
                 customer_phone: cleanPhone,
                 customer_notes: cleanNotes,
                 customer_email: cleanEmail || null,

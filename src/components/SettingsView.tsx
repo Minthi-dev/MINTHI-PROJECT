@@ -189,6 +189,14 @@ export function SettingsView({
     const [takeawayAutoPrint, setTakeawayAutoPrint] = useState(false)
     const [takeawayAutoPickupEnabled, setTakeawayAutoPickupEnabled] = useState(false)
     const [takeawayMaxOrdersPerHour, setTakeawayMaxOrdersPerHour] = useState<number | ''>('')
+    const [takeawayCollectFirstName, setTakeawayCollectFirstName] = useState(true)
+    const [takeawayFirstNameRequired, setTakeawayFirstNameRequired] = useState(true)
+    const [takeawayCollectLastName, setTakeawayCollectLastName] = useState(false)
+    const [takeawayLastNameRequired, setTakeawayLastNameRequired] = useState(false)
+    const [takeawayCollectPhone, setTakeawayCollectPhone] = useState(true)
+    const [takeawayPhoneRequired, setTakeawayPhoneRequired] = useState(true)
+    const [takeawayCollectEmail, setTakeawayCollectEmail] = useState(true)
+    const [takeawayEmailRequired, setTakeawayEmailRequired] = useState(false)
     const [savingTakeaway, setSavingTakeaway] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
     const [isStaffLoading, setIsStaffLoading] = useState(false)
@@ -253,7 +261,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_auto_print, takeaway_auto_pickup_enabled, takeaway_max_orders_per_hour')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_auto_print, takeaway_auto_pickup_enabled, takeaway_max_orders_per_hour, takeaway_collect_first_name, takeaway_first_name_required, takeaway_collect_last_name, takeaway_last_name_required, takeaway_collect_phone, takeaway_phone_required, takeaway_collect_email, takeaway_email_required')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -269,6 +277,14 @@ export function SettingsView({
                 setTakeawayAutoPrint((data as any).takeaway_auto_print ?? false)
                 setTakeawayAutoPickupEnabled((data as any).takeaway_auto_pickup_enabled ?? false)
                 setTakeawayMaxOrdersPerHour((data as any).takeaway_max_orders_per_hour ?? '')
+                setTakeawayCollectFirstName((data as any).takeaway_collect_first_name ?? true)
+                setTakeawayFirstNameRequired((data as any).takeaway_first_name_required ?? true)
+                setTakeawayCollectLastName((data as any).takeaway_collect_last_name ?? false)
+                setTakeawayLastNameRequired((data as any).takeaway_last_name_required ?? false)
+                setTakeawayCollectPhone((data as any).takeaway_collect_phone ?? true)
+                setTakeawayPhoneRequired((data as any).takeaway_phone_required ?? true)
+                setTakeawayCollectEmail((data as any).takeaway_collect_email ?? true)
+                setTakeawayEmailRequired((data as any).takeaway_email_required ?? false)
 
                 // If account exists but is not marked as enabled, check with Stripe API directly once
                 if (data.stripe_connect_account_id && !data.stripe_connect_enabled) {
@@ -364,6 +380,14 @@ export function SettingsView({
         dine_in_enabled: boolean
         takeaway_require_stripe: boolean
         takeaway_pickup_notice: string
+        takeaway_collect_first_name: boolean
+        takeaway_first_name_required: boolean
+        takeaway_collect_last_name: boolean
+        takeaway_last_name_required: boolean
+        takeaway_collect_phone: boolean
+        takeaway_phone_required: boolean
+        takeaway_collect_email: boolean
+        takeaway_email_required: boolean
         takeaway_auto_print: boolean
         takeaway_auto_pickup_enabled: boolean
         takeaway_max_orders_per_hour: number | null
@@ -1352,6 +1376,63 @@ export function SettingsView({
                                             />
                                         </div>
                                     </div>
+                                </section>
+
+                                {/* === Customer fields preferences === */}
+                                <section>
+                                    <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
+                                        Dati richiesti al cliente
+                                    </h3>
+                                    <p className="text-[12px] text-zinc-400 mb-3 px-1">
+                                        Scegli quali campi mostrare nel checkout asporto. Per ogni campo decidi se mostrarlo e se renderlo obbligatorio.
+                                    </p>
+                                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
+                                        {([
+                                            { key: 'first', label: 'Nome', collect: takeawayCollectFirstName, setCollect: setTakeawayCollectFirstName, req: takeawayFirstNameRequired, setReq: setTakeawayFirstNameRequired, dbCollect: 'takeaway_collect_first_name' as const, dbReq: 'takeaway_first_name_required' as const },
+                                            { key: 'last', label: 'Cognome', collect: takeawayCollectLastName, setCollect: setTakeawayCollectLastName, req: takeawayLastNameRequired, setReq: setTakeawayLastNameRequired, dbCollect: 'takeaway_collect_last_name' as const, dbReq: 'takeaway_last_name_required' as const },
+                                            { key: 'phone', label: 'Telefono', collect: takeawayCollectPhone, setCollect: setTakeawayCollectPhone, req: takeawayPhoneRequired, setReq: setTakeawayPhoneRequired, dbCollect: 'takeaway_collect_phone' as const, dbReq: 'takeaway_phone_required' as const },
+                                            { key: 'email', label: 'Email', collect: takeawayCollectEmail, setCollect: setTakeawayCollectEmail, req: takeawayEmailRequired, setReq: setTakeawayEmailRequired, dbCollect: 'takeaway_collect_email' as const, dbReq: 'takeaway_email_required' as const },
+                                        ]).map(row => (
+                                            <div key={row.key} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                                                <div className="min-w-0">
+                                                    <p className="text-[14px] font-semibold text-white">{row.label}</p>
+                                                    {row.key === 'email' && (
+                                                        <p className="text-[12px] text-zinc-500 mt-0.5">Necessario per invio scontrino fiscale digitale al cliente</p>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-3 shrink-0">
+                                                    <label className="flex items-center gap-2 text-[12px] text-zinc-400">
+                                                        <Switch
+                                                            checked={row.collect}
+                                                            onCheckedChange={async v => {
+                                                                row.setCollect(v)
+                                                                if (!v) row.setReq(false)
+                                                                await saveTakeawaySettings({
+                                                                    [row.dbCollect]: v,
+                                                                    ...(!v ? { [row.dbReq]: false } : {}),
+                                                                } as any)
+                                                            }}
+                                                        />
+                                                        Mostra
+                                                    </label>
+                                                    <label className={`flex items-center gap-2 text-[12px] ${row.collect ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                                                        <Switch
+                                                            checked={row.req}
+                                                            disabled={!row.collect}
+                                                            onCheckedChange={async v => {
+                                                                row.setReq(v)
+                                                                await saveTakeawaySettings({ [row.dbReq]: v } as any)
+                                                            }}
+                                                        />
+                                                        Obbligatorio
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-[11px] text-zinc-500 mt-2 px-1 leading-relaxed">
+                                        💡 Se attivi <strong>Email · Obbligatorio</strong>, ogni cliente riceverà automaticamente lo scontrino fiscale via email dopo il pagamento Stripe.
+                                    </p>
                                 </section>
                             </>
                         )}
