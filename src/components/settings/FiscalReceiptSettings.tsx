@@ -105,6 +105,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const [emailToCustomer, setEmailToCustomer] = useState(true)
     const [savingPrefs, setSavingPrefs] = useState(false)
     const [testingReceipt, setTestingReceipt] = useState(false)
+    const [verifying, setVerifying] = useState(false)
     const [setupOpen, setSetupOpen] = useState(false)
     const [credentialsOpen, setCredentialsOpen] = useState(false)
 
@@ -259,7 +260,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
         }
     }
 
-    const [verifying, setVerifying] = useState(false)
     async function handleVerifyConfiguration() {
         setVerifying(true)
         try {
