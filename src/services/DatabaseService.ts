@@ -2158,6 +2158,34 @@ export const DatabaseService = {
      * Aggiorna l'aliquota IVA di default e/o il toggle email del ristorante.
      * Non tocca P.IVA, ragione sociale o credenziali AdE.
      */
+    /**
+     * Diagnostica: chiede a OpenAPI se la P.IVA del ristorante esiste come
+     * IT-configuration. Usato per scoprire/correggere drift tra DB e OpenAPI.
+     */
+    async verifyOpenApiConfiguration(restaurantId: string): Promise<{
+        success: boolean
+        onOpenApi: boolean
+        openapiStatus?: string
+        message?: string
+    }> {
+        const userId = _getCurrentUserId()
+        const sessionToken = _requireCurrentSessionToken()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('openapi-fiscal-dashboard', {
+            body: {
+                userId,
+                sessionToken,
+                restaurantId,
+                action: 'verify_configuration',
+            },
+        })
+        if (error || (data && data.error)) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore verifica integrazione')
+            throw new Error(msg)
+        }
+        return data
+    },
+
     async updateFiscalPreferences(params: {
         restaurantId: string
         defaultVatRateCode?: string

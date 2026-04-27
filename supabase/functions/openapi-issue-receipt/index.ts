@@ -401,10 +401,37 @@ serve(async (req) => {
                 })
                 .eq("id", receiptRowId);
 
+            // CRITICAL: if OpenAPI says the fiscal_id is not registered (404 +
+            // error 424), our DB drifted from OpenAPI side. Mark the
+            // integration as "not_configured" so the dashboard banner forces
+            // the merchant to re-enter AdE credentials and trigger a fresh
+            // POST /IT-configurations.
+            const isFiscalIdMissing =
+                errMsg.includes('"error":424') ||
+                errMsg.includes("Fiscal ID not found") ||
+                errMsg.includes("not registered") ||
+                errMsg.includes("404");
+            if (isFiscalIdMissing) {
+                // OpenAPI doesn't have the fiscal_id registered. Reset the
+                // configuration timestamp so the next onboarding attempt does
+                // a fresh POST /IT-configurations (instead of a doomed PATCH).
+                await supabase
+                    .from("restaurant_fiscal_settings")
+                    .update({
+                        openapi_status: "not_configured",
+                        openapi_configured_at: null,
+                        openapi_last_error: errMsg.slice(0, 500),
+                    })
+                    .eq("restaurant_id", restaurantId);
+            }
+
             return json({
-                error: humanizeOpenApiError(errMsg),
+                error: isFiscalIdMissing
+                    ? "Integrazione scollegata: la P.IVA non risulta registrata su OpenAPI. Vai in Impostazioni → Scontrino fiscale e ri-inserisci le credenziali AdE per ricreare la configurazione."
+                    : humanizeOpenApiError(errMsg),
                 detail: errMsg,
                 receiptId: receiptRowId,
+                requiresReactivation: isFiscalIdMissing,
             }, 502);
         }
     } catch (err: any) {

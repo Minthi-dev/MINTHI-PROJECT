@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
+import { getConfiguration } from "../_shared/openapi.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -35,6 +36,70 @@ serve(async (req) => {
         const access = await verifyAccess(supabase, userId, restaurantId, sessionToken);
         if (!access.valid || (!access.isOwner && !access.isAdmin && !access.isStaff)) {
             return json({ error: "Non autorizzato" }, 403);
+        }
+
+        // -- Verify configuration on OpenAPI side -------------------------
+        // Compares our DB state with the actual /IT-configurations on
+        // OpenAPI. Auto-corrects openapi_status if it has drifted (e.g.
+        // sandbox configuration was deleted but our DB still says active).
+        if (action === "verify_configuration") {
+            if (!access.isOwner && !access.isAdmin) {
+                return json({ error: "Solo i titolari possono verificare l'integrazione" }, 403);
+            }
+            const { data: settings } = await supabase
+                .from("restaurant_fiscal_settings")
+                .select("openapi_fiscal_id, openapi_status")
+                .eq("restaurant_id", restaurantId)
+                .maybeSingle();
+            const fiscalId = settings?.openapi_fiscal_id;
+            if (!fiscalId) {
+                return json({
+                    success: true,
+                    onOpenApi: false,
+                    openapiStatus: "not_configured",
+                    message: "Nessuna P.IVA registrata. Compila i dati e attiva l'integrazione.",
+                });
+            }
+            try {
+                const config = await getConfiguration(fiscalId);
+                if (!config) {
+                    // 404 → configuration not present on OpenAPI side
+                    await supabase
+                        .from("restaurant_fiscal_settings")
+                        .update({
+                            openapi_status: "not_configured",
+                            openapi_last_error: "Configurazione non trovata su OpenAPI (verifica)",
+                        })
+                        .eq("restaurant_id", restaurantId);
+                    return json({
+                        success: true,
+                        onOpenApi: false,
+                        openapiStatus: "not_configured",
+                        message: "OpenAPI non ha la P.IVA registrata. Vai sotto e premi 'Attiva scontrino fiscale' per ricreare la configurazione.",
+                    });
+                }
+                // Configuration exists → ensure local status is 'active'
+                if (settings?.openapi_status !== "active") {
+                    await supabase
+                        .from("restaurant_fiscal_settings")
+                        .update({
+                            openapi_status: "active",
+                            openapi_last_error: null,
+                        })
+                        .eq("restaurant_id", restaurantId);
+                }
+                return json({
+                    success: true,
+                    onOpenApi: true,
+                    openapiStatus: "active",
+                    raw: config.raw,
+                    message: "Integrazione verificata e attiva su OpenAPI.",
+                });
+            } catch (err: any) {
+                return json({
+                    error: "Errore verifica OpenAPI: " + (err?.message || err),
+                }, 502);
+            }
         }
 
         // -- Update preferences (admin/owner only) -----------------------

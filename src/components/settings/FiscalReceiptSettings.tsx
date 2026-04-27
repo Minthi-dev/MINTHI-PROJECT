@@ -259,6 +259,24 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
         }
     }
 
+    const [verifying, setVerifying] = useState(false)
+    async function handleVerifyConfiguration() {
+        setVerifying(true)
+        try {
+            const result = await DatabaseService.verifyOpenApiConfiguration(restaurantId)
+            if (result.onOpenApi) {
+                toast.success(result.message || 'Integrazione verificata e attiva.')
+            } else {
+                toast.error(result.message || 'OpenAPI non ha la P.IVA registrata. Reinserisci le credenziali AdE qui sotto.')
+            }
+            await loadRestaurant()
+        } catch (err: any) {
+            toast.error(err?.message || 'Errore verifica')
+        } finally {
+            setVerifying(false)
+        }
+    }
+
     async function handleReceiptPdf(receipt: FiscalReceipt, mode: 'download' | 'print') {
         try {
             if (mode === 'print') {
@@ -316,13 +334,28 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
 
             {/* === STATUS BANNER === */}
             {setupVisible && (
-                <StatusBanner
-                    status={status}
-                    lastError={restaurant.openapi_last_error}
-                    expiresAt={credentialsExpiresAt}
-                    daysLeft={credentialsDaysLeft}
-                    expiringSoon={credentialsExpiringSoon}
-                />
+                <>
+                    <StatusBanner
+                        status={status}
+                        lastError={restaurant.openapi_last_error}
+                        expiresAt={credentialsExpiresAt}
+                        daysLeft={credentialsDaysLeft}
+                        expiringSoon={credentialsExpiringSoon}
+                    />
+                    {(status === 'active' || status === 'failed' || status === 'not_configured') && restaurant.openapi_fiscal_id && (
+                        <div className="-mt-6 flex justify-end">
+                            <Button
+                                onClick={handleVerifyConfiguration}
+                                disabled={verifying}
+                                size="sm"
+                                variant="outline"
+                                className="text-[12px] border-white/15 text-zinc-300 hover:bg-white/5"
+                            >
+                                {verifying ? 'Verifica in corso…' : '🔍 Verifica integrazione su OpenAPI'}
+                            </Button>
+                        </div>
+                    )}
+                </>
             )}
 
             {!setupVisible && (

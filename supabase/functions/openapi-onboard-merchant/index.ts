@@ -72,34 +72,45 @@ function isOpenApiNotRegisteredError(error: unknown): boolean {
 async function ensureOpenApiConfiguration(
     fiscalId: string,
     input: Parameters<typeof createConfiguration>[0],
-): Promise<"created" | "updated" | "attached"> {
+): Promise<"created" | "updated"> {
+    // Step 1: probe OpenAPI to know the real state (truth = OpenAPI, not our DB)
     const remote = await getConfiguration(fiscalId).catch((err) => {
         if (isOpenApiNotRegisteredError(err)) return null;
         throw err;
     });
 
     if (remote) {
-        try {
-            await updateConfiguration(fiscalId, input);
-            return "updated";
-        } catch (updateErr) {
-            if (!isOpenApiNotRegisteredError(updateErr)) throw updateErr;
-            // Sandbox can drift: continue with a fresh create below.
+        // Configuration exists on OpenAPI → PATCH to refresh credentials/callbacks
+        await updateConfiguration(fiscalId, input);
+        // Verify the PATCH stuck — sandbox sometimes ACKs without persisting
+        const verified = await getConfiguration(fiscalId).catch(() => null);
+        if (!verified) {
+            throw new Error("[OpenAPI] PATCH accettato ma configurazione non più presente su OpenAPI dopo update");
         }
+        return "updated";
     }
 
+    // Step 2: configuration does NOT exist → POST it
     try {
         await createConfiguration(input);
-        return "created";
     } catch (createErr) {
-        if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
-
-        // If OpenAPI says the fiscal_id already exists but refuses PATCH, avoid
-        // bouncing the user forever. Attach locally and let receipt issuance
-        // prove the configuration in the next step/test.
-        console.warn("[openapi-onboard] fiscal_id già presente su OpenAPI, aggancio locale senza PATCH");
-        return "attached";
+        // If OpenAPI says "already exists" but GET said null, retry GET — sandbox
+        // sometimes has eventual consistency. If still null after retry, bail out
+        // loudly: marking "active" without a real config = future receipts fail.
+        if (isOpenApiAlreadyExistsError(createErr)) {
+            await new Promise(r => setTimeout(r, 1500));
+            const retry = await getConfiguration(fiscalId).catch(() => null);
+            if (retry) return "created";
+        }
+        throw createErr;
     }
+
+    // Step 3: verify the POST actually persisted (truth check before marking active)
+    const verified = await getConfiguration(fiscalId).catch(() => null);
+    if (!verified) {
+        throw new Error("[OpenAPI] POST accettato ma configurazione non visibile su OpenAPI. Riprova fra qualche secondo o contatta supporto OpenAPI.");
+    }
+    return "created";
 }
 
 serve(async (req) => {
@@ -210,18 +221,20 @@ serve(async (req) => {
             .select("restaurant_id, openapi_fiscal_id, openapi_status, openapi_configured_at")
             .eq("restaurant_id", restaurantId)
             .maybeSingle();
+        // ONLY consider 'active' as truly configured. 'failed' / 'not_configured'
+        // mean OpenAPI doesn't really have the registration even if local DB
+        // remembers a fiscal_id from a past attempt.
         const hasOpenApiConfiguration = Boolean(
             existing?.openapi_fiscal_id &&
-            (existing.openapi_status === "active" || existing.openapi_configured_at)
+            existing.openapi_status === "active"
         );
 
         if (
             hasOpenApiConfiguration &&
-            existing.openapi_fiscal_id !== cleanVat &&
-            (existing.openapi_status === "active" || existing.openapi_configured_at)
+            existing.openapi_fiscal_id !== cleanVat
         ) {
             return json({
-                error: "Partita IVA già configurata su OpenAPI. Per cambiarla serve una nuova configurazione fiscale: contatta l'assistenza prima di emettere altri scontrini.",
+                error: "Partita IVA già configurata su OpenAPI con un altro valore. Per cambiarla serve una nuova configurazione fiscale: contatta l'assistenza prima di emettere altri scontrini.",
             }, 400);
         }
 
@@ -362,8 +375,8 @@ serve(async (req) => {
                 fiscalId: cleanVat,
                 adeCredentialsExpireAt: expireAt.toISOString(),
                 message: remoteAction === "created"
-                    ? "Integrazione attivata. Gli scontrini fiscali saranno emessi automaticamente sui pagamenti Stripe."
-                    : "Configurazione fiscale agganciata. Gli scontrini fiscali saranno emessi automaticamente sui pagamenti Stripe.",
+                    ? "Integrazione creata su OpenAPI e verificata. Gli scontrini saranno emessi automaticamente sui pagamenti Stripe."
+                    : "Configurazione fiscale aggiornata su OpenAPI e verificata. Gli scontrini saranno emessi automaticamente sui pagamenti Stripe.",
             });
         } catch (apiErr: any) {
             console.error("[openapi-onboard] OpenAPI error:", apiErr);
