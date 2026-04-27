@@ -514,8 +514,7 @@ export function SettingsView({
                         { value: 'reservations', icon: CalendarCheck, label: 'Prenotazioni', color: 'amber' },
                         // Asporto entry — shown always so owner can toggle it on; header here doubles as the enable row.
                         { value: 'takeaway', icon: Package, label: 'Asporto', color: 'amber' },
-                        { value: 'fiscal', icon: Receipt, label: 'Scontrino fiscale', color: 'amber' },
-                        { value: 'subscription', icon: CreditCard, label: 'Abbonamento', color: 'emerald' },
+                        { value: 'subscription', icon: CreditCard, label: 'Abbonamento e fatturazione', color: 'emerald' },
                         { value: 'printer', icon: Printer, label: 'Stampante', color: 'amber' },
                     ].map(({ value, icon: Icon, label, color }) => (
                         <TabsTrigger
@@ -1359,12 +1358,7 @@ export function SettingsView({
                     </motion.div>
                 </TabsContent>
 
-                {/* 5. SEZIONE SCONTRINO FISCALE — OpenAPI Italian electronic receipts */}
-                <TabsContent value="fiscal">
-                    <FiscalReceiptSettings restaurantId={restaurantId} />
-                </TabsContent>
-
-                {/* 6. SEZIONE ABBONAMENTO STRIPE E PAGAMENTI CLIENTI — Apple-style */}
+                {/* 5. SEZIONE ABBONAMENTO, FATTURAZIONE E PAGAMENTI CLIENTI — Apple-style */}
                 <TabsContent value="subscription">
                     <motion.div
                         variants={containerVariants}
@@ -1377,7 +1371,7 @@ export function SettingsView({
                         <section>
                             <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
                                 Pagamenti al Tavolo
-                                <InfoTip id="pagamenti" text="Attivando i pagamenti, i clienti possono pagare il conto con carta direttamente dal menù QR. Devi collegare un account Stripe per ricevere i pagamenti sul tuo conto bancario. I soldi arrivano automaticamente. Ricordati di emettere lo scontrino fiscale separatamente." />
+                                <InfoTip id="pagamenti" text="Attivando i pagamenti, i clienti possono pagare il conto con carta direttamente dal menù QR. Devi collegare un account Stripe per ricevere i pagamenti sul tuo conto bancario. Se configuri lo scontrino fiscale OpenAPI qui sotto, l'emissione può avvenire automaticamente sui pagamenti Stripe." />
                             </h3>
                             <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                 <div className="flex items-center justify-between gap-4 px-5 py-4">
@@ -1598,6 +1592,9 @@ export function SettingsView({
                                             </DialogContent>
                                         </Dialog>
                         </section>
+
+                        {/* Scontrino fiscale OpenAPI */}
+                        <FiscalReceiptSettings restaurantId={restaurantId} />
 
                         {/* Abbonamento MINTHI */}
                         <section data-tour="settings-subscription">
