@@ -21,6 +21,7 @@ import {
     createConfiguration,
     getConfiguration,
     updateConfiguration,
+    deleteConfiguration,
     isOpenApiConfigured,
     isValidVatIT,
     isValidTaxCodeIT,
@@ -69,47 +70,64 @@ function isOpenApiNotRegisteredError(error: unknown): boolean {
     );
 }
 
+/**
+ * Robust onboarding that handles all sandbox quirks:
+ *  - If GET says "exists" → PATCH (refresh credentials/callbacks)
+ *  - If GET says "not found" → POST
+ *  - If POST says "already exists" → PATCH (config exists despite GET 404)
+ *  - If PATCH also fails with 404 → DELETE + POST (fully recreate, last resort)
+ *
+ * The "truth" is always what OpenAPI says, never what our DB remembers.
+ */
 async function ensureOpenApiConfiguration(
     fiscalId: string,
     input: Parameters<typeof createConfiguration>[0],
 ): Promise<"created" | "updated"> {
-    // Step 1: probe OpenAPI to know the real state (truth = OpenAPI, not our DB)
     const remote = await getConfiguration(fiscalId).catch((err) => {
         if (isOpenApiNotRegisteredError(err)) return null;
         throw err;
     });
 
     if (remote) {
-        // Configuration exists on OpenAPI → PATCH to refresh credentials/callbacks
-        await updateConfiguration(fiscalId, input);
-        // Verify the PATCH stuck — sandbox sometimes ACKs without persisting
-        const verified = await getConfiguration(fiscalId).catch(() => null);
-        if (!verified) {
-            throw new Error("[OpenAPI] PATCH accettato ma configurazione non più presente su OpenAPI dopo update");
+        // Config visible → PATCH to refresh the AdE credentials hash/callbacks
+        try {
+            await updateConfiguration(fiscalId, input);
+            return "updated";
+        } catch (patchErr) {
+            if (!isOpenApiNotRegisteredError(patchErr)) throw patchErr;
+            // GET said yes but PATCH says 404 → continue to POST below
         }
-        return "updated";
     }
 
-    // Step 2: configuration does NOT exist → POST it
+    // Try POST first (typical fresh activation path)
     try {
         await createConfiguration(input);
+        return "created";
     } catch (createErr) {
-        // If OpenAPI says "already exists" but GET said null, retry GET — sandbox
-        // sometimes has eventual consistency. If still null after retry, bail out
-        // loudly: marking "active" without a real config = future receipts fail.
-        if (isOpenApiAlreadyExistsError(createErr)) {
-            await new Promise(r => setTimeout(r, 1500));
-            const retry = await getConfiguration(fiscalId).catch(() => null);
-            if (retry) return "created";
-        }
-        throw createErr;
+        if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
     }
 
-    // Step 3: verify the POST actually persisted (truth check before marking active)
-    const verified = await getConfiguration(fiscalId).catch(() => null);
-    if (!verified) {
-        throw new Error("[OpenAPI] POST accettato ma configurazione non visibile su OpenAPI. Riprova fra qualche secondo o contatta supporto OpenAPI.");
+    // POST said "already exists". Try PATCH on the (apparently existing) config.
+    try {
+        await updateConfiguration(fiscalId, input);
+        return "updated";
+    } catch (patchErr) {
+        if (!isOpenApiNotRegisteredError(patchErr) && !isOpenApiAlreadyExistsError(patchErr)) {
+            throw patchErr;
+        }
     }
+
+    // Last resort: DELETE the ghost config + POST fresh.
+    // Sandbox can keep "deleted" entries that block re-creation.
+    console.warn("[openapi-onboard] config in stato ambiguo (POST=exists, GET=null) — DELETE + POST recovery");
+    try {
+        await deleteConfiguration(fiscalId);
+    } catch (delErr) {
+        // Ignore: maybe nothing to delete, or DELETE returns 404. Continue to POST.
+        console.warn("[openapi-onboard] DELETE recovery fallito (continuo):", delErr);
+    }
+    await new Promise(r => setTimeout(r, 1500));
+    await createConfiguration(input);
     return "created";
 }
 
