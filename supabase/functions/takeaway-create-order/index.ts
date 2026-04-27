@@ -183,8 +183,17 @@ serve(async (req) => {
         const cleanName = sanitizeStr(customerName, MAX_NAME_LEN);
         const cleanPhone = sanitizeStr(customerPhone, MAX_PHONE_LEN);
         const cleanNotes = sanitizeStr(customerNotes, MAX_NOTE_LEN);
+        const cleanEmail = sanitizeStr(customerEmail, 120).toLowerCase();
+        const customerTaxCode = sanitizeStr((payload as any)?.customerTaxCode, 16).toUpperCase();
+        const customerLotteryCode = sanitizeStr((payload as any)?.customerLotteryCode, 8).toUpperCase();
         if (!cleanName) return json({ error: "Nome cliente obbligatorio" }, 400);
         if (!cleanPhone) return json({ error: "Telefono obbligatorio" }, 400);
+        if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+            return json({ error: "Email cliente non valida" }, 400);
+        }
+        if (customerLotteryCode && !/^[A-Z0-9]{8}$/.test(customerLotteryCode)) {
+            return json({ error: "Codice lotteria scontrini non valido (8 caratteri)" }, 400);
+        }
 
         const chosenMethod = paymentMethod === "stripe" ? "stripe" : "pay_on_pickup";
         const cleanIdempotencyKey = sanitizeStr(idempotencyKey, 64);
@@ -417,6 +426,9 @@ serve(async (req) => {
                 customer_name: cleanName,
                 customer_phone: cleanPhone,
                 customer_notes: cleanNotes,
+                customer_email: cleanEmail || null,
+                customer_tax_code: customerTaxCode || null,
+                customer_lottery_code: customerLotteryCode || null,
                 paid_amount: 0,
                 payments: [],
                 payment_method: chosenMethod === "stripe" ? null : "pay_on_pickup",

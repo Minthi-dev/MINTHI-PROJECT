@@ -102,6 +102,63 @@ export interface Restaurant {
     takeaway_auto_print?: boolean
     takeaway_auto_pickup_enabled?: boolean
     takeaway_max_orders_per_hour?: number | null
+    // Scontrino fiscale OpenAPI (multi-tenant)
+    tax_code?: string
+    billing_postal_code?: string
+    fiscal_billing_email?: string
+    openapi_fiscal_id?: string | null
+    openapi_status?: 'not_configured' | 'pending' | 'active' | 'failed' | 'suspended' | null
+    openapi_configured_at?: string | null
+    openapi_last_error?: string | null
+    ade_credentials_set_at?: string | null
+    ade_credentials_expire_at?: string | null
+    fiscal_receipts_enabled?: boolean
+    fiscal_email_to_customer?: boolean
+    default_vat_rate_code?: string
+}
+
+export interface FiscalReceipt {
+    id: string
+    restaurant_id: string
+    order_id?: string | null
+    table_session_id?: string | null
+    stripe_session_id?: string | null
+    openapi_receipt_id?: string | null
+    openapi_status: 'pending' | 'submitted' | 'ready' | 'failed' | 'voided' | 'retry'
+    items: Array<{
+        description: string
+        quantity: number
+        unit_price: number
+        vat_rate_code: string
+        discount?: number
+        complimentary?: boolean
+    }>
+    cash_payment_amount: number
+    electronic_payment_amount: number
+    ticket_restaurant_amount: number
+    ticket_restaurant_quantity: number
+    discount_amount: number
+    total_amount: number
+    customer_email?: string | null
+    customer_tax_code?: string | null
+    customer_lottery_code?: string | null
+    pdf_url?: string | null
+    customer_email_sent_at?: string | null
+    customer_email_error?: string | null
+    issued_via: 'auto_stripe' | 'auto_takeaway_stripe' | 'manual_cashier' | 'manual_retry'
+    error_log?: Array<{ at: string; error: string; source?: string }>
+    retry_count: number
+    created_at: string
+    submitted_at?: string | null
+    ready_at?: string | null
+    voided_at?: string | null
+}
+
+export interface FiscalReceiptStats {
+    sent_count: number
+    failed_count: number
+    voided_count: number
+    revenue_total: number
 }
 
 export interface DayMealConfig {

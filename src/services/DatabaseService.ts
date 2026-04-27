@@ -1863,4 +1863,114 @@ export const DatabaseService = {
         })
         return sales
     },
+
+    // === OpenAPI Scontrini Elettronici ===
+
+    /**
+     * Onboard / aggiorna i dati fiscali di un ristorante su OpenAPI.
+     * Le credenziali AdE (taxCode/password/PIN) sono inoltrate a OpenAPI
+     * e mai persistite nel nostro DB.
+     */
+    async onboardOpenApiMerchant(params: {
+        restaurantId: string
+        vatNumber: string
+        taxCode?: string
+        businessName: string
+        billingAddress: string
+        billingCity: string
+        billingProvince: string
+        billingPostalCode: string
+        fiscalEmail: string
+        adeTaxCode?: string
+        adePassword?: string
+        adePin?: string
+        enableAutoEmission?: boolean
+    }): Promise<{
+        success: boolean
+        openapiStatus?: string
+        fiscalId?: string
+        adeCredentialsExpireAt?: string
+        message?: string
+    }> {
+        const userId = _getCurrentUserId()
+        const sessionToken = _requireCurrentSessionToken()
+        if (!userId) throw new Error('Non autenticato')
+
+        const { data, error } = await supabase.functions.invoke('openapi-onboard-merchant', {
+            body: { userId, sessionToken, ...params },
+        })
+        if (error || (data && data.error)) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore attivazione scontrino fiscale')
+            throw new Error(msg)
+        }
+        return data
+    },
+
+    /**
+     * Lista degli scontrini fiscali del ristorante (RLS-safe).
+     */
+    async getFiscalReceipts(restaurantId: string, limit = 50) {
+        const { data, error } = await supabase
+            .from('fiscal_receipts')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .order('created_at', { ascending: false })
+            .limit(limit)
+        if (error) throw error
+        return data || []
+    },
+
+    async getFiscalReceiptStats30d(restaurantId: string): Promise<{
+        sent_count: number
+        failed_count: number
+        voided_count: number
+        revenue_total: number
+    }> {
+        const { data, error } = await supabase
+            .from('fiscal_receipts_stats_30d')
+            .select('*')
+            .eq('restaurant_id', restaurantId)
+            .maybeSingle()
+        if (error) {
+            console.warn('getFiscalReceiptStats30d:', error.message)
+        }
+        return data || { sent_count: 0, failed_count: 0, voided_count: 0, revenue_total: 0 }
+    },
+
+    /**
+     * Emissione manuale (es. cassiere registra contanti/POS allo sportello).
+     */
+    async issueFiscalReceiptManual(params: {
+        restaurantId: string
+        orderId?: string
+        tableSessionId?: string
+        items: Array<{
+            description: string
+            quantity: number
+            unitPrice: number
+            vatRate?: number | string
+            discount?: number
+        }>
+        cashAmount?: number
+        electronicAmount?: number
+        ticketRestaurantAmount?: number
+        ticketRestaurantQuantity?: number
+        customerEmail?: string
+        customerTaxCode?: string
+        customerLotteryCode?: string
+        invoiceIssuing?: boolean
+    }) {
+        const userId = _getCurrentUserId()
+        const sessionToken = _requireCurrentSessionToken()
+        if (!userId) throw new Error('Non autenticato')
+
+        const { data, error } = await supabase.functions.invoke('openapi-issue-receipt', {
+            body: { userId, sessionToken, issuedVia: 'manual_cashier', ...params },
+        })
+        if (error || (data && data.error)) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore emissione scontrino')
+            throw new Error(msg)
+        }
+        return data
+    },
 }

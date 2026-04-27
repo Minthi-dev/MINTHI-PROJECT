@@ -42,6 +42,7 @@ import { toast } from 'sonner'
 import { loadConnectAndInitialize } from '@stripe/connect-js'
 import { ConnectComponentsProvider, ConnectAccountOnboarding } from '@stripe/react-connect-js'
 import { Save, UserPlus, Pencil, Trash as TrashIcon, UserMinus } from 'lucide-react'
+import { FiscalReceiptSettings } from './settings/FiscalReceiptSettings'
 
 interface SettingsViewProps {
     restaurantName: string
@@ -513,6 +514,7 @@ export function SettingsView({
                         { value: 'reservations', icon: CalendarCheck, label: 'Prenotazioni', color: 'amber' },
                         // Asporto entry — shown always so owner can toggle it on; header here doubles as the enable row.
                         { value: 'takeaway', icon: Package, label: 'Asporto', color: 'amber' },
+                        { value: 'fiscal', icon: Receipt, label: 'Scontrino fiscale', color: 'amber' },
                         { value: 'subscription', icon: CreditCard, label: 'Abbonamento', color: 'emerald' },
                         { value: 'printer', icon: Printer, label: 'Stampante', color: 'amber' },
                     ].map(({ value, icon: Icon, label, color }) => (
@@ -1357,7 +1359,12 @@ export function SettingsView({
                     </motion.div>
                 </TabsContent>
 
-                {/* 5. SEZIONE ABBONAMENTO STRIPE E PAGAMENTI CLIENTI — Apple-style */}
+                {/* 5. SEZIONE SCONTRINO FISCALE — OpenAPI Italian electronic receipts */}
+                <TabsContent value="fiscal">
+                    <FiscalReceiptSettings restaurantId={restaurantId} />
+                </TabsContent>
+
+                {/* 6. SEZIONE ABBONAMENTO STRIPE E PAGAMENTI CLIENTI — Apple-style */}
                 <TabsContent value="subscription">
                     <motion.div
                         variants={containerVariants}

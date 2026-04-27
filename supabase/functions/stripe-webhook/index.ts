@@ -7,6 +7,40 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     httpClient: Stripe.createFetchHttpClient(),
 });
 
+// Internal key used to call openapi-issue-receipt server-to-server.
+const MINTHI_INTERNAL_KEY = Deno.env.get("MINTHI_INTERNAL_KEY") || "";
+const SUPABASE_URL_FOR_FN = Deno.env.get("SUPABASE_URL") ?? "";
+
+/**
+ * Fire-and-log call to openapi-issue-receipt. Never throws — the receipt
+ * emission is decoupled from the Stripe webhook reply, so a failure here
+ * does NOT cause Stripe to retry the payment confirmation.
+ */
+async function tryEmitFiscalReceipt(payload: Record<string, unknown>) {
+    if (!MINTHI_INTERNAL_KEY || !SUPABASE_URL_FOR_FN) {
+        console.warn("[WEBHOOK→fiscal] internal key o SUPABASE_URL mancanti, skip");
+        return;
+    }
+    try {
+        const res = await fetch(`${SUPABASE_URL_FOR_FN}/functions/v1/openapi-issue-receipt`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""}`,
+            },
+            body: JSON.stringify({ ...payload, internalKey: MINTHI_INTERNAL_KEY }),
+        });
+        const txt = await res.text().catch(() => "");
+        if (!res.ok) {
+            console.error(`[WEBHOOK→fiscal] non-2xx (${res.status}):`, txt.slice(0, 500));
+        } else {
+            console.log(`[WEBHOOK→fiscal] ✅ ok:`, txt.slice(0, 300));
+        }
+    } catch (err: any) {
+        console.error("[WEBHOOK→fiscal] errore:", err?.message || err);
+    }
+}
+
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -160,6 +194,45 @@ serve(async (req) => {
                     } else {
                         console.log(`[WEBHOOK] ✅ Takeaway ${orderId} paid €${amountPaid} (totale: €${newPaid}, pieno: ${fullyPaid})`);
                     }
+
+                    // ---- Emissione scontrino fiscale (best-effort, asincrono) ----
+                    // Solo se l'ordine è completamente pagato: emettiamo lo scontrino
+                    // dell'intero ordine, non del singolo split.
+                    if (fullyPaid) {
+                        try {
+                            const { data: takeawayItems } = await supabase
+                                .from("order_items")
+                                .select("id, dish_id, quantity, price, customer_notes, dish:dishes(name, vat_rate)")
+                                .eq("order_id", orderId)
+                                .neq("status", "CANCELLED");
+                            const items = (takeawayItems || []).map((it: any) => ({
+                                description: it.dish?.name || it.customer_notes || "Voce",
+                                quantity: Number(it.quantity) || 1,
+                                unitPrice: Number(it.price) || 0,
+                                vatRate: it.dish?.vat_rate ?? undefined,
+                            }));
+                            // Prendi anche email del cliente se salvata sull'ordine
+                            const { data: orderMeta } = await supabase
+                                .from("orders")
+                                .select("customer_email, customer_tax_code, customer_lottery_code")
+                                .eq("id", orderId)
+                                .maybeSingle();
+                            await tryEmitFiscalReceipt({
+                                restaurantId,
+                                orderId,
+                                stripeSessionId: (session as any).id,
+                                stripePaymentIntentId: (session as any).payment_intent || null,
+                                issuedVia: 'auto_takeaway_stripe',
+                                items,
+                                electronicAmount: Number(newPaid),
+                                customerEmail: orderMeta?.customer_email || undefined,
+                                customerTaxCode: orderMeta?.customer_tax_code || undefined,
+                                customerLotteryCode: orderMeta?.customer_lottery_code || undefined,
+                            });
+                        } catch (fe) {
+                            console.error("[WEBHOOK→fiscal] takeaway emit error:", fe);
+                        }
+                    }
                     break;
                 }
 
@@ -232,10 +305,12 @@ serve(async (req) => {
                     // as PAID/SERVED. The kitchen still needs to prepare and deliver them —
                     // Stripe checkout is a pre-payment, not a completion signal.
                     const paidItemIdsRaw = session.metadata?.paidOrderItemIds;
+                    let paidItemIdsForReceipt: string[] = [];
                     if (paidItemIdsRaw && paidItemIdsRaw !== '') {
                         try {
                             const paidItemIds = JSON.parse(paidItemIdsRaw);
                             if (Array.isArray(paidItemIds) && paidItemIds.length > 0) {
+                                paidItemIdsForReceipt = paidItemIds;
                                 const { error: itemUpdateError } = await supabase
                                     .from("order_items")
                                     .update({
@@ -253,6 +328,40 @@ serve(async (req) => {
                             }
                         } catch (parseErr) {
                             console.error(`[WEBHOOK] Errore parsing paidOrderItemIds:`, parseErr);
+                        }
+                    }
+
+                    // ---- Emissione scontrino fiscale per pagamento dine-in (best-effort) ----
+                    // Emettiamo solo per gli items pagati con QUESTA sessione Stripe.
+                    if (paidItemIdsForReceipt.length > 0) {
+                        try {
+                            const { data: paidItems } = await supabase
+                                .from("order_items")
+                                .select("id, quantity, price, customer_notes, dish:dishes(name, vat_rate)")
+                                .in("id", paidItemIdsForReceipt);
+                            const items = (paidItems || []).map((it: any) => ({
+                                description: it.dish?.name || it.customer_notes || "Voce",
+                                quantity: Number(it.quantity) || 1,
+                                unitPrice: Number(it.price) || 0,
+                                vatRate: it.dish?.vat_rate ?? undefined,
+                            }));
+                            const customerEmail = session.metadata?.customerEmail || (session.customer_details as any)?.email || undefined;
+                            const customerTaxCode = session.metadata?.customerTaxCode || undefined;
+                            const customerLotteryCode = session.metadata?.customerLotteryCode || undefined;
+                            await tryEmitFiscalReceipt({
+                                restaurantId,
+                                tableSessionId: sessionId,
+                                stripeSessionId: (session as any).id,
+                                stripePaymentIntentId: (session as any).payment_intent || null,
+                                issuedVia: 'auto_stripe',
+                                items,
+                                electronicAmount: amountPaid,
+                                customerEmail,
+                                customerTaxCode,
+                                customerLotteryCode,
+                            });
+                        } catch (fe) {
+                            console.error("[WEBHOOK→fiscal] customer_order emit error:", fe);
                         }
                     }
                 } else {
