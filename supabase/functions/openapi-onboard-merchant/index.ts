@@ -58,6 +58,16 @@ function isOpenApiAlreadyExistsError(error: unknown): boolean {
     );
 }
 
+function isOpenApiNotRegisteredError(error: unknown): boolean {
+    const message = String((error as any)?.message || error || "").toLowerCase();
+    return (
+        message.includes("not found or not registered") ||
+        message.includes('"error":424') ||
+        message.includes("error\":424") ||
+        message.includes(" 404 ")
+    );
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -312,7 +322,22 @@ serve(async (req) => {
                 }
             } else {
                 // Già configurato → PATCH (rotazione credenziali / aggiornamento)
-                await updateConfiguration(existing!.openapi_fiscal_id, configurationInput);
+                try {
+                    await updateConfiguration(existing!.openapi_fiscal_id, configurationInput);
+                } catch (updateErr) {
+                    if (!isOpenApiNotRegisteredError(updateErr)) throw updateErr;
+
+                    // Il DB può dire "active/configured" dopo test o reset, ma
+                    // OpenAPI può non avere più quella configurazione sandbox.
+                    // In quel caso riconciliamo creando una nuova configurazione.
+                    console.warn("[openapi-onboard] configurazione assente su OpenAPI nonostante DB attivo, eseguo nuova registrazione");
+                    try {
+                        await createConfiguration(configurationInput);
+                    } catch (createErr) {
+                        if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
+                        await updateConfiguration(cleanVat, configurationInput);
+                    }
+                }
             }
 
             const now = new Date();
