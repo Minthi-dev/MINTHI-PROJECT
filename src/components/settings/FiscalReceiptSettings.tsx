@@ -658,16 +658,17 @@ function StatusBanner({
         )
     }
     if (status === 'failed') {
+        const friendlyError = friendlyFiscalError(lastError)
         return (
             <div className="rounded-xl bg-red-500/10 border border-red-500/40 px-4 py-3 flex items-start gap-3">
                 <Warning size={20} className="text-red-400 mt-0.5 shrink-0" weight="fill" />
                 <div className="text-sm text-red-100">
                     <div className="font-semibold">Attivazione fallita</div>
-                    {lastError && (
-                        <div className="text-red-100/80 text-[13px] mt-1 font-mono break-all">{lastError}</div>
-                    )}
                     <div className="text-red-100/80 text-[13px] mt-1">
-                        Verifica P.IVA e credenziali, poi riprova qui sotto.
+                        {friendlyError}
+                    </div>
+                    <div className="text-red-100/60 text-[12px] mt-1">
+                        Ripremi “Attiva scontrino fiscale” dopo aver controllato i campi.
                     </div>
                 </div>
             </div>
@@ -697,6 +698,20 @@ function StatusBanner({
             </div>
         </div>
     )
+}
+
+function friendlyFiscalError(raw?: string | null): string {
+    const text = String(raw || '').toLowerCase()
+    if (text.includes('not found or not registered') || text.includes('error":424')) {
+        return 'La configurazione sandbox OpenAPI era disallineata. Il sistema ora prova ad agganciarla o ricrearla automaticamente.'
+    }
+    if (text.includes('already exists') || text.includes('error":111')) {
+        return 'Questa P.IVA risulta già presente su OpenAPI. Il sistema prova ad agganciarla automaticamente.'
+    }
+    if (text.includes('password') || text.includes('pin') || text.includes('credential')) {
+        return 'Le credenziali AdE non sono state accettate. Controlla codice fiscale, password e PIN.'
+    }
+    return 'OpenAPI non ha accettato l’attivazione. Controlla P.IVA, indirizzo e credenziali AdE.'
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
