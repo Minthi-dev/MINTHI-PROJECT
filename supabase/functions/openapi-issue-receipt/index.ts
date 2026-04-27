@@ -402,7 +402,8 @@ serve(async (req) => {
                 .eq("id", receiptRowId);
 
             return json({
-                error: "Emissione fallita, verrà riprovata.",
+                error: humanizeOpenApiError(errMsg),
+                detail: errMsg,
                 receiptId: receiptRowId,
             }, 502);
         }
@@ -418,6 +419,51 @@ serve(async (req) => {
 function round2(n?: number | null): number {
     if (typeof n !== "number" || !Number.isFinite(n)) return 0;
     return Math.round(n * 100) / 100;
+}
+
+/**
+ * Translate noisy OpenAPI error strings into a hint the restaurateur can act on.
+ * Original message stays available under `detail` for support.
+ */
+function humanizeOpenApiError(raw: string): string {
+    const msg = raw.toLowerCase();
+    if (msg.includes("credenziali mancanti")) {
+        return "Integrazione non configurata sul server Minthi: contatta il supporto.";
+    }
+    if (msg.includes("login fallito")) {
+        return "Login al provider scontrini fallito. Verifica le credenziali OpenAPI nei secret Supabase.";
+    }
+    if (msg.includes("[acube]") || msg.includes("acube")) {
+        return "Provider OpenAPI ha rifiutato la richiesta — vedi dettaglio.";
+    }
+    if (msg.includes("\"401\"") || msg.includes(" 401 ") || msg.includes("unauthorized")) {
+        return "Autorizzazione rifiutata da OpenAPI. Token Bearer non valido o scope insufficienti.";
+    }
+    if (msg.includes("\"403\"") || msg.includes(" 403 ") || msg.includes("forbidden")) {
+        return "OpenAPI ha negato l'accesso — controlla che il token abbia gli scope IT-receipts.";
+    }
+    if (msg.includes("\"404\"") || msg.includes(" 404 ") || msg.includes("not found")) {
+        return "Configurazione fiscale non trovata su OpenAPI per questa P.IVA. Riattiva l'integrazione dalle impostazioni.";
+    }
+    if (msg.includes("\"400\"") || msg.includes(" 400 ") || msg.includes("bad request")) {
+        return "Dati scontrino non validi (P.IVA, IVA, importi). Vedi dettaglio.";
+    }
+    if (msg.includes("\"422\"") || msg.includes(" 422 ")) {
+        return "Validazione lato OpenAPI fallita. Verifica i dati anagrafici del ristorante.";
+    }
+    if (msg.includes("\"429\"") || msg.includes(" 429 ") || msg.includes("rate limit")) {
+        return "Troppe richieste a OpenAPI in questo momento. Riprova fra un minuto.";
+    }
+    if (msg.includes("\"50") || msg.includes(" 502 ") || msg.includes(" 503 ") || msg.includes(" 504 ") || msg.includes("internal server")) {
+        return "Provider OpenAPI temporaneamente non disponibile. Riprova fra qualche minuto.";
+    }
+    if (msg.includes("authentication") || msg.includes("ade") || msg.includes("agenzia") || msg.includes("entrate")) {
+        return "Credenziali Agenzia Entrate non accettate. Aggiornale dalle impostazioni (scadono ogni 90 giorni).";
+    }
+    if (msg.includes("network") || msg.includes("fetch") || msg.includes("dns")) {
+        return "Errore di rete contattando OpenAPI. Riprova fra qualche secondo.";
+    }
+    return "Emissione fallita — vedi dettaglio tecnico.";
 }
 
 async function sendReceiptEmailIfPossible(params: {

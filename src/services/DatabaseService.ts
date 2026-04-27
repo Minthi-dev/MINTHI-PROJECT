@@ -26,12 +26,14 @@ function _requireCurrentSessionToken(): string {
 }
 
 async function _edgeFunctionErrorMessage(data: any, error: any, fallback: string) {
-    if (data?.error) return data.error
+    const compose = (msg: string, detail?: string) =>
+        detail && detail !== msg ? `${msg}\n\nDettaglio tecnico: ${detail}` : msg
+    if (data?.error) return compose(data.error, data?.detail)
     if (error?.context && typeof error.context.json === 'function') {
         try {
             const body = await error.context.json()
-            if (body?.error) return body.error
-            if (body?.message) return body.message
+            if (body?.error) return compose(body.error, body?.detail)
+            if (body?.message) return compose(body.message, body?.detail)
         } catch { /* ignore */ }
     }
     if (error?.message && !error.message.includes('non-2xx')) return error.message
