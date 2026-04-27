@@ -53,6 +53,10 @@ export function useThermalPrinter() {
     await thermalPrinter.printTestPage()
   }, [])
 
+  const printFiscalReceipt = useCallback(async (params: Parameters<typeof thermalPrinter.printFiscalReceipt>[0]) => {
+    await thermalPrinter.printFiscalReceipt(params)
+  }, [])
+
   return {
     isSupported: thermalPrinter.isSupported,
     connected,
@@ -63,5 +67,6 @@ export function useThermalPrinter() {
     printOrder,
     printTakeawayReceipt,
     printTestPage,
+    printFiscalReceipt,
   }
 }

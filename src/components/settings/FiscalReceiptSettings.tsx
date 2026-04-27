@@ -29,7 +29,11 @@ import {
     ArrowsClockwise,
     Buildings,
     Key,
+    Question,
+    TestTube,
+    Percent,
 } from '@phosphor-icons/react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface Props {
     restaurantId: string
@@ -94,6 +98,10 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const [showPin, setShowPin] = useState(false)
 
     const [enableAuto, setEnableAuto] = useState(false)
+    const [defaultVatRate, setDefaultVatRate] = useState('10')
+    const [emailToCustomer, setEmailToCustomer] = useState(true)
+    const [savingPrefs, setSavingPrefs] = useState(false)
+    const [testingReceipt, setTestingReceipt] = useState(false)
 
     const [saving, setSaving] = useState(false)
     const [stats, setStats] = useState<{ sent_count: number; failed_count: number; voided_count: number; revenue_total: number } | null>(null)
@@ -114,6 +122,8 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 setBillingPostalCode(r.billing_postal_code || (r as any).billing_cap || '')
                 setFiscalEmail(r.fiscal_billing_email || r.email || '')
                 setEnableAuto(!!r.fiscal_receipts_enabled)
+                setDefaultVatRate(r.default_vat_rate_code || '10')
+                setEmailToCustomer(r.fiscal_email_to_customer !== false)
                 setStats(dashboard.stats || null)
             }
         } finally {
@@ -203,12 +213,63 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
         }
     }
 
+    async function handleSavePreferences(patch: { defaultVatRateCode?: string; fiscalEmailToCustomer?: boolean }) {
+        setSavingPrefs(true)
+        try {
+            await DatabaseService.updateFiscalPreferences({
+                restaurantId,
+                ...patch,
+            })
+            toast.success('Preferenze salvate')
+            await loadRestaurant()
+        } catch (err: any) {
+            toast.error(err?.message || 'Errore salvataggio preferenze')
+        } finally {
+            setSavingPrefs(false)
+        }
+    }
+
+    async function handleTestReceipt() {
+        setTestingReceipt(true)
+        try {
+            const result = await DatabaseService.issueFiscalTestReceipt(restaurantId)
+            if (result?.alreadyIssued) {
+                toast.success('Scontrino di test già emesso in precedenza')
+            } else if (result?.skipped) {
+                toast.error(result.message || 'Test non eseguito: completa prima l\'attivazione')
+            } else {
+                toast.success('Scontrino di test emesso! Verifica la dashboard OpenAPI.')
+            }
+            await loadRestaurant()
+        } catch (err: any) {
+            toast.error(err?.message || 'Errore emissione test')
+        } finally {
+            setTestingReceipt(false)
+        }
+    }
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             className="space-y-10 max-w-3xl"
         >
+            {/* === GUIDA RAPIDA === */}
+            <div className="rounded-xl bg-blue-500/5 border border-blue-500/30 p-4">
+                <div className="flex items-start gap-3">
+                    <Question size={20} className="text-blue-400 mt-0.5 shrink-0" weight="fill" />
+                    <div className="text-sm text-blue-100/90 leading-relaxed">
+                        <div className="font-semibold text-blue-100">Come funziona</div>
+                        <ol className="text-[13px] mt-2 space-y-1 list-decimal list-inside text-blue-100/80">
+                            <li>Compili sotto i tuoi dati fiscali (P.IVA, indirizzo) — 2 minuti.</li>
+                            <li>Inserisci credenziali AdE (le stesse del portale "Fatture e Corrispettivi"). Le rinnovi ogni 90 giorni.</li>
+                            <li>Imposti l'aliquota IVA principale (in genere <strong>10%</strong> per i ristoranti).</li>
+                            <li>Attivi l'emissione automatica: <strong>ogni pagamento Stripe genera lo scontrino e arriva al cliente via email</strong>.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
             {/* === STATUS BANNER === */}
             <StatusBanner
                 status={status}
@@ -408,6 +469,89 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                 }
                             }}
                         />
+                        <ToggleRow
+                            title="Invia il PDF al cliente via email"
+                            subtitle="Quando il cliente lascia un'email durante il checkout, riceve lo scontrino fiscale in PDF."
+                            checked={emailToCustomer}
+                            onChange={async v => {
+                                setEmailToCustomer(v)
+                                await handleSavePreferences({ fiscalEmailToCustomer: v })
+                            }}
+                        />
+                    </div>
+                </section>
+            )}
+
+            {/* === IVA E PREFERENZE === */}
+            <section>
+                <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
+                    <Percent size={18} className="opacity-70" />
+                    Aliquota IVA
+                </h3>
+                <div className="rounded-xl bg-zinc-900/60 border border-white/10 overflow-hidden">
+                    <div className="px-4 py-4 space-y-3">
+                        <div className="text-[13px] text-zinc-400">
+                            Aliquota IVA usata per i piatti che non ne hanno una propria.
+                            Per i piatti specifici (es. acqua minerale 22%, libri 4%) puoi sovrascrivere
+                            l'aliquota dalla scheda di ogni piatto.
+                        </div>
+                        <Select
+                            value={defaultVatRate}
+                            onValueChange={async (v) => {
+                                setDefaultVatRate(v)
+                                await handleSavePreferences({ defaultVatRateCode: v })
+                            }}
+                            disabled={savingPrefs}
+                        >
+                            <SelectTrigger className="bg-zinc-800/60 border-white/10 text-white">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="10">10% — Ristorazione, somministrazione cibo e bevande (default)</SelectItem>
+                                <SelectItem value="22">22% — Bevande alcoliche, articoli non alimentari</SelectItem>
+                                <SelectItem value="4">4% — Beni di prima necessità (pane, latte)</SelectItem>
+                                <SelectItem value="5">5% — Erbe aromatiche, alcuni alimenti</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p className="text-[11px] text-zinc-500">
+                            <strong className="text-zinc-300">In dubbio?</strong> Se il tuo locale è una
+                            trattoria, ristorante o pizzeria con servizio al tavolo o asporto di cibo
+                            preparato, l'aliquota corretta è quasi sempre <strong className="text-amber-400">10%</strong>.
+                            Per alcolici, prodotti confezionati o casi esenti usa l'aliquota specifica
+                            nella scheda del piatto e verifica col commercialista.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            {/* === TEST INTEGRAZIONE === */}
+            {isActive && (
+                <section>
+                    <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
+                        <TestTube size={18} className="opacity-70" />
+                        Test integrazione
+                    </h3>
+                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 px-4 py-4">
+                        <div className="text-[13px] text-zinc-400 mb-3">
+                            Emette uno scontrino di test da <strong>€1,00</strong> verso l'ambiente
+                            sandbox di OpenAPI per verificare che le credenziali e l'integrazione
+                            funzionino correttamente. Non viene inviato all'Agenzia delle Entrate
+                            in ambiente di test.
+                        </div>
+                        <Button
+                            onClick={handleTestReceipt}
+                            disabled={testingReceipt || !enableAuto}
+                            variant="secondary"
+                            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
+                        >
+                            <TestTube size={16} className="mr-2" weight="bold" />
+                            {testingReceipt ? 'Emissione in corso…' : 'Emetti scontrino di test'}
+                        </Button>
+                        {!enableAuto && (
+                            <div className="text-[11px] text-amber-400/80 mt-2">
+                                Attiva l'emissione automatica qui sopra per poter testare.
+                            </div>
+                        )}
                     </div>
                 </section>
             )}

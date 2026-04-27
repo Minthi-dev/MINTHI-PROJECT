@@ -25,6 +25,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import {
+    getOpenApiEnv,
     issueReceipt,
     isValidTaxCodeIT,
     vatRateCode,
@@ -78,6 +79,7 @@ interface IssueRequestPayload {
 
     // Fattura B2B opzionale
     invoiceIssuing?: boolean;
+    testReceipt?: boolean;
 }
 
 serve(async (req) => {
@@ -112,6 +114,7 @@ serve(async (req) => {
             customerTaxCode,
             customerLotteryCode,
             invoiceIssuing,
+            testReceipt,
         } = body;
 
         // --- Auth ---
@@ -128,6 +131,9 @@ serve(async (req) => {
         if (!restaurantId) return json({ error: "restaurantId mancante" }, 400);
         if (!Array.isArray(items) || items.length === 0) {
             return json({ error: "items vuoti" }, 400);
+        }
+        if (testReceipt && getOpenApiEnv() === "production") {
+            return json({ error: "Lo scontrino di test è disponibile solo in ambiente sandbox OpenAPI." }, 400);
         }
 
         // --- Carica restaurant ---
@@ -236,9 +242,13 @@ serve(async (req) => {
             return json({ error: "Codice lotteria scontrini non valido" }, 400);
         }
 
-        const defaultRate = fiscalSettings.default_vat_rate_code || "10";
+        const defaultRate = vatRateCode(fiscalSettings.default_vat_rate_code, "10");
         const receiptItems: OpenApiReceiptItem[] = items.map(it => {
-            const rate = it.vatRate !== undefined ? vatRateCode(it.vatRate) : defaultRate;
+            // If the dish (or caller) supplied a vatRate, validate it strictly
+            // and fall back to the restaurant default — never silent 22%.
+            const rate = it.vatRate !== undefined && it.vatRate !== null && it.vatRate !== ""
+                ? vatRateCode(it.vatRate, defaultRate)
+                : defaultRate;
             return {
                 description: String(it.description || "Voce").slice(0, 1000),
                 quantity: Number(it.quantity) || 1,

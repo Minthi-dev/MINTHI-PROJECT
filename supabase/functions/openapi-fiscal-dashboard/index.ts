@@ -26,12 +26,41 @@ serve(async (req) => {
             restaurantId,
             includeReceipts = false,
             limit = 50,
+            action,
+            defaultVatRateCode,
+            fiscalEmailToCustomer,
         } = body || {};
 
         if (!userId || !restaurantId) return json({ error: "Parametri mancanti" }, 400);
         const access = await verifyAccess(supabase, userId, restaurantId, sessionToken);
         if (!access.valid || (!access.isOwner && !access.isAdmin && !access.isStaff)) {
             return json({ error: "Non autorizzato" }, 403);
+        }
+
+        // -- Update preferences (admin/owner only) -----------------------
+        if (action === "update_preferences") {
+            if (!access.isOwner && !access.isAdmin) {
+                return json({ error: "Solo i titolari possono modificare queste impostazioni" }, 403);
+            }
+            const VALID_VAT_CODES = ["4", "5", "10", "22", "N1", "N2", "N3", "N4", "N5", "N6"];
+            const update: Record<string, unknown> = { restaurant_id: restaurantId };
+            if (typeof defaultVatRateCode === "string") {
+                if (!VALID_VAT_CODES.includes(defaultVatRateCode)) {
+                    return json({ error: "Aliquota IVA non valida" }, 400);
+                }
+                update.default_vat_rate_code = defaultVatRateCode;
+            }
+            if (typeof fiscalEmailToCustomer === "boolean") {
+                update.fiscal_email_to_customer = fiscalEmailToCustomer;
+            }
+            if (Object.keys(update).length <= 1) {
+                return json({ error: "Nessuna modifica" }, 400);
+            }
+            const { error: upErr } = await supabase
+                .from("restaurant_fiscal_settings")
+                .upsert(update, { onConflict: "restaurant_id" });
+            if (upErr) return json({ error: upErr.message }, 500);
+            return json({ success: true });
         }
 
         const { data: restaurant, error: restaurantErr } = await supabase

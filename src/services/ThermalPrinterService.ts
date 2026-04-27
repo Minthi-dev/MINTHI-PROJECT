@@ -173,6 +173,23 @@ class ThermalPrinterService extends EventTarget {
     await this._enqueue(() => this._printTestPage())
   }
 
+  async printFiscalReceipt(params: {
+    items: Array<{ description: string; quantity: number; unit_price: number; vat_rate_code: string; discount?: number; complimentary?: boolean }>
+    cashAmount: number
+    electronicAmount: number
+    ticketRestaurantAmount: number
+    discountAmount: number
+    totalAmount: number
+    documentNumber?: string
+    fiscalSerial?: string
+    issuedAt?: string
+    restaurantName?: string
+    customerEmail?: string
+    customerLotteryCode?: string
+  }): Promise<void> {
+    await this._enqueue(() => this._printFiscalReceipt(params))
+  }
+
   // ========== USB Implementation ==========
 
   private async _usbConnect(): Promise<boolean> {
@@ -520,6 +537,123 @@ class ThermalPrinterService extends EventTarget {
     buf.push(...this._text(this._line('=')))
     buf.push(...CMD.ALIGN_CENTER)
     buf.push(...this._text('Grazie e buon appetito!'))
+    buf.push(...CMD.FEED_LINES(2))
+    if (this._settings.autoCut) buf.push(...this._cut())
+
+    await this._send(new Uint8Array(buf))
+  }
+
+  private async _printFiscalReceipt(params: {
+    items: Array<{ description: string; quantity: number; unit_price: number; vat_rate_code: string; discount?: number; complimentary?: boolean }>
+    cashAmount: number
+    electronicAmount: number
+    ticketRestaurantAmount: number
+    discountAmount: number
+    totalAmount: number
+    documentNumber?: string
+    fiscalSerial?: string
+    issuedAt?: string
+    restaurantName?: string
+    customerEmail?: string
+    customerLotteryCode?: string
+  }): Promise<void> {
+    const buf: number[] = []
+    buf.push(...CMD.RESET, ...CMD.CODEPAGE_858)
+
+    // Header
+    buf.push(...CMD.ALIGN_CENTER, ...CMD.SIZE_DOUBLE, ...CMD.BOLD_ON)
+    buf.push(...this._text(params.restaurantName || 'MINTHI'))
+    buf.push(...CMD.SIZE_NORMAL, ...CMD.BOLD_OFF)
+    buf.push(...this._text('COPIA SCONTRINO FISCALE'))
+    buf.push(...this._text('Documento ufficiale: PDF OpenAPI'))
+    buf.push(...this._text(this._line('=')))
+
+    // Document metadata
+    buf.push(...CMD.ALIGN_LEFT)
+    if (params.documentNumber) buf.push(...this._text(`Doc. n. ${params.documentNumber}`))
+    if (params.fiscalSerial) buf.push(...this._text(`Matricola: ${params.fiscalSerial}`))
+    const issuedAt = params.issuedAt ? new Date(params.issuedAt) : new Date()
+    buf.push(...this._text(`Data: ${issuedAt.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`))
+    buf.push(...this._text(this._line('-')))
+
+    // Items
+    let vatBreakdown: Record<string, { taxable: number; tax: number; gross: number }> = {}
+    for (const it of params.items) {
+      const lineGross = (it.unit_price * it.quantity) - (it.discount || 0)
+      const grossEffective = it.complimentary ? 0 : lineGross
+      const left = `${it.quantity}x ${it.description}`
+      const right = `€${grossEffective.toFixed(2)}`
+      for (const line of this._moneyLines(left, right)) buf.push(...this._text(line))
+      const rateLabel = String(it.vat_rate_code).startsWith('N')
+        ? `Natura ${it.vat_rate_code}`
+        : `IVA ${it.vat_rate_code}%`
+      buf.push(...this._text(`    [${rateLabel}]${it.complimentary ? ' OMAGGIO' : ''}`))
+
+      // Aggregate VAT breakdown
+      const rate = parseFloat(it.vat_rate_code) / 100
+      if (!Number.isNaN(rate) && grossEffective > 0) {
+        const taxable = grossEffective / (1 + rate)
+        const tax = grossEffective - taxable
+        const k = it.vat_rate_code
+        if (!vatBreakdown[k]) vatBreakdown[k] = { taxable: 0, tax: 0, gross: 0 }
+        vatBreakdown[k].taxable += taxable
+        vatBreakdown[k].tax += tax
+        vatBreakdown[k].gross += grossEffective
+      }
+    }
+
+    // Totals
+    buf.push(...this._text(this._line('-')))
+    if (params.discountAmount > 0) {
+      const dl = 'Sconto'; const dr = `-€${params.discountAmount.toFixed(2)}`
+      buf.push(...this._text(dl + ' '.repeat(Math.max(1, COLS - dl.length - dr.length)) + dr))
+    }
+    const totLeft = 'TOTALE'
+    const totRight = `€${params.totalAmount.toFixed(2)}`
+    buf.push(...CMD.BOLD_ON)
+    buf.push(...this._text(totLeft + ' '.repeat(Math.max(1, COLS - totLeft.length - totRight.length)) + totRight))
+    buf.push(...CMD.BOLD_OFF)
+
+    // VAT breakdown
+    if (Object.keys(vatBreakdown).length > 0) {
+      buf.push(...this._text(this._line('-')))
+      buf.push(...this._text('IVA assolta dal venditore:'))
+      for (const [code, v] of Object.entries(vatBreakdown)) {
+        const left = `  IVA ${code}%`
+        const right = `imp. €${v.taxable.toFixed(2)} iva €${v.tax.toFixed(2)}`
+        for (const line of this._moneyLines(left, right)) buf.push(...this._text(line))
+      }
+    }
+
+    // Payments
+    buf.push(...this._text(this._line('-')))
+    buf.push(...this._text('Pagamenti:'))
+    if (params.cashAmount > 0) {
+      const l = '  Contanti'; const r = `€${params.cashAmount.toFixed(2)}`
+      buf.push(...this._text(l + ' '.repeat(Math.max(1, COLS - l.length - r.length)) + r))
+    }
+    if (params.electronicAmount > 0) {
+      const l = '  Elettronico (POS/online)'; const r = `€${params.electronicAmount.toFixed(2)}`
+      for (const line of this._moneyLines(l, r)) buf.push(...this._text(line))
+    }
+    if (params.ticketRestaurantAmount > 0) {
+      const l = '  Buoni pasto'; const r = `€${params.ticketRestaurantAmount.toFixed(2)}`
+      buf.push(...this._text(l + ' '.repeat(Math.max(1, COLS - l.length - r.length)) + r))
+    }
+
+    if (params.customerLotteryCode) {
+      buf.push(...this._text(this._line('-')))
+      buf.push(...this._text(`Cod. lotteria: ${params.customerLotteryCode}`))
+    }
+    if (params.customerEmail) {
+      buf.push(...this._text(`PDF inviato a: ${params.customerEmail}`))
+    }
+
+    buf.push(...this._text(this._line('=')))
+    buf.push(...CMD.ALIGN_CENTER)
+    buf.push(...this._text('Trasmesso via OpenAPI/AdE'))
+    buf.push(...this._text('Conserva il PDF ufficiale'))
+    buf.push(...this._text('Grazie e arrivederci!'))
     buf.push(...CMD.FEED_LINES(2))
     if (this._settings.autoCut) buf.push(...this._cut())
 

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useThermalPrinter } from '../hooks/useThermalPrinter'
+import { useFiscalReceiptAutoPrint } from '../hooks/useFiscalReceiptAutoPrint'
 import { thermalPrinter } from '../services/ThermalPrinterService'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -245,6 +246,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
   const currentRestaurant = restaurants?.[0]
+
+  // Stampa termica automatica scontrini fiscali quando OpenAPI conferma "ready"
+  useFiscalReceiptAutoPrint(restaurantId, currentRestaurant?.name || 'Ristorante')
 
   // Discount banner
   const [activeDiscount, setActiveDiscount] = useState<any>(null)

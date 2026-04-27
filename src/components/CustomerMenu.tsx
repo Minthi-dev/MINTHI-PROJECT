@@ -1068,6 +1068,9 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [showPaymentOptions, setShowPaymentOptions] = useState(false)
   const [stripePaymentSplitCount, setStripePaymentSplitCount] = useState(1)
   const [stripePaymentSuccess, setStripePaymentSuccess] = useState(false)
+  const [lastStripeSessionId, setLastStripeSessionId] = useState<string | null>(null)
+  const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false)
 
   // Bottom nav tab
   const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>('menu')
@@ -1724,6 +1727,37 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }
 
 
+  // After Stripe success, poll for fiscal receipt readiness so the customer
+  // can download the PDF from the success card the moment the AdE confirms.
+  useEffect(() => {
+    if (!stripePaymentSuccess || fiscalReceiptStatus === 'ready') return
+    if (!restaurantId || !sessionId) return
+    let cancelled = false
+    let attempts = 0
+    const tick = async () => {
+      if (cancelled) return
+      attempts += 1
+      try {
+        const { ready, status } = await DatabaseService.probeFiscalReceiptForDineIn({
+          restaurantId,
+          tableSessionId: sessionId,
+          stripeSessionId: lastStripeSessionId || undefined,
+        })
+        if (!cancelled && ready) {
+          setFiscalReceiptStatus('ready')
+          return
+        }
+        if (!cancelled) setFiscalReceiptStatus(status && status !== 'unavailable' ? 'pending' : 'unknown')
+      } catch { /* ignore */ }
+      if (!cancelled && attempts < 30) {
+        setTimeout(tick, attempts < 5 ? 3000 : 10000)
+      }
+    }
+    tick()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stripePaymentSuccess, fiscalReceiptStatus, restaurantId, sessionId, lastStripeSessionId])
+
   // Check for payment success/cancel from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -1755,6 +1789,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
           if (result.paid) {
             setStripePaymentSuccess(true)
+            setLastStripeSessionId(stripeSessionId || null)
             setCustomerTab('payment')
             if (result.alreadyRegistered) {
               toast.success('Pagamento confermato!', { id: toastId, duration: 4000 })
@@ -2755,11 +2790,41 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   Ti auguriamo una buona serata!
                 </p>
                 <div className="pt-4 w-full max-w-xs space-y-3">
-                  <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
-                    <p className="text-[11px]" style={{ color: theme.textMuted }}>
-                      Riceverai lo scontrino direttamente dal ristorante
-                    </p>
-                  </div>
+                  {fiscalReceiptStatus === 'ready' ? (
+                    <Button
+                      onClick={async () => {
+                        if (!restaurantId || !sessionId) return
+                        setDownloadingReceipt(true)
+                        try {
+                          await DatabaseService.openFiscalReceiptPdfForDineIn({
+                            restaurantId,
+                            tableSessionId: sessionId,
+                            stripeSessionId: lastStripeSessionId || undefined,
+                          })
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Scontrino non ancora disponibile')
+                        } finally {
+                          setDownloadingReceipt(false)
+                        }
+                      }}
+                      disabled={downloadingReceipt}
+                      className="w-full h-12 rounded-xl font-bold shadow-lg bg-emerald-500 hover:bg-emerald-400 text-black"
+                    >
+                      📄 {downloadingReceipt ? 'Apertura…' : 'Scarica scontrino fiscale'}
+                    </Button>
+                  ) : fiscalReceiptStatus === 'pending' ? (
+                    <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
+                      <p className="text-[11px]" style={{ color: theme.textMuted }}>
+                        Lo scontrino fiscale sta venendo emesso — fra qualche istante potrai scaricarlo qui.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
+                      <p className="text-[11px]" style={{ color: theme.textMuted }}>
+                        Pagamento confermato. Se il ristorante ha attivato lo scontrino digitale, lo troverai qui appena disponibile.
+                      </p>
+                    </div>
+                  )}
 
                   <Button
                     onClick={() => {

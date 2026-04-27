@@ -31,6 +31,10 @@
 
 const ENV = (Deno.env.get("OPENAPI_ENV") || "test").toLowerCase();
 
+export function getOpenApiEnv(): string {
+    return ENV;
+}
+
 export const OPENAPI_BASE_URL = ENV === "production"
     ? "https://invoice.openapi.com"
     : "https://test.invoice.openapi.com";
@@ -475,12 +479,34 @@ export function isValidTaxCodeIT(cf: string): boolean {
 }
 
 /**
- * Maps a numeric VAT rate (e.g. 22) to the OpenAPI vat_rate_code string.
- * Italian standard: "0", "4", "5", "10", "22".
+ * Italian VAT codes accepted by OpenAPI (matches DB CHECK constraint on
+ * restaurant_fiscal_settings.default_vat_rate_code):
+ *   - Numeric percentages: 4, 5, 10, 22
+ *   - Exemption codes: N1, N2, N3, N4, N5, N6 (esenzioni AdE)
  */
-export function vatRateCode(rate: number | string | undefined | null): string {
-    if (rate === undefined || rate === null || rate === "") return "22";
-    const n = Math.round(Number(rate));
-    if ([0, 4, 5, 10, 22].includes(n)) return String(n);
-    return "22";
+export const VALID_VAT_RATE_CODES = [
+    "4", "5", "10", "22",
+    "N1", "N2", "N3", "N4", "N5", "N6",
+] as const;
+
+/**
+ * Maps a numeric VAT rate (e.g. 22) or string code (e.g. "10", "N3") to a
+ * valid OpenAPI vat_rate_code. Returns `fallback` when the input is missing
+ * or not in the allowed set. In Minthi, numeric 0 on dishes historically means
+ * "unset", not a legally selected exemption nature code, so it falls back to
+ * the restaurant default.
+ */
+export function vatRateCode(
+    rate: number | string | undefined | null,
+    fallback = "10"
+): string {
+    if (rate === undefined || rate === null || rate === "") return fallback;
+    const raw = String(rate).trim().toUpperCase();
+    if ((VALID_VAT_RATE_CODES as readonly string[]).includes(raw)) return raw;
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric)) {
+        const rounded = Math.round(numeric);
+        if ([4, 5, 10, 22].includes(rounded)) return String(rounded);
+    }
+    return fallback;
 }

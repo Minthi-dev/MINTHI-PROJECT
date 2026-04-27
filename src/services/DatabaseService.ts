@@ -1939,6 +1939,184 @@ export const DatabaseService = {
         return data?.stats || { sent_count: 0, failed_count: 0, voided_count: 0, revenue_total: 0 }
     },
 
+    // -- Public PDF download for customers ----------------------------
+    // No auth required: the customer already proves possession of their
+    // order URL (pickupCode for takeaway, tableSessionId for dine-in).
+    // The endpoint returns 202 while the receipt is still pending.
+
+    async probeFiscalReceiptForTakeaway(params: {
+        restaurantId: string
+        pickupCode: string
+    }): Promise<{ ready: boolean; status?: string }> {
+        const { data, error } = await supabase.functions.invoke('openapi-receipt-pdf', {
+            body: {
+                restaurantId: params.restaurantId,
+                pickupCode: params.pickupCode,
+                probeOnly: true,
+            },
+        })
+        if (error || (data && (data as any).error)) return { ready: false }
+        if ((data as any)?.unavailable) return { ready: false, status: 'unavailable' }
+        if ((data as any)?.pending) return { ready: false, status: (data as any).openapiStatus }
+        if ((data as any)?.ready) return { ready: true, status: 'ready' }
+        return { ready: false }
+    },
+
+    async probeFiscalReceiptForDineIn(params: {
+        restaurantId: string
+        tableSessionId: string
+        stripeSessionId?: string
+    }): Promise<{ ready: boolean; status?: string }> {
+        const { data, error } = await supabase.functions.invoke('openapi-receipt-pdf', {
+            body: {
+                restaurantId: params.restaurantId,
+                tableSessionId: params.tableSessionId,
+                stripeSessionId: params.stripeSessionId,
+                probeOnly: true,
+            },
+        })
+        if (error || (data && (data as any).error)) return { ready: false }
+        if ((data as any)?.unavailable) return { ready: false, status: 'unavailable' }
+        if ((data as any)?.pending) return { ready: false, status: (data as any).openapiStatus }
+        if ((data as any)?.ready) return { ready: true, status: 'ready' }
+        return { ready: false }
+    },
+
+    async openFiscalReceiptPdfForTakeaway(params: {
+        restaurantId: string
+        pickupCode: string
+    }): Promise<void> {
+        const url = await DatabaseService._invokePdfEdgeFunction(
+            'openapi-receipt-pdf',
+            {
+                restaurantId: params.restaurantId,
+                pickupCode: params.pickupCode,
+            }
+        )
+        window.open(url, '_blank', 'noopener')
+    },
+
+    async openFiscalReceiptPdfForDineIn(params: {
+        restaurantId: string
+        tableSessionId: string
+        stripeSessionId?: string
+    }): Promise<void> {
+        const url = await DatabaseService._invokePdfEdgeFunction(
+            'openapi-receipt-pdf',
+            {
+                restaurantId: params.restaurantId,
+                tableSessionId: params.tableSessionId,
+                stripeSessionId: params.stripeSessionId,
+            }
+        )
+        window.open(url, '_blank', 'noopener')
+    },
+
+    async openFiscalReceiptPdfForReceipt(params: {
+        restaurantId: string
+        receiptId: string
+    }): Promise<void> {
+        const userId = _getCurrentUserId()
+        const sessionToken = _getCurrentSessionToken()
+        const url = await DatabaseService._invokePdfEdgeFunction(
+            'openapi-receipt-pdf',
+            {
+                userId,
+                sessionToken,
+                restaurantId: params.restaurantId,
+                receiptId: params.receiptId,
+            }
+        )
+        window.open(url, '_blank', 'noopener')
+    },
+
+    /** Internal helper that calls the PDF edge function and returns a blob URL. */
+    async _invokePdfEdgeFunction(name: string, body: Record<string, unknown>): Promise<string> {
+        const supabaseUrl = (supabase as any)?.supabaseUrl as string | undefined
+            ?? (import.meta as any)?.env?.VITE_SUPABASE_URL
+        const anonKey = (supabase as any)?.supabaseKey as string | undefined
+            ?? (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY
+        if (!supabaseUrl) throw new Error('Configurazione Supabase mancante')
+        const url = `${supabaseUrl}/functions/v1/${name}`
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(anonKey ? { 'Authorization': `Bearer ${anonKey}`, 'apikey': anonKey } : {}),
+            },
+            body: JSON.stringify(body),
+        })
+        if (res.status === 202) {
+            const j = await res.json().catch(() => ({}))
+            throw new Error((j as any)?.message || 'Scontrino in emissione, riprova fra qualche istante')
+        }
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}))
+            throw new Error((j as any)?.error || `Errore ${res.status}`)
+        }
+        const blob = await res.blob()
+        return URL.createObjectURL(blob)
+    },
+
+    /**
+     * Aggiorna l'aliquota IVA di default e/o il toggle email del ristorante.
+     * Non tocca P.IVA, ragione sociale o credenziali AdE.
+     */
+    async updateFiscalPreferences(params: {
+        restaurantId: string
+        defaultVatRateCode?: string
+        fiscalEmailToCustomer?: boolean
+    }) {
+        const userId = _getCurrentUserId()
+        const sessionToken = _requireCurrentSessionToken()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('openapi-fiscal-dashboard', {
+            body: {
+                userId,
+                sessionToken,
+                restaurantId: params.restaurantId,
+                action: 'update_preferences',
+                defaultVatRateCode: params.defaultVatRateCode,
+                fiscalEmailToCustomer: params.fiscalEmailToCustomer,
+            },
+        })
+        if (error || (data && data.error)) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento preferenze')
+            throw new Error(msg)
+        }
+        return data
+    },
+
+    /**
+     * Emette uno scontrino di test (€1,00) verso il sandbox OpenAPI per
+     * verificare che l'integrazione sia configurata correttamente.
+     */
+    async issueFiscalTestReceipt(restaurantId: string) {
+        const userId = _getCurrentUserId()
+        const sessionToken = _requireCurrentSessionToken()
+        if (!userId) throw new Error('Non autenticato')
+        const { data, error } = await supabase.functions.invoke('openapi-issue-receipt', {
+            body: {
+                userId,
+                sessionToken,
+                restaurantId,
+                issuedVia: 'manual_cashier',
+                testReceipt: true,
+                items: [{
+                    description: 'Test integrazione fiscale',
+                    quantity: 1,
+                    unitPrice: 1.00,
+                }],
+                electronicAmount: 1.00,
+            },
+        })
+        if (error || (data && data.error)) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore test scontrino')
+            throw new Error(msg)
+        }
+        return data
+    },
+
     /**
      * Emissione manuale (es. cassiere registra contanti/POS allo sportello).
      */

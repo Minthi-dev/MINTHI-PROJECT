@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { DatabaseService } from '@/services/DatabaseService'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { CheckCircle, Clock, ForkKnife, Bell, Storefront, Warning, House } from '@phosphor-icons/react'
+import { CheckCircle, Clock, ForkKnife, Bell, Storefront, Warning, House, Receipt, DownloadSimple } from '@phosphor-icons/react'
 
 type Status = 'PENDING' | 'PREPARING' | 'READY' | 'PICKED_UP' | 'PAID' | 'CANCELLED'
 
@@ -38,6 +38,8 @@ export default function TakeawayOrderStatus() {
     const [loading, setLoading] = useState(true)
     const [notFound, setNotFound] = useState(false)
     const [verifyingPayment, setVerifyingPayment] = useState(false)
+    const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
+    const [downloadingReceipt, setDownloadingReceipt] = useState(false)
 
     useEffect(() => {
         const justCreated = searchParams.get('created') === '1'
@@ -93,6 +95,60 @@ export default function TakeawayOrderStatus() {
 
         return () => { alive = false; clearInterval(poll) }
     }, [restaurantId, pickupCode])
+
+    // Poll for fiscal receipt readiness (only once payment is made and the
+    // restaurant has fiscal receipts enabled; we discover this implicitly by
+    // probing the public PDF endpoint which returns 202 while pending.)
+    useEffect(() => {
+        if (!order?.id || !restaurantId || !pickupCode) return
+        if (Number(order.paid_amount) <= 0) return
+        if (fiscalReceiptStatus === 'ready') return
+
+        let cancelled = false
+        let isReady = false
+        let attempts = 0
+        const probe = async () => {
+            if (cancelled || isReady) return
+            attempts += 1
+            try {
+                const { ready, status } = await DatabaseService.probeFiscalReceiptForTakeaway({
+                    restaurantId,
+                    pickupCode,
+                })
+                if (cancelled) return
+                if (ready) {
+                    isReady = true
+                    setFiscalReceiptStatus('ready')
+                    return
+                }
+                setFiscalReceiptStatus(status && status !== 'unavailable' ? 'pending' : 'unknown')
+            } catch {
+                if (cancelled) return
+                setFiscalReceiptStatus('unknown')
+            }
+            if (!cancelled && !isReady && attempts < 30) {
+                setTimeout(probe, attempts < 5 ? 3000 : 10000)
+            }
+        }
+        probe()
+        return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [order?.id, order?.paid_amount, restaurantId, pickupCode])
+
+    const handleDownloadReceipt = async () => {
+        if (!restaurantId || !pickupCode) return
+        setDownloadingReceipt(true)
+        try {
+            await DatabaseService.openFiscalReceiptPdfForTakeaway({
+                restaurantId,
+                pickupCode,
+            })
+        } catch (err: any) {
+            toast.error(err?.message || 'Scontrino non ancora disponibile, riprova fra poco')
+        } finally {
+            setDownloadingReceipt(false)
+        }
+    }
 
     useEffect(() => {
         if (!order?.id) return
@@ -210,6 +266,38 @@ export default function TakeawayOrderStatus() {
                         </div>
                     )}
                 </Card>
+
+                {/* Fiscal receipt download — only when fiscal_receipts_enabled and ready */}
+                {fiscalReceiptStatus !== 'unknown' && Number(order.paid_amount) > 0 && (
+                    <Card className="bg-emerald-500/5 border-emerald-500/30 p-4">
+                        <div className="flex items-start gap-3">
+                            <Receipt size={22} className="text-emerald-400 mt-0.5 shrink-0" weight="fill" />
+                            <div className="flex-1 min-w-0">
+                                <div className="text-sm font-semibold text-emerald-200">Scontrino fiscale</div>
+                                {fiscalReceiptStatus === 'ready' ? (
+                                    <>
+                                        <div className="text-xs text-emerald-100/70 mt-0.5 mb-3">
+                                            Trasmesso all'Agenzia delle Entrate. Scaricalo per i tuoi documenti.
+                                        </div>
+                                        <Button
+                                            onClick={handleDownloadReceipt}
+                                            disabled={downloadingReceipt}
+                                            size="sm"
+                                            className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold w-full"
+                                        >
+                                            <DownloadSimple size={16} className="mr-2" weight="bold" />
+                                            {downloadingReceipt ? 'Apertura…' : 'Scarica scontrino fiscale (PDF)'}
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <div className="text-xs text-emerald-100/70 mt-0.5">
+                                        In emissione — il PDF sarà disponibile fra qualche istante.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </Card>
+                )}
 
                 <div className="text-center text-xs text-zinc-500 pt-2">
                     Salva questa pagina. Il numero #{String(order.pickup_number).padStart(3, '0')} sarà mostrato sullo schermo in sala quando pronto.
