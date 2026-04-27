@@ -183,9 +183,9 @@ serve(async (req) => {
         const cleanName = sanitizeStr(customerName, MAX_NAME_LEN);
         const cleanPhone = sanitizeStr(customerPhone, MAX_PHONE_LEN);
         const cleanNotes = sanitizeStr(customerNotes, MAX_NOTE_LEN);
-        const cleanEmail = sanitizeStr(customerEmail, 120).toLowerCase();
-        const customerTaxCode = sanitizeStr((payload as any)?.customerTaxCode, 16).toUpperCase();
-        const customerLotteryCode = sanitizeStr((payload as any)?.customerLotteryCode, 8).toUpperCase();
+        const cleanEmail = (sanitizeStr(customerEmail, 120) || "").toLowerCase();
+        const customerTaxCode = (sanitizeStr((payload as any)?.customerTaxCode, 16) || "").toUpperCase();
+        const customerLotteryCode = (sanitizeStr((payload as any)?.customerLotteryCode, 8) || "").toUpperCase();
         if (!cleanName) return json({ error: "Nome cliente obbligatorio" }, 400);
         if (!cleanPhone) return json({ error: "Telefono obbligatorio" }, 400);
         if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
