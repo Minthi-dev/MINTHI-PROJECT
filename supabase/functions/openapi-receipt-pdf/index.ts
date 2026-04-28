@@ -66,6 +66,7 @@ serve(async (req) => {
         // Resolve the fiscal_receipts row
         // ----------------------------------------------------------------
         let row: any = null;
+        let candidateJobKeys: string[] = [];
 
         if (receiptId) {
             // Path 2: authed dashboard download (must verify access).
@@ -102,6 +103,8 @@ serve(async (req) => {
                     .limit(1)
                     .maybeSingle()
                 : { data: null };
+            if (stripeSessionId) candidateJobKeys.push(`stripe:${restaurantId}:${stripeSessionId}`);
+            candidateJobKeys.push(`order:${restaurantId}:${order.id}:auto_takeaway_stripe`);
             if (receiptByStripe) {
                 row = receiptByStripe;
             } else {
@@ -117,32 +120,40 @@ serve(async (req) => {
             }
         } else if (tableSessionId && UUID_RE.test(tableSessionId)) {
             // Path 1b: dine-in customer with table session id in URL.
-            // For dine-in split payments, the table session alone is not
-            // enough: it could expose the latest receipt from another payer at
-            // the same table. Bind the download to the Stripe session that was
-            // just verified by the success page.
-            if (!stripeSessionId) {
-                if (probeOnly) {
-                    return json({
-                        ready: false,
-                        unavailable: true,
-                        openapiStatus: "missing_stripe_session",
-                    });
-                }
-                return json({ error: "stripeSessionId obbligatorio per lo scontrino tavolo" }, 400);
+            // Dine-in receipts are now one final table document. First allow the
+            // payer Stripe session for backwards compatibility, then fall back
+            // to the stable final-table idempotency key.
+            const finalTableKey = `table-final:${restaurantId}:${tableSessionId}`;
+            candidateJobKeys.push(finalTableKey);
+            if (stripeSessionId) candidateJobKeys.push(`stripe:${restaurantId}:${stripeSessionId}`);
+
+            if (stripeSessionId) {
+                const { data } = await supabase
+                    .from("fiscal_receipts")
+                    .select("id, openapi_receipt_id, openapi_status")
+                    .eq("restaurant_id", restaurantId)
+                    .eq("table_session_id", tableSessionId)
+                    .eq("stripe_session_id", stripeSessionId)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                row = data;
             }
-            const { data } = await supabase
-                .from("fiscal_receipts")
-                .select("id, openapi_receipt_id, openapi_status")
-                .eq("restaurant_id", restaurantId)
-                .eq("table_session_id", tableSessionId)
-                .eq("stripe_session_id", stripeSessionId)
-                .order("created_at", { ascending: false })
-                .limit(1)
-                .maybeSingle();
-            row = data;
+            if (!row) {
+                const { data } = await supabase
+                    .from("fiscal_receipts")
+                    .select("id, openapi_receipt_id, openapi_status")
+                    .eq("restaurant_id", restaurantId)
+                    .eq("table_session_id", tableSessionId)
+                    .eq("idempotency_key", finalTableKey)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                row = data;
+            }
         } else if (stripeSessionId) {
             // Path 1c: any authenticated payer who only has the stripe session id
+            candidateJobKeys.push(`stripe:${restaurantId}:${stripeSessionId}`);
             const { data } = await supabase
                 .from("fiscal_receipts")
                 .select("id, openapi_receipt_id, openapi_status")
@@ -155,6 +166,27 @@ serve(async (req) => {
         }
 
         if (!row) {
+            if (probeOnly && candidateJobKeys.length > 0) {
+                const { data: job } = await supabase
+                    .from("fiscal_receipt_jobs")
+                    .select("status, last_error")
+                    .in("dedupe_key", candidateJobKeys)
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                if (job) {
+                    const dead = job.status === "dead";
+                    return json({
+                        ready: false,
+                        pending: !dead,
+                        unavailable: dead,
+                        openapiStatus: job.status,
+                        message: dead
+                            ? "Lo scontrino non è stato emesso automaticamente. Il ristorante può riprovare dalla dashboard."
+                            : "Lo scontrino è in emissione. Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte.",
+                    });
+                }
+            }
             if (probeOnly) {
                 return json({
                     ready: false,
@@ -192,7 +224,7 @@ serve(async (req) => {
                     ready: false,
                     pending: true,
                     openapiStatus: row.openapi_status,
-                    message: "Lo scontrino non è ancora stato confermato dall'Agenzia delle Entrate.",
+                    message: "Lo scontrino non è ancora stato confermato dall'Agenzia delle Entrate. Negli ultimi minuti della giornata fiscale può essere disponibile subito dopo mezzanotte.",
                 });
             }
             return json({

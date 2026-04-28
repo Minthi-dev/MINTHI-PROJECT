@@ -123,6 +123,8 @@ export interface FiscalReceipt {
     order_id?: string | null
     table_session_id?: string | null
     stripe_session_id?: string | null
+    stripe_payment_intent_id?: string | null
+    stripe_payment_trace?: Record<string, unknown> | null
     openapi_receipt_id?: string | null
     openapi_status: 'pending' | 'submitted' | 'ready' | 'failed' | 'voided' | 'retry'
     items: Array<{

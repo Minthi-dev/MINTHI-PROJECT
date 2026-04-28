@@ -54,6 +54,8 @@ interface IssueRequestPayload {
     tableSessionId?: string;       // dine_in
     stripeSessionId?: string;      // cs_xxx — per idempotenza
     stripePaymentIntentId?: string;
+    stripePaymentTrace?: Record<string, unknown> | null;
+    idempotencyKey?: string;        // interno/outbox: chiave stabile job -> scontrino
     issuedVia?: 'auto_stripe' | 'auto_takeaway_stripe' | 'manual_cashier' | 'manual_retry';
 
     // Items dello scontrino (passati dal chiamante per non dipendere
@@ -109,6 +111,8 @@ serve(async (req) => {
             tableSessionId,
             stripeSessionId,
             stripePaymentIntentId,
+            stripePaymentTrace,
+            idempotencyKey: requestedIdempotencyKey,
             issuedVia = 'manual_cashier',
             items,
             cashAmount = 0,
@@ -270,13 +274,16 @@ serve(async (req) => {
         }
 
         // --- Idempotency ---
-        const idempotencyKey = stripeSessionId
+        const cleanRequestedIdempotencyKey = typeof requestedIdempotencyKey === "string"
+            ? requestedIdempotencyKey.trim().slice(0, 240)
+            : "";
+        const idempotencyKey = cleanRequestedIdempotencyKey || (stripeSessionId
             ? `stripe:${restaurantId}:${stripeSessionId}`
             : orderId
                 ? `order:${restaurantId}:${orderId}:${issuedVia}`
                 : tableSessionId
                     ? `table-session:${restaurantId}:${tableSessionId}:${issuedVia}:${Date.now()}`
-                    : `manual:${restaurantId}:${crypto.randomUUID()}`;
+                    : `manual:${restaurantId}:${crypto.randomUUID()}`);
 
         const { data: existingByKey } = await supabase
             .from("fiscal_receipts")
@@ -395,6 +402,7 @@ serve(async (req) => {
                 table_session_id: tableSessionId || null,
                 stripe_session_id: stripeSessionId || null,
                 stripe_payment_intent_id: stripePaymentIntentId || null,
+                stripe_payment_trace: stripePaymentTrace || null,
                 idempotency_key: idempotencyKey,
                 openapi_status: "pending",
                 items: receiptItems,
@@ -673,7 +681,7 @@ function receiptEmailHtml(restaurantName: string): string {
       <strong>${restaurantName}</strong>.
     </p>
     <p style="color:#666;font-size:13px;line-height:1.5;margin:0;">
-      Lo scontrino e stato trasmesso all'Agenzia delle Entrate. Conservalo se intendi richiedere garanzia o cambio.
+      Lo scontrino è stato trasmesso all'Agenzia delle Entrate. Conservalo se intendi richiedere garanzia o cambio.
     </p>
     <hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />
     <p style="color:#999;font-size:12px;margin:0;">Inviato automaticamente da Minthi.</p>

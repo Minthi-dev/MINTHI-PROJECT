@@ -1072,6 +1072,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
   const [printingReceipt, setPrintingReceipt] = useState(false)
+  const [paymentCustomerEmail, setPaymentCustomerEmail] = useState('')
+  const [paymentLotteryCode, setPaymentLotteryCode] = useState('')
 
   // Bottom nav tab
   const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>('menu')
@@ -1869,15 +1871,13 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   const getDishOrderedCount = (dishId: string) => perDishOrderedCount[dishId] || 0
 
-  // Helper: get all payable items (not PAID, not CANCELLED, not already pre-paid online).
-  // Items with paid_online_at set were pre-paid via Stripe — the kitchen is still preparing
-  // them, but they must NOT be offered for re-payment.
-  const payableItems = useMemo(() => {
-    const items: { id: string, name: string, price: number, quantity: number, orderId: string }[] = []
+  // Full bill items: used for the account total. Items already pre-paid online
+  // still belong to the final table bill, they are just not selectable again.
+  const billItems = useMemo(() => {
+    const items: { id: string, name: string, price: number, quantity: number, orderId: string, paidOnline: boolean }[] = []
     previousOrders.forEach(order => {
       order.items?.forEach((item: any) => {
         if (item.status === 'PAID' || item.status === 'CANCELLED') return
-        if (item.paid_online_at) return
         const dishName = item.dish?.name || dishes.find(d => d.id === item.dish_id)?.name || 'Piatto'
         items.push({
           id: `${order.id}_${item.dish_id}_${item.id || items.length}`,
@@ -1885,11 +1885,15 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           price: item.dish?.price || 0,
           quantity: item.quantity || 1,
           orderId: order.id,
+          paidOnline: !!item.paid_online_at,
         })
       })
     })
     return items
   }, [previousOrders, dishes])
+
+  // Payable item list for "per piatti": excludes lines already paid online.
+  const payableItems = useMemo(() => billItems.filter(item => !item.paidOnline), [billItems])
 
   // Helper: get coperto info
   const copertoInfo = useMemo(() => {
@@ -1916,14 +1920,46 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
   // Total for all unpaid items, minus any partial payments already registered in the session
   const unpaidTotal = useMemo(() => {
-    let total = payableItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    let total = billItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
     if (copertoInfo.enabled) total += copertoInfo.price * copertoInfo.count
     if (ayceInfo.enabled && ayceInfo.price > 0) total += ayceInfo.price * (activeSession?.customer_count || 1)
 
     // Subtract any amount already paid for this session (e.g. from partial or split payments)
     const paidAmount = activeSession?.paid_amount || 0;
     return Math.max(0, total - paidAmount);
-  }, [payableItems, copertoInfo, ayceInfo, activeSession])
+  }, [billItems, copertoInfo, ayceInfo, activeSession])
+
+  useEffect(() => {
+    if (stripePaymentSuccess || fiscalReceiptStatus === 'ready') return
+    if (!restaurantId || !sessionId) return
+    if (unpaidTotal > 0.01 || !(activeSession?.paid_amount || 0)) return
+
+    let cancelled = false
+    let attempts = 0
+    const tick = async () => {
+      if (cancelled) return
+      attempts += 1
+      try {
+        const { ready, status } = await DatabaseService.probeFiscalReceiptForDineIn({
+          restaurantId,
+          tableSessionId: sessionId,
+        })
+        if (cancelled) return
+        if (ready) {
+          setFiscalReceiptStatus('ready')
+          return
+        }
+        setFiscalReceiptStatus(status && status !== 'unavailable' ? 'pending' : 'unknown')
+      } catch {
+        if (!cancelled) setFiscalReceiptStatus('unknown')
+      }
+      if (!cancelled && attempts < 40) {
+        setTimeout(tick, attempts < 5 ? 3000 : 10000)
+      }
+    }
+    tick()
+    return () => { cancelled = true }
+  }, [stripePaymentSuccess, fiscalReceiptStatus, restaurantId, sessionId, unpaidTotal, activeSession?.paid_amount])
 
   // Handle Stripe payment — supports full, split (alla romana), and items (diviso per piatti)
   const handleStripePayment = async (mode: 'full' | 'split' | 'items', splitCount?: number) => {
@@ -1931,6 +1967,17 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     setIsProcessingStripePayment(true)
 
     try {
+      const cleanPaymentEmail = paymentCustomerEmail.trim()
+      const cleanLotteryCode = paymentLotteryCode.trim().toUpperCase()
+      if (cleanPaymentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanPaymentEmail)) {
+        toast.error('Email non valida')
+        return
+      }
+      if (cleanLotteryCode && !/^[A-Z0-9]{8}$/.test(cleanLotteryCode)) {
+        toast.error('Codice lotteria non valido')
+        return
+      }
+
       const orderIds = previousOrders.filter(o => o.status !== 'PAID' && o.status !== 'CANCELLED').map(o => o.id)
 
       if (orderIds.length === 0) {
@@ -1939,7 +1986,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       }
 
       const items: { name: string, price: number, quantity: number }[] = []
-      let splitLabel = 'Pagamento completo'
+      let splitLabel = 'Saldo completo'
 
       if (mode === 'split' && splitCount && splitCount > 1) {
         // Alla romana: divide total by split count
@@ -1959,7 +2006,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         if (selectedAyceCount > 0 && ayceInfo.enabled && ayceInfo.price > 0) {
           items.push({ name: 'All You Can Eat', price: ayceInfo.price, quantity: selectedAyceCount })
         }
-        splitLabel = 'Pagamento parziale (per piatti)'
+        splitLabel = 'Piatti selezionati'
       } else {
         // Full payment: all items + coperto + AYCE
         payableItems.forEach(pi => {
@@ -1978,7 +2025,9 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         return
       }
 
-      const totalToPay = items.reduce((sum, i) => sum + i.price * i.quantity, 0)
+      const totalToPay = mode === 'full'
+        ? Math.round(unpaidTotal * 100) / 100
+        : items.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
       toast.loading('Reindirizzamento a Stripe...', { id: 'stripe-pay' })
 
@@ -2001,6 +2050,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         splitLabel,
         tableId: tableId || '',
         paidOrderItemIds: paidOrderItemIds.length > 0 ? paidOrderItemIds : undefined,
+        customerEmail: cleanPaymentEmail || undefined,
+        customerLotteryCode: cleanLotteryCode || undefined,
       })
 
       if (url) {
@@ -2032,6 +2083,38 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       return
     }
     handleStripePayment('items')
+  }
+
+  const openDineInFiscalReceipt = async () => {
+    if (!restaurantId || !sessionId) return
+    setDownloadingReceipt(true)
+    try {
+      await DatabaseService.openFiscalReceiptPdfForDineIn({
+        restaurantId,
+        tableSessionId: sessionId,
+        stripeSessionId: lastStripeSessionId || undefined,
+      })
+    } catch (err: any) {
+      toast.error(err?.message || 'Scontrino non ancora disponibile')
+    } finally {
+      setDownloadingReceipt(false)
+    }
+  }
+
+  const printDineInFiscalReceipt = async () => {
+    if (!restaurantId || !sessionId) return
+    setPrintingReceipt(true)
+    try {
+      await DatabaseService.printFiscalReceiptPdfForDineIn({
+        restaurantId,
+        tableSessionId: sessionId,
+        stripeSessionId: lastStripeSessionId || undefined,
+      })
+    } catch (err: any) {
+      toast.error(err?.message || 'Scontrino non ancora stampabile')
+    } finally {
+      setPrintingReceipt(false)
+    }
   }
 
   // RENDER HELPERS - LUXURY THEME
@@ -2794,61 +2877,33 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   {fiscalReceiptStatus === 'ready' ? (
                     <div className="grid grid-cols-2 gap-2">
                       <Button
-                        onClick={async () => {
-                          if (!restaurantId || !sessionId) return
-                          setDownloadingReceipt(true)
-                          try {
-                            await DatabaseService.openFiscalReceiptPdfForDineIn({
-                              restaurantId,
-                              tableSessionId: sessionId,
-                              stripeSessionId: lastStripeSessionId || undefined,
-                            })
-                          } catch (err: any) {
-                            toast.error(err?.message || 'Scontrino non ancora disponibile')
-                          } finally {
-                            setDownloadingReceipt(false)
-                          }
-                        }}
+                        onClick={openDineInFiscalReceipt}
                         disabled={downloadingReceipt || printingReceipt}
                         className="h-12 rounded-xl font-bold shadow-lg bg-emerald-500 hover:bg-emerald-400 text-black"
                       >
                         <DownloadSimple size={18} className="mr-2" weight="bold" />
-                        {downloadingReceipt ? 'Apertura…' : 'Scarica'}
+                        {downloadingReceipt ? 'Apertura…' : 'Scarica PDF'}
                       </Button>
                       <Button
-                        onClick={async () => {
-                          if (!restaurantId || !sessionId) return
-                          setPrintingReceipt(true)
-                          try {
-                            await DatabaseService.printFiscalReceiptPdfForDineIn({
-                              restaurantId,
-                              tableSessionId: sessionId,
-                              stripeSessionId: lastStripeSessionId || undefined,
-                            })
-                          } catch (err: any) {
-                            toast.error(err?.message || 'Scontrino non ancora stampabile')
-                          } finally {
-                            setPrintingReceipt(false)
-                          }
-                        }}
+                        onClick={printDineInFiscalReceipt}
                         disabled={downloadingReceipt || printingReceipt}
                         className="h-12 rounded-xl font-bold shadow-lg"
                         style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}`, color: theme.textPrimary }}
                       >
                         <Printer size={18} className="mr-2" weight="bold" />
-                        {printingReceipt ? 'Stampa…' : 'Stampa'}
+                        {printingReceipt ? 'Stampa…' : 'Stampa PDF'}
                       </Button>
                     </div>
                   ) : fiscalReceiptStatus === 'pending' ? (
                     <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
                       <p className="text-[11px]" style={{ color: theme.textMuted }}>
-                        Lo scontrino fiscale sta venendo emesso — fra qualche istante potrai scaricarlo qui.
+                        Stiamo preparando lo scontrino digitale. Per il tavolo viene emesso un unico documento quando il conto è saldato; se il pagamento avviene negli ultimi minuti della giornata fiscale, il PDF può arrivare subito dopo mezzanotte.
                       </p>
                     </div>
                   ) : (
                     <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
                       <p className="text-[11px]" style={{ color: theme.textMuted }}>
-                        Pagamento confermato. Se il ristorante ha attivato lo scontrino digitale, lo troverai qui appena disponibile.
+                        Pagamento confermato. Lo scontrino digitale del tavolo sarà disponibile qui quando il conto sarà completamente saldato.
                       </p>
                     </div>
                   )}
@@ -3056,12 +3111,39 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                         <span className="text-xl font-black tracking-tight" style={{ color: '#10B981' }}>€0.00</span>
                       </div>
                     </div>
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#10B98120' }}>
-                      <CheckCircle size={32} weight="fill" style={{ color: '#10B981' }} />
-                    </div>
-                    <p className="text-xl font-bold" style={{ color: '#10B981' }}>Conto Saldato</p>
-                    <p className="text-sm mt-1" style={{ color: theme.textMuted }}>Tutti gli ordini sono stati pagati.</p>
-                  </div>
+	                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: '#10B98120' }}>
+	                      <CheckCircle size={32} weight="fill" style={{ color: '#10B981' }} />
+	                    </div>
+	                    <p className="text-xl font-bold" style={{ color: '#10B981' }}>Conto saldato</p>
+	                    <p className="text-sm mt-1" style={{ color: theme.textMuted }}>Tutti gli ordini sono stati pagati.</p>
+	                    <div className="w-full max-w-sm mt-5">
+	                      {fiscalReceiptStatus === 'ready' ? (
+	                        <div className="grid grid-cols-2 gap-2">
+	                          <Button
+	                            onClick={openDineInFiscalReceipt}
+	                            disabled={downloadingReceipt || printingReceipt}
+	                            className="h-12 rounded-xl font-bold bg-emerald-500 hover:bg-emerald-400 text-black"
+	                          >
+	                            <DownloadSimple size={18} className="mr-2" weight="bold" />
+	                            {downloadingReceipt ? 'Apertura…' : 'Scarica PDF'}
+	                          </Button>
+	                          <Button
+	                            onClick={printDineInFiscalReceipt}
+	                            disabled={downloadingReceipt || printingReceipt}
+	                            className="h-12 rounded-xl font-bold"
+	                            style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}`, color: theme.textPrimary }}
+	                          >
+	                            <Printer size={18} className="mr-2" weight="bold" />
+	                            {printingReceipt ? 'Stampa…' : 'Stampa PDF'}
+	                          </Button>
+	                        </div>
+	                      ) : fiscalReceiptStatus === 'pending' ? (
+	                        <p className="text-xs leading-relaxed px-3 py-2 rounded-xl" style={{ color: theme.textMuted, backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
+	                          Scontrino digitale in emissione. Se siamo negli ultimi minuti della giornata fiscale, il PDF può arrivare subito dopo mezzanotte.
+	                        </p>
+	                      ) : null}
+	                    </div>
+	                  </div>
                 ) : (
                   <>
                     {/* ZONA 1: Riepilogo pagamento (fixed top) */}
@@ -3120,10 +3202,29 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                       </div>
                     </div>
 
-                    {/* ZONA 3: Bottoni pagamento compatti (fixed bottom) */}
-                    {(fullRestaurant as any)?.enable_stripe_payments && unpaidTotal > 0 && (
-                      <div className="flex-none px-4 pt-3 pb-4" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.headerBg }}>
-                        <div className="grid grid-cols-3 gap-2 mb-2">
+	                    {/* ZONA 3: Bottoni pagamento compatti (fixed bottom) */}
+	                    {(fullRestaurant as any)?.enable_stripe_payments && unpaidTotal > 0 && (
+	                      <div className="flex-none px-4 pt-3 pb-4" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.headerBg }}>
+	                        <div className="grid grid-cols-2 gap-2 mb-2">
+	                          <Input
+	                            value={paymentCustomerEmail}
+	                            onChange={e => setPaymentCustomerEmail(e.target.value)}
+	                            type="email"
+	                            maxLength={120}
+	                            placeholder="Email scontrino"
+	                            className="h-10 text-xs rounded-xl"
+	                            style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textPrimary }}
+	                          />
+	                          <Input
+	                            value={paymentLotteryCode}
+	                            onChange={e => setPaymentLotteryCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+	                            maxLength={8}
+	                            placeholder="Cod. lotteria"
+	                            className="h-10 text-xs rounded-xl uppercase"
+	                            style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textPrimary }}
+	                          />
+	                        </div>
+	                        <div className="grid grid-cols-3 gap-2 mb-2">
                           {/* Paga Totale */}
                           <button
                             onClick={() => handleStripePayment('full')}

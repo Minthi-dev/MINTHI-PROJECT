@@ -41,6 +41,7 @@ export default function TakeawayOrderStatus() {
     const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
     const [downloadingReceipt, setDownloadingReceipt] = useState(false)
     const [printingReceipt, setPrintingReceipt] = useState(false)
+    const stripeSessionId = searchParams.get('session_id') || undefined
 
     useEffect(() => {
         const justCreated = searchParams.get('created') === '1'
@@ -115,6 +116,7 @@ export default function TakeawayOrderStatus() {
                 const { ready, status } = await DatabaseService.probeFiscalReceiptForTakeaway({
                     restaurantId,
                     pickupCode,
+                    stripeSessionId,
                 })
                 if (cancelled) return
                 if (ready) {
@@ -134,7 +136,7 @@ export default function TakeawayOrderStatus() {
         probe()
         return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [order?.id, order?.paid_amount, restaurantId, pickupCode])
+    }, [order?.id, order?.paid_amount, restaurantId, pickupCode, stripeSessionId])
 
     const handleDownloadReceipt = async () => {
         if (!restaurantId || !pickupCode) return
@@ -143,6 +145,7 @@ export default function TakeawayOrderStatus() {
             await DatabaseService.openFiscalReceiptPdfForTakeaway({
                 restaurantId,
                 pickupCode,
+                stripeSessionId,
             })
         } catch (err: any) {
             toast.error(err?.message || 'Scontrino non ancora disponibile, riprova fra poco')
@@ -158,6 +161,7 @@ export default function TakeawayOrderStatus() {
             await DatabaseService.printFiscalReceiptPdfForTakeaway({
                 restaurantId,
                 pickupCode,
+                stripeSessionId,
             })
         } catch (err: any) {
             toast.error(err?.message || 'Scontrino non ancora stampabile, riprova fra poco')
@@ -319,7 +323,7 @@ export default function TakeawayOrderStatus() {
                                     </>
                                 ) : (
                                     <div className="text-xs text-emerald-100/70 mt-0.5">
-                                        In emissione — il PDF sarà disponibile fra qualche istante.
+                                        Stiamo emettendo lo scontrino digitale. Se il pagamento arriva negli ultimi minuti della giornata fiscale, il PDF può essere disponibile subito dopo mezzanotte.
                                     </div>
                                 )}
                             </div>

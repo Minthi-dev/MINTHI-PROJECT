@@ -111,7 +111,9 @@ serve(async (req) => {
             items, // Legacy client summary. Prices are not trusted.
             totalAmount,
             customerEmail,
-            splitLabel, // e.g. "Pagamento completo", "Alla romana (1/4)", "Pagamento parziale"
+            customerTaxCode,
+            customerLotteryCode,
+            splitLabel, // e.g. "Saldo completo", "Alla romana (1/4)", "Piatti selezionati"
             successUrl,
             cancelUrl,
             tableId,
@@ -136,6 +138,18 @@ serve(async (req) => {
         const requestedTotal = money(totalAmount ?? clientItemsTotal);
         if (!Number.isFinite(requestedTotal) || requestedTotal <= 0 || requestedTotal > 10000) {
             return json({ error: "Importo non valido" }, 400, corsHeaders);
+        }
+        const cleanCustomerEmail = typeof customerEmail === "string" ? customerEmail.trim().toLowerCase().slice(0, 120) : "";
+        const cleanCustomerTaxCode = typeof customerTaxCode === "string" ? customerTaxCode.trim().toUpperCase().slice(0, 16) : "";
+        const cleanCustomerLotteryCode = typeof customerLotteryCode === "string" ? customerLotteryCode.trim().toUpperCase().slice(0, 8) : "";
+        if (cleanCustomerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanCustomerEmail)) {
+            return json({ error: "Email cliente non valida" }, 400, corsHeaders);
+        }
+        if (cleanCustomerTaxCode && !/^[A-Z0-9]{16}$/.test(cleanCustomerTaxCode)) {
+            return json({ error: "Codice fiscale cliente non valido" }, 400, corsHeaders);
+        }
+        if (cleanCustomerLotteryCode && !/^[A-Z0-9]{8}$/.test(cleanCustomerLotteryCode)) {
+            return json({ error: "Codice lotteria scontrini non valido" }, 400, corsHeaders);
         }
 
         // Verifica che il ristorante abbia i pagamenti Stripe abilitati
@@ -169,6 +183,19 @@ serve(async (req) => {
             return json({ error: "Sessione tavolo non valida o chiusa" }, 409, corsHeaders);
         }
 
+        if (cleanCustomerEmail || cleanCustomerTaxCode || cleanCustomerLotteryCode) {
+            await supabase
+                .from("table_sessions")
+                .update({
+                    ...(cleanCustomerEmail ? { customer_email: cleanCustomerEmail } : {}),
+                    ...(cleanCustomerTaxCode ? { customer_tax_code: cleanCustomerTaxCode } : {}),
+                    ...(cleanCustomerLotteryCode ? { customer_lottery_code: cleanCustomerLotteryCode } : {}),
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", tableSessionId)
+                .eq("restaurant_id", restaurantId);
+        }
+
         const { data: dbOrders, error: ordersError } = await supabase
             .from("orders")
             .select("id, restaurant_id, table_session_id, status")
@@ -198,8 +225,9 @@ serve(async (req) => {
             return json({ error: "Impossibile verificare i piatti da pagare" }, 500, corsHeaders);
         }
 
-        const payableItems = dbItems.filter((it: any) => it.status !== "PAID" && it.status !== "CANCELLED" && !it.paid_online_at);
-        const dishesDue = payableItems.reduce((sum: number, it: any) => {
+        const billableItems = dbItems.filter((it: any) => it.status !== "PAID" && it.status !== "CANCELLED");
+        const payableItems = billableItems.filter((it: any) => !it.paid_online_at);
+        const dishesDue = billableItems.reduce((sum: number, it: any) => {
             const dish = oneRelation(it.dish);
             return sum + (Number(dish?.price) || 0) * (Number(it.quantity) || 0);
         }, 0);
@@ -238,12 +266,12 @@ serve(async (req) => {
             }
         }
 
-        const safeLabel = safeText(splitLabel, "Pagamento", 60);
+        const safeLabel = safeText(splitLabel, "Saldo conto", 60);
         const lineItems = [{
             price_data: {
                 currency: "eur",
                 product_data: {
-                    name: safeText(`${safeLabel} — ${restaurant.name}`, "Pagamento tavolo", 120),
+                    name: safeText(`${safeLabel} — ${restaurant.name}`, "Saldo del conto", 120),
                 },
                 unit_amount: Math.round(requestedTotal * 100),
             },
@@ -274,12 +302,15 @@ serve(async (req) => {
                     tableSessionId: tableSessionId || "",
                     orderIds: safeOrderIdsMetadata,
                     splitLabel: safeLabel,
+                    ...(cleanCustomerEmail ? { customerEmail: cleanCustomerEmail } : {}),
+                    ...(cleanCustomerTaxCode ? { customerTaxCode: cleanCustomerTaxCode } : {}),
+                    ...(cleanCustomerLotteryCode ? { customerLotteryCode: cleanCustomerLotteryCode } : {}),
                     ...(paidOrderItemIdsList.length > 0
                         ? { paidOrderItemIds: paidItemsMetadata }
                         : {}),
                 },
-                ...(typeof customerEmail === "string" && customerEmail.length > 3 && customerEmail.length < 120
-                    ? { customer_email: customerEmail }
+                ...(cleanCustomerEmail
+                    ? { customer_email: cleanCustomerEmail }
                     : {}),
             },
             {

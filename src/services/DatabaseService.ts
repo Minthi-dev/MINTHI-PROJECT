@@ -1374,6 +1374,9 @@ export const DatabaseService = {
         splitLabel?: string,
         tableId?: string,
         paidOrderItemIds?: string[],
+        customerEmail?: string,
+        customerTaxCode?: string,
+        customerLotteryCode?: string,
     }) {
         const { data, error } = await supabase.functions.invoke('stripe-customer-payment', {
             body: {
@@ -1383,6 +1386,9 @@ export const DatabaseService = {
                 items: params.items,
                 totalAmount: params.totalAmount,
                 splitLabel: params.splitLabel || 'Pagamento',
+                customerEmail: params.customerEmail,
+                customerTaxCode: params.customerTaxCode,
+                customerLotteryCode: params.customerLotteryCode,
                 successUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
                 cancelUrl: `${window.location.origin}/client/table/${params.tableId || ''}?payment=cancelled`,
                 paidOrderItemIds: params.paidOrderItemIds,
@@ -1960,11 +1966,13 @@ export const DatabaseService = {
     async probeFiscalReceiptForTakeaway(params: {
         restaurantId: string
         pickupCode: string
+        stripeSessionId?: string
     }): Promise<{ ready: boolean; status?: string }> {
         const { data, error } = await supabase.functions.invoke('openapi-receipt-pdf', {
             body: {
                 restaurantId: params.restaurantId,
                 pickupCode: params.pickupCode,
+                stripeSessionId: params.stripeSessionId,
                 probeOnly: true,
             },
         })
@@ -1998,12 +2006,14 @@ export const DatabaseService = {
     async openFiscalReceiptPdfForTakeaway(params: {
         restaurantId: string
         pickupCode: string
+        stripeSessionId?: string
     }): Promise<void> {
         const url = await DatabaseService._invokePdfEdgeFunction(
             'openapi-receipt-pdf',
             {
                 restaurantId: params.restaurantId,
                 pickupCode: params.pickupCode,
+                stripeSessionId: params.stripeSessionId,
             }
         )
         window.open(url, '_blank', 'noopener')
@@ -2012,12 +2022,14 @@ export const DatabaseService = {
     async printFiscalReceiptPdfForTakeaway(params: {
         restaurantId: string
         pickupCode: string
+        stripeSessionId?: string
     }): Promise<void> {
         const url = await DatabaseService._invokePdfEdgeFunction(
             'openapi-receipt-pdf',
             {
                 restaurantId: params.restaurantId,
                 pickupCode: params.pickupCode,
+                stripeSessionId: params.stripeSessionId,
             }
         )
         await DatabaseService._printBlobUrl(url)
