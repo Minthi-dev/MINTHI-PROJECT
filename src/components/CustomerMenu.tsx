@@ -1701,7 +1701,10 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         note: item.notes || '',
         status: 'PENDING' as const,
         course_number: item.course_number || 1,
-        restaurant_id: restaurantId
+        restaurant_id: restaurantId,
+        dish_name_snapshot: item.dish?.name || null,
+        unit_price_snapshot: item.dish?.price ?? null,
+        vat_rate_snapshot: (item.dish as any)?.vat_rate ?? null
       }))
 
       await DatabaseService.createOrder({

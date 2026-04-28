@@ -335,6 +335,9 @@ export interface OrderItem {
     status: OrderItemStatus
     created_at?: string
     course_number?: number // Numero della portata (1 = prima portata, 2 = seconda, ecc.)
+    dish_name_snapshot?: string | null
+    unit_price_snapshot?: number | null
+    vat_rate_snapshot?: string | null
     // Frontend helper
     dish?: Dish
 }

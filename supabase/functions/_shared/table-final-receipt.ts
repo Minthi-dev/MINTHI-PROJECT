@@ -85,7 +85,7 @@ export async function buildDineInFinalReceiptPayload(supabase: any, args: {
 
     const { data: orderItems } = await supabase
         .from("order_items")
-        .select("id, quantity, status, note, dish:dishes(name, price, vat_rate, is_ayce, exclude_from_all_you_can_eat)")
+        .select("id, quantity, status, note, dish_name_snapshot, unit_price_snapshot, vat_rate_snapshot, dish:dishes(name, price, vat_rate, is_ayce, exclude_from_all_you_can_eat)")
         .in("order_id", orderIds)
         .neq("status", "CANCELLED");
 
@@ -98,13 +98,15 @@ export async function buildDineInFinalReceiptPayload(supabase: any, args: {
             && dish.exclude_from_all_you_can_eat !== true;
         if (includedInAyce) continue;
         const quantity = Number((it as any).quantity) || 1;
-        const price = money(dish.price);
+        const price = (it as any).unit_price_snapshot !== null && (it as any).unit_price_snapshot !== undefined
+            ? money((it as any).unit_price_snapshot)
+            : money(dish.price);
         if (price <= 0) continue;
         items.push({
-            description: String(dish.name || "Voce menu").slice(0, 1000),
+            description: String((it as any).dish_name_snapshot || dish.name || "Voce menu").slice(0, 1000),
             quantity,
             unitPrice: price,
-            vatRate: dish.vat_rate ?? undefined,
+            vatRate: (it as any).vat_rate_snapshot ?? dish.vat_rate ?? undefined,
         });
     }
 

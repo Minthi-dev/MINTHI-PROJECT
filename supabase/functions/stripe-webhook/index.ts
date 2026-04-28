@@ -92,14 +92,16 @@ async function emitTakeawayFiscalReceipt(args: {
 
     const { data: takeawayItems } = await supabase
         .from("order_items")
-        .select("id, dish_id, quantity, dish:dishes(name, price, vat_rate)")
+        .select("id, dish_id, quantity, dish_name_snapshot, unit_price_snapshot, vat_rate_snapshot, dish:dishes(name, price, vat_rate)")
         .eq("order_id", args.orderId)
         .neq("status", "CANCELLED");
     const items = (takeawayItems || []).map((it: any) => ({
-        description: it.dish?.name || "Voce",
+        description: it.dish_name_snapshot || it.dish?.name || "Voce",
         quantity: Number(it.quantity) || 1,
-        unitPrice: Number(it.dish?.price) || 0,
-        vatRate: it.dish?.vat_rate ?? undefined,
+        unitPrice: it.unit_price_snapshot !== null && it.unit_price_snapshot !== undefined
+            ? Number(it.unit_price_snapshot) || 0
+            : Number(it.dish?.price) || 0,
+        vatRate: it.vat_rate_snapshot ?? it.dish?.vat_rate ?? undefined,
     }));
     if (items.length === 0) return;
 
@@ -322,14 +324,16 @@ serve(async (req) => {
                         try {
                             const { data: takeawayItems } = await supabase
                                 .from("order_items")
-                                .select("id, dish_id, quantity, dish:dishes(name, price, vat_rate)")
+                                .select("id, dish_id, quantity, dish_name_snapshot, unit_price_snapshot, vat_rate_snapshot, dish:dishes(name, price, vat_rate)")
                                 .eq("order_id", orderId)
                                 .neq("status", "CANCELLED");
                             const items = (takeawayItems || []).map((it: any) => ({
-                                description: it.dish?.name || "Voce",
+                                description: it.dish_name_snapshot || it.dish?.name || "Voce",
                                 quantity: Number(it.quantity) || 1,
-                                unitPrice: Number(it.dish?.price) || 0,
-                                vatRate: it.dish?.vat_rate ?? undefined,
+                                unitPrice: it.unit_price_snapshot !== null && it.unit_price_snapshot !== undefined
+                                    ? Number(it.unit_price_snapshot) || 0
+                                    : Number(it.dish?.price) || 0,
+                                vatRate: it.vat_rate_snapshot ?? it.dish?.vat_rate ?? undefined,
                             }));
                             // Prendi anche email del cliente se salvata sull'ordine
                             const { data: orderMeta } = await supabase

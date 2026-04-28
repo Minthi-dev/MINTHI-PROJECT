@@ -217,7 +217,7 @@ serve(async (req) => {
 
         const { data: dbItems, error: itemsError } = await supabase
             .from("order_items")
-            .select("id, quantity, status, order_id, paid_online_at, dish:dishes(id, name, price)")
+            .select("id, quantity, status, order_id, paid_online_at, unit_price_snapshot, dish:dishes(id, name, price)")
             .in("order_id", orderIdsList);
 
         if (itemsError || !dbItems) {
@@ -229,7 +229,10 @@ serve(async (req) => {
         const payableItems = billableItems.filter((it: any) => !it.paid_online_at);
         const dishesDue = billableItems.reduce((sum: number, it: any) => {
             const dish = oneRelation(it.dish);
-            return sum + (Number(dish?.price) || 0) * (Number(it.quantity) || 0);
+            const unitPrice = it.unit_price_snapshot !== null && it.unit_price_snapshot !== undefined
+                ? Number(it.unit_price_snapshot) || 0
+                : Number(dish?.price) || 0;
+            return sum + unitPrice * (Number(it.quantity) || 0);
         }, 0);
         const customers = Math.max(1, Number(tableSession.customer_count || 1));
         const coverDue = tableSession.coperto_enabled ? copertoPrice(restaurant) * customers : 0;
@@ -258,7 +261,10 @@ serve(async (req) => {
 
             const selectedItemsTotal = selectedItems.reduce((sum: number, it: any) => {
                 const dish = oneRelation(it.dish);
-                return sum + (Number(dish?.price) || 0) * (Number(it.quantity) || 0);
+                const unitPrice = it.unit_price_snapshot !== null && it.unit_price_snapshot !== undefined
+                    ? Number(it.unit_price_snapshot) || 0
+                    : Number(dish?.price) || 0;
+                return sum + unitPrice * (Number(it.quantity) || 0);
             }, 0);
 
             if (requestedTotal + 0.01 < selectedItemsTotal) {

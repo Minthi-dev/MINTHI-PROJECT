@@ -105,6 +105,11 @@ serve(async (req) => {
                 if (orderError) return json({ error: orderError.message }, 500);
 
                 if (data.items.length > 0) {
+                    const dishIds = [...new Set(data.items.map((item: any) => item.dish_id).filter(Boolean))];
+                    const { data: dishes } = dishIds.length > 0
+                        ? await supabase.from("dishes").select("id, name, price, vat_rate").in("id", dishIds)
+                        : { data: [] as any[] };
+                    const dishMap = new Map((dishes || []).map((d: any) => [d.id, d]));
                     const items = data.items.map((item: any) => ({
                         order_id: newOrder.id,
                         dish_id: item.dish_id,
@@ -112,6 +117,9 @@ serve(async (req) => {
                         status: "PENDING",
                         note: item.note || null,
                         course_number: item.course_number || null,
+                        dish_name_snapshot: dishMap.get(item.dish_id)?.name || item.dish_name_snapshot || null,
+                        unit_price_snapshot: dishMap.get(item.dish_id)?.price ?? item.unit_price_snapshot ?? null,
+                        vat_rate_snapshot: dishMap.get(item.dish_id)?.vat_rate ?? item.vat_rate_snapshot ?? null,
                     }));
                     const { error: itemsError } = await supabase.from("order_items").insert(items);
                     if (itemsError) return json({ error: itemsError.message }, 500);
@@ -159,6 +167,11 @@ serve(async (req) => {
                         if (error) return json({ error: error.message }, 500);
                     } else if (op.type === "split_and_pay") {
                         // Decrement original, insert new PAID row
+                        const { data: originalItem } = await supabase
+                            .from("order_items")
+                            .select("dish_name_snapshot, unit_price_snapshot, vat_rate_snapshot")
+                            .eq("id", op.itemId)
+                            .maybeSingle();
                         const { error: updateErr } = await supabase
                             .from("order_items").update({ quantity: op.remainingQty }).eq("id", op.itemId);
                         if (updateErr) return json({ error: updateErr.message }, 500);
@@ -169,6 +182,9 @@ serve(async (req) => {
                             note: op.note || null,
                             quantity: op.paidQty,
                             status: "PAID",
+                            dish_name_snapshot: originalItem?.dish_name_snapshot || null,
+                            unit_price_snapshot: originalItem?.unit_price_snapshot ?? null,
+                            vat_rate_snapshot: originalItem?.vat_rate_snapshot || null,
                         });
                         if (insertErr) return json({ error: insertErr.message }, 500);
                     }

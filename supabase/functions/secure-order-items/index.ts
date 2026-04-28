@@ -64,6 +64,11 @@ serve(async (req) => {
                 }
 
                 // Whitelist fields
+                const dishIds = [...new Set(items.map((i: any) => i.dish_id).filter(Boolean))];
+                const { data: dishes } = dishIds.length > 0
+                    ? await supabase.from("dishes").select("id, name, price, vat_rate").in("id", dishIds)
+                    : { data: [] as any[] };
+                const dishMap = new Map((dishes || []).map((d: any) => [d.id, d]));
                 const safeItems = items.map((i: any) => ({
                     order_id: i.order_id,
                     dish_id: i.dish_id,
@@ -71,6 +76,9 @@ serve(async (req) => {
                     status: "PENDING",
                     note: i.note || null,
                     course_number: i.course_number || null,
+                    dish_name_snapshot: dishMap.get(i.dish_id)?.name || i.dish_name_snapshot || null,
+                    unit_price_snapshot: dishMap.get(i.dish_id)?.price ?? i.unit_price_snapshot ?? null,
+                    vat_rate_snapshot: dishMap.get(i.dish_id)?.vat_rate ?? i.vat_rate_snapshot ?? null,
                 }));
 
                 const { error } = await supabase.from("order_items").insert(safeItems);

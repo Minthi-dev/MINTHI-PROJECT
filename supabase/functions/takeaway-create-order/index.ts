@@ -390,7 +390,7 @@ serve(async (req) => {
         // --- Load dishes and authoritatively compute total --------------------
         const { data: dishes, error: dErr } = await supabase
             .from("dishes")
-            .select("id, name, price, restaurant_id, is_active, is_available")
+            .select("id, name, price, vat_rate, restaurant_id, is_active, is_available")
             .in("id", dishIds);
         if (dErr) return json({ error: "Errore lettura menu" }, 500);
         if (!dishes || dishes.length === 0) return json({ error: "Piatti non trovati" }, 400);
@@ -401,6 +401,7 @@ serve(async (req) => {
             dish_id: string;
             dish_name: string;
             unit_price: number;
+            vat_rate: string | number | null;
             quantity: number;
             note: string | null;
         }[] = [];
@@ -421,6 +422,7 @@ serve(async (req) => {
                 dish_id: dish.id,
                 dish_name: dish.name,
                 unit_price: unit,
+                vat_rate: dish.vat_rate ?? null,
                 quantity: it.quantity,
                 note: it.note ? it.note.slice(0, MAX_NOTE_LEN) : null,
             });
@@ -481,6 +483,9 @@ serve(async (req) => {
             note: it.note,
             status: "PENDING",
             course_number: 1,
+            dish_name_snapshot: it.dish_name,
+            unit_price_snapshot: it.unit_price,
+            vat_rate_snapshot: it.vat_rate,
         }));
         const { error: itErr } = await supabase.from("order_items").insert(itemRows);
         if (itErr) {
