@@ -1074,7 +1074,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
   const [printingReceipt, setPrintingReceipt] = useState(false)
   const [paymentCustomerEmail, setPaymentCustomerEmail] = useState('')
-  const [paymentLotteryCode, setPaymentLotteryCode] = useState('')
 
   // Bottom nav tab
   const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>('menu')
@@ -1983,13 +1982,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 
     try {
       const cleanPaymentEmail = paymentCustomerEmail.trim()
-      const cleanLotteryCode = paymentLotteryCode.trim().toUpperCase()
       if (cleanPaymentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanPaymentEmail)) {
         toast.error('Email non valida')
-        return
-      }
-      if (cleanLotteryCode && !/^[A-Z0-9]{8}$/.test(cleanLotteryCode)) {
-        toast.error('Codice lotteria non valido')
         return
       }
 
@@ -2066,7 +2060,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         tableId: tableId || '',
         paidOrderItemIds: paidOrderItemIds.length > 0 ? paidOrderItemIds : undefined,
         customerEmail: cleanPaymentEmail || undefined,
-        customerLotteryCode: cleanLotteryCode || undefined,
       })
 
       if (url) {
@@ -3215,7 +3208,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 	                    {/* ZONA 3: Bottoni pagamento compatti (fixed bottom) */}
 	                    {(fullRestaurant as any)?.enable_stripe_payments && unpaidTotal > 0 && (
 	                      <div className="flex-none px-4 pt-3 pb-4" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.headerBg }}>
-	                        <div className="grid grid-cols-2 gap-2 mb-2">
+	                        <div className="mb-2">
 	                          <Input
 	                            value={paymentCustomerEmail}
 	                            onChange={e => setPaymentCustomerEmail(e.target.value)}
@@ -3223,14 +3216,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 	                            maxLength={120}
 	                            placeholder="Email scontrino"
 	                            className="h-10 text-xs rounded-xl"
-	                            style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textPrimary }}
-	                          />
-	                          <Input
-	                            value={paymentLotteryCode}
-	                            onChange={e => setPaymentLotteryCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
-	                            maxLength={8}
-	                            placeholder="Cod. lotteria"
-	                            className="h-10 text-xs rounded-xl uppercase"
 	                            style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textPrimary }}
 	                          />
 	                        </div>

@@ -46,7 +46,6 @@ export default function TakeawayMenu() {
     const [customerLastName, setCustomerLastName] = useState('')
     const [customerPhone, setCustomerPhone] = useState('')
     const [customerEmail, setCustomerEmail] = useState('')
-    const [customerLotteryCode, setCustomerLotteryCode] = useState('')
     const [customerNotes, setCustomerNotes] = useState('')
     const [submitting, setSubmitting] = useState(false)
     const [paymentChoice, setPaymentChoice] = useState<'stripe' | 'pay_on_pickup'>('stripe')
@@ -178,8 +177,6 @@ export default function TakeawayMenu() {
         if (collectLastName && lastNameRequired && !customerLastName.trim()) return toast.error('Inserisci il cognome')
         if (collectPhone && phoneRequired && !customerPhone.trim()) return toast.error('Inserisci un numero di telefono')
         if (collectEmail && emailRequired && !customerEmail.trim()) return toast.error("Inserisci l'email per ricevere lo scontrino")
-        const cleanLotteryCode = customerLotteryCode.trim().toUpperCase()
-        if (cleanLotteryCode && !/^[A-Z0-9]{8}$/.test(cleanLotteryCode)) return toast.error('Codice lotteria non valido')
         if (paymentChoice === 'stripe' && !canPayStripe) return toast.error('Pagamento online non disponibile')
         if (paymentChoice === 'pay_on_pickup' && !canPayOnPickup) return toast.error('Questo ristorante richiede il pagamento online')
 
@@ -196,7 +193,6 @@ export default function TakeawayMenu() {
                 customerLastName: customerLastName.trim() || undefined,
                 customerPhone: customerPhone.trim(),
                 customerEmail: customerEmail.trim() || undefined,
-                customerLotteryCode: paymentChoice === 'stripe' ? cleanLotteryCode || undefined : undefined,
                 customerNotes: customerNotes.trim() || undefined,
                 paymentMethod: paymentChoice,
                 idempotencyKey,
@@ -450,18 +446,6 @@ export default function TakeawayMenu() {
                                 </label>
                                 <Input value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} type="email" maxLength={120} placeholder="nome@esempio.it" className="bg-white/5 border-white/10 mt-1" />
                                 <p className="text-[11px] text-zinc-500 mt-1">Ricevi ricevuta Stripe e scontrino fiscale digitale</p>
-                            </div>
-                        )}
-                        {paymentChoice === 'stripe' && (
-                            <div>
-                                <label className="text-xs text-zinc-400 uppercase tracking-wider">Codice lotteria (opzionale)</label>
-                                <Input
-                                    value={customerLotteryCode}
-                                    onChange={e => setCustomerLotteryCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
-                                    maxLength={8}
-                                    placeholder="8 caratteri"
-                                    className="bg-white/5 border-white/10 mt-1 uppercase"
-                                />
                             </div>
                         )}
                         <div>
