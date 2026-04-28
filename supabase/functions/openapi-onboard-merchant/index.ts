@@ -163,8 +163,19 @@ async function ensureOpenApiConfiguration(
         }
 
         // Step 4: "already exists" but GET said 404 → stale ghost entry.
-        // DELETE and recreate.
-        log.push({ at: now(), step: "CREATE→already_exists", result: "skip", detail: "P.IVA fantasma su OpenAPI, procedo con DELETE+CREATE" });
+        // Try PATCH first (to revive soft-deleted), then DELETE+CREATE.
+        log.push({ at: now(), step: "CREATE→already_exists", result: "skip", detail: "P.IVA fantasma su OpenAPI, provo PATCH" });
+
+        try {
+            await updateConfiguration(fiscalId, input);
+            log.push({ at: now(), step: "PATCH (ghost)", result: "ok" });
+            return { action: "updated", log };
+        } catch (patchGhostErr: any) {
+            log.push({ at: now(), step: "PATCH (ghost)", result: "error", detail: String(patchGhostErr?.message || patchGhostErr).slice(0, 300) });
+            
+            // If PATCH also fails, proceed with DELETE+CREATE
+            log.push({ at: now(), step: "PATCH (ghost) failed", result: "skip", detail: "Procedo con DELETE+CREATE" });
+        }
 
         try {
             await deleteConfiguration(fiscalId);
