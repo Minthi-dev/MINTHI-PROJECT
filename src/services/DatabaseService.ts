@@ -2277,4 +2277,31 @@ export const DatabaseService = {
         }
         return data
     },
+
+    /**
+     * Riprova l'emissione di uno scontrino fiscale fallito. Riusa il record
+     * esistente in fiscal_receipts, reimposta lo stato a 'pending' e ri-chiama
+     * OpenAPI con gli stessi items e importi originali.
+     */
+    async retryFiscalReceipt(restaurantId: string, receiptId: string) {
+        const userId = _getCurrentUserId()
+        const sessionToken = _requireCurrentSessionToken()
+        if (!userId) throw new Error('Non autenticato')
+
+        const { data, error } = await supabase.functions.invoke('openapi-issue-receipt', {
+            body: {
+                userId,
+                sessionToken,
+                restaurantId,
+                retryReceiptId: receiptId,
+                issuedVia: 'manual_retry',
+                items: [], // ignored for retry — the edge function loads from the existing record
+            },
+        })
+        if (error || (data && data.error)) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore retry scontrino')
+            throw new Error(msg)
+        }
+        return data
+    },
 }

@@ -12,6 +12,8 @@
 //     di POST (utile per rotazione credenziali ogni 90 giorni).
 //   - Salva uno stato 'pending'/'active'/'failed' su restaurants per
 //     pilotare la UI del ristoratore.
+//   - POST-VERIFICATION obbligatoria: non segna mai 'active' senza
+//     aver verificato con GET che la configurazione sia effettiva.
 // =====================================================================
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -19,7 +21,10 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import {
     createConfiguration,
+    deleteConfiguration,
+    getConfiguration,
     updateConfiguration,
+    verifyConfiguration,
     isOpenApiConfigured,
     isValidVatIT,
     isValidTaxCodeIT,
@@ -68,26 +73,121 @@ function isOpenApiNotRegisteredError(error: unknown): boolean {
     );
 }
 
+// -- Structured onboarding log entry --------------------------------
+interface OnboardLogEntry {
+    at: string;
+    step: string;
+    result: "ok" | "error" | "skip";
+    detail?: string;
+}
+
 /**
- * Clean onboarding: POST first; if the config already exists, PATCH it.
- * That's it. No GET probes, no DELETE recoveries — those caused more issues
- * than they solved on the OpenAPI sandbox.
+ * Robust 5-step configuration flow:
+ *
+ *   1. GET  — check if configuration exists on OpenAPI
+ *   2. PATCH (if exists) — update credentials / address
+ *   3. If PATCH fails with 404/424 → DELETE + CREATE (sandbox drift)
+ *   4. If GET returned 404 → CREATE
+ *      4a. If CREATE fails "already exists" → DELETE + CREATE
+ *   5. POST-VERIFICATION — mandatory GET to confirm receipts=true
+ *
+ * Returns the action taken and a structured log for audit.
  */
 async function ensureOpenApiConfiguration(
     fiscalId: string,
     input: Parameters<typeof createConfiguration>[0],
-): Promise<"created" | "updated"> {
+): Promise<{ action: "created" | "updated" | "recreated"; log: OnboardLogEntry[] }> {
+    const log: OnboardLogEntry[] = [];
+    const now = () => new Date().toISOString();
+
+    // Step 1: Check if configuration already exists
+    let remoteExists = false;
     try {
-        await createConfiguration(input);
-        return "created";
-    } catch (createErr) {
-        if (!isOpenApiAlreadyExistsError(createErr)) throw createErr;
-        console.log("[openapi-onboard] POST=exists → PATCH per aggiornare credenziali");
+        const remote = await getConfiguration(fiscalId);
+        remoteExists = !!remote;
+        log.push({ at: now(), step: "GET config", result: remoteExists ? "ok" : "skip", detail: remoteExists ? "Configurazione esistente trovata" : "Configurazione non trovata (404)" });
+    } catch (getErr: any) {
+        if (isOpenApiNotRegisteredError(getErr)) {
+            remoteExists = false;
+            log.push({ at: now(), step: "GET config", result: "skip", detail: "Not registered (404/424)" });
+        } else {
+            log.push({ at: now(), step: "GET config", result: "error", detail: String(getErr?.message || getErr).slice(0, 300) });
+            throw getErr;
+        }
     }
 
-    // The config exists on OpenAPI's side (per the POST response). Refresh it.
-    await updateConfiguration(fiscalId, input);
-    return "updated";
+    // Step 2: If exists → try PATCH
+    if (remoteExists) {
+        try {
+            await updateConfiguration(fiscalId, input);
+            log.push({ at: now(), step: "PATCH config", result: "ok" });
+            return { action: "updated", log };
+        } catch (patchErr: any) {
+            log.push({ at: now(), step: "PATCH config", result: "error", detail: String(patchErr?.message || patchErr).slice(0, 300) });
+
+            if (isOpenApiNotRegisteredError(patchErr)) {
+                // Sandbox drift: config appeared in GET but PATCH says 404.
+                // Delete the stale entry and recreate.
+                log.push({ at: now(), step: "PATCH→drift", result: "skip", detail: "Sandbox drift rilevato, procedo con DELETE+CREATE" });
+                try {
+                    await deleteConfiguration(fiscalId);
+                    log.push({ at: now(), step: "DELETE (drift)", result: "ok" });
+                } catch (delErr: any) {
+                    log.push({ at: now(), step: "DELETE (drift)", result: "error", detail: String(delErr?.message || delErr).slice(0, 300) });
+                    // Continue anyway — CREATE might still work
+                }
+                try {
+                    await createConfiguration(input);
+                    log.push({ at: now(), step: "CREATE (post-drift)", result: "ok" });
+                    return { action: "recreated", log };
+                } catch (createErr: any) {
+                    log.push({ at: now(), step: "CREATE (post-drift)", result: "error", detail: String(createErr?.message || createErr).slice(0, 300) });
+                    throw createErr;
+                }
+            }
+            // PATCH failed for a non-404 reason — surface the error
+            throw patchErr;
+        }
+    }
+
+    // Step 3: Config doesn't exist → CREATE
+    try {
+        await createConfiguration(input);
+        log.push({ at: now(), step: "CREATE config", result: "ok" });
+        return { action: "created", log };
+    } catch (createErr: any) {
+        log.push({ at: now(), step: "CREATE config", result: "error", detail: String(createErr?.message || createErr).slice(0, 300) });
+
+        if (!isOpenApiAlreadyExistsError(createErr)) {
+            throw createErr;
+        }
+
+        // Step 4: "already exists" but GET said 404 → stale ghost entry.
+        // DELETE and recreate.
+        log.push({ at: now(), step: "CREATE→already_exists", result: "skip", detail: "P.IVA fantasma su OpenAPI, procedo con DELETE+CREATE" });
+
+        try {
+            await deleteConfiguration(fiscalId);
+            log.push({ at: now(), step: "DELETE (ghost)", result: "ok" });
+        } catch (delErr: any) {
+            log.push({ at: now(), step: "DELETE (ghost)", result: "error", detail: String(delErr?.message || delErr).slice(0, 300) });
+            // If DELETE also fails, the P.IVA is truly stuck. Surface a clear error.
+            throw new Error(
+                `Impossibile rimuovere la configurazione fantasma per ${fiscalId} su OpenAPI. ` +
+                `DELETE ha risposto: ${String(delErr?.message || delErr).slice(0, 200)}. ` +
+                `Contatta il supporto OpenAPI o usa una P.IVA diversa in sandbox.`
+            );
+        }
+
+        try {
+            await createConfiguration(input);
+            log.push({ at: now(), step: "CREATE (post-ghost)", result: "ok" });
+            return { action: "recreated", log };
+        } catch (finalErr: any) {
+            log.push({ at: now(), step: "CREATE (post-ghost)", result: "error", detail: String(finalErr?.message || finalErr).slice(0, 300) });
+            throw finalErr;
+        }
+    }
 }
 
 serve(async (req) => {
@@ -198,20 +298,18 @@ serve(async (req) => {
             .select("restaurant_id, openapi_fiscal_id, openapi_status, openapi_configured_at")
             .eq("restaurant_id", restaurantId)
             .maybeSingle();
-        // ONLY consider 'active' as truly configured. 'failed' / 'not_configured'
-        // mean OpenAPI doesn't really have the registration even if local DB
-        // remembers a fiscal_id from a past attempt.
         const hasOpenApiConfiguration = Boolean(
             existing?.openapi_fiscal_id &&
-            existing.openapi_status === "active"
+            (existing.openapi_status === "active" || existing.openapi_configured_at)
         );
 
         if (
             hasOpenApiConfiguration &&
-            existing.openapi_fiscal_id !== cleanVat
+            existing.openapi_fiscal_id !== cleanVat &&
+            (existing.openapi_status === "active" || existing.openapi_configured_at)
         ) {
             return json({
-                error: "Partita IVA già configurata su OpenAPI con un altro valore. Per cambiarla serve una nuova configurazione fiscale: contatta l'assistenza prima di emettere altri scontrini.",
+                error: "Partita IVA già configurata su OpenAPI. Per cambiarla serve una nuova configurazione fiscale: contatta l'assistenza prima di emettere altri scontrini.",
             }, 400);
         }
 
@@ -307,7 +405,7 @@ serve(async (req) => {
             });
         }
 
-        // --- Chiamata OpenAPI ---
+        // --- Chiamata OpenAPI (flusso robusto con retry e verifica) ---
         const callbackBase = buildWebhookUrl();
         const merchant_address = {
             ...merchantStreet,
@@ -330,8 +428,45 @@ serve(async (req) => {
                 callback_receipt_error_url: callbackBase || undefined,
             };
 
-            const remoteAction = await ensureOpenApiConfiguration(cleanVat, configurationInput);
+            // Step 1-4: Create or update the configuration with robust fallbacks
+            const { action: remoteAction, log: onboardLog } = await ensureOpenApiConfiguration(cleanVat, configurationInput);
 
+            // Step 5: POST-VERIFICATION — mandatory GET to confirm the
+            // configuration is actually usable for receipt issuance.
+            const verification = await verifyConfiguration(cleanVat);
+            onboardLog.push({
+                at: new Date().toISOString(),
+                step: "POST-VERIFY",
+                result: verification.ok ? "ok" : "error",
+                detail: verification.detail,
+            });
+
+            if (!verification.ok) {
+                // Configuration was created/updated but verification failed.
+                // Mark as failed so the user knows something is wrong.
+                console.error("[openapi-onboard] POST-VERIFICATION failed:", verification.detail);
+                await supabase
+                    .from("restaurant_fiscal_settings")
+                    .update({
+                        openapi_status: "failed",
+                        openapi_fiscal_id: cleanVat,
+                        openapi_last_error: JSON.stringify({
+                            type: "verification_failed",
+                            message: verification.detail,
+                            action: remoteAction,
+                            at: new Date().toISOString(),
+                        }),
+                        openapi_onboard_log: onboardLog,
+                    })
+                    .eq("restaurant_id", restaurantId);
+                return json({
+                    error: `Configurazione ${remoteAction === "created" ? "creata" : "aggiornata"} su OpenAPI, ma la verifica post-attivazione è fallita: ${verification.detail}. Riprova o contatta l'assistenza.`,
+                    detail: verification.detail,
+                    onboardLog,
+                }, 502);
+            }
+
+            // All good — mark as active
             const now = new Date();
             const expireAt = new Date(now.getTime() + 88 * 24 * 60 * 60 * 1000); // 88gg buffer
             await supabase
@@ -343,32 +478,66 @@ serve(async (req) => {
                     openapi_last_error: null,
                     ade_credentials_set_at: now.toISOString(),
                     ade_credentials_expire_at: expireAt.toISOString(),
+                    openapi_onboard_log: onboardLog,
                 })
                 .eq("restaurant_id", restaurantId);
+
+            const actionMessages: Record<string, string> = {
+                created: "Integrazione attivata e verificata. Gli scontrini fiscali saranno emessi automaticamente sui pagamenti Stripe.",
+                updated: "Credenziali aggiornate e verificate. L'emissione degli scontrini continua senza interruzioni.",
+                recreated: "Configurazione ricreata e verificata. Gli scontrini fiscali saranno emessi automaticamente sui pagamenti Stripe.",
+            };
 
             return json({
                 success: true,
                 openapiStatus: "active",
                 fiscalId: cleanVat,
                 adeCredentialsExpireAt: expireAt.toISOString(),
-                message: remoteAction === "created"
-                    ? "Integrazione creata su OpenAPI e verificata. Gli scontrini saranno emessi automaticamente sui pagamenti Stripe."
-                    : "Configurazione fiscale aggiornata su OpenAPI e verificata. Gli scontrini saranno emessi automaticamente sui pagamenti Stripe.",
+                verificationPassed: true,
+                message: actionMessages[remoteAction] || actionMessages.created,
             });
         } catch (apiErr: any) {
             console.error("[openapi-onboard] OpenAPI error:", apiErr);
             const errMsg = String(apiErr?.message || apiErr).slice(0, 500);
+
+            // Determine error type for structured error
+            let errorType = "unknown";
+            const errLower = errMsg.toLowerCase();
+            if (errLower.includes("already exists") || errLower.includes("111") || errLower.includes("410")) {
+                errorType = "already_exists";
+            } else if (errLower.includes("not found") || errLower.includes("424") || errLower.includes("404")) {
+                errorType = "not_found";
+            } else if (errLower.includes("password") || errLower.includes("pin") || errLower.includes("credential") || errLower.includes("auth")) {
+                errorType = "credentials";
+            } else if (errLower.includes("address") || errLower.includes("indirizzo")) {
+                errorType = "address";
+            }
+
             await supabase
                 .from("restaurant_fiscal_settings")
                 .update({
                     openapi_status: "failed",
-                    openapi_last_error: errMsg,
+                    openapi_last_error: JSON.stringify({
+                        type: errorType,
+                        message: errMsg,
+                        at: new Date().toISOString(),
+                    }),
                 })
                 .eq("restaurant_id", restaurantId);
+
+            // User-friendly error messages per type
+            const userMessages: Record<string, string> = {
+                already_exists: "La P.IVA risulta bloccata su OpenAPI. Il sistema ha provato a ricrearla automaticamente ma non è riuscito. Riprova tra qualche minuto o contatta l'assistenza.",
+                not_found: "La configurazione non è stata trovata su OpenAPI. Verifica P.IVA e credenziali AdE, poi riprova.",
+                credentials: "Le credenziali AdE non sono state accettate da OpenAPI. Controlla codice fiscale, password e PIN dell'Area Riservata dell'Agenzia delle Entrate.",
+                address: "L'indirizzo non è stato accettato da OpenAPI. Verifica via, numero civico, CAP, città e provincia.",
+                unknown: "OpenAPI non ha accettato l'attivazione. Verifica P.IVA e credenziali AdE, poi riprova.",
+            };
+
             return json({
-                error: "OpenAPI non ha accettato l'attivazione. Verifica P.IVA e credenziali AdE, poi riprova.",
+                error: userMessages[errorType] || userMessages.unknown,
+                errorType,
                 detail: errMsg,
-                hint: "In sandbox usa una P.IVA test non già usata in altre prove se OpenAPI segnala conflitti.",
             }, 502);
         }
     } catch (err: any) {
@@ -379,3 +548,4 @@ serve(async (req) => {
         });
     }
 });
+

@@ -195,6 +195,62 @@ export async function getConfiguration(fiscalId: string): Promise<{ raw: any } |
     return { raw: json };
 }
 
+/**
+ * Post-onboarding health check: GET the configuration and verify it is
+ * usable for receipt issuance. Returns a structured result with actionable
+ * diagnostics. Never throws — returns { ok: false, ... } on failure.
+ */
+export interface VerifyConfigurationResult {
+    ok: boolean;
+    exists: boolean;
+    receiptsEnabled: boolean;
+    fiscalIdMatch: boolean;
+    detail: string;
+    raw: any;
+}
+
+export async function verifyConfiguration(fiscalId: string): Promise<VerifyConfigurationResult> {
+    const fail = (detail: string, raw: any = null): VerifyConfigurationResult => ({
+        ok: false, exists: false, receiptsEnabled: false, fiscalIdMatch: false, detail, raw,
+    });
+    try {
+        const res = await openapiRequest(
+            `/IT-configurations/${encodeURIComponent(fiscalId)}`,
+            { method: "GET" }
+        );
+        if (res.status === 404) {
+            return fail("Configurazione non trovata su OpenAPI dopo l'attivazione");
+        }
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            return fail(`OpenAPI ha risposto ${res.status}: ${JSON.stringify(json).slice(0, 300)}`, json);
+        }
+        const data = json?.data ?? json;
+        const exists = true;
+        const receiptsEnabled = data?.receipts === true;
+        const remoteFiscalId = String(data?.fiscal_id || "");
+        const fiscalIdMatch = remoteFiscalId === fiscalId;
+
+        if (!receiptsEnabled) {
+            return {
+                ok: false, exists, receiptsEnabled, fiscalIdMatch,
+                detail: "La configurazione esiste ma l'emissione scontrini (receipts) risulta disabilitata su OpenAPI.",
+                raw: json,
+            };
+        }
+        if (!fiscalIdMatch) {
+            return {
+                ok: false, exists, receiptsEnabled, fiscalIdMatch,
+                detail: `Fiscal ID mismatch: atteso ${fiscalId}, trovato ${remoteFiscalId} su OpenAPI.`,
+                raw: json,
+            };
+        }
+        return { ok: true, exists, receiptsEnabled, fiscalIdMatch, detail: "OK", raw: json };
+    } catch (err: any) {
+        return fail(`Errore verifica: ${err?.message || err}`);
+    }
+}
+
 function receiptCallbacks(successUrl?: string, errorUrl?: string): Array<Record<string, unknown>> {
     const secret = getOpenApiWebhookSecret();
     const makeCallback = (url: string) => ({

@@ -106,6 +106,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const [savingPrefs, setSavingPrefs] = useState(false)
     const [testingReceipt, setTestingReceipt] = useState(false)
     const [verifying, setVerifying] = useState(false)
+    const [retryingReceiptId, setRetryingReceiptId] = useState<string | null>(null)
     const [setupOpen, setSetupOpen] = useState(false)
     const [credentialsOpen, setCredentialsOpen] = useState(false)
 
@@ -296,6 +297,23 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
         }
     }
 
+    async function handleRetryReceipt(receiptId: string) {
+        setRetryingReceiptId(receiptId)
+        try {
+            const result = await DatabaseService.retryFiscalReceipt(restaurantId, receiptId)
+            if (result?.success) {
+                toast.success('Scontrino riemesso con successo')
+            } else {
+                toast.error(result?.error || 'Retry non riuscito')
+            }
+            await loadRestaurant()
+        } catch (err: any) {
+            toast.error(err?.message || 'Errore retry scontrino')
+        } finally {
+            setRetryingReceiptId(null)
+        }
+    }
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -450,6 +468,24 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                 >
                                                     <Printer size={15} className="mr-1.5" />
                                                     Stampa
+                                                </Button>
+                                            </div>
+                                        )}
+                                        {receipt.openapi_status === 'failed' && (receipt.retry_count || 0) < 5 && (
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    disabled={retryingReceiptId === receipt.id}
+                                                    onClick={() => handleRetryReceipt(receipt.id)}
+                                                    className="h-8 bg-red-900/40 hover:bg-red-800/50 text-red-100 border border-red-500/30"
+                                                >
+                                                    <ArrowsClockwise
+                                                        size={15}
+                                                        className={`mr-1.5 ${retryingReceiptId === receipt.id ? 'animate-spin' : ''}`}
+                                                    />
+                                                    {retryingReceiptId === receipt.id ? 'Riprovando...' : 'Riprova'}
                                                 </Button>
                                             </div>
                                         )}
@@ -795,17 +831,18 @@ function StatusBanner({
         )
     }
     if (status === 'failed') {
-        const friendlyError = friendlyFiscalError(lastError)
+        const err = friendlyFiscalError(lastError)
         return (
             <div className="rounded-xl bg-red-500/10 border border-red-500/40 px-4 py-3 flex items-start gap-3">
                 <Warning size={20} className="text-red-400 mt-0.5 shrink-0" weight="fill" />
                 <div className="text-sm text-red-100">
-                    <div className="font-semibold">Attivazione fallita</div>
+                    <div className="font-semibold">{err.title}</div>
                     <div className="text-red-100/80 text-[13px] mt-1">
-                        {friendlyError}
+                        {err.message}
                     </div>
-                    <div className="text-red-100/60 text-[12px] mt-1">
-                        Ripremi “Attiva scontrino fiscale” dopo aver controllato i campi.
+                    <div className="text-red-100/60 text-[12px] mt-2 flex items-center gap-1.5">
+                        <ArrowsClockwise size={14} className="shrink-0" />
+                        {err.action}
                     </div>
                 </div>
             </div>
@@ -837,18 +874,65 @@ function StatusBanner({
     )
 }
 
-function friendlyFiscalError(raw?: string | null): string {
-    const text = String(raw || '').toLowerCase()
-    if (text.includes('not found or not registered') || text.includes('error":424')) {
-        return 'La configurazione sandbox OpenAPI era disallineata. Il sistema ora prova ad agganciarla o ricrearla automaticamente.'
+function friendlyFiscalError(raw?: string | null): { title: string; message: string; action: string } {
+    // Try to parse structured JSON error from the new backend
+    let errorType = 'unknown'
+    let errorMessage = ''
+    try {
+        const parsed = JSON.parse(raw || '')
+        if (parsed?.type) errorType = parsed.type
+        if (parsed?.message) errorMessage = parsed.message
+    } catch {
+        // Legacy plain-text error - parse with heuristics
+        errorMessage = String(raw || '')
+        const text = errorMessage.toLowerCase()
+        if (text.includes('already exists') || text.includes('error":111')) {
+            errorType = 'already_exists'
+        } else if (text.includes('not found') || text.includes('error":424')) {
+            errorType = 'not_found'
+        } else if (text.includes('password') || text.includes('pin') || text.includes('credential')) {
+            errorType = 'credentials'
+        } else if (text.includes('verification_failed')) {
+            errorType = 'verification_failed'
+        } else if (text.includes('address') || text.includes('indirizzo')) {
+            errorType = 'address'
+        }
     }
-    if (text.includes('already exists') || text.includes('error":111')) {
-        return 'Questa P.IVA risulta già presente su OpenAPI. Il sistema prova ad agganciarla automaticamente.'
+
+    const messages: Record<string, { title: string; message: string; action: string }> = {
+        already_exists: {
+            title: 'P.IVA bloccata su OpenAPI',
+            message: 'La P.IVA risulta occupata. Il sistema ha provato a ricreare la configurazione automaticamente ma non ci è riuscito.',
+            action: 'Riprova fra qualche minuto. Se il problema persiste, contatta l\'assistenza OpenAPI per sbloccare la P.IVA.',
+        },
+        not_found: {
+            title: 'Configurazione non trovata',
+            message: 'OpenAPI non ha trovato una configurazione per questa P.IVA.',
+            action: 'Verifica la P.IVA e riprova. Se hai cambiato ambiente (sandbox/produzione), ri-inserisci le credenziali.',
+        },
+        credentials: {
+            title: 'Credenziali AdE rifiutate',
+            message: 'Le credenziali dell\'Agenzia delle Entrate non sono state accettate da OpenAPI.',
+            action: 'Controlla il codice fiscale, la password e il PIN dell\'Area Riservata Agenzia Entrate e riprova.',
+        },
+        verification_failed: {
+            title: 'Verifica post-attivazione fallita',
+            message: errorMessage || 'La configurazione è stata creata ma la verifica finale non è andata a buon fine.',
+            action: 'Ripremi "Attiva scontrino fiscale" per ritentare. Se il problema persiste, contatta l\'assistenza.',
+        },
+        address: {
+            title: 'Indirizzo non accettato',
+            message: 'L\'indirizzo non è stato accettato da OpenAPI.',
+            action: 'Verifica via, numero civico, CAP, città e provincia. L\'indirizzo deve includere il civico (es. Via Roma 12).',
+        },
+        unknown: {
+            title: 'Attivazione fallita',
+            message: errorMessage || 'OpenAPI non ha accettato l\'attivazione.',
+            action: 'Controlla P.IVA, indirizzo e credenziali AdE, poi riprova.',
+        },
     }
-    if (text.includes('password') || text.includes('pin') || text.includes('credential')) {
-        return 'Le credenziali AdE non sono state accettate. Controlla codice fiscale, password e PIN.'
-    }
-    return 'OpenAPI non ha accettato l’attivazione. Controlla P.IVA, indirizzo e credenziali AdE.'
+
+    return messages[errorType] || messages.unknown
 }
 
 function fiscalReceiptStatusMeta(status: FiscalReceipt['openapi_status']) {

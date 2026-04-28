@@ -83,6 +83,9 @@ interface IssueRequestPayload {
     // Fattura B2B opzionale
     invoiceIssuing?: boolean;
     testReceipt?: boolean;
+
+    // Retry: riusa un record fiscal_receipts esistente in stato 'failed'
+    retryReceiptId?: string;
 }
 
 serve(async (req) => {
@@ -118,6 +121,7 @@ serve(async (req) => {
             customerLotteryCode,
             invoiceIssuing,
             testReceipt,
+            retryReceiptId,
         } = body;
 
         // --- Auth ---
@@ -132,11 +136,107 @@ serve(async (req) => {
 
         // --- Validazione minima ---
         if (!restaurantId) return json({ error: "restaurantId mancante" }, 400);
-        if (!Array.isArray(items) || items.length === 0) {
-            return json({ error: "items vuoti" }, 400);
-        }
         if (testReceipt && getOpenApiEnv() === "production") {
             return json({ error: "Lo scontrino di test è disponibile solo in ambiente sandbox OpenAPI." }, 400);
+        }
+
+        // ----------------------------------------------------------------
+        // RETRY PATH: reload items from existing failed receipt
+        // ----------------------------------------------------------------
+        if (retryReceiptId) {
+            const { data: failedRow } = await supabase
+                .from("fiscal_receipts")
+                .select("*")
+                .eq("id", retryReceiptId)
+                .eq("restaurant_id", restaurantId)
+                .maybeSingle();
+
+            if (!failedRow) {
+                return json({ error: "Scontrino da riprovare non trovato" }, 404);
+            }
+            if (failedRow.openapi_status !== "failed") {
+                return json({ error: `Scontrino in stato '${failedRow.openapi_status}': il retry è possibile solo per scontrini falliti.` }, 400);
+            }
+            if ((failedRow.retry_count || 0) >= 5) {
+                return json({ error: "Numero massimo di tentativi raggiunto (5). Verifica la configurazione fiscale e contatta l'assistenza." }, 400);
+            }
+
+            // Reload fiscal settings
+            const { data: retryFiscalSettings } = await supabase
+                .from("restaurant_fiscal_settings")
+                .select("openapi_fiscal_id, openapi_status, fiscal_receipts_enabled, default_vat_rate_code")
+                .eq("restaurant_id", restaurantId)
+                .maybeSingle();
+            if (!retryFiscalSettings?.fiscal_receipts_enabled || retryFiscalSettings.openapi_status !== "active" || !retryFiscalSettings.openapi_fiscal_id) {
+                return json({ error: "L'integrazione fiscale non è attiva. Completa prima l'onboarding." }, 400);
+            }
+
+            // Reset to pending
+            const retryLog = Array.isArray(failedRow.error_log) ? failedRow.error_log : [];
+            retryLog.push({ at: new Date().toISOString(), status: "manual_retry", source: "cashier" });
+            await supabase
+                .from("fiscal_receipts")
+                .update({
+                    openapi_status: "pending",
+                    error_log: retryLog,
+                })
+                .eq("id", retryReceiptId);
+
+            // Re-issue
+            try {
+                const retryItems = Array.isArray(failedRow.items) ? failedRow.items : [];
+                const result = await issueReceipt({
+                    fiscal_id: retryFiscalSettings.openapi_fiscal_id,
+                    items: retryItems,
+                    cash_payment_amount: Number(failedRow.cash_payment_amount) || 0,
+                    electronic_payment_amount: Number(failedRow.electronic_payment_amount) || 0,
+                    ticket_restaurant_payment_amount: Number(failedRow.ticket_restaurant_amount) || 0,
+                    ticket_restaurant_quantity: Number(failedRow.ticket_restaurant_quantity) || 0,
+                    discount: Number(failedRow.discount_amount) || 0,
+                    lottery_code: failedRow.customer_lottery_code || undefined,
+                    customer_tax_code: failedRow.customer_tax_code || undefined,
+                    idempotency_key: retryReceiptId,
+                });
+
+                await supabase
+                    .from("fiscal_receipts")
+                    .update({
+                        openapi_receipt_id: result.id,
+                        openapi_status: result.status === "ready" ? "ready" : "submitted",
+                        openapi_response: result.raw,
+                        submitted_at: new Date().toISOString(),
+                        ready_at: result.status === "ready" ? new Date().toISOString() : null,
+                        issued_via: "manual_retry",
+                    })
+                    .eq("id", retryReceiptId);
+
+                return json({
+                    success: true,
+                    receiptId: retryReceiptId,
+                    openapiReceiptId: result.id,
+                    openapiStatus: result.status,
+                    retried: true,
+                });
+            } catch (retryApiErr: any) {
+                const retryErrMsg = String(retryApiErr?.message || retryApiErr).slice(0, 500);
+                retryLog.push({ at: new Date().toISOString(), error: retryErrMsg, source: "manual_retry" });
+                await supabase
+                    .from("fiscal_receipts")
+                    .update({
+                        openapi_status: "failed",
+                        error_log: retryLog,
+                        retry_count: (failedRow.retry_count || 0) + 1,
+                    })
+                    .eq("id", retryReceiptId);
+                return json({ error: "Retry fallito. " + retryErrMsg, receiptId: retryReceiptId }, 502);
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // NORMAL PATH: new receipt issuance
+        // ----------------------------------------------------------------
+        if (!Array.isArray(items) || items.length === 0) {
+            return json({ error: "items vuoti" }, 400);
         }
 
         // --- Carica restaurant ---
