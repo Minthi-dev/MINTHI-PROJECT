@@ -1069,6 +1069,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [stripePaymentSplitCount, setStripePaymentSplitCount] = useState(1)
   const [stripePaymentSuccess, setStripePaymentSuccess] = useState(false)
   const [lastStripeSessionId, setLastStripeSessionId] = useState<string | null>(null)
+  const [lastVerifiedSessionPaidAmount, setLastVerifiedSessionPaidAmount] = useState<number | null>(null)
   const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
   const [printingReceipt, setPrintingReceipt] = useState(false)
@@ -1796,6 +1797,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           if (result.paid) {
             setStripePaymentSuccess(true)
             setLastStripeSessionId(stripeSessionId || null)
+            if (typeof result.newPaidAmount === 'number') setLastVerifiedSessionPaidAmount(result.newPaidAmount)
             setCustomerTab('payment')
             if (result.alreadyRegistered) {
               toast.success('Pagamento confermato!', { id: toastId, duration: 4000 })
@@ -1931,6 +1933,16 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     const paidAmount = activeSession?.paid_amount || 0;
     return Math.max(0, total - paidAmount);
   }, [billItems, copertoInfo, ayceInfo, activeSession])
+
+  const dineInReceiptState = useMemo(() => {
+    const sessionPaid = activeSession?.paid_amount || 0
+    const total = unpaidTotal + sessionPaid
+    const effectivePaid = Math.max(sessionPaid, lastVerifiedSessionPaidAmount || 0)
+    return {
+      ready: fiscalReceiptStatus === 'ready',
+      canDownload: effectivePaid > 0 && Math.max(0, total - effectivePaid) <= 0.01,
+    }
+  }, [activeSession?.paid_amount, fiscalReceiptStatus, lastVerifiedSessionPaidAmount, unpaidTotal])
 
   useEffect(() => {
     if (stripePaymentSuccess || fiscalReceiptStatus === 'ready') return
@@ -2118,6 +2130,57 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     } finally {
       setPrintingReceipt(false)
     }
+  }
+
+  const renderDineInReceiptActions = () => {
+    const ready = dineInReceiptState.ready
+    const canDownload = dineInReceiptState.canDownload
+    const message = ready
+      ? "Scontrino fiscale pronto e trasmesso all'Agenzia delle Entrate."
+      : canDownload
+        ? "Scontrino digitale in emissione. Se siamo negli ultimi minuti della giornata fiscale, il PDF può arrivare subito dopo mezzanotte."
+        : "Per il tavolo viene emesso uno scontrino unico quando il conto è completamente saldato."
+
+    return (
+      <div
+        className="p-3 rounded-xl text-left mb-4"
+        style={{
+          backgroundColor: canDownload ? 'rgba(16,185,129,0.08)' : theme.inputBg,
+          border: `1px solid ${canDownload ? 'rgba(16,185,129,0.35)' : theme.inputBorder}`,
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <Receipt size={20} weight="fill" className="mt-0.5 shrink-0" style={{ color: canDownload ? '#10B981' : theme.textMuted }} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold" style={{ color: canDownload ? '#A7F3D0' : theme.textPrimary }}>
+              Scontrino fiscale
+            </p>
+            <p className="text-[11px] leading-relaxed mt-0.5 mb-3" style={{ color: canDownload ? '#D1FAE5' : theme.textMuted }}>
+              {message}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                onClick={openDineInFiscalReceipt}
+                disabled={!canDownload || downloadingReceipt || printingReceipt}
+                className="h-12 rounded-xl font-bold bg-emerald-500 hover:bg-emerald-400 text-black disabled:opacity-50"
+              >
+                <DownloadSimple size={18} className="mr-2" weight="bold" />
+                {downloadingReceipt ? 'Apertura...' : 'Scarica scontrino'}
+              </Button>
+              <Button
+                onClick={printDineInFiscalReceipt}
+                disabled={!ready || downloadingReceipt || printingReceipt}
+                className="h-12 rounded-xl font-bold disabled:opacity-50"
+                style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}`, color: theme.textPrimary }}
+              >
+                <Printer size={18} className="mr-2" weight="bold" />
+                {printingReceipt ? 'Stampa...' : 'Stampa'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // RENDER HELPERS - LUXURY THEME
@@ -2877,39 +2940,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   Ti auguriamo una buona serata!
                 </p>
                 <div className="pt-4 w-full max-w-xs space-y-3">
-                  {fiscalReceiptStatus === 'ready' ? (
-                    <div className="grid grid-cols-2 gap-2">
-                      <Button
-                        onClick={openDineInFiscalReceipt}
-                        disabled={downloadingReceipt || printingReceipt}
-                        className="h-12 rounded-xl font-bold shadow-lg bg-emerald-500 hover:bg-emerald-400 text-black"
-                      >
-                        <DownloadSimple size={18} className="mr-2" weight="bold" />
-                        {downloadingReceipt ? 'Apertura…' : 'Scarica PDF'}
-                      </Button>
-                      <Button
-                        onClick={printDineInFiscalReceipt}
-                        disabled={downloadingReceipt || printingReceipt}
-                        className="h-12 rounded-xl font-bold shadow-lg"
-                        style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}`, color: theme.textPrimary }}
-                      >
-                        <Printer size={18} className="mr-2" weight="bold" />
-                        {printingReceipt ? 'Stampa…' : 'Stampa PDF'}
-                      </Button>
-                    </div>
-                  ) : fiscalReceiptStatus === 'pending' ? (
-                    <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
-                      <p className="text-[11px]" style={{ color: theme.textMuted }}>
-                        Stiamo preparando lo scontrino digitale. Per il tavolo viene emesso un unico documento quando il conto è saldato; se il pagamento avviene negli ultimi minuti della giornata fiscale, il PDF può arrivare subito dopo mezzanotte.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-3 rounded-xl text-center mb-4" style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
-                      <p className="text-[11px]" style={{ color: theme.textMuted }}>
-                        Pagamento confermato. Lo scontrino digitale del tavolo sarà disponibile qui quando il conto sarà completamente saldato.
-                      </p>
-                    </div>
-                  )}
+                  {renderDineInReceiptActions()}
 
                   <Button
                     onClick={() => {
@@ -3120,31 +3151,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 	                    <p className="text-xl font-bold" style={{ color: '#10B981' }}>Conto saldato</p>
 	                    <p className="text-sm mt-1" style={{ color: theme.textMuted }}>Tutti gli ordini sono stati pagati.</p>
 	                    <div className="w-full max-w-sm mt-5">
-	                      {fiscalReceiptStatus === 'ready' ? (
-	                        <div className="grid grid-cols-2 gap-2">
-	                          <Button
-	                            onClick={openDineInFiscalReceipt}
-	                            disabled={downloadingReceipt || printingReceipt}
-	                            className="h-12 rounded-xl font-bold bg-emerald-500 hover:bg-emerald-400 text-black"
-	                          >
-	                            <DownloadSimple size={18} className="mr-2" weight="bold" />
-	                            {downloadingReceipt ? 'Apertura…' : 'Scarica PDF'}
-	                          </Button>
-	                          <Button
-	                            onClick={printDineInFiscalReceipt}
-	                            disabled={downloadingReceipt || printingReceipt}
-	                            className="h-12 rounded-xl font-bold"
-	                            style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}`, color: theme.textPrimary }}
-	                          >
-	                            <Printer size={18} className="mr-2" weight="bold" />
-	                            {printingReceipt ? 'Stampa…' : 'Stampa PDF'}
-	                          </Button>
-	                        </div>
-	                      ) : fiscalReceiptStatus === 'pending' ? (
-	                        <p className="text-xs leading-relaxed px-3 py-2 rounded-xl" style={{ color: theme.textMuted, backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}` }}>
-	                          Scontrino digitale in emissione. Se siamo negli ultimi minuti della giornata fiscale, il PDF può arrivare subito dopo mezzanotte.
-	                        </p>
-	                      ) : null}
+	                      {renderDineInReceiptActions()}
 	                    </div>
 	                  </div>
                 ) : (

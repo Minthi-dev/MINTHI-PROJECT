@@ -215,6 +215,8 @@ export default function TakeawayOrderStatus() {
     const isClosed = order.status === 'PICKED_UP' || order.status === 'PAID' || order.status === 'CANCELLED'
     const unpaid = Math.max(0, Number(order.total_amount) - Number(order.paid_amount))
     const requiresOnlinePayment = Boolean(order.takeaway_require_stripe)
+    const isPaid = unpaid < 0.01 && order.status !== 'CANCELLED'
+    const receiptReady = fiscalReceiptStatus === 'ready'
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white p-4 flex items-start justify-center">
@@ -287,45 +289,41 @@ export default function TakeawayOrderStatus() {
                     )}
                 </Card>
 
-                {/* Fiscal receipt download — only when fiscal_receipts_enabled and ready */}
-                {fiscalReceiptStatus !== 'unknown' && Number(order.paid_amount) > 0 && (
-                    <Card className="bg-emerald-500/5 border-emerald-500/30 p-4">
+                {/* Fiscal receipt download */}
+                {isPaid && (
+                    <Card className={`${receiptReady ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-amber-500/5 border-amber-500/30'} p-4`}>
                         <div className="flex items-start gap-3">
-                            <Receipt size={22} className="text-emerald-400 mt-0.5 shrink-0" weight="fill" />
+                            <Receipt size={22} className={`${receiptReady ? 'text-emerald-400' : 'text-amber-400'} mt-0.5 shrink-0`} weight="fill" />
                             <div className="flex-1 min-w-0">
-                                <div className="text-sm font-semibold text-emerald-200">Scontrino fiscale</div>
-                                {fiscalReceiptStatus === 'ready' ? (
-                                    <>
-                                        <div className="text-xs text-emerald-100/70 mt-0.5 mb-3">
-                                            Trasmesso all'Agenzia delle Entrate. Scaricalo per i tuoi documenti.
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <Button
-                                                onClick={handleDownloadReceipt}
-                                                disabled={downloadingReceipt || printingReceipt}
-                                                size="sm"
-                                                className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold"
-                                            >
-                                                <DownloadSimple size={16} className="mr-2" weight="bold" />
-                                                {downloadingReceipt ? 'Apertura…' : 'Scarica'}
-                                            </Button>
-                                            <Button
-                                                onClick={handlePrintReceipt}
-                                                disabled={downloadingReceipt || printingReceipt}
-                                                size="sm"
-                                                variant="secondary"
-                                                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10 font-semibold"
-                                            >
-                                                <Printer size={16} className="mr-2" weight="bold" />
-                                                {printingReceipt ? 'Stampa…' : 'Stampa'}
-                                            </Button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="text-xs text-emerald-100/70 mt-0.5">
-                                        Stiamo emettendo lo scontrino digitale. Se il pagamento arriva negli ultimi minuti della giornata fiscale, il PDF può essere disponibile subito dopo mezzanotte.
-                                    </div>
-                                )}
+                                <div className={`text-sm font-semibold ${receiptReady ? 'text-emerald-200' : 'text-amber-200'}`}>
+                                    Scontrino fiscale
+                                </div>
+                                <div className={`text-xs mt-0.5 mb-3 ${receiptReady ? 'text-emerald-100/70' : 'text-amber-100/75'}`}>
+                                    {receiptReady
+                                        ? "Trasmesso all'Agenzia delle Entrate. Scaricalo per i tuoi documenti."
+                                        : "In emissione. Se il pagamento arriva negli ultimi minuti della giornata fiscale, il PDF può essere disponibile subito dopo mezzanotte."}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                        onClick={handleDownloadReceipt}
+                                        disabled={downloadingReceipt || printingReceipt}
+                                        size="sm"
+                                        className={`${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-amber-500 hover:bg-amber-400'} text-black font-semibold`}
+                                    >
+                                        <DownloadSimple size={16} className="mr-2" weight="bold" />
+                                        {downloadingReceipt ? 'Apertura...' : 'Scarica'}
+                                    </Button>
+                                    <Button
+                                        onClick={handlePrintReceipt}
+                                        disabled={!receiptReady || downloadingReceipt || printingReceipt}
+                                        size="sm"
+                                        variant="secondary"
+                                        className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10 font-semibold disabled:opacity-50"
+                                    >
+                                        <Printer size={16} className="mr-2" weight="bold" />
+                                        {printingReceipt ? 'Stampa...' : 'Stampa'}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     </Card>

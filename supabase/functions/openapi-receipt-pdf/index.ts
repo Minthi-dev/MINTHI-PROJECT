@@ -86,7 +86,7 @@ serve(async (req) => {
             // Path 1a: takeaway customer with pickup code in URL
             const { data: order } = await supabase
                 .from("orders")
-                .select("id")
+                .select("id, payments")
                 .eq("restaurant_id", restaurantId)
                 .eq("pickup_code", pickupCode)
                 .eq("order_type", "takeaway")
@@ -104,6 +104,9 @@ serve(async (req) => {
                     .maybeSingle()
                 : { data: null };
             if (stripeSessionId) candidateJobKeys.push(`stripe:${restaurantId}:${stripeSessionId}`);
+            for (const id of extractStripeSessionIds(order.payments)) {
+                candidateJobKeys.push(`stripe:${restaurantId}:${id}`);
+            }
             candidateJobKeys.push(`order:${restaurantId}:${order.id}:auto_takeaway_stripe`);
             if (receiptByStripe) {
                 row = receiptByStripe;
@@ -190,9 +193,25 @@ serve(async (req) => {
             if (probeOnly) {
                 return json({
                     ready: false,
-                    unavailable: true,
-                    openapiStatus: "not_found",
+                    ...(await isFiscalReceiptIntegrationActive(restaurantId)
+                        ? {
+                            pending: true,
+                            openapiStatus: "pending",
+                            message: "Lo scontrino è in emissione. Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte.",
+                        }
+                        : {
+                            unavailable: true,
+                            openapiStatus: "not_found",
+                        }),
                 });
+            }
+            if (await isFiscalReceiptIntegrationActive(restaurantId)) {
+                return json({
+                    ready: false,
+                    pending: true,
+                    openapiStatus: "pending",
+                    message: "Lo scontrino è in emissione. Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte.",
+                }, 202);
             }
             return json({ error: "Scontrino non trovato per questo ordine" }, 404);
         }
@@ -311,4 +330,30 @@ function normalizeOpenApiStatus(status: unknown): string {
     if (value === "new") return "submitted";
     if (["submitted", "ready", "failed", "voided", "retry"].includes(value)) return value;
     return "";
+}
+
+function extractStripeSessionIds(payments: unknown): string[] {
+    if (!Array.isArray(payments)) return [];
+    const ids = new Set<string>();
+    for (const payment of payments) {
+        if (!payment || typeof payment !== "object") continue;
+        const p = payment as Record<string, unknown>;
+        const direct = typeof p.stripeSessionId === "string" ? p.stripeSessionId.trim() : "";
+        if (direct) ids.add(direct);
+        const label = typeof p.label === "string" ? p.label : "";
+        const match = label.match(/\[(cs_[A-Za-z0-9_]+)\]$/);
+        if (match?.[1]) ids.add(match[1]);
+    }
+    return [...ids];
+}
+
+async function isFiscalReceiptIntegrationActive(restaurantId: string): Promise<boolean> {
+    const { data } = await supabase
+        .from("restaurant_fiscal_settings")
+        .select("fiscal_receipts_enabled, openapi_status, openapi_fiscal_id")
+        .eq("restaurant_id", restaurantId)
+        .maybeSingle();
+    return data?.fiscal_receipts_enabled === true
+        && data?.openapi_status === "active"
+        && !!data?.openapi_fiscal_id;
 }
