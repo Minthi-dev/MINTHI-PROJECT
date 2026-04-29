@@ -152,6 +152,10 @@ export async function generateFiscalReceiptPdf(params: PdfContext): Promise<Uint
         drawText(`Transazione AdE: ${cleanText(data.transaction_id)}`, MARGIN_X + 10, y, 9, regular, muted);
         y -= 14;
     }
+    if (data.fiscal_serial) {
+        drawText(`Matricola: ${cleanText(data.fiscal_serial)}`, MARGIN_X + 10, y, 9, regular, muted);
+        y -= 14;
+    }
     if (receipt.openapi_receipt_id) {
         drawText(`ID OpenAPI: ${cleanText(receipt.openapi_receipt_id)}`, MARGIN_X + 10, y, 9, regular, muted);
         y -= 14;
