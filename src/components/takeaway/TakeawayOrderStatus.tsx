@@ -90,7 +90,7 @@ export default function TakeawayOrderStatus() {
             }
         }
         fetchOrder()
-        const poll = setInterval(fetchOrder, 10000)
+        const poll = setInterval(fetchOrder, 30000)
 
         // Realtime subscription on orders table (read-only for this order id once known)
         // We re-subscribe when order.id arrives.
@@ -312,9 +312,9 @@ export default function TakeawayOrderStatus() {
                                 <div>
                                     <Button
                                         onClick={handleDownloadReceipt}
-                                        disabled={downloadingReceipt}
+                                        disabled={downloadingReceipt || !receiptReady}
                                         size="sm"
-                                        className={`${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-amber-500 hover:bg-amber-400'} text-black font-semibold w-full`}
+                                        className={`${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-amber-500 hover:bg-amber-400 opacity-50 cursor-not-allowed'} text-black font-semibold w-full`}
                                     >
                                         <DownloadSimple size={16} className="mr-2" weight="bold" />
                                         {downloadingReceipt ? 'Apertura...' : 'Scarica'}
