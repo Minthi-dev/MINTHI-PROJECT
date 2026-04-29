@@ -301,27 +301,23 @@ export default function TakeawayOrderStatus() {
                                 <div className={`text-xs mt-0.5 mb-3 ${receiptReady ? 'text-emerald-100/70' : 'text-amber-100/75'}`}>
                                     {receiptReady
                                         ? "Trasmesso all'Agenzia delle Entrate. Scaricalo per i tuoi documenti."
-                                        : "In emissione. Se il pagamento arriva negli ultimi minuti della giornata fiscale, il PDF può essere disponibile subito dopo mezzanotte."}
+                                        : (() => {
+                                            const d = new Date();
+                                            const h = parseInt(d.toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', hour12: false }));
+                                            const m = parseInt(d.toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', minute: '2-digit' }));
+                                            const isLate = h === 23 && m >= 45;
+                                            return "In emissione." + (isLate ? " Se il pagamento arriva negli ultimi minuti della giornata fiscale, il PDF può essere disponibile subito dopo mezzanotte." : "");
+                                        })()}
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
+                                <div>
                                     <Button
                                         onClick={handleDownloadReceipt}
-                                        disabled={downloadingReceipt || printingReceipt}
+                                        disabled={downloadingReceipt}
                                         size="sm"
-                                        className={`${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-amber-500 hover:bg-amber-400'} text-black font-semibold`}
+                                        className={`${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-amber-500 hover:bg-amber-400'} text-black font-semibold w-full`}
                                     >
                                         <DownloadSimple size={16} className="mr-2" weight="bold" />
                                         {downloadingReceipt ? 'Apertura...' : 'Scarica'}
-                                    </Button>
-                                    <Button
-                                        onClick={handlePrintReceipt}
-                                        disabled={!receiptReady || downloadingReceipt || printingReceipt}
-                                        size="sm"
-                                        variant="secondary"
-                                        className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10 font-semibold disabled:opacity-50"
-                                    >
-                                        <Printer size={16} className="mr-2" weight="bold" />
-                                        {printingReceipt ? 'Stampa...' : 'Stampa'}
                                     </Button>
                                 </div>
                             </div>

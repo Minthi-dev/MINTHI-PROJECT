@@ -109,6 +109,8 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const [retryingReceiptId, setRetryingReceiptId] = useState<string | null>(null)
     const [setupOpen, setSetupOpen] = useState(false)
     const [credentialsOpen, setCredentialsOpen] = useState(false)
+    const [showReceipts, setShowReceipts] = useState(false)
+    const [receiptsDateFilter, setReceiptsDateFilter] = useState('')
 
     const [saving, setSaving] = useState(false)
     const [stats, setStats] = useState<{ sent_count: number; failed_count: number; voided_count: number; revenue_total: number } | null>(null)
@@ -401,99 +403,109 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
 
             {isActive && (
                 <section>
-                    <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
-                        <Receipt size={18} className="opacity-70" />
-                        Ultimi scontrini
-                    </h3>
-                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 overflow-hidden divide-y divide-white/5">
-                        {recentReceipts.length === 0 ? (
-                            <div className="px-4 py-4 text-[13px] text-zinc-500">
-                                Nessuno scontrino emesso finora.
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-[15px] font-bold text-white px-1 tracking-wide uppercase flex items-center gap-2">
+                            <Receipt size={18} className="opacity-70" />
+                            Archivio Scontrini
+                        </h3>
+                        <Button 
+                            variant="secondary" 
+                            size="sm"
+                            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10 text-xs h-7"
+                            onClick={() => setShowReceipts(!showReceipts)}
+                        >
+                            {showReceipts ? 'Nascondi' : 'Mostra'}
+                        </Button>
+                    </div>
+                    
+                    {showReceipts && (
+                        <div className="rounded-xl bg-zinc-900/60 border border-white/10 overflow-hidden flex flex-col">
+                            <div className="p-3 border-b border-white/5 bg-black/20 flex gap-2 items-center">
+                                <Label className="text-xs text-zinc-400">Filtra per data:</Label>
+                                <Input 
+                                    type="date" 
+                                    value={receiptsDateFilter} 
+                                    onChange={(e) => setReceiptsDateFilter(e.target.value)}
+                                    className="h-7 text-xs bg-black/40 border-white/10 w-auto"
+                                />
+                                {receiptsDateFilter && (
+                                    <Button variant="ghost" size="sm" className="h-7 text-xs text-zinc-400 px-2" onClick={() => setReceiptsDateFilter('')}>Reset</Button>
+                                )}
                             </div>
-                        ) : recentReceipts.map(receipt => {
-                            const meta = fiscalReceiptStatusMeta(receipt.openapi_status)
-                            const emailMessage = receipt.customer_email
-                                ? receipt.customer_email_sent_at
-                                    ? 'Email inviata al cliente'
-                                    : receipt.customer_email_error
-                                        ? `Email non inviata: ${receipt.customer_email_error}`
-                                        : 'Email in attesa'
-                                : 'Email cliente assente'
-                            return (
-                                <div key={receipt.id} className="px-4 py-3">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-[14px] font-semibold text-white">
-                                                    {receiptPrimaryLabel(receipt)}
-                                                </span>
-                                                <span className={`text-[11px] px-2 py-0.5 rounded-full border ${meta.className}`}>
+                            <div className="divide-y divide-white/5 max-h-[400px] overflow-y-auto">
+                                {recentReceipts.filter(r => !receiptsDateFilter || (r.created_at && r.created_at.startsWith(receiptsDateFilter))).length === 0 ? (
+                                    <div className="px-4 py-4 text-[13px] text-zinc-500">
+                                        Nessuno scontrino trovato.
+                                    </div>
+                                ) : recentReceipts.filter(r => !receiptsDateFilter || (r.created_at && r.created_at.startsWith(receiptsDateFilter))).map(receipt => {
+                                    const meta = fiscalReceiptStatusMeta(receipt.openapi_status)
+                                    const emailMessage = receipt.customer_email
+                                        ? receipt.customer_email_sent_at
+                                            ? 'Inviata'
+                                            : receipt.customer_email_error
+                                                ? 'Errore'
+                                                : 'Attesa'
+                                        : 'No email'
+                                    return (
+                                        <div key={receipt.id} className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-white/5 transition-colors">
+                                            <div className="min-w-0 flex-1 flex items-center gap-3">
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${meta.className}`}>
                                                     {meta.label}
                                                 </span>
+                                                <div className="text-[12px] font-medium text-zinc-200 truncate">
+                                                    {receiptPrimaryLabel(receipt)}
+                                                </div>
+                                                <div className="text-[11px] text-zinc-500 hidden sm:flex items-center gap-2">
+                                                    <span>{formatEuro(receipt.total_amount)}</span>
+                                                    <span>·</span>
+                                                    <span>{formatReceiptDate(receipt.created_at)}</span>
+                                                    <span>·</span>
+                                                    <span className="flex items-center gap-1">
+                                                        <EnvelopeSimple size={11} /> {emailMessage}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <div className="text-[12px] text-zinc-400 mt-1 flex items-center gap-2 flex-wrap">
-                                                <span>{formatEuro(receipt.total_amount)}</span>
-                                                <span>·</span>
-                                                <span>{formatReceiptDate(receipt.created_at)}</span>
-                                                <span>·</span>
-                                                <span className="inline-flex items-center gap-1">
-                                                    <EnvelopeSimple size={13} />
-                                                    {emailMessage}
-                                                </span>
-                                            </div>
-                                            {receipt.error_log && receipt.error_log.length > 0 && (
-                                                <div className="mt-1 text-[11px] text-red-300/90 line-clamp-2">
-                                                    {receipt.error_log[receipt.error_log.length - 1]?.error}
+                                            {receipt.openapi_status === 'ready' && (
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        onClick={() => handleReceiptPdf(receipt, 'download')}
+                                                        className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
+                                                        title="Scarica PDF"
+                                                    >
+                                                        <DownloadSimple size={14} />
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        onClick={() => handleReceiptPdf(receipt, 'print')}
+                                                        className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
+                                                        title="Stampa"
+                                                    >
+                                                        <Printer size={14} />
+                                                    </Button>
+                                                </div>
+                                            )}
+                                            {receipt.openapi_status === 'failed' && (receipt.retry_count || 0) < 5 && (
+                                                <div className="shrink-0">
+                                                    <Button
+                                                        type="button"
+                                                        onClick={() => handleRetryReceipt(receipt.id)}
+                                                        disabled={retryingReceiptId === receipt.id}
+                                                        className="h-6 text-[10px] px-2 bg-red-900/40 hover:bg-red-800/50 text-red-100 border border-red-500/30"
+                                                    >
+                                                        <ArrowsClockwise size={12} className={`mr-1 ${retryingReceiptId === receipt.id ? 'animate-spin' : ''}`} />
+                                                        Riprova
+                                                    </Button>
                                                 </div>
                                             )}
                                         </div>
-                                        {receipt.openapi_status === 'ready' && (
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    onClick={() => handleReceiptPdf(receipt, 'download')}
-                                                    className="h-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
-                                                >
-                                                    <DownloadSimple size={15} className="mr-1.5" />
-                                                    PDF
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    onClick={() => handleReceiptPdf(receipt, 'print')}
-                                                    className="h-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
-                                                >
-                                                    <Printer size={15} className="mr-1.5" />
-                                                    Stampa
-                                                </Button>
-                                            </div>
-                                        )}
-                                        {receipt.openapi_status === 'failed' && (receipt.retry_count || 0) < 5 && (
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    disabled={retryingReceiptId === receipt.id}
-                                                    onClick={() => handleRetryReceipt(receipt.id)}
-                                                    className="h-8 bg-red-900/40 hover:bg-red-800/50 text-red-100 border border-red-500/30"
-                                                >
-                                                    <ArrowsClockwise
-                                                        size={15}
-                                                        className={`mr-1.5 ${retryingReceiptId === receipt.id ? 'animate-spin' : ''}`}
-                                                    />
-                                                    {retryingReceiptId === receipt.id ? 'Riprovando...' : 'Riprova'}
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </section>
             )}
 

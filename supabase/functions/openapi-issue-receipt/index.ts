@@ -287,17 +287,26 @@ serve(async (req) => {
 
         const { data: existingByKey } = await supabase
             .from("fiscal_receipts")
-            .select("id, openapi_receipt_id, openapi_status")
+            .select("id, openapi_receipt_id, openapi_status, retry_count")
             .eq("idempotency_key", idempotencyKey)
             .maybeSingle();
+
+        let receiptRowId: string | undefined;
+        let isAutoRetry = false;
+
         if (existingByKey) {
-            return json({
-                success: true,
-                alreadyIssued: true,
-                receiptId: existingByKey.id,
-                openapiReceiptId: existingByKey.openapi_receipt_id,
-                openapiStatus: existingByKey.openapi_status,
-            });
+            if (existingByKey.openapi_status === "failed" && isInternal && (existingByKey.retry_count || 0) < 5) {
+                isAutoRetry = true;
+                receiptRowId = existingByKey.id;
+            } else {
+                return json({
+                    success: true,
+                    alreadyIssued: true,
+                    receiptId: existingByKey.id,
+                    openapiReceiptId: existingByKey.openapi_receipt_id,
+                    openapiStatus: existingByKey.openapi_status,
+                });
+            }
         }
 
         // 1) Se per stesso stripe_session_id esiste già scontrino non-failed → skip
@@ -376,7 +385,7 @@ serve(async (req) => {
         }, 0);
         const itemsTotal = Math.round(grossSum * 100) / 100;
         const paidTotal = Math.round(
-            (Number(cashAmount) + Number(electronicAmount) + Number(ticketRestaurantAmount) - Number(discount)) * 100
+            (Number(cashAmount) + Number(electronicAmount) + Number(ticketRestaurantAmount) + Number(discount)) * 100
         ) / 100;
 
         if (Math.abs(paidTotal - itemsTotal) > 0.05) {
@@ -393,56 +402,73 @@ serve(async (req) => {
             }, 400);
         }
 
-        // --- Insert pending row ---
-        const { data: pendingRow, error: insErr } = await supabase
-            .from("fiscal_receipts")
-            .insert({
-                restaurant_id: restaurantId,
-                order_id: orderId || null,
-                table_session_id: tableSessionId || null,
-                stripe_session_id: stripeSessionId || null,
-                stripe_payment_intent_id: stripePaymentIntentId || null,
-                stripe_payment_trace: stripePaymentTrace || null,
-                idempotency_key: idempotencyKey,
-                openapi_status: "pending",
-                items: receiptItems,
-                cash_payment_amount: round2(cashAmount),
-                electronic_payment_amount: round2(electronicAmount),
-                ticket_restaurant_amount: round2(ticketRestaurantAmount),
-                ticket_restaurant_quantity: Number(ticketRestaurantQuantity) || 0,
-                discount_amount: round2(discount),
-                total_amount: itemsTotal,
-                customer_email: cleanCustomerEmail || null,
-                customer_tax_code: cleanCustomerTaxCode || null,
-                customer_lottery_code: cleanCustomerLotteryCode || null,
-                issued_by_user_id: !isInternal ? userId : null,
-                issued_via: issuedVia,
-            })
-            .select("id")
-            .single();
+        // --- Insert pending row or Update for Auto-Retry ---
+        if (isAutoRetry && receiptRowId) {
+            const { data: currentFailed } = await supabase
+                .from("fiscal_receipts")
+                .select("error_log")
+                .eq("id", receiptRowId)
+                .single();
+            const retryLog = Array.isArray(currentFailed?.error_log) ? currentFailed!.error_log : [];
+            retryLog.push({ at: new Date().toISOString(), status: "auto_webhook_retry", source: "stripe_webhook" });
 
-        if (insErr || !pendingRow) {
-            console.error("[openapi-issue] insert pending failed:", insErr);
-            if ((insErr as any)?.code === "23505") {
-                const { data: existing } = await supabase
-                    .from("fiscal_receipts")
-                    .select("id, openapi_receipt_id, openapi_status")
-                    .eq("idempotency_key", idempotencyKey)
-                    .maybeSingle();
-                if (existing) {
-                    return json({
-                        success: true,
-                        alreadyIssued: true,
-                        receiptId: existing.id,
-                        openapiReceiptId: existing.openapi_receipt_id,
-                        openapiStatus: existing.openapi_status,
-                    });
+            await supabase
+                .from("fiscal_receipts")
+                .update({
+                    openapi_status: "pending",
+                    error_log: retryLog,
+                })
+                .eq("id", receiptRowId);
+        } else {
+            const { data: pendingRow, error: insErr } = await supabase
+                .from("fiscal_receipts")
+                .insert({
+                    restaurant_id: restaurantId,
+                    order_id: orderId || null,
+                    table_session_id: tableSessionId || null,
+                    stripe_session_id: stripeSessionId || null,
+                    stripe_payment_intent_id: stripePaymentIntentId || null,
+                    stripe_payment_trace: stripePaymentTrace || null,
+                    idempotency_key: idempotencyKey,
+                    openapi_status: "pending",
+                    items: receiptItems,
+                    cash_payment_amount: round2(cashAmount),
+                    electronic_payment_amount: round2(electronicAmount),
+                    ticket_restaurant_amount: round2(ticketRestaurantAmount),
+                    ticket_restaurant_quantity: Number(ticketRestaurantQuantity) || 0,
+                    discount_amount: round2(discount),
+                    total_amount: itemsTotal,
+                    customer_email: cleanCustomerEmail || null,
+                    customer_tax_code: cleanCustomerTaxCode || null,
+                    customer_lottery_code: cleanCustomerLotteryCode || null,
+                    issued_by_user_id: !isInternal ? userId : null,
+                    issued_via: issuedVia,
+                })
+                .select("id")
+                .single();
+
+            if (insErr || !pendingRow) {
+                console.error("[openapi-issue] insert pending failed:", insErr);
+                if ((insErr as any)?.code === "23505") {
+                    const { data: existing } = await supabase
+                        .from("fiscal_receipts")
+                        .select("id, openapi_receipt_id, openapi_status")
+                        .eq("idempotency_key", idempotencyKey)
+                        .maybeSingle();
+                    if (existing) {
+                        return json({
+                            success: true,
+                            alreadyIssued: true,
+                            receiptId: existing.id,
+                            openapiReceiptId: existing.openapi_receipt_id,
+                            openapiStatus: existing.openapi_status,
+                        });
+                    }
                 }
+                return json({ error: "Errore creazione record scontrino" }, 500);
             }
-            return json({ error: "Errore creazione record scontrino" }, 500);
+            receiptRowId = pendingRow.id;
         }
-
-        const receiptRowId = pendingRow.id;
 
         // --- Chiamata OpenAPI ---
         try {

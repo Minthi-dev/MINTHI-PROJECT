@@ -25,6 +25,16 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import { fetchReceipt, fetchReceiptPdf } from "../_shared/openapi.ts";
 
+function getPendingMessage(baseMsg: string): string {
+    const d = new Date();
+    // Using simple UTC offset logic for Europe/Rome to avoid heavy Intl calls on edge if possible,
+    // but Intl is supported in Deno.
+    const h = parseInt(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'Europe/Rome' }).format(d));
+    const m = parseInt(new Intl.DateTimeFormat('en-US', { minute: 'numeric', timeZone: 'Europe/Rome' }).format(d));
+    const isLate = h === 23 && m >= 45;
+    return baseMsg + (isLate ? " Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte." : "");
+}
+
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -186,7 +196,7 @@ serve(async (req) => {
                         openapiStatus: job.status,
                         message: dead
                             ? "Lo scontrino non è stato emesso automaticamente. Il ristorante può riprovare dalla dashboard."
-                            : "Lo scontrino è in emissione. Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte.",
+                            : getPendingMessage("Lo scontrino è in emissione."),
                     });
                 }
             }
@@ -197,7 +207,7 @@ serve(async (req) => {
                         ? {
                             pending: true,
                             openapiStatus: "pending",
-                            message: "Lo scontrino è in emissione. Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte.",
+                            message: getPendingMessage("Lo scontrino è in emissione."),
                         }
                         : {
                             unavailable: true,
@@ -210,7 +220,7 @@ serve(async (req) => {
                     ready: false,
                     pending: true,
                     openapiStatus: "pending",
-                    message: "Lo scontrino è in emissione. Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte.",
+                    message: getPendingMessage("Lo scontrino è in emissione."),
                 }, 202);
             }
             return json({ error: "Scontrino non trovato per questo ordine" }, 404);
@@ -243,7 +253,7 @@ serve(async (req) => {
                     ready: false,
                     pending: true,
                     openapiStatus: row.openapi_status,
-                    message: "Lo scontrino non è ancora stato confermato dall'Agenzia delle Entrate. Negli ultimi minuti della giornata fiscale può essere disponibile subito dopo mezzanotte.",
+                    message: getPendingMessage("Lo scontrino non è ancora stato confermato dall'Agenzia delle Entrate."),
                 });
             }
             return json({
