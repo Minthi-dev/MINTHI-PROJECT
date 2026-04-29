@@ -31,7 +31,7 @@ function getPendingMessage(baseMsg: string): string {
     // but Intl is supported in Deno.
     const h = parseInt(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: 'Europe/Rome' }).format(d));
     const m = parseInt(new Intl.DateTimeFormat('en-US', { minute: 'numeric', timeZone: 'Europe/Rome' }).format(d));
-    const isLate = h === 23 && m >= 45;
+    const isLate = h === 23 && m >= 55;
     return baseMsg + (isLate ? " Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte." : "");
 }
 
@@ -259,7 +259,7 @@ serve(async (req) => {
             return json({
                 pending: true,
                 openapiStatus: row.openapi_status,
-                message: "Lo scontrino non è ancora stato confermato dall'Agenzia delle Entrate. Riprova fra qualche istante.",
+                message: getPendingMessage("Lo scontrino non è ancora stato confermato dall'Agenzia delle Entrate. Riprova fra qualche istante."),
             }, 202);
         }
 

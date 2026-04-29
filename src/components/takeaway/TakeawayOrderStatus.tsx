@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { DatabaseService } from '@/services/DatabaseService'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { CheckCircle, Clock, ForkKnife, Bell, Storefront, Warning, House, Receipt, DownloadSimple, Printer } from '@phosphor-icons/react'
+import { CheckCircle, Clock, ForkKnife, Bell, Warning, House, Receipt, DownloadSimple } from '@phosphor-icons/react'
 
 type Status = 'PENDING' | 'PREPARING' | 'READY' | 'PICKED_UP' | 'PAID' | 'CANCELLED'
 
@@ -40,7 +40,6 @@ export default function TakeawayOrderStatus() {
     const [verifyingPayment, setVerifyingPayment] = useState(false)
     const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
     const [downloadingReceipt, setDownloadingReceipt] = useState(false)
-    const [printingReceipt, setPrintingReceipt] = useState(false)
     const stripeSessionId = searchParams.get('session_id') || undefined
 
     useEffect(() => {
@@ -154,22 +153,6 @@ export default function TakeawayOrderStatus() {
         }
     }
 
-    const handlePrintReceipt = async () => {
-        if (!restaurantId || !pickupCode) return
-        setPrintingReceipt(true)
-        try {
-            await DatabaseService.printFiscalReceiptPdfForTakeaway({
-                restaurantId,
-                pickupCode,
-                stripeSessionId,
-            })
-        } catch (err: any) {
-            toast.error(err?.message || 'Scontrino non ancora stampabile, riprova fra poco')
-        } finally {
-            setPrintingReceipt(false)
-        }
-    }
-
     useEffect(() => {
         if (!order?.id) return
         const channel = supabase.channel(`takeaway_${order.id}`)
@@ -227,7 +210,7 @@ export default function TakeawayOrderStatus() {
                     className={`rounded-3xl p-6 text-center border shadow-xl ${isReady ? 'bg-emerald-500/10 border-emerald-500/40 shadow-[0_0_60px_-10px_rgba(16,185,129,0.3)]' : 'bg-amber-500/10 border-amber-500/30'}`}
                 >
                     <h1 className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] mb-1">Ordine</h1>
-                    <div className={`text-6xl font-bold font-mono tracking-tighter ${isReady ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <div className={`text-7xl sm:text-8xl font-bold font-mono tracking-tighter leading-none ${isReady ? 'text-emerald-400' : 'text-amber-400'}`}>
                         #{String(order.pickup_number).padStart(3, '0')}
                     </div>
                     <div className={`mt-2 text-lg font-bold uppercase tracking-wide ${label.color}`}>{label.text}</div>
@@ -254,31 +237,35 @@ export default function TakeawayOrderStatus() {
                     </div>
                 )}
 
-                <Card className="bg-zinc-900/40 border-white/5 p-3 space-y-1.5 rounded-2xl shadow-inner">
-                    <div className="flex justify-between text-xs">
-                        <span className="text-zinc-500">Cliente</span>
-                        <span className="font-medium text-zinc-200">{order.customer_name}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                        <span className="text-zinc-500">Totale</span>
-                        <span className="font-bold text-zinc-200">€{Number(order.total_amount).toFixed(2)}</span>
+                <Card className="bg-zinc-900/40 border-white/5 p-2.5 rounded-2xl shadow-inner">
+                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                        <div className="min-w-0">
+                            <div className="text-zinc-500 uppercase tracking-wide">Cliente</div>
+                            <div className="font-semibold text-zinc-200 truncate">{order.customer_name}</div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-zinc-500 uppercase tracking-wide">Totale</div>
+                            <div className="font-bold text-zinc-200">€{Number(order.total_amount).toFixed(2)}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-zinc-500 uppercase tracking-wide">Stato</div>
+                            {unpaid < 0.01 && order.status !== 'CANCELLED' ? (
+                                <div className="font-bold text-emerald-400">Pagato</div>
+                            ) : (
+                                <div className="font-bold text-amber-400">Da pagare</div>
+                            )}
+                        </div>
                     </div>
                     {unpaid > 0.01 && (
-                        <div className="flex justify-between text-xs">
+                        <div className="flex justify-between text-xs pt-2 mt-2 border-t border-white/5">
                             <span className="text-amber-500/80">
                                 {requiresOnlinePayment ? (verifyingPayment ? 'Verifica pagamento online' : 'Pagamento online in attesa') : 'Da pagare al ritiro'}
                             </span>
                             <span className="font-bold text-amber-400">€{unpaid.toFixed(2)}</span>
                         </div>
                     )}
-                    {unpaid < 0.01 && order.status !== 'CANCELLED' && (
-                        <div className="flex justify-between text-xs items-center">
-                            <span className="text-emerald-500/80">Pagato</span>
-                            <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded-full text-[10px]">✓</span>
-                        </div>
-                    )}
                     {order.status === 'PREPARING' && (
-                        <div className="flex justify-between text-xs pt-1.5 border-t border-white/5 mt-1">
+                        <div className="flex justify-between text-xs pt-2 border-t border-white/5 mt-2">
                             <span className="text-zinc-500 flex items-center gap-1"><Clock size={12} />Tempo stimato</span>
                             <span className="font-medium text-zinc-300">~{order.estimated_minutes} min</span>
                         </div>
@@ -299,14 +286,14 @@ export default function TakeawayOrderStatus() {
                                 <div className={`text-[10px] leading-tight mt-0.5 line-clamp-2 ${receiptReady ? 'text-emerald-200/70' : 'text-amber-200/70'}`}>
                                     {receiptReady
                                         ? "Disponibile per il download."
-                                        : "In emissione..."}
+                                        : "Scarica appena disponibile."}
                                 </div>
                             </div>
                             <Button
                                 onClick={handleDownloadReceipt}
-                                disabled={downloadingReceipt || !receiptReady}
+                                disabled={downloadingReceipt}
                                 size="sm"
-                                className={`shrink-0 h-8 px-3 rounded-lg text-xs font-bold transition-all ${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20' : 'bg-amber-500/20 text-amber-500/50 cursor-not-allowed border border-amber-500/10'}`}
+                                className={`shrink-0 h-8 px-3 rounded-lg text-xs font-bold transition-all ${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20' : 'bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-500/20'} disabled:opacity-60`}
                             >
                                 {downloadingReceipt ? 'Apertura...' : 'Scarica'}
                             </Button>

@@ -59,7 +59,7 @@ function pokeFiscalWorker() {
                 "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""}`,
                 "x-minthi-internal-key": MINTHI_INTERNAL_KEY,
             },
-            body: JSON.stringify({ internalKey: MINTHI_INTERNAL_KEY, limit: 3 }),
+            body: JSON.stringify({ internalKey: MINTHI_INTERNAL_KEY, limit: 10, concurrency: 5 }),
         }).catch((err) => console.warn("[WEBHOOK→fiscal] worker poke fallito:", err?.message || err));
 }
 

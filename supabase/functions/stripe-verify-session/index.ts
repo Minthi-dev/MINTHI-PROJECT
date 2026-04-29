@@ -59,7 +59,7 @@ function pokeFiscalWorker() {
                 "Authorization": `Bearer ${supabaseServiceKey}`,
                 "x-minthi-internal-key": MINTHI_INTERNAL_KEY,
             },
-            body: JSON.stringify({ internalKey: MINTHI_INTERNAL_KEY, limit: 3 }),
+            body: JSON.stringify({ internalKey: MINTHI_INTERNAL_KEY, limit: 10, concurrency: 5 }),
         }).catch((err) => console.warn("[verify-session→fiscal] worker poke fallito:", err?.message || err));
 }
 

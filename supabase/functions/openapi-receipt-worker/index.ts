@@ -17,7 +17,8 @@ serve(async (req) => {
         const key = req.headers.get("x-minthi-internal-key") || body.internalKey || "";
         if (!INTERNAL_KEY || key !== INTERNAL_KEY) return json({ error: "Non autorizzato" }, 403);
 
-        const limit = Math.min(Math.max(Number(body.limit || 10), 1), 50);
+        const limit = Math.min(Math.max(Number(body.limit || 25), 1), 100);
+        const concurrency = Math.min(Math.max(Number(body.concurrency || 8), 1), 20);
         const workerId = `edge-${crypto.randomUUID()}`;
         const { data: jobs, error } = await supabase.rpc("claim_fiscal_receipt_jobs", {
             p_limit: limit,
@@ -28,12 +29,9 @@ serve(async (req) => {
             return json({ error: error.message || "claim failed" }, 500);
         }
 
-        const results = [];
-        for (const job of jobs || []) {
-            results.push(await processJob(job));
-        }
+        const results = await mapWithConcurrency(jobs || [], concurrency, processJob);
 
-        return json({ success: true, workerId, claimed: jobs?.length || 0, results });
+        return json({ success: true, workerId, claimed: jobs?.length || 0, concurrency, results });
     } catch (err: any) {
         console.error("[fiscal-worker] generic error:", err);
         return json({ error: err?.message || "Errore interno" }, 500);
@@ -96,6 +94,26 @@ async function processJob(job: any) {
         console.error(`[fiscal-worker] job ${job.id} failed attempt ${attempts}/${maxAttempts}:`, message);
         return { jobId: job.id, status: isDead ? "dead" : "retry_scheduled", attempts, nextRunAt: isDead ? null : runAfter };
     }
+}
+
+async function mapWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let cursor = 0;
+
+    async function run() {
+        while (cursor < items.length) {
+            const index = cursor++;
+            results[index] = await worker(items[index]);
+        }
+    }
+
+    const runners = Array.from({ length: Math.min(concurrency, items.length) }, run);
+    await Promise.all(runners);
+    return results;
 }
 
 function retryDelaySeconds(attempts: number): number {

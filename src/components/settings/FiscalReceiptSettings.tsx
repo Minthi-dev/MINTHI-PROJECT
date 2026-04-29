@@ -33,7 +33,6 @@ import {
     TestTube,
     Percent,
     DownloadSimple,
-    Printer,
     EnvelopeSimple,
 } from '@phosphor-icons/react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -280,16 +279,8 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
         }
     }
 
-    async function handleReceiptPdf(receipt: FiscalReceipt, mode: 'download' | 'print') {
+    async function handleReceiptPdf(receipt: FiscalReceipt) {
         try {
-            if (mode === 'print') {
-                await DatabaseService.printFiscalReceiptPdfForReceipt({
-                    restaurantId,
-                    receiptId: receipt.id,
-                })
-                toast.success('Dialogo di stampa aperto')
-                return
-            }
             await DatabaseService.openFiscalReceiptPdfForReceipt({
                 restaurantId,
                 receiptId: receipt.id,
@@ -439,6 +430,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                     </div>
                                 ) : recentReceipts.filter(r => !receiptsDateFilter || (r.created_at && r.created_at.startsWith(receiptsDateFilter))).map(receipt => {
                                     const meta = fiscalReceiptStatusMeta(receipt.openapi_status)
+                                    const canDownloadReceipt = Boolean(receipt.openapi_receipt_id) && receipt.openapi_status !== 'failed' && receipt.openapi_status !== 'voided'
                                     const emailMessage = receipt.customer_email
                                         ? receipt.customer_email_sent_at
                                             ? 'Inviata'
@@ -465,25 +457,16 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                     </span>
                                                 </div>
                                             </div>
-                                            {receipt.openapi_status === 'ready' && (
+                                            {canDownloadReceipt && (
                                                 <div className="flex items-center gap-1 shrink-0">
                                                     <Button
                                                         type="button"
                                                         variant="ghost"
-                                                        onClick={() => handleReceiptPdf(receipt, 'download')}
+                                                        onClick={() => handleReceiptPdf(receipt)}
                                                         className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
                                                         title="Scarica PDF"
                                                     >
                                                         <DownloadSimple size={14} />
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        onClick={() => handleReceiptPdf(receipt, 'print')}
-                                                        className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
-                                                        title="Stampa"
-                                                    >
-                                                        <Printer size={14} />
                                                     </Button>
                                                 </div>
                                             )}

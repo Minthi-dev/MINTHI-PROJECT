@@ -57,7 +57,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 // Icons
-import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users, Receipt, Timer, DownloadSimple, Printer } from '@phosphor-icons/react'
+import { Minus, Plus, ShoppingCart, Trash, User, Info, X, Clock, Wallet, Check, Warning, ForkKnife, Note, Storefront, Rocket, ListNumbers, CheckCircle, CreditCard, Users, Receipt, Timer, DownloadSimple } from '@phosphor-icons/react'
 import {
   ShoppingBasket, Utensils, ChefHat, Search,
   RefreshCw, AlertCircle, ChevronUp, ChevronDown, Layers, ArrowLeft, Send,
@@ -134,6 +134,20 @@ const MENU_COLORS = {
     '--input': 'rgba(255, 255, 255, 0.1)',
     '--ring': '#f59e0b',
   } as React.CSSProperties,
+}
+
+function isFiscalRolloverWindow(): boolean {
+  const now = new Date()
+  const hour = Number(new Intl.DateTimeFormat('it-IT', {
+    hour: '2-digit',
+    hour12: false,
+    timeZone: 'Europe/Rome',
+  }).format(now))
+  const minute = Number(new Intl.DateTimeFormat('it-IT', {
+    minute: '2-digit',
+    timeZone: 'Europe/Rome',
+  }).format(now))
+  return hour === 23 && minute >= 55
 }
 
 // --- HELPER COMPONENTS ---
@@ -1072,7 +1086,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [lastVerifiedSessionPaidAmount, setLastVerifiedSessionPaidAmount] = useState<number | null>(null)
   const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
-  const [printingReceipt, setPrintingReceipt] = useState(false)
   const [paymentCustomerEmail, setPaymentCustomerEmail] = useState('')
 
   // Bottom nav tab
@@ -1944,9 +1957,9 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }, [activeSession?.paid_amount, fiscalReceiptStatus, lastVerifiedSessionPaidAmount, unpaidTotal])
 
   useEffect(() => {
-    if (stripePaymentSuccess || fiscalReceiptStatus === 'ready') return
+    if (fiscalReceiptStatus === 'ready') return
     if (!restaurantId || !sessionId) return
-    if (unpaidTotal > 0.01 || !(activeSession?.paid_amount || 0)) return
+    if (!dineInReceiptState.canDownload) return
 
     let cancelled = false
     let attempts = 0
@@ -1973,7 +1986,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     }
     tick()
     return () => { cancelled = true }
-  }, [stripePaymentSuccess, fiscalReceiptStatus, restaurantId, sessionId, unpaidTotal, activeSession?.paid_amount])
+  }, [dineInReceiptState.canDownload, fiscalReceiptStatus, restaurantId, sessionId])
 
   // Handle Stripe payment — supports full, split (alla romana), and items (diviso per piatti)
   const handleStripePayment = async (mode: 'full' | 'split' | 'items', splitCount?: number) => {
@@ -2109,29 +2122,16 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     }
   }
 
-  const printDineInFiscalReceipt = async () => {
-    if (!restaurantId || !sessionId) return
-    setPrintingReceipt(true)
-    try {
-      await DatabaseService.printFiscalReceiptPdfForDineIn({
-        restaurantId,
-        tableSessionId: sessionId,
-        stripeSessionId: lastStripeSessionId || undefined,
-      })
-    } catch (err: any) {
-      toast.error(err?.message || 'Scontrino non ancora stampabile')
-    } finally {
-      setPrintingReceipt(false)
-    }
-  }
-
   const renderDineInReceiptActions = () => {
     const ready = dineInReceiptState.ready
     const canDownload = dineInReceiptState.canDownload
+    const pendingMessage = isFiscalRolloverWindow()
+      ? "Scontrino digitale in emissione. Negli ultimi minuti della giornata fiscale il PDF può arrivare subito dopo mezzanotte."
+      : "Scontrino digitale in emissione. Puoi provare il download appena pronto."
     const message = ready
       ? "Scontrino fiscale pronto e trasmesso all'Agenzia delle Entrate."
       : canDownload
-        ? "Scontrino digitale in emissione. Se siamo negli ultimi minuti della giornata fiscale, il PDF può arrivare subito dopo mezzanotte."
+        ? pendingMessage
         : "Per il tavolo viene emesso uno scontrino unico quando il conto è completamente saldato."
 
     return (
@@ -2151,23 +2151,14 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
             <p className="text-[11px] leading-relaxed mt-0.5 mb-3" style={{ color: canDownload ? '#D1FAE5' : theme.textMuted }}>
               {message}
             </p>
-            <div className="grid grid-cols-2 gap-2">
+            <div>
               <Button
                 onClick={openDineInFiscalReceipt}
-                disabled={!canDownload || downloadingReceipt || printingReceipt}
-                className="h-12 rounded-xl font-bold bg-emerald-500 hover:bg-emerald-400 text-black disabled:opacity-50"
+                disabled={!canDownload || downloadingReceipt}
+                className="h-12 w-full rounded-xl font-bold bg-emerald-500 hover:bg-emerald-400 text-black disabled:opacity-50"
               >
                 <DownloadSimple size={18} className="mr-2" weight="bold" />
                 {downloadingReceipt ? 'Apertura...' : 'Scarica scontrino'}
-              </Button>
-              <Button
-                onClick={printDineInFiscalReceipt}
-                disabled={!ready || downloadingReceipt || printingReceipt}
-                className="h-12 rounded-xl font-bold disabled:opacity-50"
-                style={{ backgroundColor: theme.inputBg, border: `1px solid ${theme.inputBorder}`, color: theme.textPrimary }}
-              >
-                <Printer size={18} className="mr-2" weight="bold" />
-                {printingReceipt ? 'Stampa...' : 'Stampa'}
               </Button>
             </div>
           </div>

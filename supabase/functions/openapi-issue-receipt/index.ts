@@ -25,6 +25,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 import {
+    fetchReceipt,
     fetchReceiptPdf,
     getOpenApiEnv,
     issueReceipt,
@@ -202,14 +203,18 @@ serve(async (req) => {
                     idempotency_key: retryReceiptId,
                 });
 
+                const readyResult = await waitForReceiptReady(result.id, result);
+                const finalStatus = normalizeIssuedReceiptStatus(readyResult.status);
+                const now = new Date().toISOString();
+
                 await supabase
                     .from("fiscal_receipts")
                     .update({
-                        openapi_receipt_id: result.id,
-                        openapi_status: result.status === "ready" ? "ready" : "submitted",
-                        openapi_response: result.raw,
-                        submitted_at: new Date().toISOString(),
-                        ready_at: result.status === "ready" ? new Date().toISOString() : null,
+                        openapi_receipt_id: readyResult.id,
+                        openapi_status: finalStatus,
+                        openapi_response: readyResult.raw || result.raw,
+                        submitted_at: now,
+                        ready_at: finalStatus === "ready" ? now : null,
                         issued_via: "manual_retry",
                     })
                     .eq("id", retryReceiptId);
@@ -217,8 +222,8 @@ serve(async (req) => {
                 return json({
                     success: true,
                     receiptId: retryReceiptId,
-                    openapiReceiptId: result.id,
-                    openapiStatus: result.status,
+                    openapiReceiptId: readyResult.id,
+                    openapiStatus: finalStatus,
                     retried: true,
                 });
             } catch (retryApiErr: any) {
@@ -486,21 +491,25 @@ serve(async (req) => {
                 idempotency_key: receiptRowId,
             });
 
+            const readyResult = await waitForReceiptReady(result.id, result);
+            const finalStatus = normalizeIssuedReceiptStatus(readyResult.status);
+            const now = new Date().toISOString();
+
             await supabase
                 .from("fiscal_receipts")
                 .update({
-                    openapi_receipt_id: result.id,
-                    openapi_status: result.status === "ready" ? "ready" : "submitted",
-                    openapi_response: result.raw,
-                    submitted_at: new Date().toISOString(),
-                    ready_at: result.status === "ready" ? new Date().toISOString() : null,
+                    openapi_receipt_id: readyResult.id,
+                    openapi_status: finalStatus,
+                    openapi_response: readyResult.raw || result.raw,
+                    submitted_at: now,
+                    ready_at: finalStatus === "ready" ? now : null,
                 })
                 .eq("id", receiptRowId);
 
-            if (result.status === "ready") {
+            if (finalStatus === "ready") {
                 await sendReceiptEmailIfPossible({
                     receiptRowId,
-                    openapiReceiptId: result.id,
+                    openapiReceiptId: readyResult.id,
                     customerEmail: cleanCustomerEmail,
                     restaurantName: restaurant.name || "Ristorante",
                     emailEnabled: fiscalSettings.fiscal_email_to_customer !== false,
@@ -510,8 +519,8 @@ serve(async (req) => {
             return json({
                 success: true,
                 receiptId: receiptRowId,
-                openapiReceiptId: result.id,
-                openapiStatus: result.status,
+                openapiReceiptId: readyResult.id,
+                openapiStatus: finalStatus,
             });
         } catch (apiErr: any) {
             console.error("[openapi-issue] OpenAPI error:", apiErr);
@@ -580,6 +589,47 @@ serve(async (req) => {
 function round2(n?: number | null): number {
     if (typeof n !== "number" || !Number.isFinite(n)) return 0;
     return Math.round(n * 100) / 100;
+}
+
+function normalizeIssuedReceiptStatus(status: unknown): "submitted" | "ready" | "failed" | "voided" {
+    const value = String(status || "").toLowerCase();
+    if (value === "ready") return "ready";
+    if (value === "failed") return "failed";
+    if (value === "voided") return "voided";
+    return "submitted";
+}
+
+async function waitForReceiptReady<T extends { id: string; status: string; raw?: unknown }>(
+    initialReceiptId: string,
+    fallback: T
+): Promise<T> {
+    let latest = fallback;
+
+    for (const delayMs of [600, 900, 1200, 1800, 2500]) {
+        await sleep(delayMs);
+        try {
+            const raw = await fetchReceipt(initialReceiptId);
+            const receipt = raw?.data ?? raw;
+            const status = normalizeIssuedReceiptStatus(receipt?.status || latest.status);
+            latest = {
+                ...latest,
+                id: String(receipt?.id || latest.id || initialReceiptId),
+                status,
+                raw,
+            };
+            if (status === "ready" || status === "failed" || status === "voided") {
+                return latest;
+            }
+        } catch (err: any) {
+            console.warn("[openapi-issue] readiness check skipped:", err?.message || err);
+        }
+    }
+
+    return latest;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
