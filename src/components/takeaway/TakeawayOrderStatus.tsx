@@ -219,23 +219,19 @@ export default function TakeawayOrderStatus() {
     const receiptReady = fiscalReceiptStatus === 'ready'
 
     return (
-        <div className="min-h-screen bg-zinc-950 text-white p-4 flex items-start justify-center">
-            <div className="max-w-md w-full space-y-4 pt-6">
-                <div className="text-center space-y-1">
-                    <Storefront size={32} weight="fill" className="text-amber-400 mx-auto" />
-                    <h1 className="text-sm text-zinc-400 uppercase tracking-widest">Il tuo numero di ritiro</h1>
-                </div>
-
+        <div className="min-h-screen bg-zinc-950 text-white p-3 sm:p-4 flex flex-col items-center justify-start pb-[env(safe-area-inset-bottom)]">
+            <div className="max-w-md w-full space-y-3 pt-2 sm:pt-4">
                 <motion.div
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className={`rounded-2xl p-10 text-center border ${isReady ? 'bg-emerald-500/10 border-emerald-500/40 shadow-[0_0_60px_-10px_rgba(16,185,129,0.5)]' : 'bg-amber-500/10 border-amber-500/40'}`}
+                    className={`rounded-3xl p-6 text-center border shadow-xl ${isReady ? 'bg-emerald-500/10 border-emerald-500/40 shadow-[0_0_60px_-10px_rgba(16,185,129,0.3)]' : 'bg-amber-500/10 border-amber-500/30'}`}
                 >
-                    <div className={`text-8xl font-bold font-mono ${isReady ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <h1 className="text-[10px] text-zinc-400 uppercase tracking-[0.2em] mb-1">Ordine</h1>
+                    <div className={`text-6xl font-bold font-mono tracking-tighter ${isReady ? 'text-emerald-400' : 'text-amber-400'}`}>
                         #{String(order.pickup_number).padStart(3, '0')}
                     </div>
-                    <div className={`mt-4 text-xl font-semibold ${label.color}`}>{label.text}</div>
-                    <div className="text-sm text-zinc-400 mt-1">{label.sub}</div>
+                    <div className={`mt-2 text-lg font-bold uppercase tracking-wide ${label.color}`}>{label.text}</div>
+                    <div className="text-xs text-zinc-400 mt-0.5">{label.sub}</div>
                 </motion.div>
 
                 {/* Progress bar for non-closed orders */}
@@ -249,78 +245,71 @@ export default function TakeawayOrderStatus() {
                             const reached = ['PENDING', 'PREPARING', 'READY'].indexOf(order.status) >= i
                             const Icon = stage.icon
                             return (
-                                <div key={stage.k} className={`p-3 rounded-lg border ${reached ? 'bg-amber-500/10 border-amber-500/40 text-amber-300' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
-                                    <Icon size={22} className="mx-auto mb-1" weight={reached ? 'fill' : 'regular'} />
-                                    <div className="text-xs">{stage.label}</div>
+                                <div key={stage.k} className={`py-2 px-1 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${reached ? 'bg-amber-500/15 border-amber-500/40 text-amber-300' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
+                                    <Icon size={18} weight={reached ? 'fill' : 'regular'} />
+                                    <div className="text-[10px] font-medium uppercase tracking-wider">{stage.label}</div>
                                 </div>
                             )
                         })}
                     </div>
                 )}
 
-                <Card className="bg-zinc-900/50 border-white/5 p-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-zinc-400">Cliente</span>
-                        <span>{order.customer_name}</span>
+                <Card className="bg-zinc-900/40 border-white/5 p-3 space-y-1.5 rounded-2xl shadow-inner">
+                    <div className="flex justify-between text-xs">
+                        <span className="text-zinc-500">Cliente</span>
+                        <span className="font-medium text-zinc-200">{order.customer_name}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                        <span className="text-zinc-400">Totale</span>
-                        <span className="font-semibold">€{Number(order.total_amount).toFixed(2)}</span>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-zinc-500">Totale</span>
+                        <span className="font-bold text-zinc-200">€{Number(order.total_amount).toFixed(2)}</span>
                     </div>
                     {unpaid > 0.01 && (
-                        <div className="flex justify-between text-sm">
-                            <span className="text-amber-400">
+                        <div className="flex justify-between text-xs">
+                            <span className="text-amber-500/80">
                                 {requiresOnlinePayment ? (verifyingPayment ? 'Verifica pagamento online' : 'Pagamento online in attesa') : 'Da pagare al ritiro'}
                             </span>
                             <span className="font-bold text-amber-400">€{unpaid.toFixed(2)}</span>
                         </div>
                     )}
                     {unpaid < 0.01 && order.status !== 'CANCELLED' && (
-                        <div className="flex justify-between text-sm">
-                            <span className="text-emerald-400">Pagato</span>
-                            <span className="text-emerald-400 font-semibold">✓</span>
+                        <div className="flex justify-between text-xs items-center">
+                            <span className="text-emerald-500/80">Pagato</span>
+                            <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded-full text-[10px]">✓</span>
                         </div>
                     )}
                     {order.status === 'PREPARING' && (
-                        <div className="flex justify-between text-sm pt-1 border-t border-white/5 mt-2">
-                            <span className="text-zinc-400 flex items-center gap-1"><Clock size={14} />Tempo stimato</span>
-                            <span>~{order.estimated_minutes} min</span>
+                        <div className="flex justify-between text-xs pt-1.5 border-t border-white/5 mt-1">
+                            <span className="text-zinc-500 flex items-center gap-1"><Clock size={12} />Tempo stimato</span>
+                            <span className="font-medium text-zinc-300">~{order.estimated_minutes} min</span>
                         </div>
                     )}
                 </Card>
 
                 {/* Fiscal receipt download */}
                 {isPaid && (
-                    <Card className={`${receiptReady ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-amber-500/5 border-amber-500/30'} p-4`}>
-                        <div className="flex items-start gap-3">
-                            <Receipt size={22} className={`${receiptReady ? 'text-emerald-400' : 'text-amber-400'} mt-0.5 shrink-0`} weight="fill" />
+                    <Card className={`${receiptReady ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/20'} p-3 rounded-2xl`}>
+                        <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${receiptReady ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                <Receipt size={20} weight="fill" />
+                            </div>
                             <div className="flex-1 min-w-0">
-                                <div className={`text-sm font-semibold ${receiptReady ? 'text-emerald-200' : 'text-amber-200'}`}>
-                                    Scontrino fiscale
+                                <div className={`text-xs font-bold uppercase tracking-wider ${receiptReady ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                    Scontrino
                                 </div>
-                                <div className={`text-xs mt-0.5 mb-3 ${receiptReady ? 'text-emerald-100/70' : 'text-amber-100/75'}`}>
+                                <div className={`text-[10px] leading-tight mt-0.5 line-clamp-2 ${receiptReady ? 'text-emerald-200/70' : 'text-amber-200/70'}`}>
                                     {receiptReady
-                                        ? "Trasmesso all'Agenzia delle Entrate. Scaricalo per i tuoi documenti."
-                                        : (() => {
-                                            const d = new Date();
-                                            const h = parseInt(d.toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', hour12: false }));
-                                            const m = parseInt(d.toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', minute: '2-digit' }));
-                                            const isLate = h === 23 && m >= 45;
-                                            return "In emissione." + (isLate ? " Se il pagamento arriva negli ultimi minuti della giornata fiscale, il PDF può essere disponibile subito dopo mezzanotte." : "");
-                                        })()}
-                                </div>
-                                <div>
-                                    <Button
-                                        onClick={handleDownloadReceipt}
-                                        disabled={downloadingReceipt || !receiptReady}
-                                        size="sm"
-                                        className={`${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-amber-500 hover:bg-amber-400 opacity-50 cursor-not-allowed'} text-black font-semibold w-full`}
-                                    >
-                                        <DownloadSimple size={16} className="mr-2" weight="bold" />
-                                        {downloadingReceipt ? 'Apertura...' : 'Scarica'}
-                                    </Button>
+                                        ? "Disponibile per il download."
+                                        : "In emissione..."}
                                 </div>
                             </div>
+                            <Button
+                                onClick={handleDownloadReceipt}
+                                disabled={downloadingReceipt || !receiptReady}
+                                size="sm"
+                                className={`shrink-0 h-8 px-3 rounded-lg text-xs font-bold transition-all ${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20' : 'bg-amber-500/20 text-amber-500/50 cursor-not-allowed border border-amber-500/10'}`}
+                            >
+                                {downloadingReceipt ? 'Apertura...' : 'Scarica'}
+                            </Button>
                         </div>
                     </Card>
                 )}
