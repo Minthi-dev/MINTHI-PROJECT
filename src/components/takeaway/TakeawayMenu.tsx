@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ShoppingBag, Minus, Plus, Trash, ForkKnife, CreditCard, Wallet, Clock, CheckCircle, Storefront, ArrowLeft, Info } from '@phosphor-icons/react'
+import { ShoppingBag, Minus, Plus, Trash, ForkKnife, CreditCard, Wallet, Clock, CheckCircle, Storefront, ArrowLeft, Info, Phone, EnvelopeSimple } from '@phosphor-icons/react'
 import { DatabaseService } from '@/services/DatabaseService'
 import type { Dish, Category } from '@/services/types'
 
@@ -362,8 +362,8 @@ export default function TakeawayMenu() {
                             onClick={() => setCartOpen(true)}
                             className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-full py-3 px-6 shadow-2xl flex items-center gap-3 max-w-md w-full justify-between"
                         >
-                            <span className="flex items-center gap-2"><ShoppingBag size={20} weight="bold" /> {cart.reduce((s, c) => s + c.quantity, 0)} piatti</span>
-                            <span className="flex items-center gap-2">€{total.toFixed(2)}<ForkKnife size={18} weight="bold" /></span>
+                            <span className="flex items-center gap-2 uppercase tracking-wide text-[13px]"><ShoppingBag size={20} weight="bold" /> Pagamento e Ordini</span>
+                            <span className="flex items-center gap-2 bg-black/10 px-3 py-1 rounded-full text-sm">€{total.toFixed(2)}</span>
                         </button>
                     </motion.div>
                 )}
@@ -401,8 +401,8 @@ export default function TakeawayMenu() {
                         <div className="flex justify-between text-lg font-bold mb-3">
                             <span>Totale</span><span className="text-amber-400">€{total.toFixed(2)}</span>
                         </div>
-                        <Button disabled={cart.length === 0} onClick={() => { setCartOpen(false); setCheckoutOpen(true) }} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-12">
-                            Procedi all'ordine
+                        <Button disabled={cart.length === 0} onClick={() => { setCartOpen(false); setCheckoutOpen(true) }} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-12 uppercase tracking-wide">
+                            Vai al Pagamento
                         </Button>
                     </div>
                 </DrawerContent>
@@ -415,42 +415,73 @@ export default function TakeawayMenu() {
                         <DialogTitle className="flex items-center gap-2"><CheckCircle size={20} className="text-amber-400" /> Conferma ordine</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3">
-                        {restaurant?.takeaway_collect_first_name !== false && (
-                            <div>
-                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
-                                    Nome {restaurant?.takeaway_first_name_required !== false && '*'}
-                                </label>
-                                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} maxLength={80} placeholder="Es. Mario" className="bg-white/5 border-white/10 mt-1" />
-                            </div>
-                        )}
-                        {restaurant?.takeaway_collect_last_name && (
-                            <div>
-                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
-                                    Cognome {restaurant?.takeaway_last_name_required && '*'}
-                                </label>
-                                <Input value={customerLastName} onChange={e => setCustomerLastName(e.target.value)} maxLength={80} placeholder="Es. Rossi" className="bg-white/5 border-white/10 mt-1" />
-                            </div>
-                        )}
-                        {restaurant?.takeaway_collect_phone !== false && (
-                            <div>
-                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
-                                    Telefono {restaurant?.takeaway_phone_required !== false && '*'}
-                                </label>
-                                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} maxLength={32} placeholder="Es. +39 333 1234567" inputMode="tel" className="bg-white/5 border-white/10 mt-1" />
-                            </div>
-                        )}
+                        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 overflow-hidden divide-y divide-white/5 shadow-inner">
+                            {/* Nome e Cognome */}
+                            {(restaurant?.takeaway_collect_first_name !== false || !!restaurant?.takeaway_collect_last_name) && (
+                                <div className="flex bg-transparent">
+                                    {restaurant?.takeaway_collect_first_name !== false && (
+                                        <div className={`flex-1 px-4 py-3.5 ${!!restaurant?.takeaway_collect_last_name ? 'border-r border-white/5' : ''}`}>
+                                            <input 
+                                                className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
+                                                placeholder={`Nome${restaurant?.takeaway_first_name_required !== false ? ' *' : ''}`} 
+                                                value={customerName} 
+                                                onChange={e => setCustomerName(e.target.value)} 
+                                            />
+                                        </div>
+                                    )}
+                                    {!!restaurant?.takeaway_collect_last_name && (
+                                        <div className="flex-1 px-4 py-3.5">
+                                            <input 
+                                                className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
+                                                placeholder={`Cognome${!!restaurant?.takeaway_last_name_required ? ' *' : ''}`} 
+                                                value={customerLastName} 
+                                                onChange={e => setCustomerLastName(e.target.value)} 
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Telefono */}
+                            {restaurant?.takeaway_collect_phone !== false && (
+                                <div className="px-4 py-3.5 flex items-center gap-3 bg-transparent">
+                                    <Phone size={16} className="text-zinc-500" />
+                                    <input 
+                                        className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
+                                        placeholder={`Telefono${restaurant?.takeaway_phone_required !== false ? ' *' : ''}`} 
+                                        value={customerPhone} 
+                                        inputMode="tel"
+                                        onChange={e => setCustomerPhone(e.target.value)} 
+                                    />
+                                </div>
+                            )}
+
+                            {/* Email */}
+                            {restaurant?.takeaway_collect_email !== false && (
+                                <div className="px-4 py-3.5 flex items-center gap-3 bg-transparent">
+                                    <EnvelopeSimple size={16} className="text-zinc-500" />
+                                    <input 
+                                        type="email"
+                                        className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
+                                        placeholder={`Email${!!restaurant?.takeaway_email_required ? ' *' : ''}`} 
+                                        value={customerEmail} 
+                                        onChange={e => setCustomerEmail(e.target.value)} 
+                                    />
+                                </div>
+                            )}
+                        </div>
                         {restaurant?.takeaway_collect_email !== false && (
-                            <div>
-                                <label className="text-xs text-zinc-400 uppercase tracking-wider">
-                                    Email {restaurant?.takeaway_email_required && '*'}
-                                </label>
-                                <Input value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} type="email" maxLength={120} placeholder="nome@esempio.it" className="bg-white/5 border-white/10 mt-1" />
-                                <p className="text-[11px] text-zinc-500 mt-1">Ricevi ricevuta Stripe e scontrino fiscale digitale</p>
-                            </div>
+                            <p className="text-[11px] text-zinc-500 -mt-1 px-2">Riceverai lo scontrino digitale a questo indirizzo.</p>
                         )}
-                        <div>
-                            <label className="text-xs text-zinc-400 uppercase tracking-wider">Note (opzionale)</label>
-                            <Textarea value={customerNotes} onChange={e => setCustomerNotes(e.target.value)} maxLength={240} rows={2} placeholder="Allergie, preferenze..." className="bg-white/5 border-white/10 mt-1" />
+
+                        {/* Note */}
+                        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4 shadow-inner">
+                            <textarea
+                                className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 resize-none h-14 text-white"
+                                placeholder="Note per la cucina (es. senza cipolla...)"
+                                value={customerNotes}
+                                onChange={e => setCustomerNotes(e.target.value)}
+                            />
                         </div>
 
                         <div className="pt-2">
