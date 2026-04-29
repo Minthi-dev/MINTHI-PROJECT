@@ -19,11 +19,12 @@
 //
 // Side-effect:
 //   - Quando lo scontrino è "ready", se il customer_email è presente,
-//     scarichiamo il PDF da OpenAPI e lo inviamo via Resend.
+//     generiamo il PDF dai dati OpenAPI confermati e lo inviamo via Resend.
 // =====================================================================
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { fetchReceiptPdf, getOpenApiWebhookSecret } from "../_shared/openapi.ts";
+import { generateFiscalReceiptPdf } from "../_shared/fiscal-receipt-pdf.ts";
+import { getOpenApiEnv, getOpenApiWebhookSecret } from "../_shared/openapi.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -182,18 +183,30 @@ serve(async (req) => {
 
         if (row.customer_email && !row.customer_email_sent_at && RESEND_API_KEY) {
             try {
-                const { data: rest } = await supabase
-                .from("restaurants")
-                    .select("name")
-                    .eq("id", row.restaurant_id)
-                    .maybeSingle();
-                const { data: fiscalSettings } = await supabase
-                    .from("restaurant_fiscal_settings")
-                    .select("fiscal_email_to_customer")
-                    .eq("restaurant_id", row.restaurant_id)
-                    .maybeSingle();
+                const [{ data: rest }, { data: fiscalSettings }] = await Promise.all([
+                    supabase
+                        .from("restaurants")
+                        .select("id, name, address, billing_name, vat_number, billing_address, billing_city, billing_province, billing_cap")
+                        .eq("id", row.restaurant_id)
+                        .maybeSingle(),
+                    supabase
+                        .from("restaurant_fiscal_settings")
+                        .select("fiscal_email_to_customer, tax_code, openapi_fiscal_id, default_vat_rate_code")
+                        .eq("restaurant_id", row.restaurant_id)
+                        .maybeSingle(),
+                ]);
                 if (fiscalSettings?.fiscal_email_to_customer !== false) {
-                    const pdfBytes = await fetchReceiptPdf(openapiReceiptId);
+                    const { data: receiptForPdf } = await supabase
+                        .from("fiscal_receipts")
+                        .select("*")
+                        .eq("id", row.id)
+                        .maybeSingle();
+                    const pdfBytes = await generateFiscalReceiptPdf({
+                        receipt: receiptForPdf || row,
+                        restaurant: rest,
+                        fiscalSettings,
+                        openapiEnv: getOpenApiEnv(),
+                    });
                     const base64 = base64FromBytes(pdfBytes);
                     const restaurantName = rest?.name || "Ristorante";
 

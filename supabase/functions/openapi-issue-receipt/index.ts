@@ -24,9 +24,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
+import { generateFiscalReceiptPdf } from "../_shared/fiscal-receipt-pdf.ts";
 import {
     fetchReceipt,
-    fetchReceiptPdf,
     getOpenApiEnv,
     issueReceipt,
     isValidTaxCodeIT,
@@ -695,7 +695,7 @@ async function sendReceiptEmailIfPossible(params: {
     }
 
     try {
-        const pdfBytes = await fetchReceiptPdf(params.openapiReceiptId);
+        const pdfBytes = await generateReceiptPdfForEmail(params.receiptRowId);
         const emailRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: {
@@ -735,6 +735,35 @@ async function sendReceiptEmailIfPossible(params: {
             .update({ customer_email_error: String(err?.message || err).slice(0, 500) })
             .eq("id", params.receiptRowId);
     }
+}
+
+async function generateReceiptPdfForEmail(receiptRowId: string): Promise<Uint8Array> {
+    const { data: receipt } = await supabase
+        .from("fiscal_receipts")
+        .select("*")
+        .eq("id", receiptRowId)
+        .maybeSingle();
+    if (!receipt) throw new Error("Scontrino non trovato per email PDF");
+
+    const [{ data: restaurant }, { data: fiscalSettings }] = await Promise.all([
+        supabase
+            .from("restaurants")
+            .select("id, name, address, billing_name, vat_number, billing_address, billing_city, billing_province, billing_cap")
+            .eq("id", receipt.restaurant_id)
+            .maybeSingle(),
+        supabase
+            .from("restaurant_fiscal_settings")
+            .select("restaurant_id, tax_code, openapi_fiscal_id, default_vat_rate_code")
+            .eq("restaurant_id", receipt.restaurant_id)
+            .maybeSingle(),
+    ]);
+
+    return await generateFiscalReceiptPdf({
+        receipt,
+        restaurant,
+        fiscalSettings,
+        openapiEnv: getOpenApiEnv(),
+    });
 }
 
 function base64FromBytes(bytes: Uint8Array): string {

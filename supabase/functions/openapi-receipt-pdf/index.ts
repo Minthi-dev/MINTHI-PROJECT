@@ -23,7 +23,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
-import { fetchReceipt, fetchReceiptPdf } from "../_shared/openapi.ts";
+import { generateFiscalReceiptPdf } from "../_shared/fiscal-receipt-pdf.ts";
+import { fetchReceipt, getOpenApiEnv } from "../_shared/openapi.ts";
 
 function getPendingMessage(baseMsg: string): string {
     const d = new Date();
@@ -272,9 +273,15 @@ serve(async (req) => {
         }
 
         // ----------------------------------------------------------------
-        // Fetch PDF from OpenAPI and stream back to caller
+        // Generate a stable customer PDF from the confirmed OpenAPI data.
+        // OpenAPI's sandbox PDF can be a demo document; the JSON receipt data
+        // is the authoritative source we have stored in fiscal_receipts.
         // ----------------------------------------------------------------
-        const pdfBytes = await fetchReceiptPdf(row.openapi_receipt_id);
+        const context = await loadReceiptPdfContext(row.id);
+        const pdfBytes = await generateFiscalReceiptPdf({
+            ...context,
+            openapiEnv: getOpenApiEnv(),
+        });
 
         return new Response(pdfBytes, {
             status: 200,
@@ -293,6 +300,36 @@ serve(async (req) => {
         });
     }
 });
+
+async function loadReceiptPdfContext(receiptRowId: string): Promise<{
+    receipt: Record<string, any>;
+    restaurant: Record<string, any> | null;
+    fiscalSettings: Record<string, any> | null;
+}> {
+    const { data: receipt, error: receiptErr } = await supabase
+        .from("fiscal_receipts")
+        .select("*")
+        .eq("id", receiptRowId)
+        .maybeSingle();
+    if (receiptErr || !receipt) {
+        throw new Error("Scontrino non trovato per la generazione PDF");
+    }
+
+    const [{ data: restaurant }, { data: fiscalSettings }] = await Promise.all([
+        supabase
+            .from("restaurants")
+            .select("id, name, address, billing_name, vat_number, billing_address, billing_city, billing_province, billing_cap")
+            .eq("id", receipt.restaurant_id)
+            .maybeSingle(),
+        supabase
+            .from("restaurant_fiscal_settings")
+            .select("restaurant_id, tax_code, openapi_fiscal_id, default_vat_rate_code")
+            .eq("restaurant_id", receipt.restaurant_id)
+            .maybeSingle(),
+    ]);
+
+    return { receipt, restaurant, fiscalSettings };
+}
 
 async function refreshReceiptStatus(row: any): Promise<any> {
     try {

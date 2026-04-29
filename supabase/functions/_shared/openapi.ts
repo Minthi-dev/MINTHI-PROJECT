@@ -15,7 +15,7 @@
  *   - DELETE /IT-configurations/{fiscal_id} — disable a restaurant
  *   - POST   /IT-receipts                 — emit a receipt (€0.019/op)
  *   - GET    /IT-receipts/{id}            — fetch JSON
- *   - GET    /IT-receipts/{id} (Accept: application/pdf) — fetch PDF
+ *   - GET    /IT-receipts/{id} (Content-Type: application/pdf) — fetch PDF
  *   - DELETE /IT-receipts/{id}            — void a receipt
  *
  * Authentication:
@@ -141,18 +141,34 @@ export async function getOpenApiToken(): Promise<string> {
  */
 async function openapiRequest(path: string, init: RequestInit & { acceptPdf?: boolean } = {}) {
     const token = await getOpenApiToken();
+    const method = (init.method || "GET").toUpperCase();
     const headers: Record<string, string> = {
         "Authorization": `Bearer ${token}`,
-        "Content-Type": init.acceptPdf ? "application/pdf" : "application/json",
         ...((init.headers as Record<string, string>) || {}),
     };
+    // OpenAPI Invoice uses Content-Type: application/pdf, not Accept, to
+    // content-negotiate the PDF version of GET /IT-receipts/{id}.
+    // This is unusual for a GET, but it is the documented contract.
     if (init.acceptPdf) {
+        headers["Content-Type"] = "application/pdf";
         headers["Accept"] = "application/pdf";
+    } else if (method === "POST" || method === "PATCH" || method === "PUT") {
+        if (!headers["Content-Type"]) {
+            headers["Content-Type"] = "application/json";
+        }
+    } else if (method === "GET" || method === "DELETE") {
+        // GET/DELETE with JSON response expected
+        if (!headers["Accept"]) {
+            headers["Accept"] = "application/json";
+        }
     }
-    const res = await fetch(`${OPENAPI_BASE_URL}${path}`, {
+    const url = `${OPENAPI_BASE_URL}${path}`;
+    console.log(`[OpenAPI] ${method} ${url} (acceptPdf=${!!init.acceptPdf})`);
+    const res = await fetch(url, {
         ...init,
         headers,
     });
+    console.log(`[OpenAPI] → ${res.status} ${res.statusText} (content-type: ${res.headers.get("content-type")})`);
     return res;
 }
 
@@ -427,6 +443,9 @@ export async function issueReceipt(input: OpenApiIssueReceiptInput): Promise<Ope
     const headers: Record<string, string> = {};
     if (input.idempotency_key) headers["Idempotency-Key"] = input.idempotency_key;
 
+    console.log(`[OpenAPI] issueReceipt: fiscal_id=${input.fiscal_id}, items=${input.items.length}, ` +
+        `electronic=${round2(input.electronic_payment_amount)}, cash=${round2(input.cash_payment_amount)}`);
+
     const res = await openapiRequest("/IT-receipts", {
         method: "POST",
         headers,
@@ -466,18 +485,51 @@ export async function fetchReceipt(receiptId: string): Promise<any> {
 
 /**
  * Returns a Uint8Array containing the PDF bytes of a fiscal receipt.
+ *
+ * Validates that the response actually contains a PDF (magic bytes "%PDF")
+ * and not a JSON error or demo placeholder. In sandbox mode, OpenAPI may
+ * return sample/demo PDFs with generic data — this is expected behaviour
+ * of the sandbox environment and NOT a bug in Minthi.
  */
 export async function fetchReceiptPdf(receiptId: string): Promise<Uint8Array> {
+    console.log(`[OpenAPI] fetchReceiptPdf: requesting PDF for receipt ${receiptId}`);
     const res = await openapiRequest(`/IT-receipts/${encodeURIComponent(receiptId)}`, {
         method: "GET",
         acceptPdf: true,
     });
+    const contentType = res.headers.get("content-type") || "";
+    console.log(`[OpenAPI] fetchReceiptPdf: status=${res.status}, content-type=${contentType}`);
+
     if (!res.ok) {
         const txt = await res.text().catch(() => "");
         throw new Error(`[OpenAPI] fetch PDF fallito: ${res.status} ${txt}`);
     }
+
+    // If the server returned JSON instead of PDF, something went wrong
+    if (contentType.includes("application/json")) {
+        const json = await res.json().catch(() => ({}));
+        console.error("[OpenAPI] fetchReceiptPdf: received JSON instead of PDF:", JSON.stringify(json).slice(0, 500));
+        throw new Error(
+            `[OpenAPI] Il server ha restituito JSON invece di PDF per lo scontrino ${receiptId}. ` +
+            `Potrebbe essere un problema di ambiente (sandbox) o lo scontrino non è ancora pronto.`
+        );
+    }
+
     const buf = await res.arrayBuffer();
-    return new Uint8Array(buf);
+    const bytes = new Uint8Array(buf);
+
+    // Validate PDF magic bytes: a valid PDF starts with "%PDF"
+    if (bytes.length < 4 || bytes[0] !== 0x25 || bytes[1] !== 0x50 || bytes[2] !== 0x44 || bytes[3] !== 0x46) {
+        const preview = new TextDecoder().decode(bytes.subarray(0, 200));
+        console.error(`[OpenAPI] fetchReceiptPdf: response is NOT a valid PDF. First 200 chars: ${preview}`);
+        throw new Error(
+            `[OpenAPI] Il file ricevuto per lo scontrino ${receiptId} non è un PDF valido. ` +
+            `Content-Type: ${contentType}, dimensione: ${bytes.length} bytes.`
+        );
+    }
+
+    console.log(`[OpenAPI] fetchReceiptPdf: received valid PDF, ${bytes.length} bytes`);
+    return bytes;
 }
 
 export async function voidReceipt(receiptId: string): Promise<void> {

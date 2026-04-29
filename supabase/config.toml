@@ -387,6 +387,9 @@ verify_jwt = false
 [functions.openapi-issue-receipt]
 verify_jwt = false
 
+[functions.openapi-receipt-webhook]
+verify_jwt = false
+
 [experimental]
 # Configures Postgres storage engine to use OrioleDB (S3)
 orioledb_version = ""
