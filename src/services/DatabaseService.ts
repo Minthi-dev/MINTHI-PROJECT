@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { User, Restaurant, Category, Dish, Table, TableSession, Order, OrderItem, Booking, CartItem } from './types'
+import { User, Restaurant, Category, Dish, Table, TableSession, Order, OrderItem, Booking, CartItem, TakeawayPickupQrOrder } from './types'
 import { hashPassword } from '../utils/passwordUtils'
 
 // Helper: get current logged-in user ID from localStorage
@@ -159,7 +159,11 @@ export const DatabaseService = {
             'auto_deliver_ready_dishes',
             'enable_stripe_payments', 'vat_number', 'billing_name',
             'takeaway_enabled', 'dine_in_enabled', 'takeaway_require_stripe',
-            'takeaway_pickup_notice', 'takeaway_auto_print', 'takeaway_auto_pickup_enabled', 'takeaway_max_orders_per_hour',
+            'takeaway_pickup_notice', 'takeaway_pickup_mode', 'takeaway_auto_print', 'takeaway_auto_pickup_enabled', 'takeaway_max_orders_per_hour',
+            'takeaway_collect_first_name', 'takeaway_first_name_required',
+            'takeaway_collect_last_name', 'takeaway_last_name_required',
+            'takeaway_collect_phone', 'takeaway_phone_required',
+            'takeaway_collect_email', 'takeaway_email_required',
         ]
 
         // Copia solo i campi presenti nell'oggetto input
@@ -857,6 +861,7 @@ export const DatabaseService = {
             takeaway_require_stripe: boolean
             takeaway_estimated_minutes: number
             takeaway_pickup_notice: string | null
+            takeaway_pickup_mode: 'code' | 'qr'
             enable_stripe_payments: boolean
             stripe_connect_enabled: boolean
             takeaway_collect_first_name?: boolean
@@ -930,6 +935,16 @@ export const DatabaseService = {
             customer_name: string
             estimated_minutes: number
             takeaway_require_stripe: boolean
+            takeaway_pickup_mode: 'code' | 'qr'
+            takeaway_pickup_token: string | null
+            items: Array<{
+                id: string
+                name: string
+                quantity: number
+                picked_quantity: number
+                remaining_quantity: number
+                status: string
+            }>
         } | null
     },
 
@@ -1011,6 +1026,8 @@ export const DatabaseService = {
             paymentMethod: 'stripe' | 'pay_on_pickup'
             checkoutUrl?: string
             sessionId?: string
+            takeawayPickupMode?: 'code' | 'qr'
+            takeawayPickupToken?: string | null
             paymentRequired?: boolean
             deduplicated?: boolean
         }
@@ -1094,9 +1111,9 @@ export const DatabaseService = {
             .from('orders')
             .select(`
                 id, status, total_amount, paid_amount, created_at, ready_at, picked_up_at, closed_at,
-                order_type, pickup_number, pickup_code, customer_name, customer_phone, customer_notes,
+                order_type, pickup_number, pickup_code, takeaway_pickup_mode, takeaway_pickup_token, customer_name, customer_phone, customer_notes,
                 payment_method, payments, restaurant_id,
-                items:order_items(id, order_id, dish_id, quantity, status, note, course_number,
+                items:order_items(id, order_id, dish_id, quantity, takeaway_picked_quantity, status, note, course_number,
                     dish:dishes(id, name, price, category_id))
             `)
             .eq('restaurant_id', restaurantId)
@@ -1105,6 +1122,55 @@ export const DatabaseService = {
             .limit(500)
         if (error) throw error
         return (data || []) as unknown as Order[]
+    },
+
+    async resolveTakeawayPickupQr(restaurantId: string, tokenOrUrl: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('takeaway-pickup-qr', {
+            body: {
+                userId,
+                sessionToken,
+                restaurantId,
+                action: 'resolve',
+                tokenOrUrl,
+            },
+        })
+        if (error || data?.error) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'QR non valido')
+            throw new Error(msg)
+        }
+        return data.order as TakeawayPickupQrOrder
+    },
+
+    async claimTakeawayPickupItem(params: {
+        restaurantId: string
+        orderId: string
+        orderItemId: string
+        quantity?: number
+        tokenOrUrl?: string
+    }) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('takeaway-pickup-qr', {
+            body: {
+                userId,
+                sessionToken,
+                restaurantId: params.restaurantId,
+                action: 'claim_item',
+                orderId: params.orderId,
+                orderItemId: params.orderItemId,
+                quantity: params.quantity || 1,
+                tokenOrUrl: params.tokenOrUrl,
+            },
+        })
+        if (error || data?.error) {
+            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore consegna prodotto')
+            throw new Error(msg)
+        }
+        return data as { success: true; order: TakeawayPickupQrOrder; result: any }
     },
 
     async getDishesForMenu(restaurantId: string) {

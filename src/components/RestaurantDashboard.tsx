@@ -2510,6 +2510,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   restaurantId={restaurantId}
                   restaurantName={currentRestaurant?.name}
                   takeawayRequireStripe={Boolean(currentRestaurant?.takeaway_require_stripe)}
+                  takeawayPickupMode={(currentRestaurant?.takeaway_pickup_mode as 'code' | 'qr' | undefined) || 'code'}
                   takeawayAutoPickupEnabled={Boolean(currentRestaurant?.takeaway_auto_pickup_enabled)}
                   onPrintKitchenOrder={async (order) => {
                     try {

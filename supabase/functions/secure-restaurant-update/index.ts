@@ -22,7 +22,11 @@ const OWNER_ALLOWED_FIELDS = [
     "auto_deliver_ready_dishes",
     // Takeaway
     "takeaway_enabled", "dine_in_enabled", "takeaway_require_stripe",
-    "takeaway_pickup_notice", "takeaway_auto_print", "takeaway_auto_pickup_enabled", "takeaway_max_orders_per_hour",
+    "takeaway_pickup_notice", "takeaway_pickup_mode", "takeaway_auto_print", "takeaway_auto_pickup_enabled", "takeaway_max_orders_per_hour",
+    "takeaway_collect_first_name", "takeaway_first_name_required",
+    "takeaway_collect_last_name", "takeaway_last_name_required",
+    "takeaway_collect_phone", "takeaway_phone_required",
+    "takeaway_collect_email", "takeaway_email_required",
 ];
 
 // Admin can also update these fields

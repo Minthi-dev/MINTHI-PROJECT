@@ -512,7 +512,7 @@ serve(async (req) => {
                     openapiReceiptId: readyResult.id,
                     customerEmail: cleanCustomerEmail,
                     restaurantName: restaurant.name || "Ristorante",
-                    emailEnabled: fiscalSettings.fiscal_email_to_customer !== false,
+                    emailEnabled: false,
                 });
             }
 

@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel, ArrowsClockwise, Eye, EyeSlash, CalendarCheck, Phone, Envelope, NotePencil } from '@phosphor-icons/react'
+import { BellRinging, Users, Plus, Pencil, Trash, SignOut, ForkKnife, MagnifyingGlass, CheckCircle, WarningCircle, X, CaretDown, CaretUp, GearSix, House, BellSimple, Receipt, User, Clock, Check, ArrowLeft, ChefHat, Funnel, ArrowsClockwise, Eye, EyeSlash, CalendarCheck, Phone, Envelope, NotePencil, QrCode } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { supabase } from '../../lib/supabase' // Corrected path (../../supabaseClient -> ../../lib/supabase usually, or just check file tree)
 import { cn } from '@/lib/utils'
@@ -21,6 +21,7 @@ import TableBillDialog from '../TableBillDialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu' // Restored
 import { Switch } from '@/components/ui/switch'
 import { soundManager } from '../../utils/SoundManager'
+import TakeawayQrScannerDialog from '../takeaway/TakeawayQrScannerDialog'
 
 interface WaiterDashboardProps {
     user: any
@@ -48,6 +49,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     const [selectedTableForPayment, setSelectedTableForPayment] = useState<Table | null>(null)
     const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
     const [isReadyDrawerOpen, setIsReadyDrawerOpen] = useState(false)
+    const [takeawayScannerOpen, setTakeawayScannerOpen] = useState(false)
     const [selectedTable, setSelectedTable] = useState<Table | null>(null)
     const [isTableModalOpen, setIsTableModalOpen] = useState(false)
 
@@ -918,6 +920,8 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     // Must be before early return to maintain consistent hook call order
     const sortedTables = useMemo(() => sortTables(filteredTables), [filteredTables, sortBy, sessions, activeOrders])
     const readyCount = readyItems.length
+    const dineInEnabled = restaurant?.dine_in_enabled !== false
+    const takeawayQrEnabled = Boolean(restaurant?.takeaway_enabled && restaurant?.takeaway_pickup_mode === 'qr')
 
     if (loading) return (
         <div className="flex flex-col items-center justify-center h-screen gap-6 bg-black text-amber-50 px-4 relative overflow-hidden">
@@ -1143,7 +1147,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                             <User size={26} weight="duotone" className="hidden sm:block" />
                         </div>
                         <div>
-                            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">Gestione Sala</h1>
+                            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                                {dineInEnabled ? 'Gestione Sala' : 'Ritiro Asporto'}
+                            </h1>
                             <div className="flex items-center gap-2 mt-0.5">
                                 <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -1154,29 +1160,42 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </div>
                     </div>
 
-                    {/* Activity Button */}
-                    <Button
-                        variant={(readyCount + assistanceRequests.length) > 0 ? "default" : "outline"}
-                        size="sm"
-                        className={`h-10 px-4 rounded-xl font-bold transition-all shadow-lg shrink-0 ${(readyCount + assistanceRequests.length) > 0
-                            ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
-                            : 'text-zinc-400 bg-zinc-900/50 border-white/5 hover:bg-zinc-800 hover:text-white'
-                            }`}
-                        onClick={() => setIsReadyDrawerOpen(true)}
-                    >
-                        {assistanceRequests.length > 0 ? (
-                            <BellSimple size={20} weight="fill" className="mr-2 animate-bounce text-yellow-400" />
-                        ) : readyCount > 0 ? (
-                            <BellRinging size={20} weight="fill" className="mr-2 animate-bounce" />
-                        ) : (
-                            <CheckCircle size={20} className="mr-2" />
+                    <div className="flex items-center gap-2">
+                        {takeawayQrEnabled && (
+                            <Button
+                                size="sm"
+                                onClick={() => setTakeawayScannerOpen(true)}
+                                className="h-10 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black shadow-lg shadow-emerald-500/20"
+                            >
+                                <QrCode size={19} weight="fill" className="mr-2" />
+                                Scannerizza QR
+                            </Button>
                         )}
-                        Attività: {readyCount + assistanceRequests.length}
-                    </Button>
+                        {dineInEnabled && (
+                            <Button
+                                variant={(readyCount + assistanceRequests.length) > 0 ? "default" : "outline"}
+                                size="sm"
+                                className={`h-10 px-4 rounded-xl font-bold transition-all shadow-lg shrink-0 ${(readyCount + assistanceRequests.length) > 0
+                                    ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
+                                    : 'text-zinc-400 bg-zinc-900/50 border-white/5 hover:bg-zinc-800 hover:text-white'
+                                    }`}
+                                onClick={() => setIsReadyDrawerOpen(true)}
+                            >
+                                {assistanceRequests.length > 0 ? (
+                                    <BellSimple size={20} weight="fill" className="mr-2 animate-bounce text-yellow-400" />
+                                ) : readyCount > 0 ? (
+                                    <BellRinging size={20} weight="fill" className="mr-2 animate-bounce" />
+                                ) : (
+                                    <CheckCircle size={20} className="mr-2" />
+                                )}
+                                Attività: {readyCount + assistanceRequests.length}
+                            </Button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Bottom row: filters - all visible, no scroll */}
-                <div className="flex items-center gap-2 flex-wrap">
+                {dineInEnabled && <div className="flex items-center gap-2 flex-wrap">
                     <div className="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5">
                         <Button
                             variant="ghost"
@@ -1228,19 +1247,21 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     >
                         <ArrowsClockwise size={16} weight="bold" />
                     </Button>
-                </div>
+                </div>}
             </header>
 
             {/* Fixed bottom-left: Settings + Logout */}
             <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-50 flex gap-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-zinc-900/90 backdrop-blur-xl border-white/10 text-zinc-400 hover:text-amber-500 hover:bg-zinc-800 h-11 w-11 p-0 rounded-xl shadow-lg"
-                    onClick={() => setIsManageDialogOpen(true)}
-                >
-                    <GearSix size={20} weight="duotone" />
-                </Button>
+                {dineInEnabled && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="bg-zinc-900/90 backdrop-blur-xl border-white/10 text-zinc-400 hover:text-amber-500 hover:bg-zinc-800 h-11 w-11 p-0 rounded-xl shadow-lg"
+                        onClick={() => setIsManageDialogOpen(true)}
+                    >
+                        <GearSix size={20} weight="duotone" />
+                    </Button>
+                )}
                 <Button
                     variant="outline"
                     size="sm"
@@ -1252,6 +1273,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             </div>
 
             {/* Tables grouped by Room */}
+            {dineInEnabled ? (
             <div className="relative z-10 space-y-8 px-3 sm:px-4 md:px-6">
                 {(() => {
                     // Group tables by room
@@ -1313,6 +1335,28 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                     return roomSections
                 })()}
             </div>
+            ) : (
+                <div className="relative z-10 px-3 sm:px-4 md:px-6">
+                    <div className="mx-auto max-w-xl rounded-3xl border border-emerald-500/25 bg-emerald-500/10 p-6 shadow-2xl shadow-emerald-500/10">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-400 text-black">
+                                <QrCode size={30} weight="fill" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-white">Scanner ritiro asporto</h2>
+                                <p className="text-sm text-emerald-100/75">Inquadra il QR del cliente e spunta i prodotti consegnati.</p>
+                            </div>
+                        </div>
+                        <Button
+                            onClick={() => setTakeawayScannerOpen(true)}
+                            className="mt-5 h-14 w-full rounded-2xl bg-emerald-400 text-base font-black text-black hover:bg-emerald-300"
+                        >
+                            <QrCode size={22} weight="fill" className="mr-2" />
+                            Scannerizza QR
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {/* Activity Center View (Full Screen) */}
             <AnimatePresence>
@@ -1581,6 +1625,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                 }}
                 isWaiter={true}
             />
+
+            {restaurantId && (
+                <TakeawayQrScannerDialog
+                    open={takeawayScannerOpen}
+                    onOpenChange={setTakeawayScannerOpen}
+                    restaurantId={restaurantId}
+                />
+            )}
 
             {/* Table Management Modal */}
             <Dialog open={isTableModalOpen} onOpenChange={setIsTableModalOpen}>

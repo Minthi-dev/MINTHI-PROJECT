@@ -33,7 +33,6 @@ import {
     TestTube,
     Percent,
     DownloadSimple,
-    EnvelopeSimple,
 } from '@phosphor-icons/react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
@@ -101,7 +100,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
 
     const [enableAuto, setEnableAuto] = useState(false)
     const [defaultVatRate, setDefaultVatRate] = useState('10')
-    const [emailToCustomer, setEmailToCustomer] = useState(true)
     const [savingPrefs, setSavingPrefs] = useState(false)
     const [testingReceipt, setTestingReceipt] = useState(false)
     const [verifying, setVerifying] = useState(false)
@@ -132,7 +130,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 setFiscalEmail(r.fiscal_billing_email || r.email || '')
                 setEnableAuto(!!r.fiscal_receipts_enabled)
                 setDefaultVatRate(r.default_vat_rate_code || '10')
-                setEmailToCustomer(r.fiscal_email_to_customer !== false)
                 const configured = r.openapi_status && r.openapi_status !== 'not_configured'
                 setSetupOpen(Boolean(configured || r.fiscal_receipts_enabled))
                 setCredentialsOpen(r.openapi_status !== 'active')
@@ -431,13 +428,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                 ) : recentReceipts.filter(r => !receiptsDateFilter || (r.created_at && r.created_at.startsWith(receiptsDateFilter))).map(receipt => {
                                     const meta = fiscalReceiptStatusMeta(receipt.openapi_status)
                                     const canDownloadReceipt = Boolean(receipt.openapi_receipt_id) && receipt.openapi_status !== 'failed' && receipt.openapi_status !== 'voided'
-                                    const emailMessage = receipt.customer_email
-                                        ? receipt.customer_email_sent_at
-                                            ? 'Inviata'
-                                            : receipt.customer_email_error
-                                                ? 'Errore'
-                                                : 'Attesa'
-                                        : 'No email'
                                     return (
                                         <div key={receipt.id} className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-white/5 transition-colors">
                                             <div className="min-w-0 flex-1 flex items-center gap-3">
@@ -451,10 +441,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                     <span>{formatEuro(receipt.total_amount)}</span>
                                                     <span>·</span>
                                                     <span>{formatReceiptDate(receipt.created_at)}</span>
-                                                    <span>·</span>
-                                                    <span className="flex items-center gap-1">
-                                                        <EnvelopeSimple size={11} /> {emailMessage}
-                                                    </span>
                                                 </div>
                                             </div>
                                             {canDownloadReceipt && (
@@ -673,7 +659,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                     <div className="rounded-xl bg-zinc-900/60 border border-white/10 overflow-hidden divide-y divide-white/5">
                         <ToggleRow
                             title="Emetti scontrino fiscale automaticamente"
-                            subtitle="Ogni pagamento Stripe (asporto e tavoli) genera lo scontrino. Se il cliente lascia l'email, riceverà il PDF in automatico."
+                            subtitle="Ogni pagamento Stripe confermato genera lo scontrino fiscale digitale, scaricabile dalla pagina ordine o dall'archivio."
                             checked={enableAuto}
                             onChange={async v => {
                                 setEnableAuto(v)
@@ -696,15 +682,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                     setEnableAuto(!v)
                                     toast.error(err?.message || 'Errore aggiornamento')
                                 }
-                            }}
-                        />
-                        <ToggleRow
-                            title="Invia il PDF al cliente via email"
-                            subtitle="Quando il cliente lascia un'email durante il checkout, riceve lo scontrino fiscale in PDF."
-                            checked={emailToCustomer}
-                            onChange={async v => {
-                                setEmailToCustomer(v)
-                                await handleSavePreferences({ fiscalEmailToCustomer: v })
                             }}
                         />
                     </div>

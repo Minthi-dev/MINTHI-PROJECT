@@ -11,6 +11,15 @@ export interface OrderPaymentEntry {
     at: string
     label?: string
     by?: string
+    paymentMethodType?: string
+    stripeSessionId?: string
+    stripePaymentIntentId?: string
+    stripeChargeId?: string
+    stripeReceiptUrl?: string
+    cardBrand?: string
+    cardLast4?: string
+    paypalEmail?: string
+    paypalPayerId?: string
 }
 
 export interface User {
@@ -99,9 +108,18 @@ export interface Restaurant {
     takeaway_require_stripe?: boolean
     takeaway_estimated_minutes?: number
     takeaway_pickup_notice?: string
+    takeaway_pickup_mode?: 'code' | 'qr'
     takeaway_auto_print?: boolean
     takeaway_auto_pickup_enabled?: boolean
     takeaway_max_orders_per_hour?: number | null
+    takeaway_collect_first_name?: boolean
+    takeaway_first_name_required?: boolean
+    takeaway_collect_last_name?: boolean
+    takeaway_last_name_required?: boolean
+    takeaway_collect_phone?: boolean
+    takeaway_phone_required?: boolean
+    takeaway_collect_email?: boolean
+    takeaway_email_required?: boolean
     // Scontrino fiscale OpenAPI (multi-tenant)
     tax_code?: string
     billing_postal_code?: string
@@ -317,6 +335,8 @@ export interface Order {
     order_type?: OrderType
     pickup_number?: number | null
     pickup_code?: string | null
+    takeaway_pickup_mode?: 'code' | 'qr' | null
+    takeaway_pickup_token?: string | null
     customer_name?: string | null
     customer_phone?: string | null
     customer_notes?: string | null
@@ -338,8 +358,39 @@ export interface OrderItem {
     dish_name_snapshot?: string | null
     unit_price_snapshot?: number | null
     vat_rate_snapshot?: string | null
+    takeaway_picked_quantity?: number
     // Frontend helper
     dish?: Dish
+}
+
+export interface TakeawayPickupQrItem {
+    id: string
+    order_id?: string
+    name: string
+    quantity: number
+    picked_quantity: number
+    remaining_quantity: number
+    status?: string
+}
+
+export interface TakeawayPickupQrOrder {
+    id: string
+    restaurant_id: string
+    pickup_number: number
+    pickup_code?: string | null
+    status: OrderStatus
+    total_amount: number
+    paid_amount: number
+    customer_name?: string | null
+    customer_phone?: string | null
+    created_at?: string
+    ready_at?: string | null
+    picked_up_at?: string | null
+    takeaway_pickup_mode?: 'code' | 'qr' | null
+    takeaway_pickup_token?: string | null
+    payment_method?: string | null
+    payments?: OrderPaymentEntry[]
+    items: TakeawayPickupQrItem[]
 }
 
 export interface Booking {

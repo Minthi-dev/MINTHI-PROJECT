@@ -645,10 +645,6 @@ class ThermalPrinterService extends EventTarget {
       buf.push(...this._text(this._line('-')))
       buf.push(...this._text(`Cod. lotteria: ${params.customerLotteryCode}`))
     }
-    if (params.customerEmail) {
-      buf.push(...this._text(`PDF inviato a: ${params.customerEmail}`))
-    }
-
     buf.push(...this._text(this._line('=')))
     buf.push(...CMD.ALIGN_CENTER)
     buf.push(...this._text('Trasmesso via OpenAPI/AdE'))

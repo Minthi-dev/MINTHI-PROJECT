@@ -28,7 +28,9 @@ import {
     ArrowClockwise,
     Sparkle,
     Printer,
-    Package
+    Package,
+    QrCode,
+    Hash
 } from '@phosphor-icons/react'
 import { SoundType } from '../utils/SoundManager'
 import WeeklyScheduleEditor from './WeeklyScheduleEditor'
@@ -186,6 +188,7 @@ export function SettingsView({
     const [dineInEnabled, setDineInEnabled] = useState(true)
     const [takeawayRequireStripe, setTakeawayRequireStripe] = useState(false)
     const [takeawayPickupNotice, setTakeawayPickupNotice] = useState('')
+    const [takeawayPickupMode, setTakeawayPickupMode] = useState<'code' | 'qr'>('code')
     const [takeawayAutoPrint, setTakeawayAutoPrint] = useState(false)
     const [takeawayAutoPickupEnabled, setTakeawayAutoPickupEnabled] = useState(false)
     const [takeawayMaxOrdersPerHour, setTakeawayMaxOrdersPerHour] = useState<number | ''>('')
@@ -195,7 +198,7 @@ export function SettingsView({
     const [takeawayLastNameRequired, setTakeawayLastNameRequired] = useState(false)
     const [takeawayCollectPhone, setTakeawayCollectPhone] = useState(true)
     const [takeawayPhoneRequired, setTakeawayPhoneRequired] = useState(true)
-    const [takeawayCollectEmail, setTakeawayCollectEmail] = useState(true)
+    const [takeawayCollectEmail, setTakeawayCollectEmail] = useState(false)
     const [takeawayEmailRequired, setTakeawayEmailRequired] = useState(false)
     const [savingTakeaway, setSavingTakeaway] = useState(false)
     const [staffList, setStaffList] = useState<RestaurantStaff[]>([])
@@ -261,7 +264,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_auto_print, takeaway_auto_pickup_enabled, takeaway_max_orders_per_hour, takeaway_collect_first_name, takeaway_first_name_required, takeaway_collect_last_name, takeaway_last_name_required, takeaway_collect_phone, takeaway_phone_required, takeaway_collect_email, takeaway_email_required')
+                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_pickup_mode, takeaway_auto_print, takeaway_auto_pickup_enabled, takeaway_max_orders_per_hour, takeaway_collect_first_name, takeaway_first_name_required, takeaway_collect_last_name, takeaway_last_name_required, takeaway_collect_phone, takeaway_phone_required, takeaway_collect_email, takeaway_email_required')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -274,6 +277,7 @@ export function SettingsView({
                 setDineInEnabled((data as any).dine_in_enabled ?? true)
                 setTakeawayRequireStripe((data as any).takeaway_require_stripe ?? false)
                 setTakeawayPickupNotice((data as any).takeaway_pickup_notice || '')
+                setTakeawayPickupMode(((data as any).takeaway_pickup_mode === 'qr' ? 'qr' : 'code'))
                 setTakeawayAutoPrint((data as any).takeaway_auto_print ?? false)
                 setTakeawayAutoPickupEnabled((data as any).takeaway_auto_pickup_enabled ?? false)
                 setTakeawayMaxOrdersPerHour((data as any).takeaway_max_orders_per_hour ?? '')
@@ -283,7 +287,7 @@ export function SettingsView({
                 setTakeawayLastNameRequired((data as any).takeaway_last_name_required ?? false)
                 setTakeawayCollectPhone((data as any).takeaway_collect_phone ?? true)
                 setTakeawayPhoneRequired((data as any).takeaway_phone_required ?? true)
-                setTakeawayCollectEmail((data as any).takeaway_collect_email ?? true)
+                setTakeawayCollectEmail((data as any).takeaway_collect_email ?? false)
                 setTakeawayEmailRequired((data as any).takeaway_email_required ?? false)
 
                 // If account exists but is not marked as enabled, check with Stripe API directly once
@@ -380,6 +384,7 @@ export function SettingsView({
         dine_in_enabled: boolean
         takeaway_require_stripe: boolean
         takeaway_pickup_notice: string
+        takeaway_pickup_mode: 'code' | 'qr'
         takeaway_collect_first_name: boolean
         takeaway_first_name_required: boolean
         takeaway_collect_last_name: boolean
@@ -1268,6 +1273,53 @@ export function SettingsView({
                                                 className="data-[state=checked]:bg-amber-500 shrink-0"
                                             />
                                         </div>
+                                        <div className="px-5 py-4">
+                                            <div className="mb-3">
+                                                <p className="text-[15px] font-semibold text-white">Modalità ritiro</p>
+                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
+                                                    Scegli cosa mostrare al cliente dopo il pagamento dell'ordine asporto.
+                                                </p>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {([
+                                                    {
+                                                        value: 'code' as const,
+                                                        title: 'Numero ritiro',
+                                                        text: 'Il cliente mostra il numero ordine al banco.',
+                                                        icon: Hash,
+                                                    },
+                                                    {
+                                                        value: 'qr' as const,
+                                                        title: 'QR ritiro',
+                                                        text: 'Il cliente salva il QR e il personale lo scannerizza.',
+                                                        icon: QrCode,
+                                                    },
+                                                ]).map(option => {
+                                                    const Icon = option.icon
+                                                    const active = takeawayPickupMode === option.value
+                                                    return (
+                                                        <button
+                                                            key={option.value}
+                                                            type="button"
+                                                            disabled={savingTakeaway}
+                                                            onClick={async () => {
+                                                                const previous = takeawayPickupMode
+                                                                setTakeawayPickupMode(option.value)
+                                                                const ok = await saveTakeawaySettings({ takeaway_pickup_mode: option.value })
+                                                                if (!ok) setTakeawayPickupMode(previous)
+                                                            }}
+                                                            className={`text-left rounded-xl border p-4 transition-all ${active ? 'border-amber-400 bg-amber-500/15 text-white shadow-lg shadow-amber-500/10' : 'border-white/10 bg-black/20 text-zinc-300 hover:border-white/20'}`}
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <Icon size={20} weight={active ? 'fill' : 'regular'} className={active ? 'text-amber-300' : 'text-zinc-400'} />
+                                                                <span className="text-sm font-bold">{option.title}</span>
+                                                            </div>
+                                                            <p className="mt-2 text-xs leading-relaxed text-zinc-400">{option.text}</p>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </div>
                                         <div className="flex items-center justify-between gap-4 px-5 py-4">
                                             <div className="min-w-0">
                                                 <p className="text-[15px] font-semibold text-white">Stampa automatica comande</p>
@@ -1384,55 +1436,38 @@ export function SettingsView({
                                         Dati richiesti al cliente
                                     </h3>
                                     <p className="text-[12px] text-zinc-400 mb-3 px-1">
-                                        Scegli quali campi mostrare nel checkout asporto. Per ogni campo decidi se mostrarlo e se renderlo obbligatorio.
+                                        Seleziona solo i dati davvero utili. I campi attivi vengono richiesti prima del pagamento.
                                     </p>
                                     <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
                                         {([
-                                            { key: 'first', label: 'Nome', collect: takeawayCollectFirstName, setCollect: setTakeawayCollectFirstName, req: takeawayFirstNameRequired, setReq: setTakeawayFirstNameRequired, dbCollect: 'takeaway_collect_first_name' as const, dbReq: 'takeaway_first_name_required' as const },
-                                            { key: 'last', label: 'Cognome', collect: takeawayCollectLastName, setCollect: setTakeawayCollectLastName, req: takeawayLastNameRequired, setReq: setTakeawayLastNameRequired, dbCollect: 'takeaway_collect_last_name' as const, dbReq: 'takeaway_last_name_required' as const },
-                                            { key: 'phone', label: 'Telefono', collect: takeawayCollectPhone, setCollect: setTakeawayCollectPhone, req: takeawayPhoneRequired, setReq: setTakeawayPhoneRequired, dbCollect: 'takeaway_collect_phone' as const, dbReq: 'takeaway_phone_required' as const },
-                                            { key: 'email', label: 'Email', collect: takeawayCollectEmail, setCollect: setTakeawayCollectEmail, req: takeawayEmailRequired, setReq: setTakeawayEmailRequired, dbCollect: 'takeaway_collect_email' as const, dbReq: 'takeaway_email_required' as const },
+                                            { key: 'first', label: 'Nome', hint: 'Utile per chiamare il cliente al banco.', collect: takeawayCollectFirstName, setCollect: setTakeawayCollectFirstName, setReq: setTakeawayFirstNameRequired, dbCollect: 'takeaway_collect_first_name' as const, dbReq: 'takeaway_first_name_required' as const },
+                                            { key: 'last', label: 'Cognome', hint: 'Aggiungilo solo se ti serve distinguere ordini simili.', collect: takeawayCollectLastName, setCollect: setTakeawayCollectLastName, setReq: setTakeawayLastNameRequired, dbCollect: 'takeaway_collect_last_name' as const, dbReq: 'takeaway_last_name_required' as const },
+                                            { key: 'phone', label: 'Telefono', hint: 'Da usare solo se vuoi un riferimento operativo.', collect: takeawayCollectPhone, setCollect: setTakeawayCollectPhone, setReq: setTakeawayPhoneRequired, dbCollect: 'takeaway_collect_phone' as const, dbReq: 'takeaway_phone_required' as const },
+                                            { key: 'email', label: 'Email', hint: 'Campo informativo: non invia automaticamente comunicazioni.', collect: takeawayCollectEmail, setCollect: setTakeawayCollectEmail, setReq: setTakeawayEmailRequired, dbCollect: 'takeaway_collect_email' as const, dbReq: 'takeaway_email_required' as const },
                                         ]).map(row => (
                                             <div key={row.key} className="flex items-center justify-between gap-4 px-5 py-3.5">
                                                 <div className="min-w-0">
                                                     <p className="text-[14px] font-semibold text-white">{row.label}</p>
-                                                    {row.key === 'email' && (
-                                                        <p className="text-[12px] text-zinc-500 mt-0.5">Necessario per invio scontrino fiscale digitale al cliente</p>
-                                                    )}
+                                                    <p className="text-[12px] text-zinc-500 mt-0.5 leading-relaxed">{row.hint}</p>
                                                 </div>
-                                                <div className="flex items-center gap-3 shrink-0">
-                                                    <label className="flex items-center gap-2 text-[12px] text-zinc-400">
-                                                        <Switch
-                                                            checked={row.collect}
-                                                            onCheckedChange={async v => {
-                                                                row.setCollect(v)
-                                                                if (!v) row.setReq(false)
-                                                                await saveTakeawaySettings({
-                                                                    [row.dbCollect]: v,
-                                                                    ...(!v ? { [row.dbReq]: false } : {}),
-                                                                } as any)
-                                                            }}
-                                                        />
-                                                        Mostra
-                                                    </label>
-                                                    <label className={`flex items-center gap-2 text-[12px] ${row.collect ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                                                        <Switch
-                                                            checked={row.req}
-                                                            disabled={!row.collect}
-                                                            onCheckedChange={async v => {
-                                                                row.setReq(v)
-                                                                await saveTakeawaySettings({ [row.dbReq]: v } as any)
-                                                            }}
-                                                        />
-                                                        Obbligatorio
-                                                    </label>
-                                                </div>
+                                                <label className="flex items-center gap-2 text-[12px] text-zinc-400 shrink-0">
+                                                    <Switch
+                                                        checked={row.collect}
+                                                        disabled={savingTakeaway}
+                                                        onCheckedChange={async v => {
+                                                            row.setCollect(v)
+                                                            row.setReq(v)
+                                                            await saveTakeawaySettings({
+                                                                [row.dbCollect]: v,
+                                                                [row.dbReq]: v,
+                                                            } as any)
+                                                        }}
+                                                    />
+                                                    Richiedi
+                                                </label>
                                             </div>
                                         ))}
                                     </div>
-                                    <p className="text-[11px] text-zinc-500 mt-2 px-1 leading-relaxed">
-                                        💡 Se attivi <strong>Email · Obbligatorio</strong>, ogni cliente riceverà automaticamente lo scontrino fiscale via email dopo il pagamento Stripe.
-                                    </p>
                                 </section>
                             </>
                         )}

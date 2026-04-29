@@ -159,24 +159,36 @@ export default function TakeawayMenu() {
     const canPayStripe = Boolean(restaurant?.enable_stripe_payments && restaurant?.stripe_connect_enabled)
     const canPayOnPickup = !restaurant?.takeaway_require_stripe
     const stripeRequiredButUnavailable = Boolean(restaurant?.takeaway_require_stripe && !canPayStripe)
+    const collectFirstName = restaurant?.takeaway_collect_first_name !== false
+    const collectLastName = !!restaurant?.takeaway_collect_last_name
+    const collectPhone = restaurant?.takeaway_collect_phone !== false
+    const collectEmail = restaurant?.takeaway_collect_email === true
+    const needsCustomerFields = collectFirstName || collectLastName || collectPhone || collectEmail
+    const needsPaymentChoice = canPayStripe && canPayOnPickup
+
+    const handleProceedToCheckout = () => {
+        if (cart.length === 0 || submitting) return
+        setCartOpen(false)
+        if (!needsCustomerFields && !needsPaymentChoice) {
+            void submitOrder()
+            return
+        }
+        setCheckoutOpen(true)
+    }
 
     const submitOrder = async () => {
         if (!restaurantId) return
         if (cart.length === 0) return toast.error('Il carrello è vuoto')
 
-        const collectFirstName = restaurant?.takeaway_collect_first_name !== false
         const firstNameRequired = restaurant?.takeaway_first_name_required !== false
-        const collectLastName = !!restaurant?.takeaway_collect_last_name
         const lastNameRequired = !!restaurant?.takeaway_last_name_required
-        const collectPhone = restaurant?.takeaway_collect_phone !== false
         const phoneRequired = restaurant?.takeaway_phone_required !== false
-        const collectEmail = restaurant?.takeaway_collect_email !== false
         const emailRequired = !!restaurant?.takeaway_email_required
 
         if (collectFirstName && firstNameRequired && !customerName.trim()) return toast.error('Inserisci il tuo nome')
         if (collectLastName && lastNameRequired && !customerLastName.trim()) return toast.error('Inserisci il cognome')
         if (collectPhone && phoneRequired && !customerPhone.trim()) return toast.error('Inserisci un numero di telefono')
-        if (collectEmail && emailRequired && !customerEmail.trim()) return toast.error("Inserisci l'email per ricevere lo scontrino")
+        if (collectEmail && emailRequired && !customerEmail.trim()) return toast.error("Inserisci l'email")
         if (paymentChoice === 'stripe' && !canPayStripe) return toast.error('Pagamento online non disponibile')
         if (paymentChoice === 'pay_on_pickup' && !canPayOnPickup) return toast.error('Questo ristorante richiede il pagamento online')
 
@@ -189,10 +201,10 @@ export default function TakeawayMenu() {
                     quantity: c.quantity,
                     note: c.note,
                 })),
-                customerName: customerName.trim(),
-                customerLastName: customerLastName.trim() || undefined,
-                customerPhone: customerPhone.trim(),
-                customerEmail: customerEmail.trim() || undefined,
+                customerName: collectFirstName ? customerName.trim() : '',
+                customerLastName: collectLastName ? customerLastName.trim() || undefined : undefined,
+                customerPhone: collectPhone ? customerPhone.trim() : '',
+                customerEmail: collectEmail ? customerEmail.trim() || undefined : undefined,
                 customerNotes: customerNotes.trim() || undefined,
                 paymentMethod: paymentChoice,
                 idempotencyKey,
@@ -401,8 +413,8 @@ export default function TakeawayMenu() {
                         <div className="flex justify-between text-lg font-bold mb-3">
                             <span>Totale</span><span className="text-amber-400">€{total.toFixed(2)}</span>
                         </div>
-                        <Button disabled={cart.length === 0} onClick={() => { setCartOpen(false); setCheckoutOpen(true) }} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-12 uppercase tracking-wide">
-                            Vai al Pagamento
+                        <Button disabled={cart.length === 0 || submitting} onClick={handleProceedToCheckout} className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-12 uppercase tracking-wide">
+                            {submitting ? 'Invio...' : 'Vai al pagamento'}
                         </Button>
                     </div>
                 </DrawerContent>
@@ -415,63 +427,87 @@ export default function TakeawayMenu() {
                         <DialogTitle className="flex items-center gap-2"><CheckCircle size={20} className="text-amber-400" /> Conferma ordine</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-3">
-                        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 overflow-hidden divide-y divide-white/5 shadow-inner">
-                            {/* Nome e Cognome */}
-                            {(restaurant?.takeaway_collect_first_name !== false || !!restaurant?.takeaway_collect_last_name) && (
-                                <div className="flex bg-transparent">
-                                    {restaurant?.takeaway_collect_first_name !== false && (
-                                        <div className={`flex-1 px-4 py-3.5 ${!!restaurant?.takeaway_collect_last_name ? 'border-r border-white/5' : ''}`}>
-                                            <input 
-                                                className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
-                                                placeholder={`Nome${restaurant?.takeaway_first_name_required !== false ? ' *' : ''}`} 
-                                                value={customerName} 
-                                                onChange={e => setCustomerName(e.target.value)} 
-                                            />
-                                        </div>
-                                    )}
-                                    {!!restaurant?.takeaway_collect_last_name && (
-                                        <div className="flex-1 px-4 py-3.5">
-                                            <input 
-                                                className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
-                                                placeholder={`Cognome${!!restaurant?.takeaway_last_name_required ? ' *' : ''}`} 
-                                                value={customerLastName} 
-                                                onChange={e => setCustomerLastName(e.target.value)} 
-                                            />
-                                        </div>
-                                    )}
+                        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-[0.18em] text-amber-200/80 font-bold">Riepilogo</div>
+                                    <div className="text-sm text-zinc-200">{cart.length} prodotti · ~{cartPrepMinutes} min</div>
                                 </div>
-                            )}
-
-                            {/* Telefono */}
-                            {restaurant?.takeaway_collect_phone !== false && (
-                                <div className="px-4 py-3.5 flex items-center gap-3 bg-transparent">
-                                    <Phone size={16} className="text-zinc-500" />
-                                    <input 
-                                        className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
-                                        placeholder={`Telefono${restaurant?.takeaway_phone_required !== false ? ' *' : ''}`} 
-                                        value={customerPhone} 
-                                        inputMode="tel"
-                                        onChange={e => setCustomerPhone(e.target.value)} 
-                                    />
-                                </div>
-                            )}
-
-                            {/* Email */}
-                            {restaurant?.takeaway_collect_email !== false && (
-                                <div className="px-4 py-3.5 flex items-center gap-3 bg-transparent">
-                                    <EnvelopeSimple size={16} className="text-zinc-500" />
-                                    <input 
-                                        type="email"
-                                        className="w-full bg-transparent outline-none text-sm placeholder:text-zinc-500 text-white" 
-                                        placeholder={`Email${!!restaurant?.takeaway_email_required ? ' *' : ''}`} 
-                                        value={customerEmail} 
-                                        onChange={e => setCustomerEmail(e.target.value)} 
-                                    />
-                                </div>
-                            )}
+                                <div className="text-right text-xl font-black text-amber-300">€{total.toFixed(2)}</div>
+                            </div>
                         </div>
-                        {restaurant?.takeaway_collect_email !== false && (
-                            <p className="text-[11px] text-zinc-500 -mt-1 px-2">Riceverai lo scontrino digitale a questo indirizzo.</p>
+
+                        {needsCustomerFields && (
+                            <div className="rounded-2xl border border-white/10 bg-zinc-900/70 p-4 shadow-inner space-y-3">
+                                <div>
+                                    <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500 font-bold mb-1">Dati ritiro</div>
+                                    <p className="text-xs text-zinc-400">Compila solo i campi richiesti dal locale.</p>
+                                </div>
+                                {(collectFirstName || collectLastName) && (
+                                    <div className={`grid gap-3 ${collectFirstName && collectLastName ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                                        {collectFirstName && (
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Nome{restaurant?.takeaway_first_name_required !== false ? ' *' : ''}</label>
+                                                <Input
+                                                    value={customerName}
+                                                    onChange={e => setCustomerName(e.target.value)}
+                                                    maxLength={80}
+                                                    autoComplete="given-name"
+                                                    className="h-11 rounded-xl bg-black/25 border-white/10 text-white placeholder:text-zinc-600"
+                                                    placeholder="Nome"
+                                                />
+                                            </div>
+                                        )}
+                                        {collectLastName && (
+                                            <div className="space-y-1.5 min-w-0">
+                                                <label className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Cognome{!!restaurant?.takeaway_last_name_required ? ' *' : ''}</label>
+                                                <Input
+                                                    value={customerLastName}
+                                                    onChange={e => setCustomerLastName(e.target.value)}
+                                                    maxLength={80}
+                                                    autoComplete="family-name"
+                                                    className="h-11 rounded-xl bg-black/25 border-white/10 text-white placeholder:text-zinc-600"
+                                                    placeholder="Cognome"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {collectPhone && (
+                                    <div className="space-y-1.5 min-w-0">
+                                        <label className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Telefono{restaurant?.takeaway_phone_required !== false ? ' *' : ''}</label>
+                                        <div className="relative">
+                                            <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                                            <Input
+                                                value={customerPhone}
+                                                inputMode="tel"
+                                                autoComplete="tel"
+                                                onChange={e => setCustomerPhone(e.target.value)}
+                                                maxLength={32}
+                                                className="h-11 rounded-xl bg-black/25 border-white/10 text-white placeholder:text-zinc-600 pl-9"
+                                                placeholder="Numero di telefono"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                {collectEmail && (
+                                    <div className="space-y-1.5 min-w-0">
+                                        <label className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold">Email{!!restaurant?.takeaway_email_required ? ' *' : ''}</label>
+                                        <div className="relative">
+                                            <EnvelopeSimple size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                                            <Input
+                                                value={customerEmail}
+                                                type="email"
+                                                autoComplete="email"
+                                                onChange={e => setCustomerEmail(e.target.value)}
+                                                maxLength={120}
+                                                className="h-11 rounded-xl bg-black/25 border-white/10 text-white placeholder:text-zinc-600 pl-9"
+                                                placeholder="Email"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         )}
 
                         {/* Note */}

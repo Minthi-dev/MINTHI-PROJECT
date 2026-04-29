@@ -10,14 +10,16 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard, MagnifyingGlass, CalendarBlank, XCircle, Plus, Minus } from '@phosphor-icons/react'
+import { ShoppingBag, Clock, Bell, ForkKnife, CheckCircle, Trash, Receipt, CaretRight, Package, Check, ArrowsDownUp, FunnelSimple, CreditCard, MagnifyingGlass, CalendarBlank, XCircle, Plus, Minus, QrCode } from '@phosphor-icons/react'
 import { cn } from '@/lib/utils'
 import TakeawayPaymentDialog from './TakeawayPaymentDialog'
+import TakeawayQrScannerDialog from './TakeawayQrScannerDialog'
 
 interface Props {
     restaurantId: string
     restaurantName?: string
     takeawayRequireStripe?: boolean
+    takeawayPickupMode?: 'code' | 'qr' | null
     takeawayAutoPickupEnabled?: boolean
     onPrintKitchenOrder?: (order: Order) => void
     onAutoPrintKitchenOrder?: (order: Order) => void
@@ -128,6 +130,32 @@ function archiveItemsLabel(order: Order) {
     return items.length > 2 ? `${first} +${items.length - 2}` : first
 }
 
+function paymentSearchText(order: Order) {
+    const payments = Array.isArray(order.payments) ? order.payments : []
+    const paymentParts = payments.flatMap((p: any) => [
+        p.method,
+        p.label,
+        p.paymentMethodType,
+        p.stripeSessionId,
+        p.stripePaymentIntentId,
+        p.stripeChargeId,
+        p.stripeReceiptUrl,
+        p.cardBrand,
+        p.cardLast4,
+        p.paypalEmail,
+        p.paypalPayerId,
+    ])
+    return [
+        String(order.pickup_number || '').padStart(3, '0'),
+        order.pickup_code || '',
+        order.customer_name || '',
+        order.customer_phone || '',
+        order.payment_method || '',
+        archiveItemsLabel(order),
+        ...paymentParts,
+    ].filter(Boolean).join(' ').toLowerCase()
+}
+
 function orderMatchesCategories(order: Order, categoryIds: string[]) {
     if (categoryIds.length === 0) return true
     return (order.items || []).some((it: any) => it.dish?.category_id && categoryIds.includes(it.dish.category_id))
@@ -146,7 +174,7 @@ function formatCountdown(ms: number) {
     return `${minutes}m ${String(seconds).padStart(2, '0')}s`
 }
 
-export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStripe = false, takeawayAutoPickupEnabled = false, onPrintKitchenOrder, onAutoPrintKitchenOrder, onPrintReceipt }: Props) {
+export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStripe = false, takeawayPickupMode = 'code', takeawayAutoPickupEnabled = false, onPrintKitchenOrder, onAutoPrintKitchenOrder, onPrintReceipt }: Props) {
     const [orders, setOrders] = useState<Order[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [loading, setLoading] = useState(true)
@@ -165,6 +193,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     const [archiveTo, setArchiveTo] = useState(() => toInputDate(new Date()))
     const [archiveSearch, setArchiveSearch] = useState('')
     const [archiveStatus, setArchiveStatus] = useState<ArchiveStatusFilter>('all')
+    const [scannerOpen, setScannerOpen] = useState(false)
     const knownKitchenPrintIdsRef = useRef<Set<string>>(new Set())
     const initialKitchenPrintLoadRef = useRef(true)
     const autoPickupInFlightRef = useRef<Set<string>>(new Set())
@@ -351,15 +380,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
 
             const q = archiveSearch.trim().toLowerCase()
             if (q) {
-                list = list.filter(o => {
-                    const haystack = [
-                        String(o.pickup_number || '').padStart(3, '0'),
-                        o.customer_name || '',
-                        o.customer_phone || '',
-                        archiveItemsLabel(o),
-                    ].join(' ').toLowerCase()
-                    return haystack.includes(q)
-                })
+                list = list.filter(o => paymentSearchText(o).includes(q))
             }
 
             return list
@@ -370,6 +391,8 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         if (selectedCategoryIds.length > 0) list = list.filter(o => orderMatchesCategories(o, selectedCategoryIds))
         if (statusFilter === 'preparing') list = list.filter(o => o.status === 'PREPARING')
         else if (statusFilter === 'ready') list = list.filter(o => o.status === 'READY')
+        const q = archiveSearch.trim().toLowerCase()
+        if (q) list = list.filter(o => paymentSearchText(o).includes(q))
         const sorted = [...list].sort((a, b) => {
             const ta = new Date(a.created_at).getTime()
             const tb = new Date(b.created_at).getTime()
@@ -433,6 +456,14 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     <Package size={26} className="text-amber-400" weight="fill" /> Ordini asporto
                 </h2>
                 <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    {takeawayPickupMode === 'qr' && (
+                        <Button
+                            onClick={() => setScannerOpen(true)}
+                            className="bg-emerald-500 hover:bg-emerald-400 text-black font-black"
+                        >
+                            <QrCode size={17} weight="fill" className="mr-2" /> Scannerizza QR
+                        </Button>
+                    )}
                     {categories.length > 0 && (
                         <CategoryFilterButton
                             categories={categories}
@@ -488,6 +519,15 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                             <Bell size={14} className="mr-1" /> Da consegnare <span className="opacity-60">({counts.ready})</span>
                         </FilterPill>
                     </div>
+                    <div className="relative flex-1 min-w-[220px]">
+                        <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                        <Input
+                            value={archiveSearch}
+                            onChange={e => setArchiveSearch(e.target.value)}
+                            placeholder="Cerca numero, cliente, pagamento o ID Stripe"
+                            className="pl-9 bg-black/20 border-white/10 h-9 text-sm"
+                        />
+                    </div>
                     <div className="ml-auto flex items-center gap-1.5">
                         <button
                             onClick={() => setSortOrder(s => s === 'oldest' ? 'newest' : 'oldest')}
@@ -534,7 +574,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                             <Input
                                 value={archiveSearch}
                                 onChange={e => setArchiveSearch(e.target.value)}
-                                placeholder="Cerca numero, cliente, telefono o piatto"
+                                placeholder="Cerca numero, cliente, pagamento o ID Stripe"
                                 className="pl-9 bg-black/20 border-white/10 h-9 text-sm"
                             />
                         </div>
@@ -627,6 +667,15 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                 forceStripeOnly={forceStripePayment}
             />
 
+            <TakeawayQrScannerDialog
+                open={scannerOpen}
+                onOpenChange={(next) => {
+                    setScannerOpen(next)
+                    if (!next) refresh()
+                }}
+                restaurantId={restaurantId}
+            />
+
             <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
                 <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-md">
                     <DialogHeader>
@@ -655,6 +704,27 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                                     </div>
                                 )}
                             </div>
+                            {Array.isArray(selected.payments) && selected.payments.length > 0 && (
+                                <div className="bg-white/5 rounded-lg p-3 border border-white/10 space-y-2 text-sm">
+                                    <div className="text-zinc-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                                        <CreditCard size={13} /> Traccia pagamento
+                                    </div>
+                                    {selected.payments.map((payment: any, index: number) => (
+                                        <div key={`${payment.at || index}-${payment.amount || 0}`} className="rounded-lg bg-black/20 border border-white/5 p-2 space-y-1">
+                                            <div className="flex justify-between gap-3">
+                                                <span className="font-semibold text-zinc-100">{payment.label || payment.method || 'Pagamento'}</span>
+                                                <span className="font-mono text-emerald-300">€{Number(payment.amount || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div className="text-[11px] text-zinc-500">
+                                                {[payment.method, payment.paymentMethodType, payment.cardBrand, payment.cardLast4 ? `•••• ${payment.cardLast4}` : ''].filter(Boolean).join(' · ')}
+                                            </div>
+                                            {[payment.stripeSessionId, payment.stripePaymentIntentId, payment.stripeChargeId, payment.paypalEmail, payment.paypalPayerId].filter(Boolean).map((value: string) => (
+                                                <div key={value} className="text-[11px] text-zinc-500 font-mono truncate">{value}</div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             <div className="flex gap-2">
                                 {onPrintKitchenOrder && <Button size="sm" onClick={() => onPrintKitchenOrder(selected)} variant="outline" className="border-white/10"><Receipt size={14} className="mr-1" />Stampa comanda</Button>}
                                 {selected.status !== 'PAID' && selected.status !== 'CANCELLED' && selected.status !== 'PICKED_UP' && (

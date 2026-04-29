@@ -17,9 +17,6 @@
 //   - L'evento può arrivare più volte. Aggiorniamo solo se lo stato
 //     non è già 'ready'.
 //
-// Side-effect:
-//   - Quando lo scontrino è "ready", se il customer_email è presente,
-//     generiamo il PDF dai dati OpenAPI confermati e lo inviamo via Resend.
 // =====================================================================
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
@@ -171,84 +168,6 @@ serve(async (req) => {
                     ready_at: new Date().toISOString(),
                 })
                 .eq("id", row.id);
-        }
-
-        // Email PDF al cliente (best-effort, non blocca il webhook)
-        if (row.customer_email && !row.customer_email_sent_at && !RESEND_API_KEY) {
-            await supabase
-                .from("fiscal_receipts")
-                .update({ customer_email_error: "RESEND_API_KEY non configurato: email PDF non inviata" })
-                .eq("id", row.id);
-        }
-
-        if (row.customer_email && !row.customer_email_sent_at && RESEND_API_KEY) {
-            try {
-                const [{ data: rest }, { data: fiscalSettings }] = await Promise.all([
-                    supabase
-                        .from("restaurants")
-                        .select("id, name, address, billing_name, vat_number, billing_address, billing_city, billing_province, billing_cap")
-                        .eq("id", row.restaurant_id)
-                        .maybeSingle(),
-                    supabase
-                        .from("restaurant_fiscal_settings")
-                        .select("fiscal_email_to_customer, tax_code, openapi_fiscal_id, default_vat_rate_code")
-                        .eq("restaurant_id", row.restaurant_id)
-                        .maybeSingle(),
-                ]);
-                if (fiscalSettings?.fiscal_email_to_customer !== false) {
-                    const { data: receiptForPdf } = await supabase
-                        .from("fiscal_receipts")
-                        .select("*")
-                        .eq("id", row.id)
-                        .maybeSingle();
-                    const pdfBytes = await generateFiscalReceiptPdf({
-                        receipt: receiptForPdf || row,
-                        restaurant: rest,
-                        fiscalSettings,
-                        openapiEnv: getOpenApiEnv(),
-                    });
-                    const base64 = base64FromBytes(pdfBytes);
-                    const restaurantName = rest?.name || "Ristorante";
-
-                    const emailRes = await fetch("https://api.resend.com/emails", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${RESEND_API_KEY}`,
-                        },
-                        body: JSON.stringify({
-                            from: FROM_EMAIL,
-                            to: [row.customer_email],
-                            subject: `Scontrino fiscale — ${restaurantName}`,
-                            html: receiptEmailHtml(restaurantName),
-                            text: `Grazie per averci scelto. In allegato lo scontrino fiscale di ${restaurantName}.`,
-                            attachments: [{
-                                filename: `scontrino-${openapiReceiptId}.pdf`,
-                                content: base64,
-                            }],
-                        }),
-                    });
-
-                    if (emailRes.ok) {
-                        await supabase
-                            .from("fiscal_receipts")
-                            .update({ customer_email_sent_at: new Date().toISOString() })
-                            .eq("id", row.id);
-                    } else {
-                        const txt = await emailRes.text().catch(() => "");
-                        await supabase
-                            .from("fiscal_receipts")
-                            .update({ customer_email_error: `Resend ${emailRes.status}: ${txt}`.slice(0, 500) })
-                            .eq("id", row.id);
-                    }
-                }
-            } catch (mailErr: any) {
-                console.error("[openapi-webhook] email error:", mailErr);
-                await supabase
-                    .from("fiscal_receipts")
-                    .update({ customer_email_error: String(mailErr?.message || mailErr).slice(0, 500) })
-                    .eq("id", row.id);
-            }
         }
 
         return json({ ok: true, status: "ready" });

@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase'
 import { DatabaseService } from '@/services/DatabaseService'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { CheckCircle, Clock, ForkKnife, Bell, Warning, House, Receipt, DownloadSimple } from '@phosphor-icons/react'
+import { CheckCircle, Clock, ForkKnife, Bell, Warning, House, Receipt, QrCode, FloppyDisk } from '@phosphor-icons/react'
+import QRCodeGenerator from '@/components/QRCodeGenerator'
 
 type Status = 'PENDING' | 'PREPARING' | 'READY' | 'PICKED_UP' | 'PAID' | 'CANCELLED'
 
@@ -34,6 +35,16 @@ export default function TakeawayOrderStatus() {
         customer_name: string
         estimated_minutes: number
         takeaway_require_stripe: boolean
+        takeaway_pickup_mode?: 'code' | 'qr'
+        takeaway_pickup_token?: string | null
+        items?: Array<{
+            id: string
+            name: string
+            quantity: number
+            picked_quantity: number
+            remaining_quantity: number
+            status?: string
+        }>
     } | null>(null)
     const [loading, setLoading] = useState(true)
     const [notFound, setNotFound] = useState(false)
@@ -200,6 +211,42 @@ export default function TakeawayOrderStatus() {
     const requiresOnlinePayment = Boolean(order.takeaway_require_stripe)
     const isPaid = unpaid < 0.01 && order.status !== 'CANCELLED'
     const receiptReady = fiscalReceiptStatus === 'ready'
+    const pickupQrValue = restaurantId && order.takeaway_pickup_token
+        ? `${window.location.origin}/takeaway-pickup/${restaurantId}?token=${order.takeaway_pickup_token}`
+        : ''
+    const qrMode = isPaid && order.takeaway_pickup_mode === 'qr' && !!pickupQrValue
+    const pickupItems = order.items || []
+    const totalPieces = pickupItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+    const pickedPieces = pickupItems.reduce((sum, item) => sum + Number(item.picked_quantity || 0), 0)
+    const remainingPieces = Math.max(0, totalPieces - pickedPieces)
+
+    const handleSavePickupQr = () => {
+        if (!pickupQrValue) return
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=${encodeURIComponent(pickupQrValue)}`
+        const safeNumber = String(order.pickup_number).padStart(3, '0')
+        const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="1060" viewBox="0 0 780 1060">
+  <rect width="780" height="1060" rx="44" fill="#0a0a0a"/>
+  <rect x="34" y="34" width="712" height="992" rx="36" fill="#17110a" stroke="#f59e0b" stroke-width="4"/>
+  <text x="390" y="126" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="700" fill="#fbbf24">RITIRO ASPORTO</text>
+  <text x="390" y="220" text-anchor="middle" font-family="Arial, sans-serif" font-size="110" font-weight="900" fill="#fbbf24">#${safeNumber}</text>
+  <image href="${qrUrl}" x="180" y="280" width="420" height="420"/>
+  <text x="390" y="770" text-anchor="middle" font-family="Arial, sans-serif" font-size="30" font-weight="800" fill="#ffffff">Salva questo QR</text>
+  <text x="390" y="822" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#d4d4d8">Mostralo al banco per validare il ritiro.</text>
+  <text x="390" y="866" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#d4d4d8">Il personale scannerizza e spunta i prodotti consegnati.</text>
+  <text x="390" y="942" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" fill="#a1a1aa">Non chiudere o perdere questa immagine prima del ritiro.</text>
+</svg>`
+        const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `ritiro-asporto-${safeNumber}.svg`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+        toast.success('QR salvato')
+    }
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white p-3 sm:p-4 flex flex-col items-center justify-start pb-[env(safe-area-inset-bottom)]">
@@ -272,6 +319,54 @@ export default function TakeawayOrderStatus() {
                     )}
                 </Card>
 
+                {qrMode && (
+                    <Card className="bg-emerald-500/10 border-emerald-500/30 p-4 rounded-2xl">
+                        <div className="flex items-center gap-2 mb-3">
+                            <QrCode size={20} weight="fill" className="text-emerald-300" />
+                            <div>
+                                <div className="text-sm font-black uppercase tracking-wide text-emerald-200">QR ritiro</div>
+                                <div className="text-xs text-emerald-100/75">Salvalo e mostralo al banco.</div>
+                            </div>
+                        </div>
+                        <div className="rounded-2xl bg-white p-3 flex justify-center">
+                            <QRCodeGenerator value={pickupQrValue} size={220} className="rounded-xl" />
+                        </div>
+                        <div className="mt-3 rounded-xl border border-emerald-400/20 bg-black/20 p-3 text-xs leading-relaxed text-emerald-50/85">
+                            Mostra questo QR al personale. Verrà scannerizzato e ogni prodotto consegnato sarà spuntato. Salvalo adesso per non perderlo prima del ritiro.
+                        </div>
+                        <Button onClick={handleSavePickupQr} className="mt-3 w-full bg-emerald-400 hover:bg-emerald-300 text-black font-black">
+                            <FloppyDisk size={17} weight="fill" className="mr-2" /> Salva QR ritiro
+                        </Button>
+                    </Card>
+                )}
+
+                {qrMode && pickupItems.length > 0 && (
+                    <Card className="bg-zinc-900/50 border-white/5 p-3 rounded-2xl">
+                        <div className="flex items-center justify-between mb-2">
+                            <div>
+                                <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">Ritiro prodotti</div>
+                                <div className="text-sm font-semibold text-zinc-200">{remainingPieces} da ritirare · {pickedPieces} ritirati</div>
+                            </div>
+                            <div className="text-right text-xs text-zinc-500">{pickedPieces}/{totalPieces}</div>
+                        </div>
+                        <div className="space-y-2">
+                            {pickupItems.map(item => (
+                                <div key={item.id} className="rounded-xl bg-black/20 border border-white/5 p-2.5">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-semibold text-zinc-100 truncate">{item.name}</div>
+                                            <div className="text-xs text-zinc-500">{item.picked_quantity} ritirati · {item.remaining_quantity} mancanti</div>
+                                        </div>
+                                        <div className={`shrink-0 text-xs font-black rounded-full px-2 py-1 ${item.remaining_quantity > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                                            {item.remaining_quantity > 0 ? `${item.remaining_quantity}x` : 'OK'}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+                )}
+
                 {/* Fiscal receipt download */}
                 {isPaid && (
                     <Card className={`${receiptReady ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-amber-500/10 border-amber-500/20'} p-3 rounded-2xl`}>
@@ -302,7 +397,9 @@ export default function TakeawayOrderStatus() {
                 )}
 
                 <div className="text-center text-xs text-zinc-500 pt-2">
-                    Salva questa pagina. Il numero #{String(order.pickup_number).padStart(3, '0')} sarà mostrato sullo schermo in sala quando pronto.
+                    {order.takeaway_pickup_mode === 'qr'
+                        ? 'Salva questa pagina e il QR ritiro: servirà al banco quando l\'ordine sarà pronto.'
+                        : `Salva questa pagina. Il numero #${String(order.pickup_number).padStart(3, '0')} sarà mostrato sullo schermo in sala quando pronto.`}
                 </div>
             </div>
         </div>

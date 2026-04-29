@@ -1086,7 +1086,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [lastVerifiedSessionPaidAmount, setLastVerifiedSessionPaidAmount] = useState<number | null>(null)
   const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
-  const [paymentCustomerEmail, setPaymentCustomerEmail] = useState('')
 
   // Bottom nav tab
   const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>('menu')
@@ -1994,12 +1993,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     setIsProcessingStripePayment(true)
 
     try {
-      const cleanPaymentEmail = paymentCustomerEmail.trim()
-      if (cleanPaymentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanPaymentEmail)) {
-        toast.error('Email non valida')
-        return
-      }
-
       const orderIds = previousOrders.filter(o => o.status !== 'PAID' && o.status !== 'CANCELLED').map(o => o.id)
 
       if (orderIds.length === 0) {
@@ -2072,7 +2065,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         splitLabel,
         tableId: tableId || '',
         paidOrderItemIds: paidOrderItemIds.length > 0 ? paidOrderItemIds : undefined,
-        customerEmail: cleanPaymentEmail || undefined,
       })
 
       if (url) {
@@ -3199,17 +3191,6 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
 	                    {/* ZONA 3: Bottoni pagamento compatti (fixed bottom) */}
 	                    {(fullRestaurant as any)?.enable_stripe_payments && unpaidTotal > 0 && (
 	                      <div className="flex-none px-4 pt-3 pb-4" style={{ borderTop: `1px solid ${theme.divider}`, backgroundColor: theme.headerBg }}>
-	                        <div className="mb-2">
-	                          <Input
-	                            value={paymentCustomerEmail}
-	                            onChange={e => setPaymentCustomerEmail(e.target.value)}
-	                            type="email"
-	                            maxLength={120}
-	                            placeholder="Email scontrino"
-	                            className="h-10 text-xs rounded-xl"
-	                            style={{ backgroundColor: theme.inputBg, borderColor: theme.inputBorder, color: theme.textPrimary }}
-	                          />
-	                        </div>
 	                        <div className="grid grid-cols-3 gap-2 mb-2">
                           {/* Paga Totale */}
                           <button

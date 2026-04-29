@@ -224,7 +224,10 @@ serve(async (req) => {
         if (customerLotteryCode && !/^[A-Z0-9]{8}$/.test(customerLotteryCode)) {
             return json({ error: "Codice lotteria scontrini non valido (8 caratteri)" }, 400);
         }
-        const displayName = [cleanName, cleanLastName].filter(Boolean).join(" ").trim() || null;
+        const displayName = [
+            prefs.collectFirstName ? cleanName : null,
+            prefs.collectLastName ? cleanLastName : null,
+        ].filter(Boolean).join(" ").trim() || null;
 
         const chosenMethod = paymentMethod === "stripe" ? "stripe" : "pay_on_pickup";
         const cleanIdempotencyKey = sanitizeStr(idempotencyKey, 64);
@@ -236,7 +239,7 @@ serve(async (req) => {
         if (cleanIdempotencyKey) {
             const { data: existing } = await supabase
                 .from("orders")
-                .select("id, pickup_number, pickup_code, status, total_amount, paid_amount")
+                .select("id, pickup_number, pickup_code, status, total_amount, paid_amount, takeaway_pickup_mode, takeaway_pickup_token")
                 .eq("restaurant_id", restaurantId)
                 .eq("idempotency_key", cleanIdempotencyKey)
                 .maybeSingle();
@@ -266,7 +269,7 @@ serve(async (req) => {
         const { data: restaurant, error: rErr } = await supabase
             .from("restaurants")
             .select(
-                "id, name, is_active, takeaway_enabled, takeaway_require_stripe, takeaway_estimated_minutes, takeaway_max_orders_per_hour, enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled"
+                "id, name, is_active, takeaway_enabled, takeaway_require_stripe, takeaway_pickup_mode, takeaway_estimated_minutes, takeaway_max_orders_per_hour, enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled"
             )
             .eq("id", restaurantId)
             .maybeSingle();
@@ -295,6 +298,8 @@ serve(async (req) => {
                 orderId: existingOrder.id,
                 pickupNumber: existingOrder.pickup_number,
                 pickupCode: existingOrder.pickup_code,
+                takeawayPickupMode: existingOrder.takeaway_pickup_mode || "code",
+                takeawayPickupToken: existingOrder.takeaway_pickup_token || null,
                 estimatedMinutes,
                 paymentMethod: "pay_on_pickup",
                 paymentRequired: true,
@@ -314,6 +319,8 @@ serve(async (req) => {
                     orderId: existingOrder.id,
                     pickupNumber: existingOrder.pickup_number,
                     pickupCode: existingOrder.pickup_code,
+                    takeawayPickupMode: existingOrder.takeaway_pickup_mode || "code",
+                    takeawayPickupToken: existingOrder.takeaway_pickup_token || null,
                     estimatedMinutes,
                     paymentMethod: "stripe",
                     paymentRequired: false,
@@ -328,7 +335,7 @@ serve(async (req) => {
                 orderId: existingOrder.id,
                 pickupCode: existingOrder.pickup_code,
                 pickupNumber: existingOrder.pickup_number,
-                customerEmail,
+                customerEmail: undefined,
                 successUrl,
                 cancelUrl,
                 idempotencyKey: `takeaway-order-retry-${existingOrder.id}-${Math.round(remaining * 100)}`,
@@ -350,6 +357,8 @@ serve(async (req) => {
                 orderId: existingOrder.id,
                 pickupNumber: existingOrder.pickup_number,
                 pickupCode: existingOrder.pickup_code,
+                takeawayPickupMode: existingOrder.takeaway_pickup_mode || "code",
+                takeawayPickupToken: existingOrder.takeaway_pickup_token || null,
                 estimatedMinutes,
                 paymentMethod: "stripe",
                 checkoutUrl: session.url,
@@ -440,6 +449,8 @@ serve(async (req) => {
         }
         const pickupNumber = nextNum;
         const pickupCode = randomCode(6);
+        const pickupMode = restaurant.takeaway_pickup_mode === "qr" ? "qr" : "code";
+        const pickupToken = pickupMode === "qr" ? crypto.randomUUID() : null;
 
         // --- Insert order + items (status: PENDING when paying online, PENDING when cash — cashier confirms) ---
         // If customer pays on pickup, order is immediately visible to kitchen (PREPARING).
@@ -456,10 +467,12 @@ serve(async (req) => {
                 total_amount: total,
                 pickup_number: pickupNumber,
                 pickup_code: pickupCode,
+                takeaway_pickup_mode: pickupMode,
+                takeaway_pickup_token: pickupToken,
                 customer_name: displayName,
-                customer_phone: cleanPhone,
+                customer_phone: prefs.collectPhone ? cleanPhone : null,
                 customer_notes: cleanNotes,
-                customer_email: cleanEmail || null,
+                customer_email: prefs.collectEmail ? (cleanEmail || null) : null,
                 customer_tax_code: customerTaxCode || null,
                 customer_lottery_code: customerLotteryCode || null,
                 paid_amount: 0,
@@ -504,6 +517,8 @@ serve(async (req) => {
                 orderId: newOrder.id,
                 pickupNumber,
                 pickupCode,
+                takeawayPickupMode: pickupMode,
+                takeawayPickupToken: pickupToken,
                 estimatedMinutes,
                 paymentRequired: true,
                 paymentMethod: "pay_on_pickup",
@@ -535,7 +550,7 @@ serve(async (req) => {
                 pickupCode,
                 pickupNumber,
                 lineItems,
-                customerEmail,
+                customerEmail: undefined,
                 successUrl,
                 cancelUrl,
                 idempotencyKey: `takeaway-order-${newOrder.id}-${Math.round(total * 100)}`,
@@ -546,6 +561,8 @@ serve(async (req) => {
                 orderId: newOrder.id,
                 pickupNumber,
                 pickupCode,
+                takeawayPickupMode: pickupMode,
+                takeawayPickupToken: pickupToken,
                 estimatedMinutes,
                 paymentMethod: "stripe",
                 checkoutUrl: session.url,
