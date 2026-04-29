@@ -2008,15 +2008,21 @@ export const DatabaseService = {
         pickupCode: string
         stripeSessionId?: string
     }): Promise<void> {
-        const url = await DatabaseService._invokePdfEdgeFunction(
-            'openapi-receipt-pdf',
-            {
-                restaurantId: params.restaurantId,
-                pickupCode: params.pickupCode,
-                stripeSessionId: params.stripeSessionId,
-            }
-        )
-        window.open(url, '_blank', 'noopener')
+        const pdfWindow = DatabaseService._reservePdfWindow()
+        try {
+            const url = await DatabaseService._invokePdfEdgeFunction(
+                'openapi-receipt-pdf',
+                {
+                    restaurantId: params.restaurantId,
+                    pickupCode: params.pickupCode,
+                    stripeSessionId: params.stripeSessionId,
+                }
+            )
+            DatabaseService._openPdfBlobUrl(url, pdfWindow)
+        } catch (err) {
+            DatabaseService._closeReservedPdfWindow(pdfWindow)
+            throw err
+        }
     },
 
     async printFiscalReceiptPdfForTakeaway(params: {
@@ -2040,15 +2046,21 @@ export const DatabaseService = {
         tableSessionId: string
         stripeSessionId?: string
     }): Promise<void> {
-        const url = await DatabaseService._invokePdfEdgeFunction(
-            'openapi-receipt-pdf',
-            {
-                restaurantId: params.restaurantId,
-                tableSessionId: params.tableSessionId,
-                stripeSessionId: params.stripeSessionId,
-            }
-        )
-        window.open(url, '_blank', 'noopener')
+        const pdfWindow = DatabaseService._reservePdfWindow()
+        try {
+            const url = await DatabaseService._invokePdfEdgeFunction(
+                'openapi-receipt-pdf',
+                {
+                    restaurantId: params.restaurantId,
+                    tableSessionId: params.tableSessionId,
+                    stripeSessionId: params.stripeSessionId,
+                }
+            )
+            DatabaseService._openPdfBlobUrl(url, pdfWindow)
+        } catch (err) {
+            DatabaseService._closeReservedPdfWindow(pdfWindow)
+            throw err
+        }
     },
 
     async printFiscalReceiptPdfForDineIn(params: {
@@ -2071,18 +2083,24 @@ export const DatabaseService = {
         restaurantId: string
         receiptId: string
     }): Promise<void> {
+        const pdfWindow = DatabaseService._reservePdfWindow()
         const userId = _getCurrentUserId()
         const sessionToken = _getCurrentSessionToken()
-        const url = await DatabaseService._invokePdfEdgeFunction(
-            'openapi-receipt-pdf',
-            {
-                userId,
-                sessionToken,
-                restaurantId: params.restaurantId,
-                receiptId: params.receiptId,
-            }
-        )
-        window.open(url, '_blank', 'noopener')
+        try {
+            const url = await DatabaseService._invokePdfEdgeFunction(
+                'openapi-receipt-pdf',
+                {
+                    userId,
+                    sessionToken,
+                    restaurantId: params.restaurantId,
+                    receiptId: params.receiptId,
+                }
+            )
+            DatabaseService._openPdfBlobUrl(url, pdfWindow)
+        } catch (err) {
+            DatabaseService._closeReservedPdfWindow(pdfWindow)
+            throw err
+        }
     },
 
     async printFiscalReceiptPdfForReceipt(params: {
@@ -2129,6 +2147,59 @@ export const DatabaseService = {
         }
         const blob = await res.blob()
         return URL.createObjectURL(blob)
+    },
+
+    _reservePdfWindow(): Window | null {
+        if (typeof window === 'undefined') return null
+        try {
+            const pdfWindow = window.open('', '_blank')
+            if (!pdfWindow) return null
+            try {
+                pdfWindow.document.write(`<!doctype html><html lang="it"><head><title>Scontrino</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#09090b;color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;"><p style="font-size:15px;">Apertura scontrino...</p></body></html>`)
+                pdfWindow.document.close()
+            } catch {
+                // Some mobile browsers expose a Window handle but block document writes.
+            }
+            return pdfWindow
+        } catch {
+            return null
+        }
+    },
+
+    _openPdfBlobUrl(url: string, pdfWindow?: Window | null): void {
+        if (typeof window === 'undefined') return
+        if (pdfWindow && !pdfWindow.closed) {
+            pdfWindow.location.href = url
+            setTimeout(() => URL.revokeObjectURL(url), 120000)
+            return
+        }
+
+        const opened = window.open(url, '_blank')
+        if (opened) {
+            try { opened.opener = null } catch {}
+            setTimeout(() => URL.revokeObjectURL(url), 120000)
+            return
+        }
+
+        if (typeof document !== 'undefined') {
+            const link = document.createElement('a')
+            link.href = url
+            link.target = '_blank'
+            link.rel = 'noopener'
+            link.download = 'scontrino.pdf'
+            document.body.appendChild(link)
+            link.click()
+            link.remove()
+            setTimeout(() => URL.revokeObjectURL(url), 120000)
+        }
+    },
+
+    _closeReservedPdfWindow(pdfWindow?: Window | null): void {
+        try {
+            if (pdfWindow && !pdfWindow.closed) pdfWindow.close()
+        } catch {
+            // Browser may refuse scripted close; the toast in the caller explains the error.
+        }
     },
 
     async _printBlobUrl(url: string): Promise<void> {
