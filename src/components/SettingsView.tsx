@@ -1631,7 +1631,7 @@ export function SettingsView({
                                                             <p>• In <span className="text-white font-medium">Gestione Tavoli</span> il tavolo diventa <span className="text-purple-400 font-medium">viola pulsante</span> con badge "💳 Pagato Online"</p>
                                                             <p>• Appare un toast: <span className="text-white">"💳 Tavolo X ha pagato online! €XX.XX"</span></p>
                                                             <p>• Il ristoratore <span className="text-white font-medium">emette lo scontrino fiscale</span> dal proprio registratore di cassa</p>
-                                                            <p>• Poi clicca <span className="text-emerald-400 font-medium">"Conferma Scontrino"</span> per registrare l'avvenuta emissione</p>
+                                                            <p>• Dopo un pagamento online controlla lo storico: troverai lo stato dello scontrino elettronico emesso automaticamente</p>
                                                         </div>
                                                     </div>
 

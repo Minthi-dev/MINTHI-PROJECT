@@ -951,7 +951,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
         const isTableMarkedInactive = table.is_active === false
 
-        const hasStripePaymentToConfirm = session && (session.paid_amount || 0) > 0 && !session.receipt_issued
+        const hasStripePaymentToConfirm = session && (session.paid_amount || 0) > 0
 
         // Exact styles from RestaurantDashboard.tsx
         const tableCardClasses = isTableMarkedInactive
@@ -1048,20 +1048,21 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                         onClick={async (e) => {
                                             e.stopPropagation();
                                             if (!restaurant?.allow_waiter_payments) {
-                                                toast.error('Non hai i permessi di cassa per confermare lo scontrino');
+                                                toast.error('Non hai i permessi di cassa per chiudere il tavolo');
                                                 return;
                                             }
                                             try {
-                                                await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                                toast.success('Scontrino confermato!');
+                                                await DatabaseService.markOrdersPaidForSession(session.id, 'stripe');
+                                                await DatabaseService.closeSession(session.id, user?.name, user?.role);
+                                                toast.success('Tavolo chiuso. Scontrino elettronico tracciato nello storico.');
                                                 refreshData();
                                             } catch (err) {
-                                                toast.error('Errore nella conferma');
+                                                toast.error('Errore nella chiusura del tavolo');
                                             }
                                         }}
                                     >
                                         <CheckCircle size={14} weight="fill" className="mr-1.5 shrink-0" />
-                                        <span>Conferma Scontrino</span>
+                                        <span>Chiudi tavolo pagato</span>
                                     </Button>
                                 ) : (
                                     <>

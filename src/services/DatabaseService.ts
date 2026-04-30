@@ -2062,7 +2062,7 @@ export const DatabaseService = {
 
     async probeFiscalReceiptForDineIn(params: {
         restaurantId: string
-        tableSessionId: string
+        tableSessionId?: string
         stripeSessionId?: string
     }): Promise<{ ready: boolean; status?: string }> {
         const { data, error } = await supabase.functions.invoke('openapi-receipt-pdf', {
@@ -2120,7 +2120,7 @@ export const DatabaseService = {
 
     async openFiscalReceiptPdfForDineIn(params: {
         restaurantId: string
-        tableSessionId: string
+        tableSessionId?: string
         stripeSessionId?: string
     }): Promise<void> {
         const pdfWindow = DatabaseService._reservePdfWindow()
@@ -2142,7 +2142,7 @@ export const DatabaseService = {
 
     async printFiscalReceiptPdfForDineIn(params: {
         restaurantId: string
-        tableSessionId: string
+        tableSessionId?: string
         stripeSessionId?: string
     }): Promise<void> {
         const url = await DatabaseService._invokePdfEdgeFunction(

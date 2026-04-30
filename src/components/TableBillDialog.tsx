@@ -859,7 +859,7 @@ export default function TableBillDialog({
                                             }}
                                         >
                                             <CheckCircle weight="fill" size={24} />
-                                            <span>Conferma Scontrino e Chiudi</span>
+                                            <span>Chiudi tavolo pagato</span>
                                         </Button>
                                     ) : (
                                         <Button

@@ -375,6 +375,27 @@ const CustomerMenuBase = () => {
   // 1. Get Table ID from URL params (via generic Route)
   const { tableId } = useParams<{ tableId: string }>()
   const navigate = useNavigate()
+  const initialUrlParams = new URLSearchParams(window.location.search)
+  const initialStripeSuccess = initialUrlParams.get('payment') === 'success'
+  const initialStripeSessionId = initialUrlParams.get('session_id')
+  const paymentPersistenceKey = tableId ? `minthi_dinein_payment_success_${tableId}` : null
+  const persistedPayment = (() => {
+    if (!paymentPersistenceKey) return null
+    try {
+      const raw = localStorage.getItem(paymentPersistenceKey)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      if (!parsed?.at || Date.now() - new Date(parsed.at).getTime() > 6 * 60 * 60 * 1000) {
+        localStorage.removeItem(paymentPersistenceKey)
+        return null
+      }
+      return parsed
+    } catch {
+      localStorage.removeItem(paymentPersistenceKey)
+      return null
+    }
+  })()
+  const hasCompletedStripePayment = Boolean(initialStripeSuccess || persistedPayment)
 
   // 2. Use Session Context
   const { sessionId, sessionStatus, loading: sessionLoading, joinSession, exitSession, sessionPin, savePin } = useSession()
@@ -693,7 +714,11 @@ const CustomerMenuBase = () => {
           // Double-check session ID matches
           if (updatedSession.id === currentSessionId) {
             if (updatedSession.status === 'CLOSED') {
-              // Session closed - force logout handled by session context effect usually, but we sync state here
+              if (hasCompletedStripePayment) {
+                setActiveSession(updatedSession)
+                setCustomerTab('payment')
+                return
+              }
               setIsAuthenticated(false)
               setActiveSession(null)
               setPin(['', '', '', ''])
@@ -713,6 +738,10 @@ const CustomerMenuBase = () => {
           const deletedSession = payload.old as any
           // Only log out if the deleted session is OUR session
           if (deletedSession?.id === currentSessionId) {
+            if (hasCompletedStripePayment) {
+              setCustomerTab('payment')
+              return
+            }
             setIsAuthenticated(false)
             setActiveSession(null)
             setPin(['', '', '', ''])
@@ -728,7 +757,7 @@ const CustomerMenuBase = () => {
     return () => {
       supabase.removeChannel(sessionChannel)
     }
-  }, [tableId, isAuthenticated, activeSession?.id])
+  }, [tableId, isAuthenticated, activeSession?.id, hasCompletedStripePayment])
 
   // Real-time subscription for Restaurant Settings (Independent of session/auth)
   useEffect(() => {
@@ -887,7 +916,7 @@ const CustomerMenuBase = () => {
     </div>
   )
 
-  if (!isTableActive && !isAuthenticated && !isViewOnly) return (
+  if (!hasCompletedStripePayment && !isTableActive && !isAuthenticated && !isViewOnly) return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center" style={{ background: theme.pageBgGradient, color: theme.textPrimary, ...theme.cssVars }}>
       <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 border" style={{ backgroundColor: theme.cardBg, borderColor: theme.cardBorder, color: theme.textMuted }}>
         <Storefront size={40} weight="duotone" />
@@ -914,7 +943,7 @@ const CustomerMenuBase = () => {
   )
 
   // LOGIN SCREEN (PIN) - Themed Design
-  if (!isAuthenticated && !isViewOnly) {
+  if (!hasCompletedStripePayment && !isAuthenticated && !isViewOnly) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background: theme.pageBgGradient, color: theme.textPrimary, fontFamily: theme.bodyFont, ...theme.cssVars }}>
 
@@ -1035,6 +1064,27 @@ const CustomerMenuBase = () => {
 // Refactored Content Component to keep logic clean
 //  -- UPDATED INTERFACE to include auth and full restaurant --
 function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, onSessionUpdate, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, onSessionUpdate?: (session: TableSession) => void, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
+  const initialUrlParams = new URLSearchParams(window.location.search)
+  const initialStripeSuccess = initialUrlParams.get('payment') === 'success'
+  const initialStripeSessionId = initialUrlParams.get('session_id')
+  const paymentPersistenceKey = tableId ? `minthi_dinein_payment_success_${tableId}` : null
+  const persistedPayment = (() => {
+    if (!paymentPersistenceKey) return null
+    try {
+      const raw = localStorage.getItem(paymentPersistenceKey)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      if (!parsed?.at || Date.now() - new Date(parsed.at).getTime() > 6 * 60 * 60 * 1000) {
+        localStorage.removeItem(paymentPersistenceKey)
+        return null
+      }
+      return parsed
+    } catch {
+      localStorage.removeItem(paymentPersistenceKey)
+      return null
+    }
+  })()
+
   // Using passed props instead of resolving them
   const isWaiterMode = false // Or pass as prop if needed
 
@@ -1081,14 +1131,28 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [isProcessingStripePayment, setIsProcessingStripePayment] = useState(false)
   const [showPaymentOptions, setShowPaymentOptions] = useState(false)
   const [stripePaymentSplitCount, setStripePaymentSplitCount] = useState(1)
-  const [stripePaymentSuccess, setStripePaymentSuccess] = useState(false)
-  const [lastStripeSessionId, setLastStripeSessionId] = useState<string | null>(null)
+  const [stripePaymentSuccess, setStripePaymentSuccess] = useState(Boolean(initialStripeSuccess || persistedPayment))
+  const [lastStripeSessionId, setLastStripeSessionId] = useState<string | null>(initialStripeSessionId || persistedPayment?.stripeSessionId || null)
+  const [lastPaidTableSessionId, setLastPaidTableSessionId] = useState<string | null>(persistedPayment?.tableSessionId || null)
   const [lastVerifiedSessionPaidAmount, setLastVerifiedSessionPaidAmount] = useState<number | null>(null)
   const [fiscalReceiptStatus, setFiscalReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
   const [downloadingReceipt, setDownloadingReceipt] = useState(false)
 
+  const rememberCompletedStripePayment = (stripeSessionId?: string | null, paidTableSessionId?: string | null) => {
+    if (!paymentPersistenceKey) return
+    const tableSessionId = paidTableSessionId || activeSession?.id || sessionId || lastPaidTableSessionId || null
+    const payload = {
+      at: new Date().toISOString(),
+      stripeSessionId: stripeSessionId || lastStripeSessionId || null,
+      tableSessionId,
+    }
+    localStorage.setItem(paymentPersistenceKey, JSON.stringify(payload))
+    setLastStripeSessionId(payload.stripeSessionId)
+    setLastPaidTableSessionId(payload.tableSessionId)
+  }
+
   // Bottom nav tab
-  const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>('menu')
+  const [customerTab, setCustomerTab] = useState<'menu' | 'payment'>(Boolean(initialStripeSuccess || persistedPayment) ? 'payment' : 'menu')
   // Payment sub-step: summary -> options -> selectItems
   const [paymentStep, setPaymentStep] = useState<'summary' | 'options' | 'selectItems'>('summary')
   // Selected items for 'diviso per piatti' payment
@@ -1749,7 +1813,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   // can download the PDF from the success card the moment the AdE confirms.
   useEffect(() => {
     if (!stripePaymentSuccess || fiscalReceiptStatus === 'ready') return
-    if (!restaurantId || !sessionId) return
+    const receiptSessionId = sessionId || lastPaidTableSessionId
+    if (!restaurantId || (!receiptSessionId && !lastStripeSessionId)) return
     let cancelled = false
     let attempts = 0
     const tick = async () => {
@@ -1758,7 +1823,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       try {
         const { ready, status } = await DatabaseService.probeFiscalReceiptForDineIn({
           restaurantId,
-          tableSessionId: sessionId,
+          tableSessionId: receiptSessionId || undefined,
           stripeSessionId: lastStripeSessionId || undefined,
         })
         if (!cancelled && ready) {
@@ -1774,7 +1839,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     tick()
     return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stripePaymentSuccess, fiscalReceiptStatus, restaurantId, sessionId, lastStripeSessionId])
+  }, [stripePaymentSuccess, fiscalReceiptStatus, restaurantId, sessionId, lastPaidTableSessionId, lastStripeSessionId])
 
   // Check for payment success/cancel from URL
   useEffect(() => {
@@ -1796,6 +1861,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           if (!stripeSessionId || !restaurantId) {
             // Fallback: no session ID available — optimistic UI only
             setStripePaymentSuccess(true)
+            rememberCompletedStripePayment(stripeSessionId, sessionId || activeSession?.id || null)
             setCustomerTab('payment')
             toast.success('Pagamento completato!', { id: toastId, duration: 5000 })
             if (sessionId) fetchOrders()
@@ -1808,6 +1874,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           if (result.paid) {
             setStripePaymentSuccess(true)
             setLastStripeSessionId(stripeSessionId || null)
+            rememberCompletedStripePayment(stripeSessionId || null, sessionId || activeSession?.id || null)
             if (typeof result.newPaidAmount === 'number') setLastVerifiedSessionPaidAmount(result.newPaidAmount)
             setCustomerTab('payment')
             if (result.alreadyRegistered) {
@@ -1834,6 +1901,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           // Even on verify error, show success UI optimistically — webhook
           // may have already handled it. Polling below will confirm.
           setStripePaymentSuccess(true)
+          rememberCompletedStripePayment(stripeSessionId || null, sessionId || activeSession?.id || null)
           setCustomerTab('payment')
           toast.success('Pagamento ricevuto, verifica in corso...', { id: toastId, duration: 4000 })
           if (sessionId) fetchOrders()
@@ -1951,13 +2019,14 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     const effectivePaid = Math.max(sessionPaid, lastVerifiedSessionPaidAmount || 0)
     return {
       ready: fiscalReceiptStatus === 'ready',
-      canDownload: effectivePaid > 0 && Math.max(0, total - effectivePaid) <= 0.01,
+      canDownload: (stripePaymentSuccess && !!lastStripeSessionId) || (effectivePaid > 0 && Math.max(0, total - effectivePaid) <= 0.01),
     }
-  }, [activeSession?.paid_amount, fiscalReceiptStatus, lastVerifiedSessionPaidAmount, unpaidTotal])
+  }, [activeSession?.paid_amount, fiscalReceiptStatus, lastStripeSessionId, lastVerifiedSessionPaidAmount, stripePaymentSuccess, unpaidTotal])
 
   useEffect(() => {
     if (fiscalReceiptStatus === 'ready') return
-    if (!restaurantId || !sessionId) return
+    const receiptSessionId = sessionId || lastPaidTableSessionId
+    if (!restaurantId || (!receiptSessionId && !lastStripeSessionId)) return
     if (!dineInReceiptState.canDownload) return
 
     let cancelled = false
@@ -1968,7 +2037,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       try {
         const { ready, status } = await DatabaseService.probeFiscalReceiptForDineIn({
           restaurantId,
-          tableSessionId: sessionId,
+          tableSessionId: receiptSessionId || undefined,
         })
         if (cancelled) return
         if (ready) {
@@ -1985,7 +2054,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
     }
     tick()
     return () => { cancelled = true }
-  }, [dineInReceiptState.canDownload, fiscalReceiptStatus, restaurantId, sessionId])
+  }, [dineInReceiptState.canDownload, fiscalReceiptStatus, restaurantId, sessionId, lastPaidTableSessionId, lastStripeSessionId])
 
   // Handle Stripe payment — supports full, split (alla romana), and items (diviso per piatti)
   const handleStripePayment = async (mode: 'full' | 'split' | 'items', splitCount?: number) => {
@@ -2099,12 +2168,13 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   }
 
   const openDineInFiscalReceipt = async () => {
-    if (!restaurantId || !sessionId) return
+    const receiptSessionId = sessionId || lastPaidTableSessionId
+    if (!restaurantId || (!receiptSessionId && !lastStripeSessionId)) return
     setDownloadingReceipt(true)
     try {
       await DatabaseService.openFiscalReceiptPdfForDineIn({
         restaurantId,
-        tableSessionId: sessionId,
+        tableSessionId: receiptSessionId || undefined,
         stripeSessionId: lastStripeSessionId || undefined,
       })
     } catch (err: any) {

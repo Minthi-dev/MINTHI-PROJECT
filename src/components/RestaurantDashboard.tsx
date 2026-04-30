@@ -85,7 +85,7 @@ import CustomMenusManager from './CustomMenusManager'
 import QRCodeGenerator from './QRCodeGenerator'
 import TakeawayOrdersPanel from './takeaway/TakeawayOrdersPanel'
 import TakeawayQRPosterButton from './takeaway/TakeawayQRPosterButton'
-import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, Room } from '../services/types'
+import type { Table, Order, Dish, Category, TableSession, Booking, Restaurant, Room, FiscalReceipt } from '../services/types'
 import { soundManager, type SoundType } from '../utils/SoundManager'
 import { ModeToggle } from './ModeToggle'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -109,6 +109,78 @@ interface RestaurantDashboardProps {
 }
 
 // Helper function to fix oklch colors that html2canvas doesn't support
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const LATE_NIGHT_CUTOFF_MINUTES = 6 * 60
+
+const parseClockMinutes = (value?: string | null) => {
+  if (!value) return 0
+  const [h, m] = value.split(':').map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0
+  return h * 60 + m
+}
+
+const addMinutesToServiceDate = (base: Date, minutes: number) => {
+  const result = new Date(base)
+  if (minutes >= 24 * 60) {
+    result.setDate(result.getDate() + Math.floor(minutes / (24 * 60)))
+    minutes = minutes % (24 * 60)
+  }
+  result.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0)
+  return result
+}
+
+const getCurrentServiceWindow = (
+  now: Date,
+  weeklyServiceHours: any,
+  lunchTimeStart: string,
+  dinnerTimeStart: string
+): { mealType: 'lunch' | 'dinner' | null; scheduleDay: number; endsAt: Date } => {
+  const dayOfWeek = now.getDay()
+  const currentTime = now.getHours() * 60 + now.getMinutes()
+  let scheduleDay = dayOfWeek
+  let checkTime = currentTime
+
+  if (currentTime < LATE_NIGHT_CUTOFF_MINUTES) {
+    scheduleDay = (dayOfWeek + 6) % 7
+    checkTime = currentTime + (24 * 60)
+  }
+
+  const daySchedule = weeklyServiceHours?.useWeeklySchedule
+    ? weeklyServiceHours.schedule?.[DAY_NAMES[scheduleDay]]
+    : null
+
+  const serviceMatches: Array<{ mealType: 'lunch' | 'dinner'; start: number; end: number }> = []
+  const addMatch = (mealType: 'lunch' | 'dinner', startValue?: string, endValue?: string, fallbackEnd?: number) => {
+    const start = parseClockMinutes(startValue)
+    let end = parseClockMinutes(endValue)
+    if (!start) return
+    if (!end) end = fallbackEnd || start + 180
+    if (end <= start) end += 24 * 60
+    if (checkTime >= start && checkTime < end) serviceMatches.push({ mealType, start, end })
+  }
+
+  if (daySchedule) {
+    if (daySchedule.lunch?.enabled) addMatch('lunch', daySchedule.lunch.start, daySchedule.lunch.end, parseClockMinutes(dinnerTimeStart) || 15 * 60)
+    if (daySchedule.dinner?.enabled) addMatch('dinner', daySchedule.dinner.start, daySchedule.dinner.end, 24 * 60 + LATE_NIGHT_CUTOFF_MINUTES)
+  } else {
+    const lunchStart = parseClockMinutes(lunchTimeStart)
+    const dinnerStart = parseClockMinutes(dinnerTimeStart)
+    if (lunchStart) addMatch('lunch', lunchTimeStart, dinnerStart ? dinnerTimeStart : '18:00', 18 * 60)
+    if (dinnerStart) addMatch('dinner', dinnerTimeStart, '06:00', 24 * 60 + LATE_NIGHT_CUTOFF_MINUTES)
+  }
+
+  const current = serviceMatches.sort((a, b) => b.start - a.start)[0]
+  if (current) return { mealType: current.mealType, scheduleDay, endsAt: addMinutesToServiceDate(now, current.end) }
+
+  return { mealType: null, scheduleDay, endsAt: new Date(now.getTime() + 4 * 60 * 60 * 1000) }
+}
+
+const fiscalReceiptStatusLabel = (receipt?: FiscalReceipt | null) => {
+  if (!receipt) return { label: 'Scontrino in emissione', className: 'bg-amber-500/10 text-amber-400 border-amber-500/25' }
+  if (receipt.openapi_status === 'ready') return { label: 'Scontrino emesso', className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' }
+  if (receipt.openapi_status === 'failed') return { label: 'Errore scontrino', className: 'bg-red-500/10 text-red-400 border-red-500/25' }
+  return { label: 'Scontrino in emissione', className: 'bg-amber-500/10 text-amber-400 border-amber-500/25' }
+}
 
 const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const navigate = useNavigate()
@@ -154,6 +226,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   // Orders state initialized with explicit type to prevent 'never' inference
   const [orders, setOrders] = useState<Order[]>([])
   const [pastOrders, setPastOrders] = useState<Order[]>([])
+  const [fiscalReceipts, setFiscalReceipts] = useState<FiscalReceipt[]>([])
+  const [activeCustomMenu, setActiveCustomMenu] = useState<any | null>(null)
 
   // Takeaway public QR dialog
   const [showTakeawayPublicDialog, setShowTakeawayPublicDialog] = useState(false)
@@ -243,6 +317,31 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         .catch(console.error)
     }
   }, [showExportMenuDialog, restaurantId])
+
+  const refreshFiscalReceipts = useCallback(async () => {
+    if (!restaurantId) return
+    try {
+      const receipts = await DatabaseService.getFiscalReceipts(restaurantId, 100)
+      setFiscalReceipts(receipts || [])
+    } catch (error) {
+      console.warn('Errore caricamento scontrini fiscali:', error)
+    }
+  }, [restaurantId])
+
+  const refreshActiveCustomMenu = useCallback(async () => {
+    if (!restaurantId) return
+    try {
+      const menus = await DatabaseService.getAllCustomMenus(restaurantId)
+      setActiveCustomMenu((menus || []).find((menu: any) => menu.is_active) || null)
+    } catch (error) {
+      console.warn('Errore caricamento menu personalizzato attivo:', error)
+    }
+  }, [restaurantId])
+
+  useEffect(() => {
+    refreshFiscalReceipts()
+    refreshActiveCustomMenu()
+  }, [refreshFiscalReceipts, refreshActiveCustomMenu])
 
   const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
   const currentRestaurant = restaurants?.[0]
@@ -356,65 +455,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     const checkAndApplySchedules = async () => {
       try {
         const now = new Date()
-        const dayOfWeek = now.getDay() // 0 = Sunday
-        const currentTime = now.getHours() * 60 + now.getMinutes() // Minutes from midnight
-
-        // Parse time strings (e.g., "12:00") to minutes
-        const parseTime = (t: string) => {
-          if (!t) return 0
-          const [h, m] = t.split(':').map(Number)
-          return h * 60 + m
-        }
-
-        // Improved Logic for "Restaurant Day"
-        const LATE_NIGHT_CUTOFF = 6 * 60 // 06:00 AM
-
-        let effectiveDay = dayOfWeek
-        let checkTime = currentTime
-
-        if (currentTime < LATE_NIGHT_CUTOFF) {
-          effectiveDay = (dayOfWeek + 6) % 7
-          checkTime = currentTime + (24 * 60)
-        }
-
-        // Determine current meal type using weekly_service_hours if available
-        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
-        const dayName = dayNames[effectiveDay]
-        let currentMealType: string | null = null
-
-        const wsHours = currentRestaurant?.weekly_service_hours
-        if (wsHours?.useWeeklySchedule && wsHours.schedule?.[dayName]) {
-          const daySchedule = wsHours.schedule[dayName]
-          if (daySchedule.lunch?.enabled) {
-            const lStart = parseTime(daySchedule.lunch.start)
-            const lEnd = parseTime(daySchedule.lunch.end)
-            if (checkTime >= lStart && checkTime < lEnd) currentMealType = 'lunch'
-          }
-          if (daySchedule.dinner?.enabled) {
-            const dStart = parseTime(daySchedule.dinner.start)
-            const dEnd = parseTime(daySchedule.dinner.end)
-            if (checkTime >= dStart && (dEnd > dStart ? checkTime < dEnd : true)) currentMealType = 'dinner'
-          }
-        } else {
-          // Fallback to legacy lunchTimeStart/dinnerTimeStart
-          const lunchStart = parseTime(lunchTimeStart)
-          const dinnerStart = parseTime(dinnerTimeStart)
-          if (lunchStart > 0 && dinnerStart > 0) {
-            if (lunchStart < dinnerStart) {
-              if (checkTime >= lunchStart && checkTime < dinnerStart) currentMealType = 'lunch'
-              else if (checkTime >= dinnerStart) currentMealType = 'dinner'
-            } else {
-              currentMealType = checkTime >= lunchStart ? 'lunch' : 'dinner'
-            }
-          } else if (lunchStart > 0) {
-            if (checkTime >= lunchStart) currentMealType = 'lunch'
-          } else if (dinnerStart > 0) {
-            if (checkTime >= dinnerStart) currentMealType = 'dinner'
-          }
-        }
+        const serviceWindow = getCurrentServiceWindow(now, weeklyServiceHours, lunchTimeStart, dinnerTimeStart)
+        const currentMealType = serviceWindow.mealType
 
         // Valid schedule day is the effective day
-        const scheduleDay = effectiveDay
+        const scheduleDay = serviceWindow.scheduleDay
         const { data: allSchedules } = await supabase
           .from('custom_menu_schedules')
           .select('custom_menu_id, custom_menus!inner(restaurant_id)')
@@ -544,6 +589,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             mealType: currentMealType,
             day: scheduleDay
           }
+          refreshActiveCustomMenu()
         }
       } catch (err) {
         console.error("Error in menu scheduler:", err)
@@ -554,7 +600,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     checkAndApplySchedules() // Run immediately
 
     return () => clearInterval(interval)
-  }, [restaurantId, lunchTimeStart, dinnerTimeStart])
+  }, [restaurantId, weeklyServiceHours, lunchTimeStart, dinnerTimeStart, refreshActiveCustomMenu])
 
   // Export Menu Function
   // Export Menu Function
@@ -2681,9 +2727,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       <Button data-tour="tables-history-btn" type="button" variant="outline" size="sm" className="h-10 shadow-sm hover:shadow-md transition-shadow relative">
                         <ClockCounterClockwise size={16} className="mr-2" />
                         Storico
-                        {(() => {
-                          const pendingCount = sessions
-                            .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued && (s.paid_amount || 0) > 0)
+                          {(() => {
+                            const pendingCount = sessions
+                            .filter(s => {
+                              if (s.status !== 'CLOSED' || s.restaurant_id !== restaurantId || !(s.paid_amount || 0)) return false
+                              const receipt = fiscalReceipts.find(r => r.table_session_id === s.id)
+                              return receipt?.openapi_status !== 'ready'
+                            })
                             .length
                           return pendingCount > 0 ? (
                             <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 flex items-center justify-center px-1 rounded-full text-[10px] font-bold bg-amber-500 text-black animate-pulse">
@@ -2699,11 +2749,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           Storico Tavoli Chiusi
                           {(() => {
                             const pendingCount = sessions
-                              .filter(s => s.status === 'CLOSED' && s.restaurant_id === restaurantId && !s.receipt_issued && (s.paid_amount || 0) > 0)
+                              .filter(s => {
+                                if (s.status !== 'CLOSED' || s.restaurant_id !== restaurantId || !(s.paid_amount || 0)) return false
+                                const receipt = fiscalReceipts.find(r => r.table_session_id === s.id)
+                                return receipt?.openapi_status !== 'ready'
+                              })
                               .length
                             return pendingCount > 0 ? (
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse">
-                                {pendingCount} scontrin{pendingCount === 1 ? 'o' : 'i'} da registrare
+                                {pendingCount} scontrin{pendingCount === 1 ? 'o' : 'i'} da verificare
                               </span>
                             ) : null
                           })()}
@@ -2737,8 +2791,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Tutti</SelectItem>
-                            <SelectItem value="pending_receipt">Da registrare</SelectItem>
-                            <SelectItem value="receipt_done">Registrato</SelectItem>
+                            <SelectItem value="pending_receipt">In emissione/errori</SelectItem>
+                            <SelectItem value="receipt_done">Scontrino emesso</SelectItem>
                             <SelectItem value="online">Online</SelectItem>
                             <SelectItem value="cash">Contanti</SelectItem>
                           </SelectContent>
@@ -2784,8 +2838,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             .filter(summary => {
                               if (tableHistoryPaymentFilter === 'all') return true
                               const hasStripe = summary.sessionOrders.some((o: any) => o.payment_method === 'stripe') || (summary.session.paid_amount || 0) > 0
-                              if (tableHistoryPaymentFilter === 'pending_receipt') return hasStripe && !summary.session.receipt_issued
-                              if (tableHistoryPaymentFilter === 'receipt_done') return summary.session.receipt_issued === true
+                              const receipt = fiscalReceipts.find(r => r.table_session_id === summary.session.id)
+                              if (tableHistoryPaymentFilter === 'pending_receipt') return hasStripe && receipt?.openapi_status !== 'ready'
+                              if (tableHistoryPaymentFilter === 'receipt_done') return hasStripe && receipt?.openapi_status === 'ready'
                               if (tableHistoryPaymentFilter === 'online') return hasStripe
                               if (tableHistoryPaymentFilter === 'cash') return !hasStripe
                               return true
@@ -2808,13 +2863,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             const isExpanded = expandedHistorySessionId === session.id
                             const allItems = sessionOrders.flatMap((o: any) => (o.items || []).map((item: any) => ({ ...item, orderId: o.id })))
                             const hasStripePayment = sessionOrders.some((o: any) => o.payment_method === 'stripe') || (session.paid_amount || 0) > 0
-                            const needsReceipt = hasStripePayment && !session.receipt_issued
+                            const fiscalReceipt = fiscalReceipts.find(r => r.table_session_id === session.id)
+                            const receiptMeta = hasStripePayment ? fiscalReceiptStatusLabel(fiscalReceipt) : null
+                            const needsReceipt = hasStripePayment && fiscalReceipt?.openapi_status !== 'ready'
 
                             return (
                               <div key={session.id} className={`rounded-lg overflow-hidden transition-all ${
                                 needsReceipt
                                   ? 'bg-amber-500/[0.03] border border-amber-500/25'
-                                  : session.receipt_issued
+                                  : fiscalReceipt?.openapi_status === 'ready'
                                     ? 'bg-zinc-900/30 border border-zinc-800/40'
                                     : 'bg-zinc-900/40 border border-zinc-800/50'
                               }`}>
@@ -2840,9 +2897,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                               Online €{(session.paid_amount || 0).toFixed(2)}
                                             </span>
                                           )}
-                                          {session.receipt_issued && (
-                                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                                              Registrato
+                                          {receiptMeta && (
+                                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${receiptMeta.className}`}>
+                                              {receiptMeta.label}
                                             </span>
                                           )}
                                         </div>
@@ -2861,25 +2918,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                   </div>
                                 </button>
 
-                                {/* Conferma Scontrino — prominent full-width when collapsed */}
-                                {needsReceipt && !isExpanded && (
+                                {/* Stato scontrino — nessuna conferma manuale: lo stato arriva da OpenAPI/outbox */}
+                                {hasStripePayment && !isExpanded && (
                                   <div className="px-3 pb-3">
-                                    <Button
-                                      className="w-full h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg"
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        try {
-                                          await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                          toast.success('Scontrino confermato!');
-                                          refreshSessions();
-                                        } catch (err) {
-                                          toast.error('Errore nella conferma');
-                                        }
-                                      }}
-                                    >
-                                      <CheckCircle weight="fill" className="mr-1.5" size={14} />
-                                      Conferma Scontrino Emesso
-                                    </Button>
+                                    <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${receiptMeta?.className || 'bg-zinc-800/40 text-zinc-400 border-zinc-700'}`}>
+                                      <Receipt weight="fill" size={14} />
+                                      <span>Pagato online · {receiptMeta?.label || 'scontrino in verifica'}</span>
+                                    </div>
                                   </div>
                                 )}
 
@@ -2937,25 +2982,13 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                           </div>
                                         )}
 
-                                        {/* Conferma scontrino in expanded view */}
-                                        {needsReceipt && (
+                                        {/* Stato scontrino in expanded view */}
+                                        {hasStripePayment && (
                                           <div className="mt-3 pt-2 border-t border-amber-500/20">
-                                            <Button
-                                              className="w-full h-9 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg"
-                                              onClick={async (e) => {
-                                                e.stopPropagation();
-                                                try {
-                                                  await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                                  toast.success('Scontrino confermato!');
-                                                  refreshSessions();
-                                                } catch (err) {
-                                                  toast.error('Errore nella conferma');
-                                                }
-                                              }}
-                                            >
-                                              <CheckCircle weight="fill" className="mr-1.5" size={14} />
-                                              Conferma Scontrino Emesso
-                                            </Button>
+                                            <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${receiptMeta?.className || 'bg-zinc-800/40 text-zinc-400 border-zinc-700'}`}>
+                                              <Receipt weight="fill" size={14} />
+                                              <span>{receiptMeta?.label || 'Scontrino in verifica automatica'}</span>
+                                            </div>
                                           </div>
                                         )}
                                       </>
@@ -3309,7 +3342,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                             ? 'opacity-60 grayscale'
                             : (() => {
                               const status = getDetailedTableStatus(table.id)
-                              if (isFullyPaidOnline && !session?.receipt_issued) return 'bg-emerald-900/40 border-emerald-500/70 shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] animate-pulse-slow' // Green - fully paid online, ready to close
+                              if (isFullyPaidOnline) return 'bg-emerald-900/40 border-emerald-500/70 shadow-[0_0_20px_-5px_rgba(16,185,129,0.5)] animate-pulse-slow' // Green - fully paid online, ready to close
                               if (isPartiallyPaidOnline) return 'bg-orange-900/30 border-orange-500/60 shadow-[0_0_20px_-5px_rgba(249,115,22,0.5)]' // Orange - partially paid online
                               if (status === 'free') return 'bg-black/40 border-emerald-500/20 shadow-[0_0_15px_-5px_rgba(16,185,129,0.1)] hover:border-emerald-500/40' // Green (Free)
                               if (status === 'waiting') return 'bg-red-900/20 border-red-500/50 shadow-[0_0_15px_-5px_rgba(239,68,68,0.3)]' // Red (Waiting for food)
@@ -3356,14 +3389,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                               <Badge
                                 variant={isActive ? 'default' : 'outline'}
                                 className={
-                                  isFullyPaidOnline && !session?.receipt_issued
+                                  isFullyPaidOnline
                                     ? 'bg-emerald-500 text-white border-none font-bold'
                                     : isPartiallyPaidOnline
                                     ? 'bg-orange-500 text-white border-none font-bold'
                                     : isActive ? 'bg-amber-500 text-black border-none font-bold' : 'bg-transparent text-zinc-500 border-zinc-700'
                                 }
                               >
-                                {isFullyPaidOnline && !session?.receipt_issued ? 'Pagato' : isPartiallyPaidOnline ? 'Parziale' : isActive ? 'Occupato' : 'Libero'}
+                                {isFullyPaidOnline ? 'Pagato' : isPartiallyPaidOnline ? 'Parziale' : isActive ? 'Occupato' : 'Libero'}
                               </Badge>
                             </div>
 
@@ -3384,7 +3417,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                       {activeOrder.items?.filter(i => i.status === 'SERVED').length || 0} completati
                                     </Badge>
                                   )}
-                                  {isFullyPaidOnline && !session?.receipt_issued && (
+                                  {isFullyPaidOnline && (
                                     <div className="flex flex-col items-center gap-1.5 mt-2">
                                       <div className="flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/40 rounded-lg px-3 py-1.5">
                                         <CreditCard size={14} weight="fill" className="text-emerald-400 shrink-0" />
@@ -3418,8 +3451,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
                             <div className="p-3 bg-gradient-to-t from-muted/10 to-transparent border-t border-border/5 grid gap-2">
                               {isActive ? (
-                                <div className={`grid gap-2 ${isFullyPaidOnline && !session?.receipt_issued ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                                  {isFullyPaidOnline && !session?.receipt_issued ? (
+                                <div className={`grid gap-2 ${isFullyPaidOnline ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                  {isFullyPaidOnline ? (
                                     <Button
                                       className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-sm hover:shadow transition-all h-8 text-xs font-bold"
                                       size="sm"
@@ -3435,22 +3468,22 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                           const msg = `Attenzione: ci sono ancora ${undelivered.length} piatt${undelivered.length === 1 ? 'o' : 'i'} non servit${undelivered.length === 1 ? 'o' : 'i'}.\n\nVuoi chiudere comunque il tavolo?`;
                                           if (!confirm(msg)) return;
                                         } else {
-                                          if (!confirm('Tutto pagato online. Stampare scontrino e chiudere il tavolo?')) return;
+                                          if (!confirm('Tutto pagato online. Vuoi chiudere il tavolo?')) return;
                                         }
                                         try {
-                                          await DatabaseService.updateSessionReceiptIssued(session.id, true);
                                           await DatabaseService.markOrdersPaidForSession(session.id, 'stripe');
                                           await DatabaseService.closeSession(session.id);
-                                          toast.success('Scontrino confermato e tavolo chiuso!');
+                                          toast.success('Tavolo chiuso. Lo scontrino elettronico resta tracciato nello storico.');
                                           refreshSessions();
                                           refreshData();
+                                          setTimeout(refreshFiscalReceipts, 1500);
                                         } catch (err) {
-                                          toast.error('Errore nella conferma');
+                                          toast.error('Errore nella chiusura del tavolo');
                                         }
                                       }}
                                     >
                                       <CheckCircle size={14} weight="fill" className="mr-1.5" />
-                                      Stampa Scontrino e Chiudi
+                                      Chiudi tavolo pagato
                                     </Button>
                                   ) : (
                                     <>
@@ -3583,43 +3616,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                         restaurantId={restaurantId || ''}
                         dishes={dishes || []}
                         categories={categories || []}
-                        onDishesChange={refreshDishes}
+                        onDishesChange={() => {
+                          refreshDishes()
+                          refreshActiveCustomMenu()
+                        }}
                         onMenuDeactivated={() => {
-                          // Suppress the scheduler until the END of the current meal service
                           const now = new Date()
-                          const currentMinutes = now.getHours() * 60 + now.getMinutes()
-                          const lunchMin = lunchTimeStart ? parseInt(lunchTimeStart.split(':')[0]) * 60 + parseInt(lunchTimeStart.split(':')[1]) : 0
-                          const dinnerMin = dinnerTimeStart ? parseInt(dinnerTimeStart.split(':')[0]) * 60 + parseInt(dinnerTimeStart.split(':')[1]) : 0
-
-                          // Calculate when the current meal service ends
-                          let endMinutes: number
-                          if (dinnerMin > 0 && currentMinutes >= dinnerMin) {
-                            // Currently in dinner service → suppress until next day 06:00
-                            endMinutes = 24 * 60 + 6 * 60 // next day 06:00
-                          } else if (lunchMin > 0 && currentMinutes >= lunchMin && dinnerMin > 0) {
-                            // Currently in lunch service → suppress until dinner starts
-                            endMinutes = dinnerMin
-                          } else if (lunchMin > 0 && currentMinutes >= lunchMin) {
-                            // Only lunch configured → suppress until 18:00 or end of day
-                            endMinutes = 18 * 60
-                          } else {
-                            // Outside service hours → suppress for 4 hours
-                            endMinutes = currentMinutes + 4 * 60
-                          }
-
-                          // Convert endMinutes to an actual Date
-                          const expiresAt = new Date(now)
-                          if (endMinutes >= 24 * 60) {
-                            // Next day
-                            expiresAt.setDate(expiresAt.getDate() + 1)
-                            expiresAt.setHours(Math.floor((endMinutes - 24 * 60) / 60), (endMinutes - 24 * 60) % 60, 0, 0)
-                          } else {
-                            expiresAt.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0)
-                          }
-
+                          const { endsAt: expiresAt } = getCurrentServiceWindow(now, weeklyServiceHours, lunchTimeStart, dinnerTimeStart)
                           localStorage.setItem('minthi_menu_suppressed', JSON.stringify({ expiresAt: expiresAt.toISOString() }))
-                          // Also clear the lastScheduledMenuRef so it doesn't think it's already applied
                           lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
+                          refreshActiveCustomMenu()
                         }}
                       />
                     </DialogContent>
@@ -3983,6 +3989,21 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                   </Dialog>
                 </div>
               </div>
+
+              {activeCustomMenu && (
+                <div className="flex flex-col gap-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                      <Sparkle size={18} weight="fill" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-widest text-amber-400">Menu personalizzato attivo</p>
+                      <p className="truncate text-sm font-semibold text-zinc-100">{activeCustomMenu.name}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-zinc-400">I piatti visibili seguono questo menu fino alla fine del servizio o alla disattivazione.</span>
+                </div>
+              )}
 
               <div className="space-y-10">
                 {restaurantCategories.map(category => {
