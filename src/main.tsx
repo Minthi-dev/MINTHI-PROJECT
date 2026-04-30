@@ -17,6 +17,7 @@ if (typeof crypto !== 'undefined' && !crypto.randomUUID) {
 import App from './App.tsx'
 import { ErrorFallback } from './ErrorFallback.tsx'
 import { ThemeProvider } from "./components/theme-provider.tsx"
+import { recoverFromModuleLoadError } from './utils/lazyImportRetry.ts'
 
 import "./main.css"
 import "./styles/theme.css"
@@ -46,6 +47,16 @@ document.addEventListener('focusin', (e) => {
     setTimeout(() => {
       target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
     }, 300)
+  }
+})
+
+window.addEventListener('error', (event) => {
+  recoverFromModuleLoadError(event.error || event.message)
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  if (recoverFromModuleLoadError(event.reason)) {
+    event.preventDefault()
   }
 })
 

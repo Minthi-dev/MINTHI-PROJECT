@@ -128,7 +128,7 @@ const AppContent = () => {
         const validate = async () => {
           try {
             const { DatabaseService } = await import('./services/DatabaseService')
-            const valid = await withTimeout(DatabaseService.validateCurrentSession(parsedUser), 4500)
+            const valid = await withTimeout(DatabaseService.validateCurrentSession(parsedUser), 8000)
 
             if (cancelled) return
             if (valid) {
@@ -140,9 +140,14 @@ const AppContent = () => {
             }
           } catch {
             if (cancelled) return
-            localStorage.removeItem('minthi_user')
-            localStorage.removeItem('minthi_session_token')
-            localStorage.removeItem('minthi_session_expires_at')
+            const shouldKeepRememberedDevice = localStorage.getItem('minthi_remember_login') === '1' && hasToken
+            if (shouldKeepRememberedDevice) {
+              setUser(parsedUser)
+            } else {
+              localStorage.removeItem('minthi_user')
+              localStorage.removeItem('minthi_session_token')
+              localStorage.removeItem('minthi_session_expires_at')
+            }
           } finally {
             if (!cancelled) setLoading(false)
           }

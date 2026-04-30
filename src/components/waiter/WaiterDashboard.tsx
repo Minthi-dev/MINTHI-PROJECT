@@ -1113,7 +1113,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
     }
 
     return (
-        <div className="min-h-[100dvh] bg-zinc-950 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
+        <div className="min-h-[100dvh] max-w-full overflow-x-hidden bg-zinc-950 pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] pb-24 text-zinc-100 font-sans selection:bg-amber-500/30">
             {/* Background Ambience */}
             <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-900/10 via-zinc-950 to-zinc-950 pointer-events-none" />
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none brightness-100 contrast-150 mix-blend-overlay"></div>
@@ -1121,14 +1121,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             {/* Header */}
             <header className="sticky top-0 z-50 flex flex-col gap-2 bg-zinc-950/80 backdrop-blur-xl pt-[max(0.75rem,env(safe-area-inset-top))] px-3 sm:px-4 pb-3 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300 mb-4 sm:mb-8">
                 {/* Top row: title + activity button */}
-                <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center gap-3 sm:gap-4">
+                <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3 sm:gap-4">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10">
                             <User size={22} weight="duotone" className="sm:hidden" />
                             <User size={26} weight="duotone" className="hidden sm:block" />
                         </div>
-                        <div>
-                            <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                        <div className="min-w-0">
+                            <h1 className="truncate text-lg sm:text-xl font-bold text-white tracking-tight">
                                 {dineInEnabled ? 'Gestione Sala' : 'Ritiro Asporto'}
                             </h1>
                             <div className="flex items-center gap-2 mt-0.5">
@@ -1141,43 +1141,43 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:justify-end">
                         {takeawayQrEnabled && (
                             <Button
                                 size="sm"
                                 onClick={() => setTakeawayScannerOpen(true)}
-                                className="h-10 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black shadow-lg shadow-emerald-500/20"
+                                className="h-10 min-w-0 rounded-xl bg-emerald-500 px-3 font-black text-black shadow-lg shadow-emerald-500/20 hover:bg-emerald-400"
                             >
-                                <QrCode size={19} weight="fill" className="mr-2" />
-                                Scannerizza QR
+                                <QrCode size={19} weight="fill" className="mr-2 shrink-0" />
+                                <span className="truncate"><span className="hidden sm:inline">Scannerizza </span>QR</span>
                             </Button>
                         )}
                         {dineInEnabled && (
                             <Button
                                 variant={(readyCount + assistanceRequests.length) > 0 ? "default" : "outline"}
                                 size="sm"
-                                className={`h-10 px-4 rounded-xl font-bold transition-all shadow-lg shrink-0 ${(readyCount + assistanceRequests.length) > 0
+                                className={`h-10 min-w-0 rounded-xl px-3 font-bold transition-all shadow-lg sm:px-4 ${(readyCount + assistanceRequests.length) > 0
                                     ? 'bg-amber-500 hover:bg-amber-400 text-black border-transparent animate-pulse shadow-amber-500/20'
                                     : 'text-zinc-400 bg-zinc-900/50 border-white/5 hover:bg-zinc-800 hover:text-white'
                                     }`}
                                 onClick={() => setIsReadyDrawerOpen(true)}
                             >
                                 {assistanceRequests.length > 0 ? (
-                                    <BellSimple size={20} weight="fill" className="mr-2 animate-bounce text-yellow-400" />
+                                    <BellSimple size={20} weight="fill" className="mr-2 shrink-0 animate-bounce text-yellow-400" />
                                 ) : readyCount > 0 ? (
-                                    <BellRinging size={20} weight="fill" className="mr-2 animate-bounce" />
+                                    <BellRinging size={20} weight="fill" className="mr-2 shrink-0 animate-bounce" />
                                 ) : (
-                                    <CheckCircle size={20} className="mr-2" />
+                                    <CheckCircle size={20} className="mr-2 shrink-0" />
                                 )}
-                                Attività: {readyCount + assistanceRequests.length}
+                                <span className="truncate">Attività: {readyCount + assistanceRequests.length}</span>
                             </Button>
                         )}
                     </div>
                 </div>
 
                 {/* Bottom row: filters - all visible, no scroll */}
-                {dineInEnabled && <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex bg-zinc-900/80 p-1 rounded-xl border border-white/5">
+                {dineInEnabled && <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
+                    <div className="flex min-w-0 flex-1 bg-zinc-900/80 p-1 rounded-xl border border-white/5 sm:flex-none">
                         <Button
                             variant="ghost"
                             size="sm"
@@ -1206,7 +1206,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
                     {/* Room Filter */}
                     <Select value={selectedRoomFilter} onValueChange={setSelectedRoomFilter}>
-                        <SelectTrigger className="w-[130px] h-8 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl">
+                        <SelectTrigger className="h-8 min-w-0 flex-1 bg-zinc-900/80 border-white/5 text-xs font-bold rounded-xl sm:w-[130px] sm:flex-none">
                             <House size={14} className="mr-1.5 text-amber-500" />
                             <SelectValue placeholder="Sala" />
                         </SelectTrigger>
@@ -1287,7 +1287,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                         <div className="flex-1 h-px bg-white/10" />
                                         <span className="text-xs text-zinc-500">{roomTables.length} tavoli</span>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 md:gap-4">
+                                    <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3 lg:grid-cols-4 xl:grid-cols-5 md:gap-4">
                                         {roomTables.map(table => renderTableCard(table))}
                                     </div>
                                 </div>
@@ -1306,7 +1306,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                         <span className="text-xs text-zinc-500">{noRoomTables.length} tavoli</span>
                                     </div>
                                 )}
-                                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 md:gap-4">
+                                <div className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-3 lg:grid-cols-4 xl:grid-cols-5 md:gap-4">
                                     {noRoomTables.map(table => renderTableCard(table))}
                                 </div>
                             </div>

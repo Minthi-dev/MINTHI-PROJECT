@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { User } from '../services/types'
-import { Users, Eye, EyeSlash } from '@phosphor-icons/react'
+import { Eye, EyeSlash } from '@phosphor-icons/react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { supabase } from '../lib/supabase'
 
@@ -17,10 +17,10 @@ interface Props {
 
 export default function LoginPage({ onLogin }: Props) {
   const [isLoading, setIsLoading] = useState(false)
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(() => localStorage.getItem('minthi_remember_username') || '')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  const [rememberMe, setRememberMe] = useState(() => localStorage.getItem('minthi_remember_login') === '1')
   const [searchParams, setSearchParams] = useSearchParams()
 
   const [paymentSuccess, setPaymentSuccess] = useState(false)
@@ -43,7 +43,7 @@ export default function LoginPage({ onLogin }: Props) {
 
     try {
       const { data, error } = await supabase.functions.invoke('login', {
-        body: { username: username.trim(), password }
+        body: { username: username.trim(), password, rememberMe }
       })
 
       if (error || !data?.user) {
@@ -60,6 +60,13 @@ export default function LoginPage({ onLogin }: Props) {
         localStorage.setItem('minthi_user', JSON.stringify(loggedUser))
         if (data.sessionToken) localStorage.setItem('minthi_session_token', data.sessionToken)
         if (data.sessionExpiresAt) localStorage.setItem('minthi_session_expires_at', data.sessionExpiresAt)
+        if (rememberMe) {
+          localStorage.setItem('minthi_remember_login', '1')
+          localStorage.setItem('minthi_remember_username', username.trim())
+        } else {
+          localStorage.removeItem('minthi_remember_login')
+          localStorage.removeItem('minthi_remember_username')
+        }
         onLogin(loggedUser)
         toast.success(data.restaurant_name ? `Benvenuto, ${data.restaurant_name}` : `Benvenuto ${loggedUser.name || 'Utente'}`)
       }
@@ -207,7 +214,7 @@ export default function LoginPage({ onLogin }: Props) {
                 className="border-white/20 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-500 data-[state=checked]:text-black rounded-[4px] w-5 h-5"
               />
               <Label htmlFor="remember-me" className="text-sm text-zinc-400 cursor-pointer font-normal hover:text-white transition-colors select-none">
-                Resta collegato
+                Ricordami su questo dispositivo
               </Label>
             </div>
           </div>
