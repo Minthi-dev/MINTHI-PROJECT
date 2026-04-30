@@ -1063,7 +1063,7 @@ const CustomerMenuBase = () => {
 
 // Refactored Content Component to keep logic clean
 //  -- UPDATED INTERFACE to include auth and full restaurant --
-function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, onSessionUpdate, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId: string, activeSession: TableSession, onSessionUpdate?: (session: TableSession) => void, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
+function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession, onSessionUpdate, isViewOnly, isClosed, isAuthenticated, fullRestaurant }: { restaurantId: string, tableId: string, sessionId?: string | null, activeSession?: TableSession | null, onSessionUpdate?: (session: TableSession) => void, isViewOnly?: boolean, isClosed?: boolean, isAuthenticated: boolean, fullRestaurant?: any }) {
   const initialUrlParams = new URLSearchParams(window.location.search)
   const initialStripeSuccess = initialUrlParams.get('payment') === 'success'
   const initialStripeSessionId = initialUrlParams.get('session_id')
@@ -1162,6 +1162,27 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const [showRomanaInline, setShowRomanaInline] = useState(false)
   // Show coperto/AYCE prompt
   const [showCopertoPrompt, setShowCopertoPrompt] = useState(false)
+
+  useEffect(() => {
+    if (!stripePaymentSuccess) return
+    setCustomerTab('payment')
+    setPaymentStep('summary')
+    setIsCartOpen(false)
+    setSelectedDish(null)
+
+    const cleanPath = window.location.pathname
+    window.history.replaceState({ minthiPaymentComplete: true }, '', cleanPath)
+    window.history.pushState({ minthiPaymentComplete: true }, '', cleanPath)
+
+    const keepCustomerOnReceipt = () => {
+      window.history.pushState({ minthiPaymentComplete: true }, '', cleanPath)
+      setCustomerTab('payment')
+      setPaymentStep('summary')
+    }
+
+    window.addEventListener('popstate', keepCustomerOnReceipt)
+    return () => window.removeEventListener('popstate', keepCustomerOnReceipt)
+  }, [stripePaymentSuccess])
 
   // Cleanup all pending timers on unmount
   React.useEffect(() => {
@@ -2038,6 +2059,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
         const { ready, status } = await DatabaseService.probeFiscalReceiptForDineIn({
           restaurantId,
           tableSessionId: receiptSessionId || undefined,
+          stripeSessionId: lastStripeSessionId || undefined,
         })
         if (cancelled) return
         if (ready) {
@@ -2060,6 +2082,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
   const handleStripePayment = async (mode: 'full' | 'split' | 'items', splitCount?: number) => {
     if (!fullRestaurant || !activeSession || previousOrders.length === 0) return
     setIsProcessingStripePayment(true)
+    let navigatingToStripe = false
 
     try {
       const orderIds = previousOrders.filter(o => o.status !== 'PAID' && o.status !== 'CANCELLED').map(o => o.id)
@@ -2137,7 +2160,8 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       })
 
       if (url) {
-        window.location.href = url
+        navigatingToStripe = true
+        window.location.assign(url)
       } else {
         toast.error('Errore: nessun link di pagamento ricevuto', { id: 'stripe-pay' })
       }
@@ -2145,7 +2169,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       console.error('Stripe payment error:', error)
       toast.error('Errore durante il pagamento: ' + (error.message || 'Riprova'), { id: 'stripe-pay' })
     } finally {
-      setIsProcessingStripePayment(false)
+      if (!navigatingToStripe) setIsProcessingStripePayment(false)
     }
   }
 
@@ -2931,21 +2955,21 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           </DialogContent>
         </Dialog>
 
-        {/* Call Waiter FAB */}
-        {/* Call Waiter FAB */}
-        <Button
-          onClick={handleCallWaiter}
-          disabled={callWaiterDisabled}
-          className={`fixed top-4 right-4 z-50 h-10 px-3 rounded-full shadow-xl border-2 transition-all duration-300 flex items-center gap-1.5 ${callWaiterDisabled ? 'cursor-not-allowed' : ''}`}
-          style={callWaiterDisabled
-            ? { backgroundColor: '#27272a', borderColor: '#3f3f46', color: '#71717a' }
-            : theme.fabStyle
-          }
-          title={callWaiterDisabled ? 'Attendi 30 secondi...' : 'Chiama cameriere'}
-        >
-          <Bell className="w-4 h-4" fill="currentColor" />
-          <span className="text-xs font-semibold tracking-wide">Cameriere</span>
-        </Button>
+        {!stripePaymentSuccess && (
+          <Button
+            onClick={handleCallWaiter}
+            disabled={callWaiterDisabled}
+            className={`fixed top-4 right-4 z-50 h-10 px-3 rounded-full shadow-xl border-2 transition-all duration-300 flex items-center gap-1.5 ${callWaiterDisabled ? 'cursor-not-allowed' : ''}`}
+            style={callWaiterDisabled
+              ? { backgroundColor: '#27272a', borderColor: '#3f3f46', color: '#71717a' }
+              : theme.fabStyle
+            }
+            title={callWaiterDisabled ? 'Attendi 30 secondi...' : 'Chiama cameriere'}
+          >
+            <Bell className="w-4 h-4" fill="currentColor" />
+            <span className="text-xs font-semibold tracking-wide">Cameriere</span>
+          </Button>
+        )}
 
       </div>
 
@@ -2955,12 +2979,16 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           {/* Payment Header */}
           <header className="flex-none z-20 backdrop-blur-xl px-4 py-4" style={{ backgroundColor: theme.headerBg, borderBottom: `1px solid ${theme.primaryAlpha(0.1)}` }}>
             <div className="flex items-center justify-between">
-              <button onClick={() => { setCustomerTab('menu'); setPaymentStep('summary') }} className="flex items-center gap-1.5 min-w-[60px]" style={{ color: theme.textSecondary }}>
-                <ArrowLeft className="w-5 h-5" />
-                <span className="text-sm">Menù</span>
-              </button>
+              {stripePaymentSuccess ? (
+                <div className="min-w-[60px]" />
+              ) : (
+                <button onClick={() => { setCustomerTab('menu'); setPaymentStep('summary') }} className="flex items-center gap-1.5 min-w-[60px]" style={{ color: theme.textSecondary }}>
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="text-sm">Menù</span>
+                </button>
+              )}
               <h1 className="text-base font-semibold tracking-wide text-center flex-1" style={{ color: theme.textPrimary }}>
-                {(fullRestaurant as any)?.enable_stripe_payments ? "Conto e Pagamento" : "Il Tuo Ordine"}
+                {stripePaymentSuccess ? 'Pagamento completato' : (fullRestaurant as any)?.enable_stripe_payments ? "Conto e Pagamento" : "Il Tuo Ordine"}
               </h1>
               <div className="min-w-[60px] pointer-events-none" /> {/* spacer - pointer-events-none to not block touches */}
             </div>
@@ -2970,7 +2998,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           <main className={`flex-1 ${paymentStep === 'options' && !stripePaymentSuccess && previousOrders.length > 0 ? 'flex flex-col min-h-0' : 'overflow-y-auto px-4 pt-4 pb-4 scrollbar-hide'}`}>
             {stripePaymentSuccess ? (
               /* === Payment Success === */
-              <div className="flex flex-col items-center justify-center text-center py-12 space-y-4">
+              <div className="flex min-h-full flex-col items-center justify-center text-center py-12 space-y-4">
                 <div className="w-20 h-20 rounded-full flex items-center justify-center mb-2"
                   style={{ backgroundColor: '#10B98120', border: '2px solid #10B98140' }}>
                   <CheckCircle size={48} weight="fill" style={{ color: '#10B981' }} />
@@ -2982,35 +3010,13 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
                   Grazie per aver scelto {fullRestaurant?.name || 'il nostro ristorante'}
                 </p>
                 <p className="text-sm" style={{ color: theme.textMuted }}>
-                  Il pagamento è stato elaborato con successo.<br />
-                  Ti auguriamo una buona serata!
+                  Il tavolo è stato saldato online. Qui puoi scaricare lo scontrino fiscale appena disponibile.
                 </p>
                 <div className="pt-4 w-full max-w-xs space-y-3">
                   {renderDineInReceiptActions()}
-
-                  <Button
-                    onClick={() => {
-                      setStripePaymentSuccess(false);
-                      setCustomerTab('menu');
-                    }}
-                    className="w-full h-12 rounded-xl font-bold shadow-lg"
-                    style={{ backgroundColor: theme.primary, color: '#000' }}
-                  >
-                    Torna al Menù
-                  </Button>
-
-                  <Button
-                    onClick={() => {
-                      setStripePaymentSuccess(false);
-                      setPaymentStep('options');
-                      setCustomerTab('payment');
-                    }}
-                    variant="outline"
-                    className="w-full h-12 rounded-xl font-bold"
-                    style={{ borderColor: theme.primaryAlpha(0.3), color: theme.textPrimary }}
-                  >
-                    Effettua un altro pagamento
-                  </Button>
+                  <p className="text-[11px] leading-relaxed" style={{ color: theme.textMuted }}>
+                    Puoi chiudere questa pagina. Per ordinare ancora serve una nuova attivazione del tavolo da parte del personale.
+                  </p>
                 </div>
               </div>
             ) : previousOrders.length === 0 ? (
@@ -3375,6 +3381,24 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
           )}
 
 
+        </div>
+      )}
+
+      {isProcessingStripePayment && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center px-6 text-center" style={{ background: 'rgba(9,9,11,0.92)', backdropFilter: 'blur(14px)' }}>
+          <div className="w-full max-w-sm rounded-3xl border p-6 shadow-2xl" style={{ backgroundColor: theme.cardBg, borderColor: theme.primaryAlpha(0.22) }}>
+            <div className="mx-auto mb-5 relative h-16 w-16">
+              <div className="absolute inset-0 rounded-full" style={{ border: `1px solid ${theme.primaryAlpha(0.25)}` }} />
+              <div className="absolute inset-0 rounded-full animate-spin" style={{ border: '2px solid transparent', borderTopColor: theme.primary }} />
+              <div className="absolute inset-4 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.primaryAlpha(0.12), color: theme.primary }}>
+                <CreditCard size={22} weight="fill" />
+              </div>
+            </div>
+            <h2 className="text-lg font-black" style={{ color: theme.textPrimary }}>Apro il pagamento sicuro</h2>
+            <p className="mt-2 text-sm leading-relaxed" style={{ color: theme.textSecondary }}>
+              Sto preparando Stripe. Attendi qualche secondo e non premere indietro.
+            </p>
+          </div>
         </div>
       )}
 

@@ -417,11 +417,14 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
                                 return (
                                     <div
                                         key={item.id}
-                                        className={`rounded-2xl border p-3 transition-colors ${done ? 'border-emerald-500/25 bg-emerald-500/5' : 'border-white/10 bg-zinc-900/70'}`}
+                                        className={`rounded-2xl border p-3 transition-all ${done ? 'border-white/5 bg-white/[0.02] opacity-35 grayscale' : 'border-white/10 bg-zinc-900/80 shadow-lg shadow-black/10'}`}
                                     >
                                         <div className="flex items-center gap-3">
+                                            <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border ${done ? 'border-white/10 bg-white/[0.03] text-zinc-500' : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'}`}>
+                                                {done ? <CheckCircle size={20} weight="fill" /> : <Package size={20} weight="fill" />}
+                                            </div>
                                             <div className="min-w-0 flex-1">
-                                                <div className={`font-semibold leading-snug ${done ? 'text-emerald-200' : 'text-white'}`}>
+                                                <div className={`font-semibold leading-snug ${done ? 'text-zinc-400 line-through decoration-white/30' : 'text-white'}`}>
                                                     {item.name}
                                                 </div>
                                                 <div className="mt-0.5 text-[11px] text-zinc-500">
@@ -444,7 +447,7 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
                                                     )}
                                                 </Button>
                                             ) : (
-                                                <div className="h-12 w-12 rounded-2xl bg-emerald-500/15 border border-emerald-400/25 text-emerald-300 flex items-center justify-center">
+                                                <div className="h-12 w-12 rounded-2xl bg-white/[0.03] border border-white/10 text-zinc-500 flex items-center justify-center">
                                                     <CheckCircle size={22} weight="fill" />
                                                 </div>
                                             )}
@@ -463,23 +466,23 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
                                     setScannerError(null)
                                     setQrFound(false)
                                 }}
-                                className="h-11 border-white/15 bg-black/20 text-zinc-100 hover:bg-white/5 font-semibold"
+                                className="h-12 border-white/15 bg-black/20 text-zinc-100 hover:bg-white/5 font-black rounded-2xl"
                             >
-                                <ArrowsClockwise size={16} className="mr-2" /> Nuovo QR
+                                <ArrowsClockwise size={17} className="mr-2" /> Scansiona nuovo
                             </Button>
                             {progress.remaining > 0 ? (
                                 <Button
                                     disabled={!canClaim || !!claiming}
                                     onClick={claimAll}
-                                    className="h-11 bg-emerald-500 hover:bg-emerald-400 text-black font-black shadow-lg shadow-emerald-500/20"
+                                    className="h-12 bg-emerald-500 hover:bg-emerald-400 text-black font-black shadow-lg shadow-emerald-500/20 rounded-2xl"
                                 >
                                     <CheckCircle size={17} weight="fill" className="mr-2" />
-                                    {claiming === '__all__' ? 'Consegno...' : `Consegna tutto (${progress.remaining})`}
+                                    {claiming === '__all__' ? 'Consegno...' : `Completa ritiro (${progress.remaining})`}
                                 </Button>
                             ) : (
                                 <Button
                                     onClick={() => onOpenChange(false)}
-                                    className="h-11 bg-emerald-500 hover:bg-emerald-400 text-black font-black"
+                                    className="h-12 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-2xl"
                                 >
                                     <Receipt size={17} weight="fill" className="mr-2" /> Chiudi
                                 </Button>

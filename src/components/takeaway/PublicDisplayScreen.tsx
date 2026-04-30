@@ -13,6 +13,75 @@ interface DisplayOrder {
     created_at: string
 }
 
+function displayGridMetrics(count: number) {
+    if (count <= 1) return { columns: 1, gap: 18, fontSize: 'clamp(5rem, 12vw, 9rem)', padding: '1.6rem' }
+    if (count <= 6) return { columns: 2, gap: 18, fontSize: 'clamp(4rem, 8vw, 7rem)', padding: '1.35rem' }
+    if (count <= 12) return { columns: 3, gap: 14, fontSize: 'clamp(3rem, 6vw, 5rem)', padding: '1rem' }
+    if (count <= 24) return { columns: 4, gap: 12, fontSize: 'clamp(2.2rem, 4.4vw, 3.8rem)', padding: '0.8rem' }
+    if (count <= 40) return { columns: 5, gap: 10, fontSize: 'clamp(1.8rem, 3.6vw, 3rem)', padding: '0.65rem' }
+    if (count <= 56) return { columns: 7, gap: 8, fontSize: 'clamp(1.35rem, 2.6vw, 2.25rem)', padding: '0.5rem' }
+    return { columns: 8, gap: 7, fontSize: 'clamp(1.05rem, 2vw, 1.85rem)', padding: '0.42rem' }
+}
+
+function DisplayCodeGrid({
+    orders,
+    tone,
+}: {
+    orders: DisplayOrder[]
+    tone: 'preparing' | 'ready'
+}) {
+    const visible = orders.slice(0, 72)
+    const hidden = Math.max(0, orders.length - visible.length)
+    const metrics = displayGridMetrics(visible.length || 1)
+    const rows = Math.max(1, Math.ceil((visible.length + (hidden > 0 ? 1 : 0)) / metrics.columns))
+    const isReady = tone === 'ready'
+
+    if (orders.length === 0) return null
+
+    return (
+        <div
+            className="grid flex-1 min-h-0 content-stretch"
+            style={{
+                gridTemplateColumns: `repeat(${metrics.columns}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+                gap: metrics.gap,
+            }}
+        >
+            <AnimatePresence mode="popLayout">
+                {visible.map(o => (
+                    <motion.div
+                        key={o.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.86 }}
+                        animate={isReady ? { opacity: 1, scale: [1, 1.035, 1] } : { opacity: 1, scale: 1 }}
+                        transition={isReady ? { scale: { repeat: Infinity, duration: 1.6 } } : undefined}
+                        exit={{ opacity: 0, scale: 0.72 }}
+                        className={[
+                            'min-h-0 rounded-2xl border-2 flex items-center justify-center text-center font-mono font-black leading-none',
+                            isReady
+                                ? 'bg-emerald-500/15 border-emerald-400 text-emerald-300 shadow-[0_0_30px_-5px_rgba(16,185,129,0.6)]'
+                                : 'bg-amber-500/10 border-amber-500/40 text-amber-300',
+                        ].join(' ')}
+                        style={{ fontSize: metrics.fontSize, padding: metrics.padding }}
+                    >
+                        #{String(o.pickup_number).padStart(3, '0')}
+                    </motion.div>
+                ))}
+                {hidden > 0 && (
+                    <motion.div
+                        key="hidden-count"
+                        layout
+                        className="min-h-0 rounded-2xl border-2 border-white/20 bg-white/5 flex items-center justify-center text-center px-3 font-black text-zinc-300"
+                        style={{ fontSize: 'clamp(1rem, 2vw, 1.5rem)' }}
+                    >
+                        +{hidden}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    )
+}
+
 export default function PublicDisplayScreen() {
     const { restaurantId } = useParams<{ restaurantId: string }>()
     const [orders, setOrders] = useState<DisplayOrder[]>([])
@@ -129,24 +198,7 @@ export default function PublicDisplayScreen() {
                                 <div className="text-sm uppercase tracking-widest">Nessun ordine</div>
                             </div>
                         </div>
-                    ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4 content-start">
-                            <AnimatePresence mode="popLayout">
-                                {preparing.map(o => (
-                                    <motion.div
-                                        key={o.id}
-                                        layout
-                                        initial={{ opacity: 0, scale: 0.8 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 0.6 }}
-                                        className="bg-amber-500/10 border-2 border-amber-500/40 rounded-xl py-6 text-center font-mono text-4xl md:text-5xl font-bold text-amber-300"
-                                    >
-                                        #{String(o.pickup_number).padStart(3, '0')}
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
-                        </div>
-                    )}
+                    ) : <DisplayCodeGrid orders={preparing} tone="preparing" />}
                 </section>
 
                 {/* Ready */}
@@ -162,28 +214,7 @@ export default function PublicDisplayScreen() {
                                 <div className="text-sm uppercase tracking-widest">Nessun ordine pronto</div>
                             </div>
                         </div>
-                    ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4 content-start">
-                            <AnimatePresence mode="popLayout">
-                                {ready.map(o => (
-                                    <motion.div
-                                        key={o.id}
-                                        layout
-                                        initial={{ opacity: 0, scale: 0.8 }}
-                                        animate={{
-                                            opacity: 1,
-                                            scale: [1, 1.05, 1],
-                                        }}
-                                        transition={{ scale: { repeat: Infinity, duration: 1.6 } }}
-                                        exit={{ opacity: 0, scale: 0.6 }}
-                                        className="bg-emerald-500/15 border-2 border-emerald-400 rounded-xl py-6 text-center font-mono text-4xl md:text-5xl font-bold text-emerald-300 shadow-[0_0_30px_-5px_rgba(16,185,129,0.6)]"
-                                    >
-                                        #{String(o.pickup_number).padStart(3, '0')}
-                                    </motion.div>
-                                ))}
-                            </AnimatePresence>
-                        </div>
-                    )}
+                    ) : <DisplayCodeGrid orders={ready} tone="ready" />}
                 </section>
             </main>
 
