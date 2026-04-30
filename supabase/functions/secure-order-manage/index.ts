@@ -113,7 +113,8 @@ serve(async (req) => {
                     .update({ status: "PAID", payment_method: pm, closed_at: new Date().toISOString() })
                     .eq("table_session_id", sessionId)
                     .eq("restaurant_id", restaurantId)
-                    .neq("status", "PAID");
+                    .neq("status", "PAID")
+                    .neq("status", "CANCELLED");
                 if (error) return json({ error: error.message }, 500);
                 if (resolved.orderIds.length > 0) {
                     const { error: itemsError } = await supabase
