@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { DatabaseService } from '@/services/DatabaseService'
@@ -197,6 +197,12 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     const knownKitchenPrintIdsRef = useRef<Set<string>>(new Set())
     const initialKitchenPrintLoadRef = useRef(true)
     const autoPickupInFlightRef = useRef<Set<string>>(new Set())
+    const onAutoPrintKitchenOrderRef = useRef(onAutoPrintKitchenOrder)
+    const knownTakeawayOrderIdsRef = useRef<Set<string>>(new Set())
+
+    useEffect(() => {
+        onAutoPrintKitchenOrderRef.current = onAutoPrintKitchenOrder
+    }, [onAutoPrintKitchenOrder])
 
     // Re-render often enough for the ready countdown and auto-pickup timer.
     useEffect(() => {
@@ -205,27 +211,45 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     }, [])
 
     // Hash veloce dello stato ordini per evitare setOrders quando i dati
-    // sono identici → previene flicker di AnimatePresence quando il
+    // sono identici → previene flicker quando il
     // realtime e il polling fired insieme producono lo stesso risultato.
     const ordersSignatureRef = useRef<string>('')
+    const makeOrdersSignature = useCallback((list: Order[]) => {
+        return list
+            .map(o => {
+                const itemsSignature = (o.items || [])
+                    .map((it: any) => `${it.id}:${it.quantity}:${it.status}:${it.takeaway_picked_quantity || 0}`)
+                    .join(',')
+                return [
+                    o.id,
+                    o.status,
+                    o.paid_amount,
+                    o.total_amount,
+                    o.ready_at,
+                    o.picked_up_at,
+                    o.closed_at,
+                    itemsSignature,
+                ].join(':')
+            })
+            .join('|')
+    }, [])
 
     const refresh = useCallback(async () => {
         try {
             const data = await DatabaseService.getTakeawayOrders(restaurantId)
             const nextOrders = data as Order[]
-            const signature = nextOrders
-                .map(o => `${o.id}:${o.status}:${o.paid_amount}:${(o.items || []).length}`)
-                .join('|')
+            const signature = makeOrdersSignature(nextOrders)
+            knownTakeawayOrderIdsRef.current = new Set(nextOrders.map(o => o.id))
             if (signature !== ordersSignatureRef.current) {
                 ordersSignatureRef.current = signature
                 setOrders(nextOrders)
             }
 
             const printable = nextOrders.filter(o => o.status === 'PREPARING' || o.status === 'READY')
-            if (onAutoPrintKitchenOrder && !initialKitchenPrintLoadRef.current) {
+            if (onAutoPrintKitchenOrderRef.current && !initialKitchenPrintLoadRef.current) {
                 for (const order of printable) {
                     if (!knownKitchenPrintIdsRef.current.has(order.id)) {
-                        onAutoPrintKitchenOrder(order)
+                        onAutoPrintKitchenOrderRef.current(order)
                     }
                 }
             }
@@ -234,7 +258,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         } catch (e: any) {
             console.error('[takeaway-panel] refresh error', e)
         }
-    }, [restaurantId, onAutoPrintKitchenOrder])
+    }, [restaurantId, makeOrdersSignature])
 
     useEffect(() => {
         let alive = true
@@ -252,7 +276,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         }
 
         ;(async () => {
-            setLoading(true)
+            if (ordersSignatureRef.current === '') setLoading(true)
             await refresh()
             if (alive) setLoading(false)
         })()
@@ -261,10 +285,10 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` }, (payload: any) => {
                 if (payload.new?.order_type === 'takeaway' || payload.old?.order_type === 'takeaway') scheduleRefresh()
             })
-            // order_items non ha filter restaurant_id (la tabella non lo
-            // espone), ma il check su orders.restaurant_id sopra basta a
-            // intercettare i cambi rilevanti — qui solo come backup.
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => scheduleRefresh())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, (payload: any) => {
+                const orderId = payload.new?.order_id || payload.old?.order_id
+                if (orderId && knownTakeawayOrderIdsRef.current.has(orderId)) scheduleRefresh()
+            })
             .subscribe()
 
         // Polling di sicurezza più lento: il realtime gestisce gli update
@@ -409,7 +433,32 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         }
     }, [visible, archive.length, tab])
 
+    const applyOptimisticOrderStatus = useCallback((orderId: string, next: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') => {
+        const nowIso = new Date().toISOString()
+        const patch: Partial<Order> = {
+            status: next,
+            ...(next === 'READY' ? { ready_at: nowIso } : {}),
+            ...(next === 'PICKED_UP' ? { picked_up_at: nowIso, closed_at: nowIso } : {}),
+            ...(next === 'CANCELLED' ? { closed_at: nowIso } : {}),
+        }
+        setOrders(prev => {
+            const updated = prev.map(order => order.id === orderId ? { ...order, ...patch } : order)
+            ordersSignatureRef.current = makeOrdersSignature(updated)
+            knownTakeawayOrderIdsRef.current = new Set(updated.map(order => order.id))
+            return updated
+        })
+        setSelected(prev => prev?.id === orderId ? { ...prev, ...patch } : prev)
+    }, [makeOrdersSignature])
+
+    const replaceOrdersOptimistically = useCallback((nextOrders: Order[]) => {
+        ordersSignatureRef.current = makeOrdersSignature(nextOrders)
+        knownTakeawayOrderIdsRef.current = new Set(nextOrders.map(order => order.id))
+        setOrders(nextOrders)
+    }, [makeOrdersSignature])
+
     const changeStatus = async (o: Order, next: 'PREPARING' | 'READY' | 'PICKED_UP' | 'CANCELLED') => {
+        const previousOrders = orders
+        applyOptimisticOrderStatus(o.id, next)
         try {
             await DatabaseService.updateTakeawayStatus(o.id, next)
             if (next === 'PICKED_UP') {
@@ -418,11 +467,13 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     action: {
                         label: 'Annulla',
                         onClick: async () => {
+                            applyOptimisticOrderStatus(o.id, 'READY')
                             try {
                                 await DatabaseService.updateTakeawayStatus(o.id, 'READY')
                                 toast.success('Consegna annullata')
-                                refresh()
+                                window.setTimeout(refresh, 600)
                             } catch (err: any) {
+                                applyOptimisticOrderStatus(o.id, 'PICKED_UP')
                                 toast.error(err?.message || 'Impossibile annullare')
                             }
                         },
@@ -435,8 +486,9 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             } else {
                 toast.success('Stato aggiornato')
             }
-            refresh()
+            window.setTimeout(refresh, 600)
         } catch (e: any) {
+            replaceOrdersOptimistically(previousOrders)
             toast.error(e?.message || 'Errore')
         }
     }
@@ -638,21 +690,19 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                             className={cn('grid content-start pb-20', cardSize === 'compact' ? 'gap-2.5' : 'gap-3')}
                             style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSizeConfig[cardSize].minWidth}px, 1fr))` }}
                         >
-                            <AnimatePresence mode="popLayout">
-                                {visible.map(o => (
-                                    <TakeawayCard
-                                        key={o.id}
-                                        order={o}
-                                        now={now}
-                                        onStatus={changeStatus}
-                                        onPay={openPayment}
-                                        onDetail={openDetail}
-                                        takeawayRequireStripe={takeawayRequireStripe}
-                                        takeawayAutoPickupEnabled={takeawayAutoPickupEnabled}
-                                        cardSize={cardSize}
-                                    />
-                                ))}
-                            </AnimatePresence>
+                            {visible.map(o => (
+                                <TakeawayCard
+                                    key={o.id}
+                                    order={o}
+                                    now={now}
+                                    onStatus={changeStatus}
+                                    onPay={openPayment}
+                                    onDetail={openDetail}
+                                    takeawayRequireStripe={takeawayRequireStripe}
+                                    takeawayAutoPickupEnabled={takeawayAutoPickupEnabled}
+                                    cardSize={cardSize}
+                                />
+                            ))}
                         </div>
                     )}
                 </>
@@ -775,38 +825,38 @@ function TakeawayArchiveRow({
     const due = orderDue(order)
     const date = orderArchiveDate(order)
     return (
-        <div className="grid grid-cols-[auto,1fr] sm:grid-cols-[68px,1fr,96px,132px] gap-2.5 items-center px-3 py-2.5 hover:bg-white/[0.03] transition-colors">
-            <div className="flex items-center justify-center w-14 h-14 rounded-xl border border-white/10 bg-black/30 text-amber-300 font-mono font-black text-lg">
+        <div className="grid grid-cols-[48px,1fr,74px,auto] gap-2 items-center px-2.5 py-1.5 hover:bg-white/[0.03] transition-colors">
+            <div className="flex items-center justify-center w-11 h-9 rounded-lg border border-white/10 bg-black/30 text-amber-300 font-mono font-black text-sm">
                 #{String(order.pickup_number || 0).padStart(3, '0')}
             </div>
             <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                    <Badge className={`${meta.color} border text-[10px] uppercase font-bold tracking-wide px-2 py-0.5`}>
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <Badge className={`${meta.color} border text-[9px] uppercase font-bold tracking-wide px-1.5 py-0 h-5 shrink-0`}>
                         {meta.label}
                     </Badge>
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-[11px] text-zinc-500 shrink-0">
                         {date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })} · {date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                     </span>
+                    <span className="font-semibold text-white text-xs truncate">{order.customer_name || 'Cliente'}</span>
                 </div>
-                <div className="font-semibold text-white text-sm truncate">{order.customer_name || 'Cliente'}</div>
-                <div className="text-[13px] text-zinc-300 truncate">{archiveItemsLabel(order)}</div>
+                <div className="text-[11px] text-zinc-400 truncate leading-tight">{archiveItemsLabel(order)}</div>
             </div>
-            <div className="col-start-2 sm:col-start-auto text-sm sm:text-right">
-                <div className="font-black text-white">€{Number(order.total_amount || 0).toFixed(2)}</div>
+            <div className="text-right leading-tight">
+                <div className="font-black text-white text-xs">€{Number(order.total_amount || 0).toFixed(2)}</div>
                 {due > 0.01 ? (
-                    <div className="text-xs font-semibold text-amber-300">Residuo €{due.toFixed(2)}</div>
+                    <div className="text-[10px] font-semibold text-amber-300">-€{due.toFixed(2)}</div>
                 ) : (
-                    <div className="text-xs text-emerald-300">Pagato</div>
+                    <div className="text-[10px] text-emerald-300">Pagato</div>
                 )}
             </div>
-            <div className="col-span-2 sm:col-span-1 flex items-center justify-end gap-2">
+            <div className="flex items-center justify-end gap-1">
                 {onPrint && order.status !== 'CANCELLED' && (
-                    <Button size="sm" variant="outline" onClick={() => onPrint(order)} className="h-8 border-white/10 text-zinc-300 hover:bg-white/5">
-                        <Receipt size={14} className="mr-1" /> Comanda
+                    <Button size="sm" variant="outline" onClick={() => onPrint(order)} className="h-7 px-2 border-white/10 text-zinc-300 hover:bg-white/5">
+                        <Receipt size={13} />
                     </Button>
                 )}
-                <Button size="sm" variant="ghost" onClick={() => onDetail(order)} className="h-8 text-zinc-300 hover:text-white hover:bg-white/5">
-                    Dettagli <CaretRight size={14} className="ml-1" />
+                <Button size="sm" variant="ghost" onClick={() => onDetail(order)} className="h-7 px-2 text-zinc-300 hover:text-white hover:bg-white/5">
+                    <CaretRight size={14} />
                 </Button>
             </div>
         </div>
@@ -829,10 +879,9 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
     return (
         <motion.div
             layout
-            initial={{ opacity: 0, y: 12 }}
+            initial={false}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.16 }}
         >
             <Card className={cn(
                 'relative flex h-full flex-col overflow-hidden rounded-xl border bg-zinc-950/80 shadow-sm transition-all duration-200',
