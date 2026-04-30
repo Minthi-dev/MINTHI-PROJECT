@@ -173,6 +173,7 @@ export async function verifyAccess(
 
     const sessionResult = await verifySessionToken(supabase, userId, sessionToken)
     if (!sessionResult.valid || !sessionResult.session) {
+        console.warn(`[AUTH] verifyAccess deny: session invalid userId=${userId} hasToken=${!!sessionToken}`)
         return deny
     }
     const appSession = sessionResult.session
@@ -186,16 +187,29 @@ export async function verifyAccess(
             return { valid: true, role: "ADMIN", isAdmin: true, isOwner: false, isStaff: false };
         }
         if (user.role === "OWNER" && appSession.role === "OWNER" && restaurantId) {
-            if (appSession.restaurant_id && appSession.restaurant_id !== restaurantId) return { ...deny, role: "OWNER" }
+            if (appSession.restaurant_id && appSession.restaurant_id !== restaurantId) {
+                console.warn(`[AUTH] verifyAccess deny OWNER: session.restaurant=${appSession.restaurant_id} req.restaurant=${restaurantId}`)
+                return { ...deny, role: "OWNER" }
+            }
             const { data: rest } = await supabase
                 .from("restaurants").select("owner_id").eq("id", restaurantId).maybeSingle();
             if (rest && rest.owner_id === userId) {
                 return { valid: true, role: "OWNER", isAdmin: false, isOwner: true, isStaff: false };
             }
+            // Fallback robust: il ristorante esiste ma owner_id è null o
+            // disallineato. Se la app_session è stata creata col login
+            // OWNER e collegata a questo restaurantId, il ristorante è
+            // legittimamente del chiamante. Validiamo via session.
+            if (rest && appSession.restaurant_id === restaurantId) {
+                console.warn(`[AUTH] verifyAccess OWNER fallback via session: rest.owner_id=${rest.owner_id} userId=${userId} session.restaurant=${appSession.restaurant_id}`)
+                return { valid: true, role: "OWNER", isAdmin: false, isOwner: true, isStaff: false };
+            }
+            console.warn(`[AUTH] verifyAccess deny OWNER: rest=${JSON.stringify(rest)} userId=${userId} session.restaurant=${appSession.restaurant_id}`)
         }
         if (user.role === "OWNER" && appSession.role === "OWNER" && !restaurantId) {
             return { valid: true, role: "OWNER", isAdmin: false, isOwner: true, isStaff: false, staffRestaurantId: appSession.restaurant_id ?? undefined };
         }
+        console.warn(`[AUTH] verifyAccess deny: user.role=${user.role} session.role=${appSession.role} restaurantId=${restaurantId}`)
         return { ...deny, role: user.role };
     }
 
@@ -214,5 +228,6 @@ export async function verifyAccess(
         return { valid: true, role: "STAFF", isAdmin: false, isOwner: false, isStaff: true, staffRestaurantId: appSession.restaurant_id };
     }
 
+    console.warn(`[AUTH] verifyAccess deny final: userId=${userId} session.role=${appSession.role} session.restaurant=${appSession.restaurant_id} req.restaurant=${restaurantId} hasStaff=${!!staff}`)
     return deny;
 }
