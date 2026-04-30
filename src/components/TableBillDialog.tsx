@@ -282,8 +282,9 @@ export default function TableBillDialog({
             }
 
             const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+            const sessionToken = localStorage.getItem('minthi_session_token')
             const { data: result, error: payError } = await supabase.functions.invoke('secure-order-manage', {
-                body: { userId: uid, action: 'pay_items', data: { operations } }
+                body: { userId: uid, sessionToken, action: 'pay_items', data: { operations } }
             })
             if (payError) throw new Error(result?.error || payError?.message || 'Errore pagamento')
 
@@ -340,8 +341,9 @@ export default function TableBillDialog({
             const currentQty = originalItem.quantity || 1
 
             const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+            const sessionToken = localStorage.getItem('minthi_session_token')
             const { data: result, error: cancelErr } = await supabase.functions.invoke('secure-order-manage', {
-                body: { userId: uid, action: 'cancel_item', itemId: matchingItem.originalId, data: { decrement: currentQty > 1 } }
+                body: { userId: uid, sessionToken, action: 'cancel_item', itemId: matchingItem.originalId, data: { decrement: currentQty > 1 } }
             })
             if (cancelErr) throw new Error(result?.error || cancelErr?.message || 'Errore rimozione')
 

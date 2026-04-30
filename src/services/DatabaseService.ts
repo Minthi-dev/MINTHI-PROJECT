@@ -548,10 +548,11 @@ export const DatabaseService = {
         const userId = _getCurrentUserId()
         if (userId) {
             const { id, ...rest } = session
+            const sessionToken = _requireCurrentSessionToken()
             const { data, error } = await supabase.functions.invoke('secure-session-manage', {
-                body: { userId, action: 'update', sessionId: id, data: rest }
+                body: { userId, sessionToken, action: 'update', sessionId: id, data: rest }
             })
-            if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento sessione')
+            if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento sessione'))
             return
         }
         const { error } = await supabase.from('table_sessions').update(session).eq('id', session.id)
@@ -611,10 +612,11 @@ export const DatabaseService = {
     async createSession(session: Partial<TableSession>) {
         const userId = _getCurrentUserId()
         if (userId) {
+            const sessionToken = _requireCurrentSessionToken()
             const { data, error } = await supabase.functions.invoke('secure-session-manage', {
-                body: { userId, action: 'create', restaurantId: session.restaurant_id, tableId: session.table_id, data: session }
+                body: { userId, sessionToken, action: 'create', restaurantId: session.restaurant_id, tableId: session.table_id, data: session }
             })
-            if (error) throw new Error(data?.error || error?.message || 'Errore creazione sessione')
+            if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione sessione'))
             return (data?.data || session) as TableSession
         }
         // Customer path (no login) — direct insert scoped to table
@@ -626,10 +628,11 @@ export const DatabaseService = {
     async closeSession(sessionId: string, closedByName?: string, closedByRole?: string) {
         const userId = _getCurrentUserId()
         if (userId) {
+            const sessionToken = _requireCurrentSessionToken()
             const { data, error } = await supabase.functions.invoke('secure-session-manage', {
-                body: { userId, action: 'close', sessionId, data: { closed_by_name: closedByName, closed_by_role: closedByRole } }
+                body: { userId, sessionToken, action: 'close', sessionId, data: { closed_by_name: closedByName, closed_by_role: closedByRole } }
             })
-            if (error) throw new Error(data?.error || error?.message || 'Errore chiusura sessione')
+            if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore chiusura sessione'))
             return
         }
         const { error } = await supabase.from('table_sessions').update({
@@ -643,10 +646,11 @@ export const DatabaseService = {
     async closeAllOpenSessionsForTable(tableId: string, closedByName?: string, closedByRole?: string) {
         const userId = _getCurrentUserId()
         if (userId) {
+            const sessionToken = _requireCurrentSessionToken()
             const { data, error } = await supabase.functions.invoke('secure-session-manage', {
-                body: { userId, action: 'close_all_for_table', tableId, data: { closed_by_name: closedByName, closed_by_role: closedByRole } }
+                body: { userId, sessionToken, action: 'close_all_for_table', tableId, data: { closed_by_name: closedByName, closed_by_role: closedByRole } }
             })
-            if (error) throw new Error(data?.error || error?.message || 'Errore chiusura sessioni')
+            if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore chiusura sessioni'))
             return
         }
         const { error } = await supabase.from('table_sessions').update({
@@ -660,19 +664,32 @@ export const DatabaseService = {
     async markOrdersPaidForSession(sessionId: string, paymentMethod: string = 'cash') {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-order-manage', {
-            body: { userId, action: 'mark_paid_session', sessionId, paymentMethod }
+            body: { userId, sessionToken, action: 'mark_paid_session', sessionId, paymentMethod }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore pagamento ordini')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore pagamento ordini'))
+    },
+
+    async markOrdersPaid(orderIds: string[], paymentMethod: string = 'cash') {
+        if (orderIds.length === 0) return
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('secure-order-manage', {
+            body: { userId, sessionToken, action: 'mark_paid_orders', orderIds, paymentMethod }
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore pagamento ordini'))
     },
 
     async cancelSessionOrders(sessionId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-order-manage', {
-            body: { userId, action: 'cancel_session', sessionId }
+            body: { userId, sessionToken, action: 'cancel_session', sessionId }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore cancellazione ordini')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore cancellazione ordini'))
     },
 
     // Orders
@@ -788,10 +805,11 @@ export const DatabaseService = {
             return rest
         })
         if (userId) {
+            const sessionToken = _requireCurrentSessionToken()
             const { data, error } = await supabase.functions.invoke('secure-order-manage', {
-                body: { userId, action: 'create_order', data: { order, items: cleanItems } }
+                body: { userId, sessionToken, action: 'create_order', data: { order, items: cleanItems } }
             })
-            if (error) throw new Error(data?.error || error?.message || 'Errore creazione ordine')
+            if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione ordine'))
             return data?.data || order
         }
         // Customer path — direct insert
@@ -807,10 +825,11 @@ export const DatabaseService = {
     async updateOrder(orderId: string, updates: Partial<Order>) {
         const userId = _getCurrentUserId()
         if (userId) {
+            const sessionToken = _requireCurrentSessionToken()
             const { data, error } = await supabase.functions.invoke('secure-order-manage', {
-                body: { userId, action: 'update_order', orderId, data: updates }
+                body: { userId, sessionToken, action: 'update_order', orderId, data: updates }
             })
-            if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento ordine')
+            if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento ordine'))
             return
         }
         const { error } = await supabase.from('orders').update(updates).eq('id', orderId)
@@ -820,21 +839,12 @@ export const DatabaseService = {
     async updateOrderItem(itemId: string, updates: Partial<OrderItem>) {
         const userId = _getCurrentUserId()
         if (userId) {
+            const sessionToken = _requireCurrentSessionToken()
             const { data, error } = await supabase.functions.invoke('secure-order-manage', {
-                body: { userId, action: 'update_order_item', itemId, data: updates }
+                body: { userId, sessionToken, action: 'update_order_item', itemId, data: updates }
             })
             if (error) {
-                let msg = 'Errore aggiornamento item'
-                try {
-                    if (data?.error) msg = data.error
-                    else if ((error as any).context) {
-                        const body = await (error as any).context.json()
-                        if (body?.error) msg = body.error
-                    } else if (error.message && !error.message.includes('non-2xx')) {
-                        msg = error.message
-                    }
-                } catch { /* ignore */ }
-                throw new Error(msg)
+                throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento item'))
             }
             return
         }
@@ -1700,10 +1710,11 @@ export const DatabaseService = {
         if (orderIds.length === 0) return
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-order-manage', {
-            body: { userId, action: 'mark_paid_stripe', orderIds }
+            body: { userId, sessionToken, action: 'mark_paid_stripe', orderIds }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore pagamento ordini Stripe')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore pagamento ordini Stripe'))
     },
 
     // App Config (global settings)

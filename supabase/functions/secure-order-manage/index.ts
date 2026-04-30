@@ -11,6 +11,39 @@ const supabase = createClient(
 const VALID_ORDER_STATUSES = ["OPEN", "PENDING", "PREPARING", "READY", "PICKED_UP", "PAID", "CANCELLED"];
 const VALID_ITEM_STATUSES = ["PENDING", "IN_PREPARATION", "READY", "SERVED", "DELIVERED", "PAID", "CANCELLED"];
 
+async function getSessionOrderIds(sessionId: string, restaurantId: string): Promise<{ orderIds: string[]; error?: string }> {
+    const { data: orders, error } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("table_session_id", sessionId)
+        .eq("restaurant_id", restaurantId);
+
+    if (error) return { orderIds: [], error: error.message };
+    return { orderIds: (orders || []).map((order: any) => order.id) };
+}
+
+async function verifyOrderIds(orderIds: string[], restaurantId: string): Promise<{ valid: boolean; error?: string }> {
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return { valid: false, error: "orderIds richiesto" };
+    }
+
+    const uniqueIds = [...new Set(orderIds)];
+    const { data: orders, error } = await supabase
+        .from("orders")
+        .select("id, restaurant_id")
+        .in("id", uniqueIds);
+
+    if (error) return { valid: false, error: error.message };
+    if (!orders || orders.length !== uniqueIds.length) {
+        return { valid: false, error: "Uno o più ordini non esistono" };
+    }
+    if (orders.some((order: any) => order.restaurant_id !== restaurantId)) {
+        return { valid: false, error: "Ordini di un altro ristorante non consentiti" };
+    }
+
+    return { valid: true };
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -42,6 +75,17 @@ serve(async (req) => {
             const { data: item } = await supabase
                 .from("order_items").select("order_id, order:orders(restaurant_id)").eq("id", itemId).maybeSingle();
             restaurantId = (item?.order as any)?.restaurant_id || null;
+        } else if (data?.operations?.length) {
+            const firstOperation = data.operations.find((op: any) => op.itemId || op.orderId);
+            if (firstOperation?.orderId) {
+                const { data: order } = await supabase
+                    .from("orders").select("restaurant_id").eq("id", firstOperation.orderId).maybeSingle();
+                restaurantId = order?.restaurant_id || null;
+            } else if (firstOperation?.itemId) {
+                const { data: item } = await supabase
+                    .from("order_items").select("order_id, order:orders(restaurant_id)").eq("id", firstOperation.itemId).maybeSingle();
+                restaurantId = (item?.order as any)?.restaurant_id || null;
+            }
         } else if (data?.restaurant_id) {
             restaurantId = data.restaurant_id;
         } else if (data?.order?.restaurant_id) {
@@ -62,32 +106,84 @@ serve(async (req) => {
             case "mark_paid_session": {
                 if (!sessionId) return json({ error: "sessionId richiesto" }, 400);
                 const pm = paymentMethod || "cash";
+                const resolved = await getSessionOrderIds(sessionId, restaurantId);
+                if (resolved.error) return json({ error: resolved.error }, 500);
                 const { error } = await supabase
                     .from("orders")
                     .update({ status: "PAID", payment_method: pm, closed_at: new Date().toISOString() })
                     .eq("table_session_id", sessionId)
+                    .eq("restaurant_id", restaurantId)
                     .neq("status", "PAID");
                 if (error) return json({ error: error.message }, 500);
+                if (resolved.orderIds.length > 0) {
+                    const { error: itemsError } = await supabase
+                        .from("order_items")
+                        .update({ status: "PAID" })
+                        .in("order_id", resolved.orderIds)
+                        .not("status", "in", "(PAID,CANCELLED)");
+                    if (itemsError) return json({ error: itemsError.message }, 500);
+                }
                 break;
             }
             case "cancel_session": {
                 if (!sessionId) return json({ error: "sessionId richiesto" }, 400);
+                const resolved = await getSessionOrderIds(sessionId, restaurantId);
+                if (resolved.error) return json({ error: resolved.error }, 500);
                 const { error } = await supabase
                     .from("orders")
                     .update({ status: "CANCELLED", closed_at: new Date().toISOString() })
                     .eq("table_session_id", sessionId)
+                    .eq("restaurant_id", restaurantId)
                     .neq("status", "PAID")
                     .neq("status", "COMPLETED");
                 if (error) return json({ error: error.message }, 500);
+                if (resolved.orderIds.length > 0) {
+                    const { error: itemsError } = await supabase
+                        .from("order_items")
+                        .update({ status: "CANCELLED" })
+                        .in("order_id", resolved.orderIds)
+                        .not("status", "in", "(PAID,CANCELLED)");
+                    if (itemsError) return json({ error: itemsError.message }, 500);
+                }
+                break;
+            }
+            case "mark_paid_orders": {
+                if (!orderIds || orderIds.length === 0) return json({ error: "orderIds richiesto" }, 400);
+                const verification = await verifyOrderIds(orderIds, restaurantId);
+                if (!verification.valid) return json({ error: verification.error || "Ordini non validi" }, 403);
+                const uniqueIds = [...new Set(orderIds)];
+                const pm = paymentMethod || "cash";
+                const { error } = await supabase
+                    .from("orders")
+                    .update({ status: "PAID", payment_method: pm, closed_at: new Date().toISOString() })
+                    .in("id", uniqueIds)
+                    .eq("restaurant_id", restaurantId);
+                if (error) return json({ error: error.message }, 500);
+                const { error: itemsError } = await supabase
+                    .from("order_items")
+                    .update({ status: "PAID" })
+                    .in("order_id", uniqueIds)
+                    .not("status", "in", "(PAID,CANCELLED)");
+                if (itemsError) return json({ error: itemsError.message }, 500);
                 break;
             }
             case "mark_paid_stripe": {
                 if (!orderIds || orderIds.length === 0) return json({ error: "orderIds richiesto" }, 400);
+                const verification = await verifyOrderIds(orderIds, restaurantId);
+                if (!verification.valid) return json({ error: verification.error || "Ordini non validi" }, 403);
+                const uniqueIds = [...new Set(orderIds)];
                 const { error } = await supabase
                     .from("orders")
                     .update({ status: "PAID", payment_method: "stripe", closed_at: new Date().toISOString() })
-                    .in("id", orderIds);
+                    .in("id", uniqueIds)
+                    .eq("restaurant_id", restaurantId);
                 if (error) return json({ error: error.message }, 500);
+                const { error: itemsError } = await supabase
+                    .from("order_items")
+                    .update({ status: "PAID" })
+                    .in("order_id", uniqueIds)
+                    .not("status", "in", "(PAID,CANCELLED)");
+                if (itemsError) return json({ error: itemsError.message }, 500);
                 break;
             }
 
@@ -163,15 +259,26 @@ serve(async (req) => {
                 if (!data?.operations) return json({ error: "operations richiesto" }, 400);
                 for (const op of data.operations) {
                     if (op.type === "mark_paid") {
+                        const { data: item } = await supabase
+                            .from("order_items")
+                            .select("order:orders(restaurant_id)")
+                            .eq("id", op.itemId)
+                            .maybeSingle();
+                        if ((item?.order as any)?.restaurant_id !== restaurantId) {
+                            return json({ error: "Item non appartiene a questo ristorante" }, 403);
+                        }
                         const { error } = await supabase.from("order_items").update({ status: "PAID" }).eq("id", op.itemId);
                         if (error) return json({ error: error.message }, 500);
                     } else if (op.type === "split_and_pay") {
                         // Decrement original, insert new PAID row
                         const { data: originalItem } = await supabase
                             .from("order_items")
-                            .select("dish_name_snapshot, unit_price_snapshot, vat_rate_snapshot")
+                            .select("dish_name_snapshot, unit_price_snapshot, vat_rate_snapshot, order:orders(restaurant_id)")
                             .eq("id", op.itemId)
                             .maybeSingle();
+                        if ((originalItem?.order as any)?.restaurant_id !== restaurantId) {
+                            return json({ error: "Item non appartiene a questo ristorante" }, 403);
+                        }
                         const { error: updateErr } = await supabase
                             .from("order_items").update({ quantity: op.remainingQty }).eq("id", op.itemId);
                         if (updateErr) return json({ error: updateErr.message }, 500);

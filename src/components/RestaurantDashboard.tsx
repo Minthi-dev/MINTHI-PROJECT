@@ -1313,7 +1313,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
   }, [currentRestaurant])
 
-  const { updateOrderItemStatus, updateOrderStatus } = useRestaurantActions()
+  const { updateOrderItemStatus } = useRestaurantActions()
 
   useEffect(() => {
     if (activeTab === 'tables') {
@@ -1389,7 +1389,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       }
 
       try {
-        await DatabaseService.closeSession(openSession.id)
         if (markPaid) {
           const payMethod = (openSession.paid_amount || 0) > 0 ? 'stripe' : 'cash'
           await DatabaseService.markOrdersPaidForSession(openSession.id, payMethod)
@@ -1398,6 +1397,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           // so they don't count as "Active" in analytics.
           await DatabaseService.cancelSessionOrders(openSession.id)
         }
+        await DatabaseService.closeSession(openSession.id)
 
         toast.success(markPaid ? 'Tavolo pagato e liberato' : 'Tavolo svuotato e liberato')
         refreshSessions()
@@ -1770,16 +1770,15 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const handleCompleteOrder = async (orderId: string) => {
     if (demoGuard()) return
-    const targetOrder = orders?.find(o => o.id === orderId)
-
-    if (targetOrder?.items?.length) {
-      await Promise.all(
-        targetOrder.items.map(item => updateOrderItemStatus(orderId, item.id, 'SERVED'))
-      )
+    try {
+      await DatabaseService.markOrdersPaid([orderId], 'cash')
+      setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId))
+      fetchOrders()
+      toast.success('Ordine completato e spostato nello storico')
+    } catch (error) {
+      console.error('Complete order error:', error)
+      toast.error(error instanceof Error ? error.message : 'Errore durante il completamento ordine')
     }
-
-    await updateOrderStatus(orderId, 'PAID')
-    toast.success('Ordine completato e spostato nello storico')
   }
 
   const handleCompleteDish = async (orderId: string, itemId: string, showToast = true) => {
@@ -3440,8 +3439,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                                         }
                                         try {
                                           await DatabaseService.updateSessionReceiptIssued(session.id, true);
-                                          await DatabaseService.closeSession(session.id);
                                           await DatabaseService.markOrdersPaidForSession(session.id, 'stripe');
+                                          await DatabaseService.closeSession(session.id);
                                           toast.success('Scontrino confermato e tavolo chiuso!');
                                           refreshSessions();
                                           refreshData();

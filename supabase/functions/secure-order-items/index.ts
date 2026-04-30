@@ -69,17 +69,21 @@ serve(async (req) => {
                     ? await supabase.from("dishes").select("id, name, price, vat_rate").in("id", dishIds)
                     : { data: [] as any[] };
                 const dishMap = new Map((dishes || []).map((d: any) => [d.id, d]));
-                const safeItems = items.map((i: any) => ({
-                    order_id: i.order_id,
-                    dish_id: i.dish_id,
-                    quantity: i.quantity,
-                    status: "PENDING",
-                    note: i.note || null,
-                    course_number: i.course_number || null,
-                    dish_name_snapshot: dishMap.get(i.dish_id)?.name || i.dish_name_snapshot || null,
-                    unit_price_snapshot: dishMap.get(i.dish_id)?.price ?? i.unit_price_snapshot ?? null,
-                    vat_rate_snapshot: dishMap.get(i.dish_id)?.vat_rate ?? i.vat_rate_snapshot ?? null,
-                }));
+                const safeItems = items.map((i: any) => {
+                    const status = VALID_STATUSES.includes(i.status) ? i.status : "PENDING";
+                    return {
+                        order_id: i.order_id,
+                        dish_id: i.dish_id,
+                        quantity: i.quantity,
+                        status,
+                        note: i.note || null,
+                        course_number: i.course_number || null,
+                        ready_at: status === "READY" ? new Date().toISOString() : null,
+                        dish_name_snapshot: dishMap.get(i.dish_id)?.name || i.dish_name_snapshot || null,
+                        unit_price_snapshot: dishMap.get(i.dish_id)?.price ?? i.unit_price_snapshot ?? null,
+                        vat_rate_snapshot: dishMap.get(i.dish_id)?.vat_rate ?? i.vat_rate_snapshot ?? null,
+                    };
+                });
 
                 const { error } = await supabase.from("order_items").insert(safeItems);
                 if (error) return json({ error: error.message }, 500);
@@ -111,7 +115,9 @@ serve(async (req) => {
                     }
                 }
 
-                const { error } = await supabase.from("order_items").update({ status }).in("id", itemIds);
+                const payload: any = { status };
+                if (status === "READY") payload.ready_at = new Date().toISOString();
+                const { error } = await supabase.from("order_items").update(payload).in("id", itemIds);
                 if (error) return json({ error: error.message }, 500);
                 break;
             }

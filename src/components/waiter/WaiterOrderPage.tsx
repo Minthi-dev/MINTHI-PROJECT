@@ -294,8 +294,9 @@ const WaiterOrderPage = () => {
                 }))
 
                 const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                const sessionToken = localStorage.getItem('minthi_session_token')
                 const { error: itemsError } = await supabase.functions.invoke('secure-order-items', {
-                    body: { userId: uid, restaurantId: restaurant.id, action: 'insert_items', data: { items: dbItems } }
+                    body: { userId: uid, sessionToken, restaurantId: restaurant.id, action: 'insert_items', data: { items: dbItems } }
                 })
                 if (itemsError) throw itemsError
             }
@@ -330,8 +331,9 @@ const WaiterOrderPage = () => {
                     }))
 
                     const uid2 = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
+                    const sessionToken = localStorage.getItem('minthi_session_token')
                     const { error: itemsError } = await supabase.functions.invoke('secure-order-items', {
-                        body: { userId: uid2, restaurantId: restaurant.id, action: 'insert_items', data: { items: dbItems } }
+                        body: { userId: uid2, sessionToken, restaurantId: restaurant.id, action: 'insert_items', data: { items: dbItems } }
                     })
                     if (itemsError) throw itemsError
                 }

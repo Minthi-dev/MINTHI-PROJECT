@@ -422,8 +422,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
 
         const uid = user?.id
         if (uid) {
+            const sessionToken = localStorage.getItem('minthi_session_token')
             await supabase.functions.invoke('secure-order-items', {
-                body: { userId: uid, restaurantId, action: 'update_status', data: { itemIds: [itemId], status: 'SERVED' } }
+                body: { userId: uid, sessionToken, restaurantId, action: 'update_status', data: { itemIds: [itemId], status: 'SERVED' } }
             })
         }
 
@@ -584,34 +585,14 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
         // Logic: Empty Table (markAsPaid=false) sets everything to COMPLETED/CANCELLED?
 
         try {
-            // Update orders if marking as paid
             const sessionOrders = activeOrders.filter(o => o.table_session_id === session.id)
-            if (sessionOrders.length > 0) {
-                // If closing, we update all UNPAID orders/items
-                // Actually, handleCloseTable is "Close Session". 
-                // Using DatabaseService logic.
-
-                await supabase
-                    .from('orders')
-                    .update({ status: 'PAID' })
-                    .in('id', sessionOrders.map(o => o.id))
-
-                // Mark items via edge function
-                const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
-                if (allItemIds.length > 0) {
-                    const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
-                    await supabase.functions.invoke('secure-order-items', {
-                        body: { userId: uid, restaurantId, action: 'update_status', data: { itemIds: allItemIds, status: markAsPaid ? 'PAID' : 'SERVED' } }
-                    })
-                }
+            if (sessionOrders.length > 0 && markAsPaid) {
+                await DatabaseService.markOrdersPaidForSession(session.id, 'cash')
+            } else if (sessionOrders.length > 0) {
+                await DatabaseService.cancelSessionOrders(session.id)
             }
 
-            // Close session
-            await DatabaseService.updateSession({
-                ...session,
-                status: 'CLOSED',
-                closed_at: new Date().toISOString()
-            })
+            await DatabaseService.closeSession(session.id)
 
             await DatabaseService.clearCart(session.id)
 
@@ -1774,23 +1755,9 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                                                 try {
                                                     const sessionOrders = activeOrders.filter(o => o.table_session_id === session.id)
                                                     if (sessionOrders.length > 0) {
-                                                        await supabase
-                                                            .from('orders')
-                                                            .update({ status: 'PAID' })
-                                                            .in('id', sessionOrders.map(o => o.id))
-                                                        const allItemIds = sessionOrders.flatMap(o => o.items?.map((i: any) => i.id) || [])
-                                                        if (allItemIds.length > 0) {
-                                                            const uid = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
-                                                            await supabase.functions.invoke('secure-order-items', {
-                                                                body: { userId: uid, restaurantId, action: 'update_status', data: { itemIds: allItemIds, status: 'SERVED' } }
-                                                            })
-                                                        }
+                                                        await DatabaseService.cancelSessionOrders(session.id)
                                                     }
-                                                    await DatabaseService.updateSession({
-                                                        ...session,
-                                                        status: 'CLOSED',
-                                                        closed_at: new Date().toISOString()
-                                                    })
+                                                    await DatabaseService.closeSession(session.id)
                                                     await DatabaseService.clearCart(session.id)
                                                     setSessions(prev => prev.filter(s => s.id !== session.id))
                                                     setActiveOrders(prev => prev.filter(o => o.table_session_id !== session.id))
