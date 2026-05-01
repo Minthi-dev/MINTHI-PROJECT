@@ -160,9 +160,14 @@ serve(async (req) => {
                 if (payload.guests !== undefined) payload.guests = Math.max(1, Math.min(50, Math.floor(Number(payload.guests) || 1)));
                 if (payload.notes !== undefined) payload.notes = payload.notes ? String(payload.notes).trim().slice(0, 500) : null;
                 if (payload.duration !== undefined) payload.duration = cleanDuration(payload.duration);
-                const { error } = await supabase.from("bookings").update(payload).eq("id", bookingId);
+                const { data: booking, error } = await supabase
+                    .from("bookings")
+                    .update(payload)
+                    .eq("id", bookingId)
+                    .select()
+                    .single();
                 if (error) return json({ error: error.message }, 500);
-                break;
+                return json({ success: true, data: booking });
             }
 
             case "delete": {

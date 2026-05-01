@@ -40,12 +40,13 @@ interface ReservationsManagerProps {
   serviceSegments?: ServiceSegment[]
   reservationDuration?: number
   onRefresh?: () => void
+  onBookingsChange?: (updater: (bookings: Booking[]) => Booking[]) => void
   onDateChange?: (date: Date) => void
 }
 
 import { generatePdfFromElement } from '../utils/pdfUtils'
 
-export default function ReservationsManager({ user, restaurantId, tables, rooms, bookings, selectedDate, openingTime = '10:00', closingTime = '23:00', serviceSegments, reservationDuration = 120, onRefresh, onDateChange }: ReservationsManagerProps) {
+export default function ReservationsManager({ user, restaurantId, tables, rooms, bookings, selectedDate, openingTime = '10:00', closingTime = '23:00', serviceSegments, reservationDuration = 120, onRefresh, onBookingsChange, onDateChange }: ReservationsManagerProps) {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
   const [selectedRoomId, setSelectedRoomId] = useState<string>('all')
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -190,7 +191,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
           notes: editForm.notes.trim(),
           duration: editForm.duration
         }
-        await DatabaseService.updateBooking(updatedBooking)
+        const saved = await DatabaseService.updateBooking(updatedBooking)
+        onBookingsChange?.((prev) => prev.map(b => b.id === saved.id ? { ...b, ...saved } : b))
         toast.success('Prenotazione modificata con successo')
       } else {
         // Create New
@@ -219,7 +221,8 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
         // To be safe, I'll use direct supabase if I can, but `supabase` is not imported here.
         // `DatabaseService` is imported.
         // Let's check `DatabaseService` content if possible... I'll just try `createBooking` as it's standard naming.
-        await DatabaseService.createBooking(newBooking)
+        const saved = await DatabaseService.createBooking(newBooking)
+        onBookingsChange?.((prev) => prev.some(b => b.id === saved.id) ? prev : [saved, ...prev])
         toast.success('Prenotazione creata con successo')
       }
 
@@ -234,7 +237,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
   }
 
   // Save moved reservation
-  const handleSaveMove = () => {
+  const handleSaveMove = async () => {
     if (!selectedBooking || !moveForm.date || !moveForm.time) {
       toast.error('Seleziona data e ora')
       return
@@ -252,20 +255,22 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
       }
     }
 
-    DatabaseService.updateBooking({
-      id: selectedBooking.id,
-      date_time: dateTime
-    })
-      .then(() => {
-        setShowMoveDialog(false)
-        setSelectedBooking(null)
-        toast.success('Prenotazione spostata con successo')
-        onRefresh?.()
+    try {
+      const saved = await DatabaseService.updateBooking({
+        id: selectedBooking.id,
+        restaurant_id: selectedBooking.restaurant_id,
+        table_id: selectedBooking.table_id,
+        date_time: dateTime
       })
-      .catch((error) => {
-        console.error('Move reservation error:', error)
-        toast.error(error?.message || 'Errore nello spostamento della prenotazione')
-      })
+      onBookingsChange?.((prev) => prev.map(b => b.id === saved.id ? { ...b, ...saved } : b))
+      setShowMoveDialog(false)
+      setSelectedBooking(null)
+      toast.success('Prenotazione spostata con successo')
+      await onRefresh?.()
+    } catch (error: any) {
+      console.error('Move reservation error:', error)
+      toast.error(error?.message || 'Errore nello spostamento della prenotazione')
+    }
   }
 
   // Delete reservation
@@ -275,6 +280,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
 
     try {
       await DatabaseService.deleteBooking(id)
+      onBookingsChange?.((prev) => prev.filter(b => b.id !== id))
       setShowDeleteDialog(false)
       setSelectedBooking(null)
       toast.success('Prenotazione eliminata')
@@ -287,8 +293,9 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
 
   // Complete reservation (move to history)
   const handleCompleteBooking = (booking: Booking) => {
-    DatabaseService.updateBooking({ id: booking.id, status: 'COMPLETED' })
-      .then(() => {
+    DatabaseService.updateBooking({ id: booking.id, restaurant_id: booking.restaurant_id, status: 'COMPLETED' })
+      .then((saved) => {
+        onBookingsChange?.((prev) => prev.map(b => b.id === saved.id ? { ...b, ...saved } : b))
         toast.success('Prenotazione completata')
         onRefresh?.()
       })
@@ -629,6 +636,7 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
             serviceSegments={serviceSegments}
             reservationDuration={reservationDuration}
             onRefresh={onRefresh}
+            onBookingsChange={onBookingsChange}
             onDateChange={onDateChange}
             onEditBooking={handleEditBooking}
             onDeleteBooking={handleDeleteBooking}

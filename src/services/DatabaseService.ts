@@ -1260,6 +1260,7 @@ export const DatabaseService = {
             body: { userId, sessionToken, action: 'update', bookingId: booking.id, restaurantId: booking.restaurant_id, data: booking }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento prenotazione')
+        return (data?.data || booking) as Booking
     },
 
     async deleteBooking(bookingId: string) {

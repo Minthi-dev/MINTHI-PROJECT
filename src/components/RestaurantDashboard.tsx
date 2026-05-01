@@ -3618,6 +3618,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                       serviceSegments={serviceSegments}
                       reservationDuration={reservationDuration}
                       onRefresh={refreshData}
+                      onBookingsChange={(updater) => setBookings(prev => updater(prev || []))}
                       onDateChange={setSelectedDate}
                     />
                   );
@@ -4282,6 +4283,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
                     closingTime={effClose}
                     serviceSegments={serviceSegments}
                     onRefresh={refreshData}
+                    onBookingsChange={(updater) => setBookings(prev => updater(prev || []))}
                     onDateChange={(date) => setSelectedReservationDate(date)}
                     reservationDuration={reservationDuration}
                   />

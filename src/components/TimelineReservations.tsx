@@ -30,6 +30,7 @@ interface TimelineReservationsProps {
   serviceSegments?: ServiceSegment[]
   reservationDuration?: number // Duration in minutes, default 120
   onRefresh?: () => void
+  onBookingsChange?: (updater: (bookings: Booking[]) => Booking[]) => void
   onEditBooking?: (booking: Booking) => void
   onDeleteBooking?: (bookingId: string) => void
   onDateChange?: (date: Date) => void
@@ -50,7 +51,7 @@ interface ReservationBlock {
 
 const COLORS = ['#C9A152', '#8B7355', '#F4E6D1', '#E8C547', '#D4B366', '#A68B5B', '#F0D86F', '#C09853']
 
-export default function TimelineReservations({ user, restaurantId, tables, bookings, selectedDate, openingTime = '10:00', closingTime = '23:00', serviceSegments, reservationDuration = 120, onRefresh, onEditBooking, onDeleteBooking, onDateChange }: TimelineReservationsProps) {
+export default function TimelineReservations({ user, restaurantId, tables, bookings, selectedDate, openingTime = '10:00', closingTime = '23:00', serviceSegments, reservationDuration = 120, onRefresh, onBookingsChange, onEditBooking, onDeleteBooking, onDateChange }: TimelineReservationsProps) {
   const [showReservationDialog, setShowReservationDialog] = useState(false)
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<{ tableId: string, time: string } | null>(null)
   const [draggedBookingId, setDraggedBookingId] = useState<string | null>(null)
@@ -548,7 +549,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
 
       const dateTime = `${selectedDate}T${newReservation.time}:00`
 
-      await DatabaseService.createBooking({
+      const saved = await DatabaseService.createBooking({
         restaurant_id: restaurantId,
         table_id: newReservation.tableId,
         date_time: dateTime,
@@ -557,8 +558,9 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
         name: newReservation.name,
         phone: newReservation.phone,
         notes: newReservation.notes,
-        // duration: newReservation.duration // Not in DB schema yet, but logic is ready
+        duration: newReservation.duration
       })
+      onBookingsChange?.((prev) => prev.some(b => b.id === saved.id) ? prev : [saved, ...prev])
 
       toast.success('Prenotazione creata')
       setShowReservationDialog(false)
@@ -575,11 +577,14 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
 
     try {
       const dateTime = `${selectedDate}T${dropTarget.time}:00`
-      await DatabaseService.updateBooking({
+      const currentBooking = bookings.find(b => b.id === draggedBookingId)
+      const saved = await DatabaseService.updateBooking({
         id: draggedBookingId,
+        restaurant_id: currentBooking?.restaurant_id || restaurantId,
         table_id: dropTarget.tableId,
         date_time: dateTime
       })
+      onBookingsChange?.((prev) => prev.map(b => b.id === saved.id ? { ...b, ...saved } : b))
       toast.success('Prenotazione spostata')
       onRefresh?.()
     } catch (error) {
@@ -600,10 +605,12 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
     if (!bookingToArrive) return
 
     try {
-      await DatabaseService.updateBooking({
+      const saved = await DatabaseService.updateBooking({
         id: bookingToArrive.id,
+        restaurant_id: bookingToArrive.restaurant_id,
         status: 'COMPLETED'
       })
+      onBookingsChange?.((prev) => prev.map(b => b.id === saved.id ? { ...b, ...saved } : b))
       toast.success('Prenotazione completata! 👍')
       onRefresh?.()
     } catch (error) {
@@ -629,6 +636,7 @@ export default function TimelineReservations({ user, restaurantId, tables, booki
       } else {
         await DatabaseService.deleteBooking(bookingToDelete.id)
       }
+      onBookingsChange?.((prev) => prev.filter(b => b.id !== bookingToDelete.id))
       toast.success('Prenotazione eliminata')
       onRefresh?.()
     } catch (error) {
