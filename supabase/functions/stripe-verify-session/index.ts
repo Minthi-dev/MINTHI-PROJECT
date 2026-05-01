@@ -152,6 +152,37 @@ async function emitDineInFiscalReceipt(args: {
         console.log("[verify-session→fiscal] scontrino tavolo finale non ancora pronto:", JSON.stringify(result));
         return;
     }
+
+    // Pagamento online copre l'intero conto → chiudiamo il tavolo + ordini.
+    try {
+        await supabase
+            .from("table_sessions")
+            .update({
+                status: "CLOSED",
+                closed_at: new Date().toISOString(),
+                closed_by_role: "STRIPE_AUTO",
+                closed_by_name: "Pagamento online",
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", args.tableSessionId)
+            .eq("restaurant_id", args.restaurantId)
+            .neq("status", "CLOSED");
+
+        await supabase
+            .from("orders")
+            .update({
+                status: "PAID",
+                payment_method: "stripe",
+                closed_at: new Date().toISOString(),
+            })
+            .eq("table_session_id", args.tableSessionId)
+            .eq("restaurant_id", args.restaurantId)
+            .neq("status", "PAID")
+            .neq("status", "CANCELLED");
+    } catch (closeErr) {
+        console.error("[verify-session→close] errore chiusura tavolo:", closeErr);
+    }
+
     await tryEmitFiscalReceipt(result.payload, { dedupeKey: result.dedupeKey });
 }
 

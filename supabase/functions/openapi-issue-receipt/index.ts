@@ -287,13 +287,16 @@ serve(async (req) => {
             : orderId
                 ? `order:${restaurantId}:${orderId}:${issuedVia}`
                 : tableSessionId
-                    ? `table-session:${restaurantId}:${tableSessionId}:${issuedVia}:${Date.now()}`
+                    // Idempotenza vera per dine-in: stessa chiave a ogni retry
+                    // così non emettiamo scontrini duplicati su AdE.
+                    ? `table-session:${restaurantId}:${tableSessionId}:${issuedVia}`
                     : `manual:${restaurantId}:${crypto.randomUUID()}`);
 
         const { data: existingByKey } = await supabase
             .from("fiscal_receipts")
             .select("id, openapi_receipt_id, openapi_status, retry_count")
             .eq("idempotency_key", idempotencyKey)
+            .eq("restaurant_id", restaurantId)
             .maybeSingle();
 
         let receiptRowId: string | undefined;

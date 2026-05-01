@@ -39,6 +39,14 @@ function oneRelation(row: any): any {
     return Array.isArray(row) ? row[0] : row;
 }
 
+function clientIp(req: Request): string {
+    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    return forwarded ||
+        req.headers.get("cf-connecting-ip") ||
+        req.headers.get("x-real-ip") ||
+        "unknown";
+}
+
 function safeText(value: unknown, fallback: string, max = 80): string {
     if (typeof value !== "string") return fallback;
     const cleaned = value.replace(/[\r\n\t]+/g, " ").trim();
@@ -126,6 +134,30 @@ serve(async (req) => {
             : [];
         if (!UUID_RE.test(String(restaurantId || "")) || !UUID_RE.test(String(tableSessionId || "")) || !orderIdsList || !paidOrderItemIdsList) {
             return json({ error: "Parametri mancanti o non validi" }, 400, corsHeaders);
+        }
+
+        // Rate limit per evitare abuso dell'endpoint pubblico (creazione
+        // illimitata di Checkout Session sul Connect account del ristorante).
+        const { data: rateRows } = await supabase.rpc("check_takeaway_rate_limit", {
+            p_action: "stripe_customer_payment",
+            p_restaurant_id: restaurantId,
+            p_ip: clientIp(req),
+            p_window_seconds: 60,
+            p_max_attempts: 20,
+        });
+        const rate = Array.isArray(rateRows) ? rateRows[0] : rateRows;
+        if (rate && rate.allowed === false) {
+            return new Response(
+                JSON.stringify({ error: "Troppi tentativi di pagamento. Riprova fra qualche istante." }),
+                {
+                    status: 429,
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json",
+                        "Retry-After": String(rate.retry_after_seconds || 60),
+                    },
+                }
+            );
         }
 
         const clientItemsTotal = Array.isArray(items)

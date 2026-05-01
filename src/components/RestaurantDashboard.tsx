@@ -218,6 +218,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [lunchTimeStart, setLunchTimeStart] = useState('12:00')
   const [dinnerTimeStart, setDinnerTimeStart] = useState('19:00')
 
+  // Weekly schedule state — DICHIARATI QUI (non più sotto) perché il
+  // useEffect dello scheduler menu (sotto) li referenzia nel dep array;
+  // dichiararli dopo crea un TDZ ("Cannot access before initialization")
+  // visibile solo nella build minificata di produzione.
+  const [weeklyCoperto, setWeeklyCoperto] = useState<any>(null)
+  const [weeklyAyce, setWeeklyAyce] = useState<any>(null)
+  const [weeklyServiceHours, setWeeklyServiceHours] = useState<any>(null)
+
   // Thermal printer
   const printer = useThermalPrinter()
   const knownOrderIdsRef = useRef<Set<string>>(new Set())
@@ -972,10 +980,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [courseSplittingEnabled, setCourseSplittingEnabled] = useState(false)
   const [reservationDuration, setReservationDuration] = useState(120)
 
-  // Weekly schedule state
-  const [weeklyCoperto, setWeeklyCoperto] = useState<any>(currentRestaurant?.weekly_coperto || null)
-  const [weeklyAyce, setWeeklyAyce] = useState<any>(currentRestaurant?.weekly_ayce || null)
-  const [weeklyServiceHours, setWeeklyServiceHours] = useState<any>(currentRestaurant?.weekly_service_hours || null)
+  // Weekly schedule state: dichiarazioni spostate in alto nel componente
+  // per evitare il TDZ ("Cannot access before initialization") quando il
+  // useEffect dello scheduler menu le usa nel dep array. Vedi le useState
+  // sopra accanto a lunchTimeStart/dinnerTimeStart.
 
   // Reservation Settings
   const [enableReservationRoomSelection, setEnableReservationRoomSelection] = useState(false)

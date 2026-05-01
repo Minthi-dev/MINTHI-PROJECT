@@ -37,6 +37,31 @@ function forceReloginForStaleSession(): Promise<never> {
     return Promise.reject(new Error('Sessione scaduta. Accedi di nuovo per continuare.'))
 }
 
+async function isAuthFailure(invokeResult: any): Promise<boolean> {
+    const data = invokeResult?.data
+    const error = invokeResult?.error
+    // FunctionsHttpError carries the original Response in error.context
+    const ctx: any = error?.context
+    if (ctx && typeof ctx.status === 'number' && (ctx.status === 401 || ctx.status === 403)) {
+        try {
+            const cloned = typeof ctx.clone === 'function' ? ctx.clone() : null
+            if (cloned) {
+                const txt = await cloned.text()
+                const lower = txt.toLowerCase()
+                if (lower.includes('non autorizzato') || lower.includes('unauthorized') || lower.includes('auth richiesta')) {
+                    return true
+                }
+            }
+        } catch { /* ignore */ }
+        return true
+    }
+    if (data && typeof data === 'object') {
+        const errMsg = String((data as any).error || '').toLowerCase()
+        if (errMsg.includes('non autorizzato') || errMsg.includes('unauthorized')) return true
+    }
+    return false
+}
+
 supabase.functions.invoke = ((functionName: string, options?: any) => {
     const body = options?.body
     const shouldAttachSession =
@@ -74,8 +99,23 @@ supabase.functions.invoke = ((functionName: string, options?: any) => {
         return originalInvoke(functionName, options)
     }
 
-    return originalInvoke(functionName, {
-        ...options,
-        body: { ...body, sessionToken },
-    })
+    // Funzioni che gestiscono l'autenticazione direttamente: NON forzare
+    // logout su 401/403 perché significherebbe loop infinito al login.
+    const skipAutoRelogin = new Set(['login'])
+    const skipName = functionName.split('/').pop() || functionName
+
+    return (async () => {
+        const result = await originalInvoke(functionName, {
+            ...options,
+            body: { ...body, sessionToken },
+        })
+        // Se la edge function ha rifiutato il sessionToken (token revocato,
+        // expired, o segreto cambiato lato server), invalida lo stato
+        // locale e manda al login. Senza questa logica l'utente resta in
+        // uno stato "loggato ma 403 ovunque" e deve fare logout a mano.
+        if (!skipAutoRelogin.has(skipName) && (await isAuthFailure(result))) {
+            return forceReloginForStaleSession()
+        }
+        return result
+    })()
 }) as typeof supabase.functions.invoke

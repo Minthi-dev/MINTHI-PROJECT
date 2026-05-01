@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import bcrypt from "https://esm.sh/bcryptjs@2.4.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
 
@@ -88,6 +89,17 @@ serve(async (req) => {
                 JSON.stringify({ error: "Nessun campo valido da aggiornare" }),
                 { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
             );
+        }
+
+        // Difesa-in-profondità: la password cameriere deve essere bcrypt.
+        // Il frontend hasha già, ma se arriva plaintext la hashiamo qui per
+        // evitare leakage in DB e fallback silenzioso del login.
+        if (typeof safePayload.waiter_password === "string" && safePayload.waiter_password.length > 0) {
+            const value: string = safePayload.waiter_password;
+            const isBcrypt = value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$");
+            if (!isBcrypt) {
+                safePayload.waiter_password = bcrypt.hashSync(value, 10);
+            }
         }
 
         // 4. Perform update with service_role (bypasses RLS)

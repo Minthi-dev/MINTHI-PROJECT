@@ -37,10 +37,14 @@ serve(async (req) => {
             );
         }
 
-        // Determine target restaurant_id (from payload or staff record)
+        // Determine target restaurant_id. Per update/delete deriviamo SEMPRE
+        // dal record staff esistente per evitare cross-tenant: se trustassimo
+        // `restaurantId` dal body, un OWNER del ristorante A potrebbe
+        // modificare uno staff del ristorante B passando staffId di B e
+        // restaurantId di A (verifyAccess passerebbe).
         let targetRestaurantId = restaurantId;
 
-        if ((action === "update" || action === "delete") && staffId && !targetRestaurantId) {
+        if ((action === "update" || action === "delete") && staffId) {
             const { data: staffRecord } = await supabase
                 .from("restaurant_staff")
                 .select("restaurant_id")
@@ -74,13 +78,16 @@ serve(async (req) => {
         // 4. Route to action
         switch (action) {
             case "create": {
-                if (!data || !data.restaurant_id || !data.name || !data.username) {
+                if (!data || !data.name || !data.username) {
                     return new Response(
-                        JSON.stringify({ error: "restaurant_id, name e username richiesti" }),
+                        JSON.stringify({ error: "name e username richiesti" }),
                         { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
                     );
                 }
                 const payload = pickAllowed(data, ALLOWED_CREATE_FIELDS);
+                // Forza il restaurant_id sul tenant autorizzato. Ignora un
+                // eventuale data.restaurant_id (cross-tenant guard).
+                payload.restaurant_id = targetRestaurantId;
                 // Hash password server-side
                 if (payload.password) {
                     payload.password = bcrypt.hashSync(payload.password);
@@ -111,7 +118,8 @@ serve(async (req) => {
                 const { error } = await supabase
                     .from("restaurant_staff")
                     .update(payload)
-                    .eq("id", staffId);
+                    .eq("id", staffId)
+                    .eq("restaurant_id", targetRestaurantId);
                 if (error) {
                     return new Response(
                         JSON.stringify({ error: error.message }),
@@ -131,7 +139,8 @@ serve(async (req) => {
                 const { error } = await supabase
                     .from("restaurant_staff")
                     .delete()
-                    .eq("id", staffId);
+                    .eq("id", staffId)
+                    .eq("restaurant_id", targetRestaurantId);
                 if (error) {
                     return new Response(
                         JSON.stringify({ error: error.message }),

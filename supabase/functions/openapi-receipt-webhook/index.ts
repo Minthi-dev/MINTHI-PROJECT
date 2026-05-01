@@ -37,6 +37,16 @@ const cors = {
     "Access-Control-Allow-Headers": "content-type, x-openapi-secret",
 };
 
+function constantTimeEqual(a: string, b: string): boolean {
+    if (typeof a !== "string" || typeof b !== "string") return false;
+    if (a.length !== b.length) return false;
+    let mismatch = 0;
+    for (let i = 0; i < a.length; i++) {
+        mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return mismatch === 0;
+}
+
 serve(async (req) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -46,7 +56,7 @@ serve(async (req) => {
             headers: { ...cors, "Content-Type": "application/json" },
         });
 
-    // --- Auth shared-secret ---
+    // --- Auth shared-secret (timing-safe) ---
     const expected = getOpenApiWebhookSecret();
     if (expected) {
         const url = new URL(req.url);
@@ -54,7 +64,7 @@ serve(async (req) => {
             req.headers.get("x-openapi-secret") ||
             url.searchParams.get("secret") ||
             "";
-        if (provided !== expected) {
+        if (!constantTimeEqual(provided, expected)) {
             console.warn("[openapi-webhook] secret mismatch");
             return json({ error: "Forbidden" }, 403);
         }

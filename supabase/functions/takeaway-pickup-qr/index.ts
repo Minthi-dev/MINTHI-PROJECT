@@ -114,6 +114,10 @@ serve(async (req) => {
             if (!token) return json({ error: "QR non valido" }, 400);
             const order = await readOrderByToken(restaurantId, token);
             if (!order) return json({ error: "Ordine non trovato" }, 404);
+            if (order.status === "CANCELLED") {
+                // Non leakare dati cliente di un ordine annullato.
+                return json({ error: "Ordine non trovato" }, 404);
+            }
             if (order.takeaway_pickup_mode !== "qr") {
                 return json({ error: "Questo ordine non usa il ritiro QR" }, 409);
             }

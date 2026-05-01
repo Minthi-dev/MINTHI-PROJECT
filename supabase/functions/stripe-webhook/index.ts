@@ -152,6 +152,41 @@ async function emitDineInFiscalReceipt(args: {
         console.log("[WEBHOOK→fiscal] scontrino tavolo finale non ancora pronto:", JSON.stringify(result));
         return;
     }
+
+    // Quando il pagamento Stripe copre l'intero conto chiudiamo il tavolo:
+    // - status=CLOSED + closed_at sblocca lo storico, l'archivio e il badge
+    //   "scontrini da registrare" lato frontend.
+    // - Marchiamo gli order non chiusi come PAID per coerenza con il flusso
+    //   manuale di "incassa & chiudi".
+    try {
+        await supabase
+            .from("table_sessions")
+            .update({
+                status: "CLOSED",
+                closed_at: new Date().toISOString(),
+                closed_by_role: "STRIPE_AUTO",
+                closed_by_name: "Pagamento online",
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", args.tableSessionId)
+            .eq("restaurant_id", args.restaurantId)
+            .neq("status", "CLOSED");
+
+        await supabase
+            .from("orders")
+            .update({
+                status: "PAID",
+                payment_method: "stripe",
+                closed_at: new Date().toISOString(),
+            })
+            .eq("table_session_id", args.tableSessionId)
+            .eq("restaurant_id", args.restaurantId)
+            .neq("status", "PAID")
+            .neq("status", "CANCELLED");
+    } catch (closeErr) {
+        console.error("[WEBHOOK→close] errore chiusura tavolo:", closeErr);
+    }
+
     await tryEmitFiscalReceipt(result.payload, { dedupeKey: result.dedupeKey });
 }
 

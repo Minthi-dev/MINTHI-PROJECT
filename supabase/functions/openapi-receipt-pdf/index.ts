@@ -43,14 +43,22 @@ const supabase = createClient(
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function clientIp(req: Request): string {
+    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    return forwarded ||
+        req.headers.get("cf-connecting-ip") ||
+        req.headers.get("x-real-ip") ||
+        "unknown";
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
-    const json = (b: unknown, s = 200) =>
+    const json = (b: unknown, s = 200, extraHeaders: Record<string, string> = {}) =>
         new Response(JSON.stringify(b), {
             status: s,
-            headers: { ...cors, "Content-Type": "application/json" },
+            headers: { ...cors, "Content-Type": "application/json", ...extraHeaders },
         });
 
     try {
@@ -73,6 +81,27 @@ serve(async (req) => {
             return json({ error: "restaurantId mancante o non valido" }, 400);
         }
 
+        // Rate limit per gli accessi non autenticati (cliente con
+        // pickupCode/tableSessionId): impedisce bruteforce dei codici
+        // a 6 caratteri per leakare scontrini altrui.
+        if (!receiptId) {
+            const { data: rateRows, error: rateErr } = await supabase.rpc("check_takeaway_rate_limit", {
+                p_action: probeOnly ? "fiscal_pdf_probe" : "fiscal_pdf_download",
+                p_restaurant_id: restaurantId,
+                p_ip: clientIp(req),
+                p_window_seconds: 60,
+                p_max_attempts: probeOnly ? 60 : 20,
+            });
+            const rate = Array.isArray(rateRows) ? rateRows[0] : rateRows;
+            if (!rateErr && rate && rate.allowed === false) {
+                return json(
+                    { error: "Troppi tentativi. Riprova fra qualche istante." },
+                    429,
+                    { "Retry-After": String(rate.retry_after_seconds || 60) }
+                );
+            }
+        }
+
         // ----------------------------------------------------------------
         // Resolve the fiscal_receipts row
         // ----------------------------------------------------------------
@@ -93,7 +122,7 @@ serve(async (req) => {
                 .eq("restaurant_id", restaurantId)
                 .maybeSingle();
             row = data;
-        } else if (pickupCode && /^[A-Z0-9]{4,8}$/.test(pickupCode)) {
+        } else if (pickupCode && /^[A-Z2-9]{4,12}$/.test(pickupCode)) {
             // Path 1a: takeaway customer with pickup code in URL
             const { data: order } = await supabase
                 .from("orders")

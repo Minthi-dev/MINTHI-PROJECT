@@ -8,14 +8,29 @@ const supabase = createClient(
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
+function clientIp(req: Request): string {
+    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    return forwarded ||
+        req.headers.get("cf-connecting-ip") ||
+        req.headers.get("x-real-ip") ||
+        "unknown";
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^[+0-9\s().\-]{6,24}$/;
+const MAX_RESERVATION_ADVANCE_DAYS = 365;
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
     try {
         const { userId, action, bookingId, restaurantId, data, sessionToken } = await req.json();
-        const json = (body: any, status = 200) =>
-            new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+        const json = (body: any, status = 200, extraHeaders: Record<string, string> = {}) =>
+            new Response(JSON.stringify(body), {
+                status,
+                headers: { ...cors, "Content-Type": "application/json", ...extraHeaders },
+            });
 
         if (!action) return json({ error: "action richiesto" }, 400);
 
@@ -36,6 +51,44 @@ serve(async (req) => {
             if (!data || !data.restaurant_id || !data.name || !data.date_time || !data.guests) {
                 return json({ error: "restaurant_id, name, date_time, guests richiesti" }, 400);
             }
+
+            // Validazione formato per evitare spam / dati malformati.
+            const cleanName = String(data.name || "").trim().slice(0, 80);
+            if (cleanName.length < 2) return json({ error: "Nome non valido" }, 400);
+            const cleanEmail = data.email ? String(data.email).trim().toLowerCase().slice(0, 120) : "";
+            if (cleanEmail && !EMAIL_RE.test(cleanEmail)) return json({ error: "Email non valida" }, 400);
+            const cleanPhone = data.phone ? String(data.phone).trim().slice(0, 24) : "";
+            if (cleanPhone && !PHONE_RE.test(cleanPhone)) return json({ error: "Telefono non valido" }, 400);
+            const guests = Math.floor(Number(data.guests) || 0);
+            if (!Number.isFinite(guests) || guests < 1 || guests > 50) {
+                return json({ error: "Numero coperti non valido (1-50)" }, 400);
+            }
+            const dateMs = Date.parse(String(data.date_time || ""));
+            if (!Number.isFinite(dateMs)) return json({ error: "Data non valida" }, 400);
+            const maxFuture = Date.now() + MAX_RESERVATION_ADVANCE_DAYS * 24 * 3600 * 1000;
+            const minFuture = Date.now() - 60 * 60 * 1000; // tollera 1h indietro
+            if (dateMs < minFuture || dateMs > maxFuture) {
+                return json({ error: "Data prenotazione fuori intervallo consentito" }, 400);
+            }
+            const cleanNotes = data.notes ? String(data.notes).trim().slice(0, 500) : "";
+
+            // Rate limit per IP+restaurant per evitare spam.
+            const { data: rateRows } = await supabase.rpc("check_takeaway_rate_limit", {
+                p_action: "public_booking_create",
+                p_restaurant_id: data.restaurant_id,
+                p_ip: clientIp(req),
+                p_window_seconds: 3600,
+                p_max_attempts: 6,
+            });
+            const rate = Array.isArray(rateRows) ? rateRows[0] : rateRows;
+            if (rate && rate.allowed === false) {
+                return json(
+                    { error: "Hai inviato troppe prenotazioni. Riprova fra un'ora." },
+                    429,
+                    { "Retry-After": String(rate.retry_after_seconds || 3600) }
+                );
+            }
+
             // Verify restaurant allows public reservations
             const { data: rest } = await supabase
                 .from("restaurants").select("enable_public_reservations, is_active").eq("id", data.restaurant_id).maybeSingle();
@@ -44,12 +97,12 @@ serve(async (req) => {
             }
             const payload = {
                 restaurant_id: data.restaurant_id,
-                name: data.name,
-                email: data.email || null,
-                phone: data.phone || null,
-                date_time: data.date_time,
-                guests: data.guests,
-                notes: data.notes || null,
+                name: cleanName,
+                email: cleanEmail || null,
+                phone: cleanPhone || null,
+                date_time: new Date(dateMs).toISOString(),
+                guests,
+                notes: cleanNotes || null,
                 status: "PENDING",
                 table_id: data.table_id || null,
             };
