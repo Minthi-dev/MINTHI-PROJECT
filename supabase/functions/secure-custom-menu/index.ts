@@ -85,6 +85,61 @@ serve(async (req) => {
                 }
                 break;
             }
+            case "save_dishes": {
+                if (!targetId) return json({ error: "targetId (menuId) richiesto" }, 400);
+                const { data: menu } = await supabase.from("custom_menus").select("restaurant_id").eq("id", targetId).maybeSingle();
+                if (!menu || menu.restaurant_id !== resolvedRestaurantId) return json({ error: "Menu non trovato" }, 404);
+
+                const toAdd = Array.isArray(data?.dishIdsToAdd) ? data.dishIdsToAdd : [];
+                const toRemove = Array.isArray(data?.dishIdsToRemove) ? data.dishIdsToRemove : [];
+
+                if (toRemove.length > 0) {
+                    const { error } = await supabase
+                        .from("custom_menu_dishes")
+                        .delete()
+                        .eq("custom_menu_id", targetId)
+                        .in("dish_id", toRemove);
+                    if (error) return json({ error: error.message }, 500);
+                }
+
+                if (toAdd.length > 0) {
+                    const { data: validDishes, error: dishError } = await supabase
+                        .from("dishes")
+                        .select("id")
+                        .eq("restaurant_id", resolvedRestaurantId)
+                        .in("id", toAdd);
+                    if (dishError) return json({ error: dishError.message }, 500);
+                    const validIds = new Set((validDishes || []).map((d: any) => d.id));
+                    const rows = [...new Set(toAdd)]
+                        .filter((id: string) => validIds.has(id))
+                        .map((dishId: string) => ({ custom_menu_id: targetId, dish_id: dishId }));
+                    if (rows.length > 0) {
+                        const { error } = await supabase
+                            .from("custom_menu_dishes")
+                            .upsert(rows, { onConflict: "custom_menu_id,dish_id" });
+                        if (error) return json({ error: error.message }, 500);
+                    }
+                }
+                break;
+            }
+            case "apply_menu": {
+                if (!targetId) return json({ error: "targetId (menuId) richiesto" }, 400);
+                const { data: menu } = await supabase.from("custom_menus").select("restaurant_id").eq("id", targetId).maybeSingle();
+                if (!menu || menu.restaurant_id !== resolvedRestaurantId) return json({ error: "Menu non trovato" }, 404);
+                const { error } = await supabase.rpc("apply_custom_menu", {
+                    p_restaurant_id: resolvedRestaurantId,
+                    p_menu_id: targetId,
+                });
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
+            case "reset_full_menu": {
+                const { error } = await supabase.rpc("reset_to_full_menu", {
+                    p_restaurant_id: resolvedRestaurantId,
+                });
+                if (error) return json({ error: error.message }, 500);
+                break;
+            }
             default:
                 return json({ error: `Azione non riconosciuta: ${action}` }, 400);
         }

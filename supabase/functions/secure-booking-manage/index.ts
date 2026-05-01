@@ -20,6 +20,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^[+0-9\s().\-]{6,24}$/;
 const MAX_RESERVATION_ADVANCE_DAYS = 365;
 
+function cleanDuration(value: unknown): number | null {
+    if (value === undefined || value === null || value === "") return null;
+    const minutes = Math.floor(Number(value));
+    if (!Number.isFinite(minutes) || minutes <= 0) return null;
+    return Math.min(9999, Math.max(15, minutes));
+}
+
 serve(async (req) => {
     const cors = getCorsHeaders(req);
     if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -71,6 +78,7 @@ serve(async (req) => {
                 return json({ error: "Data prenotazione fuori intervallo consentito" }, 400);
             }
             const cleanNotes = data.notes ? String(data.notes).trim().slice(0, 500) : "";
+            const duration = cleanDuration(data.duration);
 
             // Rate limit per IP+restaurant per evitare spam.
             const { data: rateRows } = await supabase.rpc("check_takeaway_rate_limit", {
@@ -105,6 +113,7 @@ serve(async (req) => {
                 notes: cleanNotes || null,
                 status: "PENDING",
                 table_id: data.table_id || null,
+                ...(duration ? { duration } : {}),
             };
             const { data: booking, error } = await supabase.from("bookings").insert(payload).select().single();
             if (error) return json({ error: error.message }, 500);
@@ -124,12 +133,13 @@ serve(async (req) => {
                 const payload = {
                     restaurant_id: data.restaurant_id || targetRestaurantId,
                     table_id: data.table_id || null,
-                    name: data.name,
-                    email: data.email || null,
-                    phone: data.phone || null,
+                    name: String(data.name || "").trim().slice(0, 80),
+                    email: data.email ? String(data.email).trim().toLowerCase().slice(0, 120) : null,
+                    phone: data.phone ? String(data.phone).trim().slice(0, 24) : null,
                     date_time: data.date_time,
-                    guests: data.guests,
-                    notes: data.notes || null,
+                    guests: Math.max(1, Math.min(50, Math.floor(Number(data.guests) || 1))),
+                    notes: data.notes ? String(data.notes).trim().slice(0, 500) : null,
+                    ...(cleanDuration(data.duration) ? { duration: cleanDuration(data.duration) } : {}),
                     status: data.status || "PENDING",
                 };
                 const { data: booking, error } = await supabase.from("bookings").insert(payload).select().single();
@@ -139,11 +149,17 @@ serve(async (req) => {
 
             case "update": {
                 if (!bookingId || !data) return json({ error: "bookingId e data richiesti" }, 400);
-                const allowed = ["table_id", "name", "email", "phone", "date_time", "guests", "notes", "status"];
+                const allowed = ["table_id", "name", "email", "phone", "date_time", "guests", "notes", "status", "duration"];
                 const payload: any = {};
                 for (const key of allowed) {
                     if (data[key] !== undefined) payload[key] = data[key];
                 }
+                if (payload.name !== undefined) payload.name = String(payload.name || "").trim().slice(0, 80);
+                if (payload.email !== undefined) payload.email = payload.email ? String(payload.email).trim().toLowerCase().slice(0, 120) : null;
+                if (payload.phone !== undefined) payload.phone = payload.phone ? String(payload.phone).trim().slice(0, 24) : null;
+                if (payload.guests !== undefined) payload.guests = Math.max(1, Math.min(50, Math.floor(Number(payload.guests) || 1)));
+                if (payload.notes !== undefined) payload.notes = payload.notes ? String(payload.notes).trim().slice(0, 500) : null;
+                if (payload.duration !== undefined) payload.duration = cleanDuration(payload.duration);
                 const { error } = await supabase.from("bookings").update(payload).eq("id", bookingId);
                 if (error) return json({ error: error.message }, 500);
                 break;

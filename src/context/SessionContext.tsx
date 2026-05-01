@@ -28,6 +28,11 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const [sessionStatus, setSessionStatus] = useState<'OPEN' | 'CLOSED' | 'PAID' | null>(null);
     const [loading, setLoading] = useState(false);
 
+    const isReturningFromStripe = useCallback(() => {
+        return location.pathname.includes('/client/table/') &&
+            new URLSearchParams(location.search).get('payment') === 'success';
+    }, [location.pathname, location.search]);
+
     // 1. URL Listener & Auto-Logout Logic
     // Detects if the user scans a NEW QR code for a DIFFERENT table
     useEffect(() => {
@@ -64,6 +69,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 }
 
                 if (!data || data.status === 'CLOSED' || data.status === 'PAID') {
+                    if (isReturningFromStripe()) {
+                        setSessionStatus(data?.status || 'CLOSED');
+                        return;
+                    }
                     exitSession();
                 } else {
                     setSessionStatus(data.status);
@@ -87,6 +96,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 },
                 (payload) => {
                     if (payload.eventType === 'DELETE') {
+                        if (isReturningFromStripe()) {
+                            setSessionStatus('CLOSED');
+                            return;
+                        }
                         toast.info('Il tavolo è stato chiuso. Grazie della visita!');
                         exitSession();
                         return;
@@ -94,6 +107,10 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     const newStatus = payload.new?.status;
 
                     if (newStatus === 'CLOSED' || newStatus === 'PAID') {
+                        if (isReturningFromStripe()) {
+                            setSessionStatus(newStatus);
+                            return;
+                        }
                         toast.info('Il tavolo è stato chiuso. Grazie della visita!');
                         exitSession();
                     } else {
@@ -106,7 +123,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [sessionId, navigate]);
+    }, [sessionId, navigate, isReturningFromStripe]);
 
 
     const joinSession = useCallback(async (tableId: string, restaurantId: string): Promise<boolean> => {

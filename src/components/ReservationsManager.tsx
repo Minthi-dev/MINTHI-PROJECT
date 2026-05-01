@@ -227,9 +227,9 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
       setSelectedBooking(null)
       onRefresh?.()
 
-    } catch (e) {
+    } catch (e: any) {
       console.error("Save error:", e)
-      toast.error("Errore nel salvataggio della prenotazione")
+      toast.error(e?.message || "Errore nel salvataggio della prenotazione")
     }
   }
 
@@ -262,6 +262,10 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
         toast.success('Prenotazione spostata con successo')
         onRefresh?.()
       })
+      .catch((error) => {
+        console.error('Move reservation error:', error)
+        toast.error(error?.message || 'Errore nello spostamento della prenotazione')
+      })
   }
 
   // Delete reservation
@@ -287,6 +291,10 @@ export default function ReservationsManager({ user, restaurantId, tables, rooms,
       .then(() => {
         toast.success('Prenotazione completata')
         onRefresh?.()
+      })
+      .catch((error) => {
+        console.error('Complete reservation error:', error)
+        toast.error(error?.message || 'Errore nel completamento della prenotazione')
       })
   }
 

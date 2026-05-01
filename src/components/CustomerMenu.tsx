@@ -371,6 +371,156 @@ function SortableItem({ id, children }: { id: string, children: React.ReactNode 
   )
 }
 
+function DineInPaymentCompleteScreen({
+  restaurantId,
+  restaurantName,
+  tableSessionId,
+  stripeSessionId,
+}: {
+  restaurantId?: string | null
+  restaurantName?: string | null
+  tableSessionId?: string | null
+  stripeSessionId?: string | null
+}) {
+  const theme = MENU_COLORS
+  const [receiptStatus, setReceiptStatus] = useState<'unknown' | 'pending' | 'ready'>('unknown')
+  const [downloading, setDownloading] = useState(false)
+  const [verifiedAmount, setVerifiedAmount] = useState<number | null>(null)
+
+  useEffect(() => {
+    const cleanPath = window.location.pathname
+    window.history.replaceState({ minthiPaymentComplete: true }, '', cleanPath)
+    window.history.pushState({ minthiPaymentComplete: true }, '', cleanPath)
+
+    const keepOnCompleteScreen = () => {
+      window.history.pushState({ minthiPaymentComplete: true }, '', cleanPath)
+    }
+
+    window.addEventListener('popstate', keepOnCompleteScreen)
+    return () => window.removeEventListener('popstate', keepOnCompleteScreen)
+  }, [])
+
+  useEffect(() => {
+    if (!restaurantId || !stripeSessionId) return
+    let cancelled = false
+
+    DatabaseService.verifyStripeSession(stripeSessionId, restaurantId)
+      .then((result) => {
+        if (cancelled) return
+        if (typeof result.newPaidAmount === 'number') setVerifiedAmount(result.newPaidAmount)
+        if (typeof result.amount === 'number') setVerifiedAmount(result.amount)
+      })
+      .catch((err) => {
+        console.warn('[stripe verify post-payment]', err)
+      })
+
+    return () => { cancelled = true }
+  }, [restaurantId, stripeSessionId])
+
+  useEffect(() => {
+    if (!restaurantId || (!tableSessionId && !stripeSessionId) || receiptStatus === 'ready') return
+    let cancelled = false
+    let attempts = 0
+
+    const tick = async () => {
+      if (cancelled) return
+      attempts += 1
+      try {
+        const { ready, status } = await DatabaseService.probeFiscalReceiptForDineIn({
+          restaurantId,
+          tableSessionId: tableSessionId || undefined,
+          stripeSessionId: stripeSessionId || undefined,
+        })
+        if (cancelled) return
+        if (ready) {
+          setReceiptStatus('ready')
+          return
+        }
+        setReceiptStatus(status && status !== 'unavailable' ? 'pending' : 'unknown')
+      } catch {
+        if (!cancelled) setReceiptStatus('unknown')
+      }
+      if (!cancelled && attempts < 40) {
+        setTimeout(tick, attempts < 5 ? 2500 : 8000)
+      }
+    }
+
+    tick()
+    return () => { cancelled = true }
+  }, [restaurantId, receiptStatus, stripeSessionId, tableSessionId])
+
+  const openReceipt = async () => {
+    if (!restaurantId || (!tableSessionId && !stripeSessionId)) {
+      toast.error('Scontrino in preparazione. Riprova tra poco.')
+      return
+    }
+    setDownloading(true)
+    try {
+      await DatabaseService.openFiscalReceiptPdfForDineIn({
+        restaurantId,
+        tableSessionId: tableSessionId || undefined,
+        stripeSessionId: stripeSessionId || undefined,
+      })
+    } catch (err: any) {
+      toast.error(err?.message || 'Scontrino non ancora disponibile')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const receiptMessage = receiptStatus === 'ready'
+    ? 'Scontrino fiscale pronto.'
+    : isFiscalRolloverWindow()
+      ? 'Scontrino in emissione. In questa fascia di chiusura giornata il PDF può arrivare subito dopo mezzanotte.'
+      : 'Scontrino in emissione. Puoi premere scarica appena il PDF è pronto.'
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-5 py-8" style={{ background: theme.pageBgGradient, color: theme.textPrimary, fontFamily: theme.bodyFont, ...theme.cssVars }}>
+      <div className="w-full max-w-sm text-center space-y-5">
+        <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center border" style={{ backgroundColor: 'rgba(16,185,129,0.12)', borderColor: 'rgba(16,185,129,0.35)' }}>
+          <CheckCircle size={46} weight="fill" style={{ color: '#10B981' }} />
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-[0.22em]" style={{ color: '#10B981' }}>Pagamento Stripe confermato</p>
+          <h1 className="text-3xl font-black tracking-tight" style={{ color: theme.textPrimary }}>Grazie</h1>
+          <p className="text-sm leading-relaxed" style={{ color: theme.textSecondary }}>
+            Il conto del tavolo è stato saldato online. Il tavolo può essere chiuso dal personale e questo schermo resta disponibile per scaricare lo scontrino.
+          </p>
+          {restaurantName && (
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: theme.textMuted }}>{restaurantName}</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl p-4 text-left space-y-3" style={{ backgroundColor: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.32)' }}>
+          <div className="flex items-start gap-3">
+            <Receipt size={22} weight="fill" className="mt-0.5 shrink-0" style={{ color: '#10B981' }} />
+            <div className="min-w-0">
+              <p className="text-sm font-bold" style={{ color: '#A7F3D0' }}>Scontrino fiscale</p>
+              <p className="text-[12px] leading-relaxed mt-1" style={{ color: '#D1FAE5' }}>{receiptMessage}</p>
+              {verifiedAmount != null && (
+                <p className="text-[11px] mt-2" style={{ color: '#A7F3D0' }}>Pagamento registrato: €{verifiedAmount.toFixed(2)}</p>
+              )}
+            </div>
+          </div>
+          <Button
+            onClick={openReceipt}
+            disabled={downloading || !restaurantId || (!tableSessionId && !stripeSessionId)}
+            className="h-12 w-full rounded-xl font-bold bg-emerald-500 hover:bg-emerald-400 text-black disabled:opacity-50"
+          >
+            <DownloadSimple size={18} className="mr-2" weight="bold" />
+            {downloading ? 'Apertura...' : 'Scarica scontrino'}
+          </Button>
+        </div>
+
+        <p className="text-[11px] leading-relaxed" style={{ color: theme.textMuted }}>
+          Per ordinare di nuovo serve una nuova attivazione del tavolo da parte del personale.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 const CustomerMenuBase = () => {
   // 1. Get Table ID from URL params (via generic Route)
   const { tableId } = useParams<{ tableId: string }>()
@@ -435,6 +585,17 @@ const CustomerMenuBase = () => {
   const [isTableActive, setIsTableActive] = useState(true) // Check if table has active session
   const [isViewOnly, setIsViewOnly] = useState(false) // New state for view-only mode
   const [isClosed, setIsClosed] = useState(false) // New state for closed hours
+
+  useEffect(() => {
+    if (!initialStripeSuccess || !paymentPersistenceKey) return
+    const payload = {
+      at: new Date().toISOString(),
+      stripeSessionId: initialStripeSessionId || persistedPayment?.stripeSessionId || null,
+      tableSessionId: sessionId || activeSession?.id || persistedPayment?.tableSessionId || localStorage.getItem('sessionId') || null,
+      restaurantId: restaurantId || persistedPayment?.restaurantId || localStorage.getItem('restaurantId') || null,
+    }
+    localStorage.setItem(paymentPersistenceKey, JSON.stringify(payload))
+  }, [activeSession?.id, initialStripeSessionId, initialStripeSuccess, paymentPersistenceKey, persistedPayment?.restaurantId, persistedPayment?.stripeSessionId, persistedPayment?.tableSessionId, restaurantId, sessionId])
 
   // Check if table is active (has ANY open session) when Not Authenticated
   // Also subscribe to real-time changes so if waiter activates after customer scans QR,
@@ -564,6 +725,7 @@ const CustomerMenuBase = () => {
             }
 
             setRestaurantId(tableData.restaurant_id)
+            localStorage.setItem('restaurantId', tableData.restaurant_id)
             // Attempt auto-join only if no session
             if (!sessionId) {
               joinSession(tableId, tableData.restaurant_id)
@@ -609,6 +771,7 @@ const CustomerMenuBase = () => {
               }
             }
             setRestaurantId(tableData.restaurant_id)
+            localStorage.setItem('restaurantId', tableData.restaurant_id)
           }
         } finally {
           setIsInitLoading(false)
@@ -638,9 +801,16 @@ const CustomerMenuBase = () => {
           if (session) {
             setActiveSession(session)
 
-            // Verify session status - if CLOSED, force logout/re-auth
+            // Verify session status - if CLOSED, force logout/re-auth.
+            // Eccezione: se il cliente è appena tornato da Stripe con
+            // pagamento completato, lasciamo isAuthenticated invariato per
+            // permettere al componente di mostrare la schermata "Pagamento
+            // completato" invece di riportarlo al PIN o al "Tavolo non
+            // attivo".
             if (session.status === 'CLOSED') {
-              setIsAuthenticated(false)
+              if (!hasCompletedStripePayment) {
+                setIsAuthenticated(false)
+              }
               setAuthChecking(false)
               return
             }
@@ -715,8 +885,12 @@ const CustomerMenuBase = () => {
           if (updatedSession.id === currentSessionId) {
             if (updatedSession.status === 'CLOSED') {
               if (hasCompletedStripePayment) {
+                // Cliente ha pagato online → il webhook ha chiuso il tavolo.
+                // Lasciamo activeSession aggiornata e lo stato authenticated
+                // intatto, così l'AuthorizedMenuContent continua a rendere
+                // la schermata "Pagamento completato" (gestita lì via
+                // stripePaymentSuccess + customerTab='payment').
                 setActiveSession(updatedSession)
-                setCustomerTab('payment')
                 return
               }
               setIsAuthenticated(false)
@@ -739,7 +913,7 @@ const CustomerMenuBase = () => {
           // Only log out if the deleted session is OUR session
           if (deletedSession?.id === currentSessionId) {
             if (hasCompletedStripePayment) {
-              setCustomerTab('payment')
+              // Idem: stripe completato → manteniamo lo schermo scontrino.
               return
             }
             setIsAuthenticated(false)
@@ -915,6 +1089,17 @@ const CustomerMenuBase = () => {
       </div>
     </div>
   )
+
+  if (hasCompletedStripePayment && !isViewOnly) {
+    return (
+      <DineInPaymentCompleteScreen
+        restaurantId={restaurantId || persistedPayment?.restaurantId || localStorage.getItem('restaurantId')}
+        restaurantName={restaurantName || fullRestaurant?.name || null}
+        tableSessionId={sessionId || activeSession?.id || persistedPayment?.tableSessionId || localStorage.getItem('sessionId')}
+        stripeSessionId={initialStripeSessionId || persistedPayment?.stripeSessionId || null}
+      />
+    )
+  }
 
   if (!hasCompletedStripePayment && !isTableActive && !isAuthenticated && !isViewOnly) return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center" style={{ background: theme.pageBgGradient, color: theme.textPrimary, ...theme.cssVars }}>
@@ -1145,6 +1330,7 @@ function AuthorizedMenuContent({ restaurantId, tableId, sessionId, activeSession
       at: new Date().toISOString(),
       stripeSessionId: stripeSessionId || lastStripeSessionId || null,
       tableSessionId,
+      restaurantId,
     }
     localStorage.setItem(paymentPersistenceKey, JSON.stringify(payload))
     setLastStripeSessionId(payload.stripeSessionId)

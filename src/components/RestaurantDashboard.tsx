@@ -478,7 +478,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
         if (!allSchedules || allSchedules.length === 0) {
           // No schedules found - reset to full menu if a scheduled menu was active
           if (lastScheduledMenuRef.current.menuId) {
-            await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
+            await DatabaseService.resetToFullMenu(restaurantId)
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
           }
           return
@@ -494,7 +494,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
         if (!schedules || schedules.length === 0) {
           if (lastScheduledMenuRef.current.menuId) {
-            await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
+            await DatabaseService.resetToFullMenu(restaurantId)
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
           }
           return
@@ -522,7 +522,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               const diffHours = (now.getTime() - lastUpdate) / (1000 * 60 * 60)
 
               if (diffHours >= 24) {
-                await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
+                await DatabaseService.resetToFullMenu(restaurantId)
                 lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
                 return
               }
@@ -556,7 +556,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           }
 
           if (lastScheduledMenuRef.current.menuId) {
-            await supabase.rpc('reset_to_full_menu', { p_restaurant_id: restaurantId })
+            await DatabaseService.resetToFullMenu(restaurantId)
             lastScheduledMenuRef.current = { menuId: null, mealType: null, day: null }
           }
           return
@@ -586,18 +586,16 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           return
         }
         // Apply the scheduled menu
-        const { error } = await supabase.rpc('apply_custom_menu', {
-          p_restaurant_id: restaurantId,
-          p_menu_id: match.custom_menu_id
-        })
-
-        if (!error) {
+        try {
+          await DatabaseService.applyCustomMenu(restaurantId, match.custom_menu_id)
           lastScheduledMenuRef.current = {
             menuId: match.custom_menu_id,
             mealType: currentMealType,
             day: scheduleDay
           }
           refreshActiveCustomMenu()
+        } catch (error) {
+          console.error("Error applying scheduled menu:", error)
         }
       } catch (err) {
         console.error("Error in menu scheduler:", err)
@@ -1709,7 +1707,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
 
     DatabaseService.createDish(newItem)
-      .then(() => {
+      .then((createdDish) => {
+        if (createdDish?.id) {
+          setDishes(prev => [...(prev || []), createdDish])
+        }
         setNewDish({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], ayce_max_orders_per_person: null })
         setAllergenInput('')
         setIsAddItemDialogOpen(false)
@@ -1717,7 +1718,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       })
       .catch((error) => {
         console.error('Error creating dish:', error)
-        toast.error('Errore durante la creazione del piatto')
+        toast.error(error?.message || 'Errore durante la creazione del piatto')
       })
   }
 
@@ -1731,9 +1732,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       setDishes((prev) => prev.map(dish => dish.id === dishId ? updatedItem : dish))
 
       DatabaseService.updateDish(updatedItem)
+        .then((savedDish) => {
+          if (savedDish?.id) {
+            setDishes((prev) => prev.map(dish => dish.id === dishId ? savedDish : dish))
+          }
+        })
         .catch((error) => {
           console.error('Error updating dish:', error)
-          toast.error('Errore durante l\'aggiornamento del piatto')
+          toast.error(error?.message || 'Errore durante l\'aggiornamento del piatto')
           setDishes((prev) => prev.map(dish => dish.id === dishId ? { ...dish, is_active: previousStatus } : dish))
         })
     }
@@ -1750,7 +1756,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       .then(() => toast.success('Piatto eliminato'))
       .catch((error) => {
         console.error('Error deleting dish:', error)
-        toast.error('Errore durante l\'eliminazione del piatto')
+        toast.error(error?.message || 'Errore durante l\'eliminazione del piatto')
+        if (dish) setDishes(prev => [...prev, dish])
       })
   }
 
@@ -1803,14 +1810,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
 
     DatabaseService.updateDish(updatedItem)
-      .then(() => {
+      .then((savedDish) => {
         setDishes?.((prev = []) =>
-          prev.map(d => d.id === updatedItem.id ? { ...d, ...updatedItem } : d)
+          prev.map(d => d.id === updatedItem.id ? { ...d, ...(savedDish || updatedItem) } : d)
         )
         setEditingDish(null)
         setEditDishData({ name: '', description: '', price: '', categoryId: '', image: '', is_ayce: false, allergens: [], ayce_max_orders_per_person: null })
         setAllergenInput('')
         toast.success('Piatto modificato')
+      })
+      .catch((error) => {
+        console.error('Error saving dish:', error)
+        toast.error(error?.message || 'Errore durante il salvataggio del piatto')
       })
   }
 
@@ -1896,8 +1907,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       }
       setInlineCatName('')
       toast.success('Categoria creata')
-    } catch {
-      toast.error('Errore creazione categoria')
+    } catch (error: any) {
+      toast.error(error?.message || 'Errore creazione categoria')
     }
   }
 
@@ -1937,9 +1948,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     }
 
     DatabaseService.createCategory(newCategoryObj)
-      .then(() => {
+      .then((created) => {
+        if (created?.id) setCategories(prev => [...(prev || []), created])
         setNewCategory('')
         toast.success('Categoria aggiunta')
+      })
+      .catch((error) => {
+        console.error('Error creating category:', error)
+        toast.error(error?.message || 'Errore creazione categoria')
       })
   }
 
@@ -1949,6 +1965,10 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     if (!confirm(`Eliminare la categoria "${cat?.name || 'questa categoria'}" e tutti i piatti associati?`)) return
     DatabaseService.deleteCategory(categoryId)
       .then(() => toast.success('Categoria eliminata'))
+      .catch((error) => {
+        console.error('Error deleting category:', error)
+        toast.error(error?.message || 'Errore eliminazione categoria')
+      })
   }
 
   const handleEditCategory = (category: Category) => {
@@ -1973,9 +1993,14 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     const updatedCategory = { ...editingCategory, name: editCategoryName.trim() }
     DatabaseService.updateCategory(updatedCategory)
       .then(() => {
+        setCategories(prev => prev.map(cat => cat.id === updatedCategory.id ? updatedCategory : cat))
         setEditingCategory(null)
         setEditCategoryName('')
         toast.success('Categoria modificata')
+      })
+      .catch((error) => {
+        console.error('Error updating category:', error)
+        toast.error(error?.message || 'Errore modifica categoria')
       })
   }
 

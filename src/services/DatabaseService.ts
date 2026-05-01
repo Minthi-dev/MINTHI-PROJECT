@@ -468,8 +468,9 @@ export const DatabaseService = {
     async createCategory(category: Partial<Category>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
-            body: { userId, restaurantId: category.restaurant_id, action: 'create_category', data: category }
+            body: { userId, sessionToken, restaurantId: category.restaurant_id, action: 'create_category', data: category }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore creazione categoria')
         return (data?.data || category) as Category
@@ -478,17 +479,20 @@ export const DatabaseService = {
     async updateCategory(category: Partial<Category>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
-            body: { userId, action: 'update_category', targetId: category.id, data: category }
+            body: { userId, sessionToken, restaurantId: category.restaurant_id, action: 'update_category', targetId: category.id, data: category }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento categoria')
+        return (data?.data || category) as Category
     },
 
     async deleteCategory(categoryId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
-            body: { userId, action: 'delete_category', targetId: categoryId }
+            body: { userId, sessionToken, action: 'delete_category', targetId: categoryId }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione categoria')
     },
@@ -497,7 +501,7 @@ export const DatabaseService = {
     async getDishes(restaurantId: string) {
         const { data, error } = await supabase
             .from('dishes')
-            .select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, created_at, exclude_from_all_you_can_eat, is_ayce, allergens')
+            .select('id, name, description, price, vat_rate, category_id, restaurant_id, is_active, image_url, created_at, exclude_from_all_you_can_eat, is_ayce, allergens, ayce_max_orders_per_person')
             .eq('restaurant_id', restaurantId)
         if (error) throw error
         return data.map((d: any) => ({
@@ -509,36 +513,49 @@ export const DatabaseService = {
     async createDish(dish: Partial<Dish>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const payload: any = { ...dish }
         if (dish.excludeFromAllYouCanEat !== undefined) {
             payload.exclude_from_all_you_can_eat = dish.excludeFromAllYouCanEat
         }
         delete payload.excludeFromAllYouCanEat
         const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
-            body: { userId, restaurantId: dish.restaurant_id, action: 'create_dish', data: payload }
+            body: { userId, sessionToken, restaurantId: dish.restaurant_id, action: 'create_dish', data: payload }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore creazione piatto')
+        const created = data?.data || payload
+        return {
+            ...created,
+            excludeFromAllYouCanEat: created.exclude_from_all_you_can_eat
+        } as Dish
     },
 
     async updateDish(dish: Partial<Dish>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const payload: any = { ...dish }
         if (dish.excludeFromAllYouCanEat !== undefined) {
             payload.exclude_from_all_you_can_eat = dish.excludeFromAllYouCanEat
         }
         delete payload.excludeFromAllYouCanEat
         const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
-            body: { userId, action: 'update_dish', targetId: dish.id, data: payload }
+            body: { userId, sessionToken, restaurantId: dish.restaurant_id, action: 'update_dish', targetId: dish.id, data: payload }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento piatto')
+        const updated = data?.data || payload
+        return {
+            ...updated,
+            excludeFromAllYouCanEat: updated.exclude_from_all_you_can_eat
+        } as Dish
     },
 
     async deleteDish(id: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-menu-manage', {
-            body: { userId, action: 'delete_dish', targetId: id }
+            body: { userId, sessionToken, action: 'delete_dish', targetId: id }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione piatto')
     },
@@ -1208,7 +1225,7 @@ export const DatabaseService = {
     async getBookings(restaurantId: string) {
         const { data, error } = await supabase
             .from('bookings')
-            .select('id, restaurant_id, table_id, name, email, phone, date_time, guests, notes, status, created_at')
+            .select('id, restaurant_id, table_id, name, email, phone, date_time, guests, duration, notes, status, created_at')
             .eq('restaurant_id', restaurantId)
             .order('date_time', { ascending: false })
             .limit(500)
@@ -1219,8 +1236,9 @@ export const DatabaseService = {
     async createBooking(booking: Partial<Booking>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-booking-manage', {
-            body: { userId, action: 'create', restaurantId: booking.restaurant_id, data: booking }
+            body: { userId, sessionToken, action: 'create', restaurantId: booking.restaurant_id, data: booking }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore creazione prenotazione')
         return (data?.data || booking) as Booking
@@ -1237,8 +1255,9 @@ export const DatabaseService = {
     async updateBooking(booking: Partial<Booking>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-booking-manage', {
-            body: { userId, action: 'update', bookingId: booking.id, data: booking }
+            body: { userId, sessionToken, action: 'update', bookingId: booking.id, restaurantId: booking.restaurant_id, data: booking }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento prenotazione')
     },
@@ -1246,8 +1265,9 @@ export const DatabaseService = {
     async deleteBooking(bookingId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-booking-manage', {
-            body: { userId, action: 'delete', bookingId }
+            body: { userId, sessionToken, action: 'delete', bookingId }
         })
         if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione prenotazione')
     },
@@ -1373,6 +1393,43 @@ export const DatabaseService = {
 
         if (error) throw error
         return data
+    },
+
+    async saveCustomMenuDishes(restaurantId: string, menuId: string, dishIdsToAdd: string[], dishIdsToRemove: string[]) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('secure-custom-menu', {
+            body: {
+                userId,
+                sessionToken,
+                restaurantId,
+                action: 'save_dishes',
+                targetId: menuId,
+                data: { dishIdsToAdd, dishIdsToRemove },
+            },
+        })
+        if (error || data?.error) throw new Error(data?.error || error?.message || 'Errore salvataggio piatti menù')
+    },
+
+    async applyCustomMenu(restaurantId: string, menuId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('secure-custom-menu', {
+            body: { userId, sessionToken, restaurantId, action: 'apply_menu', targetId: menuId },
+        })
+        if (error || data?.error) throw new Error(data?.error || error?.message || 'Errore attivazione menù')
+    },
+
+    async resetToFullMenu(restaurantId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('secure-custom-menu', {
+            body: { userId, sessionToken, restaurantId, action: 'reset_full_menu' },
+        })
+        if (error || data?.error) throw new Error(data?.error || error?.message || 'Errore ripristino menù completo')
     },
 
     // Stripe - Abbonamento ristorante
