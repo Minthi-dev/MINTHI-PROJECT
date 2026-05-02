@@ -259,7 +259,7 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="bg-zinc-950 border-white/10 text-white max-w-lg p-0 overflow-hidden rounded-[1.75rem]">
+            <DialogContent className="top-[56%] sm:top-[50%] bg-zinc-950 border-white/10 text-white max-w-lg p-0 overflow-hidden rounded-[1.75rem] max-h-[92dvh]">
                 <DialogHeader className="px-5 pt-5 pb-3 border-b border-white/5">
                     <DialogTitle className="flex items-center gap-2.5 text-white">
                         <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
@@ -276,7 +276,7 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
 
                 {!order && (
                     <div className="px-5 py-4 space-y-4">
-                        <div className="relative overflow-hidden rounded-[1.35rem] bg-black aspect-square sm:aspect-[4/3]">
+                        <div className="relative mx-auto w-full max-w-[430px] overflow-hidden rounded-[1.35rem] bg-black aspect-[4/5] sm:aspect-[4/3] max-h-[58dvh]">
                             <video
                                 ref={videoRef}
                                 className="absolute inset-0 h-full w-full object-cover"

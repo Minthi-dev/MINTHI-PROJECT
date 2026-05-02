@@ -98,11 +98,11 @@ async function buildPickupQrPoster(opts: {
 
     ctx.fillStyle = '#f4f4f5'
     ctx.font = '800 32px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-    ctx.fillText('Salva questa immagine', W / 2, 1260)
+    ctx.fillText('Mostra questo QR al banco', W / 2, 1260)
 
     ctx.fillStyle = '#a1a1aa'
     ctx.font = '500 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-    ctx.fillText("Ti serve per ritirare l'ordine anche se chiudi la pagina.", W / 2, 1306)
+    ctx.fillText('Il personale lo scannerizza e spunta i prodotti.', W / 2, 1306)
 
     ctx.fillStyle = '#71717a'
     ctx.font = '700 22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
@@ -334,12 +334,13 @@ export default function TakeawayOrderStatus() {
             const nav = navigator as any
             if (typeof nav.canShare === 'function' && nav.canShare({ files: [file] })) {
                 try {
+                    toast.info('Nel pannello che si apre scegli "Salva immagine" per metterla nel rullino foto', { duration: 6500 })
                     await nav.share({
                         files: [file],
                         title: `Ritiro asporto #${safeNumber}`,
-                        text: 'Salva questa immagine: il QR ti servirà al banco per ritirare l\'ordine.',
+                        text: 'Mostra questo QR al banco per ritirare l\'ordine.',
                     })
-                    toast.success('Tocca "Salva immagine" per metterlo nel rullino foto')
+                    toast.success('Operazione completata')
                     return
                 } catch (err: any) {
                     if (err?.name === 'AbortError') return
@@ -351,6 +352,7 @@ export default function TakeawayOrderStatus() {
             // può tap-tenere → Aggiungi a Foto). Su desktop scarica direttamente.
             const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
             if (isMobile) {
+                toast.info('Nella schermata che si apre tieni premuta l\'immagine e scegli "Salva immagine"', { duration: 6500 })
                 const w = window.open()
                 if (w) {
                     w.document.write(`
@@ -364,7 +366,6 @@ export default function TakeawayOrderStatus() {
                         <img src="${dataUrl}" alt="QR ritiro #${safeNumber}" />
                         </body></html>`)
                     w.document.close()
-                    toast.success('Tieni premuto sull\'immagine e tocca "Salva immagine"')
                     return
                 }
             }
@@ -437,8 +438,22 @@ export default function TakeawayOrderStatus() {
                     />
                 )}
 
-                {/* Stato + progress stadi (per ordini non chiusi) */}
-                {!isClosed && (
+                {/* Stato + progress stadi: in QR ritiro il cliente deve concentrarsi sul QR, non su pulsanti/stadi */}
+                {qrMode ? (
+                    <Card className="border-emerald-500/20 bg-emerald-500/8 p-3 rounded-2xl">
+                        <div className="flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                                <QrCode size={18} weight="fill" className="text-emerald-300" />
+                            </div>
+                            <div className="min-w-0">
+                                <div className="text-sm font-black text-emerald-200">Ritira mostrando il QR</div>
+                                <p className="mt-0.5 text-[12px] leading-snug text-emerald-100/70">
+                                    Vai al banco con questa schermata o con l'immagine salvata. Il personale scannerizza il QR e consegna i prodotti.
+                                </p>
+                            </div>
+                        </div>
+                    </Card>
+                ) : !isClosed && (
                     <Card className={`border ${label.ring} p-3 rounded-2xl`}>
                         <div className="flex items-center justify-between mb-2">
                             <div>
@@ -505,12 +520,10 @@ export default function TakeawayOrderStatus() {
 
                 {/* Lista prodotti per il ritiro (solo modalità QR pagata) */}
                 {qrMode && pickupItems.length > 0 && (
-                    <Card className="bg-zinc-900/50 border-white/5 p-3 rounded-2xl">
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-                                    <Package size={16} weight="fill" className="text-emerald-300" />
-                                </div>
+                    <Card className="bg-zinc-900/50 border-white/5 p-2.5 rounded-2xl">
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <Package size={16} weight="fill" className="text-emerald-300 shrink-0" />
                                 <div>
                                     <div className="text-[11px] uppercase tracking-widest text-zinc-500 font-bold">Ritiro prodotti</div>
                                     <div className="text-[13px] font-bold text-zinc-100 leading-tight">
@@ -518,29 +531,28 @@ export default function TakeawayOrderStatus() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <div className="text-[11px] text-zinc-500">Avanzamento</div>
-                                <div className="text-sm font-black text-emerald-300 font-mono tabular-nums">{pickedPieces}/{totalPieces}</div>
+                            <div className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-sm font-black text-emerald-300 font-mono tabular-nums">
+                                {pickedPieces}/{totalPieces}
                             </div>
                         </div>
-                        <div className="h-1.5 rounded-full bg-white/5 overflow-hidden mb-3">
+                        <div className="h-1 rounded-full bg-white/5 overflow-hidden mb-2">
                             <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${pickupProgressPct}%` }} />
                         </div>
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                             {pickupItems.map(item => (
                                 <div
                                     key={item.id}
-                                    className={`rounded-xl px-3 py-2 flex items-center justify-between gap-3 transition-all ${
+                                    className={`rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-3 transition-all ${
                                         item.remaining_quantity === 0
                                             ? 'bg-emerald-500/5 border border-emerald-500/20'
                                             : 'bg-black/20 border border-white/5'
                                     }`}
                                 >
                                     <div className="min-w-0 flex-1">
-                                        <div className={`text-sm font-semibold truncate ${item.remaining_quantity === 0 ? 'text-emerald-200/90' : 'text-zinc-100'}`}>
+                                        <div className={`text-[13px] font-semibold truncate ${item.remaining_quantity === 0 ? 'text-emerald-200/90' : 'text-zinc-100'}`}>
                                             {item.name}
                                         </div>
-                                        <div className="text-[11px] text-zinc-500">
+                                        <div className="text-[10px] text-zinc-500">
                                             {item.remaining_quantity === 0
                                                 ? `Consegnati ${item.picked_quantity}/${item.quantity}`
                                                 : `${item.picked_quantity} ritirati · ${item.remaining_quantity} mancanti`}
@@ -623,7 +635,7 @@ function QrHero({
                         Salva il QR e mostralo al banco
                     </h1>
                     <p className="mt-1 text-sm text-emerald-100/75 leading-snug">
-                        Serve per validare il ritiro e spuntare solo i prodotti consegnati.
+                        Prima di chiudere la pagina salvalo nel rullino foto. Serve per validare il ritiro e spuntare solo i prodotti consegnati.
                     </p>
                 </div>
 

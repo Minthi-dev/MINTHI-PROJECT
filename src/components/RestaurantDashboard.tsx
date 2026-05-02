@@ -5563,7 +5563,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               QR & Link pubblici — Asporto
             </DialogTitle>
             <DialogDescription className="text-xs text-zinc-500 mt-1">
-              Condividi questi link con i clienti o stampa il poster QR per la vetrina.
+              {((currentRestaurant?.takeaway_pickup_mode as 'code' | 'qr' | undefined) || 'code') === 'code'
+                ? 'Condividi il menu asporto e, se usi il monitor codici, apri il display sala d\'attesa.'
+                : 'In modalità QR ritiro condividi solo il menu: il cliente riceve il QR personale dopo il pagamento.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -5593,7 +5595,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             <div className="divide-y divide-white/[0.04] border-t border-white/[0.04] pt-1">
               {[
                 { label: 'Menu asporto', url: `${window.location.origin}/client/takeaway/${restaurantId}`, dot: 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.8)]' },
-                { label: "Display sala d'attesa", url: `${window.location.origin}/display/${restaurantId}`, dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]' },
+                ...(((currentRestaurant?.takeaway_pickup_mode as 'code' | 'qr' | undefined) || 'code') === 'code'
+                  ? [{ label: "Display sala d'attesa", url: `${window.location.origin}/display/${restaurantId}`, dot: 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]' }]
+                  : []),
               ].map(link => (
                 <div key={link.label} className="py-3 flex items-center gap-3 min-w-0">
                   <span className={`w-1 h-1 rounded-full shrink-0 ${link.dot}`} />

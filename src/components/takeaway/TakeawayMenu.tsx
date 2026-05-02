@@ -48,6 +48,7 @@ export default function TakeawayMenu() {
     const [customerEmail, setCustomerEmail] = useState('')
     const [customerNotes, setCustomerNotes] = useState('')
     const [submitting, setSubmitting] = useState(false)
+    const [stripeRedirecting, setStripeRedirecting] = useState(false)
     const [paymentChoice, setPaymentChoice] = useState<'stripe' | 'pay_on_pickup'>('stripe')
     const [loadError, setLoadError] = useState<string | null>(null)
     const [idempotencyKey, setIdempotencyKey] = useState<string>(() => makeIdempotencyKey())
@@ -192,7 +193,13 @@ export default function TakeawayMenu() {
         if (paymentChoice === 'stripe' && !canPayStripe) return toast.error('Pagamento online non disponibile')
         if (paymentChoice === 'pay_on_pickup' && !canPayOnPickup) return toast.error('Questo ristorante richiede il pagamento online')
 
+        const goingToStripe = paymentChoice === 'stripe'
         setSubmitting(true)
+        if (goingToStripe) {
+            setCheckoutOpen(false)
+            setCartOpen(false)
+            setStripeRedirecting(true)
+        }
         try {
             const result = await DatabaseService.createTakeawayOrder({
                 restaurantId,
@@ -213,7 +220,7 @@ export default function TakeawayMenu() {
             if (result.paymentMethod === 'stripe' && result.checkoutUrl) {
                 // Persist pickup code for later status check
                 try { sessionStorage.setItem(`takeaway_${restaurantId}_code`, result.pickupCode) } catch {}
-                window.location.href = result.checkoutUrl
+                window.location.assign(result.checkoutUrl)
                 return
             }
             // Pay on pickup — reset idempotency key (this order is done)
@@ -224,6 +231,7 @@ export default function TakeawayMenu() {
         } catch (e: any) {
             console.error('[TakeawayMenu] submit error:', e)
             toast.error(e?.message || 'Errore invio ordine. Controlla la connessione e riprova.')
+            setStripeRedirecting(false)
         } finally {
             setSubmitting(false)
         }
@@ -267,6 +275,37 @@ export default function TakeawayMenu() {
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white" style={{ paddingBottom: 'env(safe-area-inset-bottom, 96px)' }}>
+            <AnimatePresence>
+                {stripeRedirecting && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[120] bg-zinc-950 text-white flex items-center justify-center px-6"
+                    >
+                        <div className="w-full max-w-sm text-center">
+                            <div className="mx-auto mb-5 h-16 w-16 rounded-3xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+                                <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}
+                                    className="h-8 w-8 rounded-full border-2 border-amber-300 border-t-transparent"
+                                />
+                            </div>
+                            <h2 className="text-2xl font-black tracking-tight">Prepariamo il pagamento</h2>
+                            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                                Ti stiamo portando alla pagina sicura Stripe. Non chiudere questa schermata.
+                            </p>
+                            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left">
+                                <div className="flex items-center justify-between gap-3 text-sm">
+                                    <span className="text-zinc-400">Totale ordine</span>
+                                    <span className="font-black text-amber-300">€{total.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Header */}
             <header className="sticky top-0 z-30 backdrop-blur-xl bg-zinc-950/80 border-b border-white/5">
                 <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">

@@ -361,6 +361,79 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
     }
   }, [mealFilteredOrders, orders, categories, dishes, dateFilter, start, end, activeCategoryIds, categoryMetric, weeklyServiceHours, mealFilter])
 
+  const takeawayStats = useMemo(() => {
+    const takeawayOrders = mealFilteredOrders.filter(order => order.order_type === 'takeaway')
+    const statusOf = (order: Order) => String(order.status || '').toUpperCase()
+    const validOrders = takeawayOrders.filter(order => statusOf(order) !== 'CANCELLED')
+    const qrOrders = validOrders.filter(order => order.takeaway_pickup_mode === 'qr')
+    const codeOrders = validOrders.filter(order => (order.takeaway_pickup_mode || 'code') === 'code')
+    const paidOnline = validOrders.filter(order => order.payment_method === 'stripe' || (order.payments || []).some(p => p.method === 'stripe'))
+    const payOnPickup = validOrders.filter(order => order.payment_method !== 'stripe' && !(order.payments || []).some(p => p.method === 'stripe'))
+    const readyOrders = validOrders.filter(order => statusOf(order) === 'READY')
+    const pickedOrders = validOrders.filter(order => statusOf(order) === 'PICKED_UP' || statusOf(order) === 'PAID' || statusOf(order) === 'COMPLETED' || statusOf(order) === 'DELIVERED')
+    const preparingOrders = validOrders.filter(order => ['PREPARING', 'PENDING', 'OPEN'].includes(statusOf(order)))
+    const revenue = validOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0)
+    const pieces = validOrders.flatMap(order => order.filteredItems || order.items || [])
+    const totalPieces = pieces.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+    const pickedPieces = pieces.reduce((sum, item) => sum + Number(item.takeaway_picked_quantity || 0), 0)
+
+    const hourly = Array.from({ length: 24 }, (_, hour) => {
+      const slot = validOrders.filter(order => new Date(order.created_at).getHours() === hour)
+      return {
+        hour: `${String(hour).padStart(2, '0')}:00`,
+        ordini: slot.length,
+        ricavi: slot.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0),
+      }
+    }).filter(row => row.ordini > 0 || row.ricavi > 0)
+
+    const dishMap = new Map<string, { name: string; quantity: number; revenue: number }>()
+    validOrders.forEach(order => {
+      ;(order.filteredItems || order.items || []).forEach(item => {
+        const dish = dishes.find(d => d.id === item.dish_id)
+        const name = item.dish_name_snapshot || dish?.name || 'Prodotto'
+        const unitPrice = Number(item.unit_price_snapshot ?? dish?.price ?? 0)
+        const current = dishMap.get(name) || { name, quantity: 0, revenue: 0 }
+        current.quantity += Number(item.quantity || 0)
+        current.revenue += unitPrice * Number(item.quantity || 0)
+        dishMap.set(name, current)
+      })
+    })
+
+    return {
+      totalOrders: validOrders.length,
+      revenue,
+      averageValue: validOrders.length > 0 ? revenue / validOrders.length : 0,
+      qrOrders: qrOrders.length,
+      codeOrders: codeOrders.length,
+      paidOnline: paidOnline.length,
+      payOnPickup: payOnPickup.length,
+      preparingOrders: preparingOrders.length,
+      readyOrders: readyOrders.length,
+      pickedOrders: pickedOrders.length,
+      cancelledOrders: takeawayOrders.length - validOrders.length,
+      totalPieces,
+      pickedPieces,
+      missingPieces: Math.max(0, totalPieces - pickedPieces),
+      avgWait: calcAvgWait(validOrders),
+      hourly,
+      topDishes: Array.from(dishMap.values()).sort((a, b) => b.quantity - a.quantity).slice(0, 8),
+      modeRows: [
+        {
+          label: 'QR ritiro',
+          description: 'Cliente mostra QR, staff scannerizza e spunta i prodotti consegnati.',
+          orders: qrOrders.length,
+          revenue: qrOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0),
+        },
+        {
+          label: 'Monitor codici',
+          description: 'Cliente segue il numero ordine sullo schermo lista attesa.',
+          orders: codeOrders.length,
+          revenue: codeOrders.reduce((sum, order) => sum + (order.filteredAmount || order.total_amount || 0), 0),
+        },
+      ],
+    }
+  }, [mealFilteredOrders, dishes])
+
   // EXPORT ANALYTICS FUNCTION - VISUAL PDF
   const handleExportAnalytics = async () => {
     const toastId = toast.loading('Generazione PDF in corso...')
@@ -872,6 +945,7 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="bg-zinc-900/50 border border-white/10 mb-8 p-1 rounded-xl flex-wrap">
             <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-amber-500 data-[state=active]:text-black transition-all font-bold">Panoramica & Magazzino</TabsTrigger>
+            <TabsTrigger value="takeaway" className="rounded-lg data-[state=active]:bg-amber-500 data-[state=active]:text-black transition-all font-bold">Asporto</TabsTrigger>
             <TabsTrigger value="waiters" className="rounded-lg data-[state=active]:bg-amber-500 data-[state=active]:text-black transition-all font-bold">Performance Camerieri</TabsTrigger>
           </TabsList>
 
@@ -1396,6 +1470,148 @@ export default function AnalyticsCharts({ orders, completedOrders, dishes, categ
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="takeaway" className="space-y-6 focus:outline-none">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'Ordini asporto', value: takeawayStats.totalOrders, sub: `${takeawayStats.qrOrders} QR · ${takeawayStats.codeOrders} codici`, accent: 'text-amber-400', icon: <ShoppingBag size={21} weight="duotone" /> },
+                { label: 'Ricavi asporto', value: `€${takeawayStats.revenue.toFixed(0)}`, sub: `medio €${takeawayStats.averageValue.toFixed(2)}`, accent: 'text-emerald-400', icon: <CurrencyEur size={21} weight="duotone" /> },
+                { label: 'Ritiri prodotti', value: `${takeawayStats.pickedPieces}/${takeawayStats.totalPieces}`, sub: `${takeawayStats.missingPieces} ancora da ritirare`, accent: 'text-sky-400', icon: <Package size={21} weight="duotone" /> },
+                { label: 'Attesa media', value: `${takeawayStats.avgWait} min`, sub: `${takeawayStats.readyOrders} pronti · ${takeawayStats.pickedOrders} ritirati`, accent: 'text-violet-400', icon: <Clock size={21} weight="duotone" /> },
+              ].map(card => (
+                <Card key={card.label} className="border-zinc-800/60 bg-zinc-900/60 shadow-lg">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-xl border border-white/10 bg-black/25 flex items-center justify-center ${card.accent}`}>
+                        {card.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{card.label}</div>
+                        <div className={`text-xl font-black tabular-nums ${card.accent}`}>{card.value}</div>
+                        <div className="text-[11px] text-zinc-500 truncate">{card.sub}</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden">
+                <CardHeader className="border-b border-white/5 pb-4">
+                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                    <ShoppingBag size={20} className="text-amber-500" /> Modalità asporto
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {takeawayStats.modeRows.map(row => (
+                    <div key={row.label} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="text-sm font-black text-white">{row.label}</div>
+                          <p className="mt-1 text-xs leading-relaxed text-zinc-500">{row.description}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-2xl font-black text-amber-300 tabular-nums">{row.orders}</div>
+                          <div className="text-xs font-semibold text-zinc-500">€{row.revenue.toFixed(0)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-500">Pagati online</div>
+                      <div className="text-xl font-black text-emerald-300">{takeawayStats.paidOnline}</div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                      <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-500">Paga al ritiro</div>
+                      <div className="text-xl font-black text-amber-300">{takeawayStats.payOnPickup}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden">
+                <CardHeader className="border-b border-white/5 pb-4">
+                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                    <ChartLine size={20} className="text-amber-500" /> Picchi orari asporto
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  {takeawayStats.hourly.length === 0 ? (
+                    <div className="h-[260px] flex items-center justify-center text-sm text-zinc-600">Nessun ordine asporto nel periodo</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={260}>
+                      <BarChart data={takeawayStats.hourly} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#71717a' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#71717a' }} allowDecimals={false} />
+                        <Tooltip
+                          cursor={{ fill: 'rgba(245,158,11,0.06)' }}
+                          contentStyle={{ backgroundColor: '#09090b', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}
+                          itemStyle={{ color: '#fbbf24', fontWeight: 'bold' }}
+                        />
+                        <Bar dataKey="ordini" name="Ordini" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={36} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden">
+                <CardHeader className="border-b border-white/5 pb-4">
+                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                    <Package size={20} className="text-amber-500" /> Stato operativo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[
+                      ['In lavorazione', takeawayStats.preparingOrders, 'text-amber-300'],
+                      ['Pronti', takeawayStats.readyOrders, 'text-emerald-300'],
+                      ['Ritirati', takeawayStats.pickedOrders, 'text-zinc-200'],
+                      ['Annullati', takeawayStats.cancelledOrders, 'text-red-300'],
+                    ].map(([label, value, color]) => (
+                      <div key={label as string} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-500">{label}</div>
+                        <div className={`text-2xl font-black tabular-nums ${color}`}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-zinc-800/50 bg-zinc-900/40 shadow-xl overflow-hidden">
+                <CardHeader className="border-b border-white/5 pb-4">
+                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                    <Star size={20} className="text-amber-500" /> Prodotti asporto più venduti
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {takeawayStats.topDishes.length === 0 ? (
+                    <div className="py-12 flex items-center justify-center text-sm text-zinc-600">Nessun prodotto venduto nel periodo</div>
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {takeawayStats.topDishes.map((dish, idx) => (
+                        <div key={dish.name} className="px-4 py-3 flex items-center justify-between gap-4">
+                          <div className="min-w-0 flex items-center gap-3">
+                            <div className="h-7 w-7 rounded-lg bg-white/[0.04] border border-white/10 flex items-center justify-center text-xs font-black text-zinc-500">{idx + 1}</div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-zinc-100 truncate">{dish.name}</div>
+                              <div className="text-[11px] text-zinc-500">€{dish.revenue.toFixed(0)}</div>
+                            </div>
+                          </div>
+                          <div className="text-lg font-black text-amber-300 tabular-nums">{dish.quantity}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="waiters" className="space-y-8 focus:outline-none">
