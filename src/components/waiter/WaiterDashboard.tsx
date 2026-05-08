@@ -1120,11 +1120,11 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             <div className="fixed inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none brightness-100 contrast-150 mix-blend-overlay"></div>
 
             {/* Header */}
-            <header className="sticky top-0 z-50 flex flex-col gap-2 bg-zinc-950/80 backdrop-blur-xl pt-[max(0.75rem,env(safe-area-inset-top))] px-3 sm:px-4 pb-3 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300 mb-4 sm:mb-8">
+            <header className={`sticky top-0 z-50 flex flex-col gap-2 bg-zinc-950/80 backdrop-blur-xl pt-[max(0.75rem,env(safe-area-inset-top))] px-3 sm:px-4 pb-3 rounded-b-2xl sm:rounded-b-3xl border-b border-white/5 shadow-2xl transition-all duration-300 ${dineInEnabled ? 'mb-4 sm:mb-8' : 'mb-3 sm:mb-4'}`}>
                 {/* Top row: title + activity button */}
-                <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10">
+                <div className={`flex w-full min-w-0 items-center gap-3 ${dineInEnabled ? 'flex-col sm:flex-row sm:justify-between' : 'justify-between'}`}>
+                    <div className="flex min-w-0 items-center gap-3 sm:gap-4 flex-1">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-black shadow-lg shadow-amber-500/20 ring-1 ring-white/10 shrink-0">
                             <User size={22} weight="duotone" className="sm:hidden" />
                             <User size={26} weight="duotone" className="hidden sm:block" />
                         </div>
@@ -1142,7 +1142,7 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
                         </div>
                     </div>
 
-                    <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:justify-end">
+                    <div className={`min-w-0 ${dineInEnabled ? 'grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center sm:justify-end' : 'flex shrink-0 items-center gap-2'}`}>
                         {takeawayQrEnabled && (
                             <Button
                                 size="sm"
@@ -1319,19 +1319,17 @@ const WaiterDashboard = ({ user, onLogout }: WaiterDashboardProps) => {
             </div>
             ) : (
                 <div className="relative z-10 px-3 sm:px-4 md:px-6">
-                    <div className="mx-auto max-w-xl rounded-3xl border border-emerald-500/25 bg-emerald-500/10 p-6 shadow-2xl shadow-emerald-500/10">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-400 text-black">
-                                <QrCode size={30} weight="fill" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-black text-white">Scanner ritiro asporto</h2>
-                                <p className="text-sm text-emerald-100/75">Inquadra il QR del cliente e spunta i prodotti consegnati.</p>
-                            </div>
+                    <div className="mx-auto max-w-md rounded-3xl border border-emerald-500/25 bg-emerald-500/10 p-4 sm:p-5 text-center shadow-2xl shadow-emerald-500/10">
+                        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-400 text-black shadow-lg shadow-emerald-500/30">
+                            <QrCode size={34} weight="fill" />
                         </div>
+                        <h2 className="mt-3 text-xl font-black text-white">Scanner ritiro asporto</h2>
+                        <p className="mt-1 text-sm text-emerald-100/75 leading-snug">
+                            Inquadra il QR del cliente e spunta i prodotti consegnati.
+                        </p>
                         <Button
                             onClick={() => setTakeawayScannerOpen(true)}
-                            className="mt-5 h-14 w-full rounded-2xl bg-emerald-400 text-base font-black text-black hover:bg-emerald-300"
+                            className="mt-4 h-14 w-full rounded-2xl bg-emerald-400 text-base font-black text-black hover:bg-emerald-300"
                         >
                             <QrCode size={22} weight="fill" className="mr-2" />
                             Scannerizza QR

@@ -421,7 +421,7 @@ export default function TakeawayOrderStatus() {
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-950 to-black text-white pb-[calc(env(safe-area-inset-bottom)+1rem)]">
-            <div className="max-w-md mx-auto px-3 sm:px-4 pt-3 sm:pt-5 space-y-3">
+            <div className="max-w-md mx-auto px-3 sm:px-4 pt-3 sm:pt-5 space-y-2.5">
                 {/* HERO: dipende dalla modalità */}
                 {qrMode ? (
                     <QrHero
@@ -438,30 +438,16 @@ export default function TakeawayOrderStatus() {
                     />
                 )}
 
-                {/* Stato + progress stadi: in QR ritiro il cliente deve concentrarsi sul QR, non su pulsanti/stadi */}
-                {qrMode ? (
-                    <Card className="border-emerald-500/20 bg-emerald-500/8 p-3 rounded-2xl">
-                        <div className="flex items-start gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
-                                <QrCode size={18} weight="fill" className="text-emerald-300" />
-                            </div>
-                            <div className="min-w-0">
-                                <div className="text-sm font-black text-emerald-200">Ritira mostrando il QR</div>
-                                <p className="mt-0.5 text-[12px] leading-snug text-emerald-100/70">
-                                    Vai al banco con questa schermata o con l'immagine salvata. Il personale scannerizza il QR e consegna i prodotti.
-                                </p>
-                            </div>
-                        </div>
-                    </Card>
-                ) : !isClosed && (
+                {/* Stati di preparazione (solo modalità codice, non chiusa) */}
+                {!qrMode && !isClosed && (
                     <Card className={`border ${label.ring} p-3 rounded-2xl`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <div>
-                                <div className={`text-sm font-black ${label.color}`}>{label.text}</div>
-                                <div className="text-[11px] text-zinc-400 leading-tight">{label.sub}</div>
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                            <div className="min-w-0">
+                                <div className={`text-sm font-black ${label.color} truncate`}>{label.text}</div>
+                                <div className="text-[11px] text-zinc-400 leading-tight truncate">{label.sub}</div>
                             </div>
                             {order.status === 'PREPARING' && (
-                                <div className="flex items-center gap-1 text-xs font-semibold text-zinc-300 bg-black/30 border border-white/10 rounded-full px-2.5 py-1">
+                                <div className="flex shrink-0 items-center gap-1 text-xs font-semibold text-zinc-300 bg-black/30 border border-white/10 rounded-full px-2.5 py-1">
                                     <Clock size={12} weight="fill" />~{order.estimated_minutes}'
                                 </div>
                             )}
@@ -488,50 +474,43 @@ export default function TakeawayOrderStatus() {
                     </Card>
                 )}
 
-                {/* Card cliente / pagamento */}
-                <Card className="bg-zinc-900/50 border-white/5 p-3 rounded-2xl">
-                    <div className="grid grid-cols-3 gap-3 text-[11px]">
-                        <div className="min-w-0">
-                            <div className="text-zinc-500 uppercase tracking-wide font-bold">Cliente</div>
-                            <div className="font-semibold text-zinc-100 truncate text-[13px]">{order.customer_name}</div>
+                {/* Riepilogo: cliente, totale, pagamento — layout verticale, niente sovrapposizioni */}
+                <Card className="bg-zinc-900/60 border-white/5 p-3 rounded-2xl">
+                    <div className="flex items-center justify-between gap-2 min-w-0">
+                        <div className="min-w-0 flex-1">
+                            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Cliente</div>
+                            <div className="font-semibold text-zinc-100 truncate text-sm leading-tight">{order.customer_name || '—'}</div>
                         </div>
-                        <div className="text-center min-w-0">
-                            <div className="text-zinc-500 uppercase tracking-wide font-bold">Totale</div>
-                            <div className="font-black text-white text-[13px]">€{Number(order.total_amount).toFixed(2)}</div>
-                        </div>
-                        <div className="text-right min-w-0">
-                            <div className="text-zinc-500 uppercase tracking-wide font-bold">Pagamento</div>
-                            {isPaid ? (
-                                <div className="font-black text-emerald-400 text-[13px]">Pagato</div>
-                            ) : (
-                                <div className="font-black text-amber-400 text-[13px]">Da pagare</div>
-                            )}
+                        <div className="shrink-0 text-right">
+                            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Totale</div>
+                            <div className="font-black text-white text-base leading-tight">€{Number(order.total_amount).toFixed(2)}</div>
                         </div>
                     </div>
-                    {unpaid > 0.01 && (
-                        <div className="flex justify-between items-center text-xs pt-2 mt-2 border-t border-white/5">
-                            <span className="text-amber-300/80 font-medium">
-                                {requiresOnlinePayment ? (verifyingPayment ? 'Verifica pagamento...' : 'In attesa di pagamento online') : 'Da pagare al ritiro'}
+                    <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-zinc-500 uppercase tracking-widest font-bold">Pagamento</span>
+                        {isPaid ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-400/30 px-2 py-0.5 text-[11px] font-black text-emerald-300">
+                                <CheckCircle size={11} weight="fill" /> Pagato
                             </span>
-                            <span className="font-black text-amber-300">€{unpaid.toFixed(2)}</span>
-                        </div>
-                    )}
+                        ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-400/30 px-2 py-0.5 text-[11px] font-black text-amber-300">
+                                {requiresOnlinePayment ? (verifyingPayment ? 'Verifica…' : 'Da pagare online') : 'Da pagare al ritiro'} · €{unpaid.toFixed(2)}
+                            </span>
+                        )}
+                    </div>
                 </Card>
 
                 {/* Lista prodotti per il ritiro (solo modalità QR pagata) */}
                 {qrMode && pickupItems.length > 0 && (
-                    <Card className="bg-zinc-900/50 border-white/5 p-2.5 rounded-2xl">
+                    <Card className="bg-zinc-900/60 border-white/5 p-3 rounded-2xl">
                         <div className="flex items-center justify-between gap-3 mb-2">
                             <div className="flex items-center gap-2 min-w-0">
-                                <Package size={16} weight="fill" className="text-emerald-300 shrink-0" />
-                                <div>
-                                    <div className="text-[11px] uppercase tracking-widest text-zinc-500 font-bold">Ritiro prodotti</div>
-                                    <div className="text-[13px] font-bold text-zinc-100 leading-tight">
-                                        {remainingPieces === 0 ? 'Tutto consegnato' : `${remainingPieces} da ritirare`}
-                                    </div>
+                                <Package size={15} weight="fill" className="text-emerald-300 shrink-0" />
+                                <div className="text-[12px] font-black text-zinc-100 truncate">
+                                    {remainingPieces === 0 ? 'Tutto consegnato' : `${remainingPieces} da ritirare`}
                                 </div>
                             </div>
-                            <div className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-sm font-black text-emerald-300 font-mono tabular-nums">
+                            <div className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-black text-emerald-300 font-mono tabular-nums">
                                 {pickedPieces}/{totalPieces}
                             </div>
                         </div>
@@ -542,7 +521,7 @@ export default function TakeawayOrderStatus() {
                             {pickupItems.map(item => (
                                 <div
                                     key={item.id}
-                                    className={`rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-3 transition-all ${
+                                    className={`rounded-xl px-2.5 py-1.5 flex items-center justify-between gap-2 transition-all ${
                                         item.remaining_quantity === 0
                                             ? 'bg-emerald-500/5 border border-emerald-500/20'
                                             : 'bg-black/20 border border-white/5'
@@ -552,13 +531,11 @@ export default function TakeawayOrderStatus() {
                                         <div className={`text-[13px] font-semibold truncate ${item.remaining_quantity === 0 ? 'text-emerald-200/90' : 'text-zinc-100'}`}>
                                             {item.name}
                                         </div>
-                                        <div className="text-[10px] text-zinc-500">
-                                            {item.remaining_quantity === 0
-                                                ? `Consegnati ${item.picked_quantity}/${item.quantity}`
-                                                : `${item.picked_quantity} ritirati · ${item.remaining_quantity} mancanti`}
+                                        <div className="text-[10px] text-zinc-500 truncate">
+                                            {item.picked_quantity}/{item.quantity} ritirati
                                         </div>
                                     </div>
-                                    <div className={`shrink-0 text-[11px] font-black rounded-full px-2 py-0.5 ${item.remaining_quantity > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                                    <div className={`shrink-0 text-[11px] font-black rounded-full px-2 py-0.5 leading-none ${item.remaining_quantity > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
                                         {item.remaining_quantity > 0 ? `${item.remaining_quantity}×` : <CheckCircle size={11} weight="fill" />}
                                     </div>
                                 </div>
@@ -570,38 +547,37 @@ export default function TakeawayOrderStatus() {
                 {/* Scontrino fiscale */}
                 {isPaid && (
                     <Card className={`p-3 rounded-2xl ${receiptReady ? 'bg-emerald-500/8 border-emerald-500/25' : 'bg-amber-500/5 border-amber-500/20'}`}>
-                        <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${receiptReady ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                                <Receipt size={18} weight="fill" />
+                        <div className="flex items-center gap-2.5">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${receiptReady ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                <Receipt size={17} weight="fill" />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <div className={`text-[11px] font-black uppercase tracking-wider ${receiptReady ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                <div className={`text-[11px] font-black uppercase tracking-wider truncate ${receiptReady ? 'text-emerald-300' : 'text-amber-300'}`}>
                                     Scontrino fiscale
                                 </div>
-                                <div className={`text-[11px] leading-tight mt-0.5 ${receiptReady ? 'text-emerald-100/70' : 'text-amber-100/70'}`}>
-                                    {receiptReady ? 'Disponibile per il download' : 'Sarà disponibile fra qualche istante'}
+                                <div className={`text-[11px] leading-tight mt-0.5 truncate ${receiptReady ? 'text-emerald-100/70' : 'text-amber-100/70'}`}>
+                                    {receiptReady ? 'Pronto al download' : 'In emissione…'}
                                 </div>
                             </div>
                             <Button
                                 onClick={handleDownloadReceipt}
-                                disabled={downloadingReceipt}
+                                disabled={downloadingReceipt || !receiptReady}
                                 size="sm"
-                                className={`shrink-0 h-9 px-3 rounded-lg text-xs font-black transition-all ${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400 text-black' : 'bg-amber-500 hover:bg-amber-400 text-black'} disabled:opacity-60`}
+                                className={`shrink-0 h-9 px-3 rounded-lg text-xs font-black transition-all ${receiptReady ? 'bg-emerald-500 hover:bg-emerald-400 text-black' : 'bg-amber-500/40 text-black/60'} disabled:opacity-60`}
                             >
                                 <DownloadSimple size={14} weight="bold" className="mr-1" />
-                                {downloadingReceipt ? 'Apro...' : 'Scarica'}
+                                {downloadingReceipt ? '…' : 'Scarica'}
                             </Button>
                         </div>
                     </Card>
                 )}
 
                 {/* Hint finale */}
-                <div className="text-center text-[11px] text-zinc-500 pt-1 px-2 leading-relaxed">
-                    {qrMode
-                        ? <>Il QR e' il tuo codice di ritiro. Salvalo subito e mostralo al banco quando l'ordine e' pronto.</>
-                        : <>Conserva questa pagina. Il numero <span className="font-mono font-bold text-zinc-400">#{orderNumber}</span> verrà mostrato sullo schermo quando il tuo ordine sarà pronto.</>
-                    }
-                </div>
+                {!qrMode && (
+                    <div className="text-center text-[11px] text-zinc-500 pt-1 px-2 leading-relaxed">
+                        Conserva questa pagina. Il numero <span className="font-mono font-bold text-zinc-400">#{orderNumber}</span> verrà mostrato quando il tuo ordine sarà pronto.
+                    </div>
+                )}
             </div>
         </div>
     )
@@ -626,18 +602,22 @@ function QrHero({
             transition={{ type: 'spring', stiffness: 220, damping: 24 }}
             className="relative overflow-hidden rounded-[1.7rem] border border-emerald-500/25 bg-zinc-900/80 shadow-[0_24px_60px_-36px_rgba(16,185,129,0.65)]"
         >
-            <div className="px-4 pt-4 pb-4">
-                <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-3 text-center">
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-black/25 border border-emerald-400/20 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">
+            <div className="px-4 pt-3.5 pb-4">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-400/25 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">
                         <Sparkle size={11} weight="fill" /> QR ritiro
                     </div>
-                    <h1 className="mt-2 text-2xl font-black leading-tight text-white">
-                        Salva il QR e mostralo al banco
-                    </h1>
-                    <p className="mt-1 text-sm text-emerald-100/75 leading-snug">
-                        Prima di chiudere la pagina salvalo nel rullino foto. Serve per validare il ritiro e spuntare solo i prodotti consegnati.
-                    </p>
+                    <div className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono font-black tracking-widest text-zinc-300">
+                        #{orderNumber}
+                    </div>
                 </div>
+
+                <h1 className="mt-2.5 text-center text-xl font-black leading-tight text-white">
+                    Mostra il QR al banco
+                </h1>
+                <p className="mt-1 text-center text-[12px] text-emerald-100/70 leading-snug px-2">
+                    Salvalo nel rullino prima di chiudere la pagina.
+                </p>
 
                 <div className="mt-3 rounded-[1.35rem] bg-white p-3 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.8)]">
                     <QRCodeGenerator value={qrValue} size={312} className="rounded-xl w-full h-auto" />
@@ -664,15 +644,6 @@ function QrHero({
                         </>
                     )}
                 </Button>
-
-                <div className="mt-3 grid grid-cols-[1fr_auto] gap-3 items-center rounded-2xl border border-white/8 bg-black/25 px-3 py-2.5">
-                    <p className="text-[12px] leading-snug text-zinc-300">
-                        Se chiudi questa pagina, usa l'immagine salvata per il ritiro.
-                    </p>
-                    <div className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-mono font-black tracking-widest text-zinc-400">
-                        #{orderNumber}
-                    </div>
-                </div>
             </div>
         </motion.div>
     )
