@@ -278,6 +278,11 @@ serve(async (req) => {
         if (restaurant.is_active === false) return json({ error: "Ristorante non attivo" }, 403);
         if (!restaurant.takeaway_enabled) return json({ error: "Asporto non attivo per questo ristorante" }, 403);
 
+        const pickupMode = restaurant.takeaway_pickup_mode === "qr" ? "qr" : "code";
+        if (pickupMode === "qr" && chosenMethod !== "stripe") {
+            return json({ error: "Il ritiro QR richiede pagamento online" }, 400);
+        }
+
         if (chosenMethod === "pay_on_pickup" && restaurant.takeaway_require_stripe) {
             return json({ error: "Questo ristorante richiede il pagamento online" }, 400);
         }
@@ -449,7 +454,6 @@ serve(async (req) => {
         }
         const pickupNumber = nextNum;
         const pickupCode = randomCode(6);
-        const pickupMode = restaurant.takeaway_pickup_mode === "qr" ? "qr" : "code";
         const pickupToken = pickupMode === "qr" ? crypto.randomUUID() : null;
 
         // --- Insert order + items (status: PENDING when paying online, PENDING when cash — cashier confirms) ---

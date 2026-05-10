@@ -36,11 +36,14 @@ serve(async (req) => {
 
         const { data: order, error: oErr } = await supabase
             .from("orders")
-            .select("id, restaurant_id, status, order_type, paid_amount, total_amount, ready_at")
+            .select("id, restaurant_id, status, order_type, paid_amount, total_amount, ready_at, takeaway_pickup_mode")
             .eq("id", orderId)
             .maybeSingle();
         if (oErr || !order) return json({ error: "Ordine non trovato" }, 404);
         if (order.order_type !== "takeaway") return json({ error: "Non è un ordine asporto" }, 400);
+        if (order.takeaway_pickup_mode === "qr" && nextStatus !== "CANCELLED") {
+            return json({ error: "Gli ordini QR si ritirano dalla scheda QR acquistati o con scanner QR" }, 409);
+        }
 
         const access = await verifyAccess(supabase, userId, order.restaurant_id, sessionToken);
         if (!access.valid) {

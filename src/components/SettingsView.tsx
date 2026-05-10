@@ -402,9 +402,17 @@ export function SettingsView({
             toast.error('Prima attiva i pagamenti online e completa Stripe Connect.')
             return false
         }
+        if (patch.takeaway_pickup_mode === 'qr' && !stripeReadyForTakeaway) {
+            toast.error('Il ritiro QR richiede pagamenti online attivi e Stripe Connect completato.')
+            return false
+        }
+        const effectivePatch = patch.takeaway_pickup_mode === 'qr'
+            ? { ...patch, takeaway_require_stripe: true }
+            : patch
         setSavingTakeaway(true)
         try {
-            await DatabaseService.updateRestaurant({ id: restaurantId, ...patch })
+            await DatabaseService.updateRestaurant({ id: restaurantId, ...effectivePatch })
+            if (effectivePatch.takeaway_require_stripe === true) setTakeawayRequireStripe(true)
             toast.success('Impostazioni asporto aggiornate')
             return true
         } catch (e: any) {
@@ -1291,7 +1299,7 @@ export function SettingsView({
                                                     {
                                                         value: 'qr' as const,
                                                         title: 'QR ritiro',
-                                                        text: 'Il cliente salva il QR e il personale lo scannerizza.',
+                                                        text: 'Il cliente paga online, salva il QR e il personale spunta i prodotti ritirati.',
                                                         icon: QrCode,
                                                     },
                                                 ]).map(option => {

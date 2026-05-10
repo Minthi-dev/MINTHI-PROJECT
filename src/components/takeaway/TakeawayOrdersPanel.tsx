@@ -26,7 +26,7 @@ interface Props {
     onPrintReceipt?: (order: Order) => void
 }
 
-type Tab = 'active' | 'archive'
+type Tab = 'active' | 'qr' | 'archive'
 type StatusFilter = 'all' | 'preparing' | 'ready'
 type SortOrder = 'oldest' | 'newest'
 type ArchiveRange = 'today' | '7d' | '30d' | 'custom' | 'all'
@@ -100,6 +100,21 @@ function orderDue(order: Order) {
     const total = Number(order.total_amount || 0)
     const paid = Number(order.paid_amount || 0)
     return Math.max(0, Math.round((total - paid) * 100) / 100)
+}
+
+function isQrPickupOrder(order: Order) {
+    return order.takeaway_pickup_mode === 'qr'
+}
+
+function pickupPieces(order: Order) {
+    const items = order.items || []
+    const total = items.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0)
+    const picked = items.reduce((sum: number, item: any) => {
+        const quantity = Number(item.quantity || 0)
+        const pickedQuantity = item.takeaway_picked_quantity ?? item.picked_quantity ?? 0
+        return sum + Math.min(quantity, Math.max(0, Number(pickedQuantity || 0)))
+    }, 0)
+    return { total, picked, remaining: Math.max(0, total - picked) }
 }
 
 function formatMinutes(mins: number) {
@@ -178,7 +193,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     const [orders, setOrders] = useState<Order[]>([])
     const [categories, setCategories] = useState<Category[]>([])
     const [loading, setLoading] = useState(true)
-    const [tab, setTab] = useState<Tab>('active')
+    const [tab, setTab] = useState<Tab>(takeawayPickupMode === 'qr' ? 'qr' : 'active')
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
     const [sortOrder, setSortOrder] = useState<SortOrder>('oldest')
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
@@ -194,6 +209,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     const [archiveSearch, setArchiveSearch] = useState('')
     const [archiveStatus, setArchiveStatus] = useState<ArchiveStatusFilter>('all')
     const [scannerOpen, setScannerOpen] = useState(false)
+    const [qrClaiming, setQrClaiming] = useState<string | null>(null)
     const knownKitchenPrintIdsRef = useRef<Set<string>>(new Set())
     const initialKitchenPrintLoadRef = useRef(true)
     const autoPickupInFlightRef = useRef<Set<string>>(new Set())
@@ -245,7 +261,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                 setOrders(nextOrders)
             }
 
-            const printable = nextOrders.filter(o => o.status === 'PREPARING' || o.status === 'READY')
+            const printable = nextOrders.filter(o => !isQrPickupOrder(o) && (o.status === 'PREPARING' || o.status === 'READY'))
             if (onAutoPrintKitchenOrderRef.current && !initialKitchenPrintLoadRef.current) {
                 for (const order of printable) {
                     if (!knownKitchenPrintIdsRef.current.has(order.id)) {
@@ -320,6 +336,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         if (!takeawayAutoPickupEnabled) return
 
         for (const order of orders) {
+            if (isQrPickupOrder(order)) continue
             if (order.status !== 'READY') continue
             if (orderDue(order) > 0.01) continue
             const readyAt = readySince(order)
@@ -342,25 +359,40 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     }, [orders, now, takeawayAutoPickupEnabled, refresh])
 
     // Partition orders once; filter/sort applied below based on UI state
-    const { active, archive, counts } = useMemo(() => {
+    const { active, qrPickup, archive, counts } = useMemo(() => {
         const activeAll: Order[] = []
+        const qrAll: Order[] = []
         const archiveAll: Order[] = []
         for (const o of orders) {
-            if (ACTIVE_STATUSES.has(o.status)) activeAll.push(o)
+            if (isQrPickupOrder(o)) {
+                if (ARCHIVE_STATUSES.has(o.status) || o.status === 'CANCELLED' || pickupPieces(o).remaining === 0) {
+                    archiveAll.push(o)
+                } else if (o.status !== 'PENDING') {
+                    qrAll.push(o)
+                }
+            } else if (ACTIVE_STATUSES.has(o.status)) activeAll.push(o)
             else if (ARCHIVE_STATUSES.has(o.status)) archiveAll.push(o)
         }
         const counts = {
             active: activeAll.length,
             pending: activeAll.filter(o => o.status === 'PREPARING').length,
             ready: activeAll.filter(o => o.status === 'READY').length,
+            qr: qrAll.length,
             archive: archiveAll.length,
         }
-        return { active: activeAll, archive: archiveAll, counts }
+        return { active: activeAll, qrPickup: qrAll, archive: archiveAll, counts }
     }, [orders])
+
+    useEffect(() => {
+        if (takeawayPickupMode === 'qr' && tab === 'active' && counts.active === 0) {
+            setTab('qr')
+        }
+    }, [takeawayPickupMode, tab, counts.active])
 
     const categoryCounts = useMemo(() => {
         const map = new Map<string, number>()
-        for (const o of active) {
+        const source = tab === 'qr' ? qrPickup : tab === 'archive' ? archive : active
+        for (const o of source) {
             const seen = new Set<string>()
             for (const it of o.items || []) {
                 const categoryId = (it as any).dish?.category_id
@@ -369,7 +401,7 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             seen.forEach(id => map.set(id, (map.get(id) || 0) + 1))
         }
         return map
-    }, [active])
+    }, [active, archive, qrPickup, tab])
 
     const visible = useMemo(() => {
         if (tab === 'archive') {
@@ -424,6 +456,18 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         })
         return sorted
     }, [tab, active, archive, selectedCategoryIds, statusFilter, sortOrder, archiveRange, archiveFrom, archiveTo, archiveSearch, archiveStatus])
+
+    const visibleQrPickup = useMemo(() => {
+        let list = [...qrPickup]
+        if (selectedCategoryIds.length > 0) list = list.filter(o => orderMatchesCategories(o, selectedCategoryIds))
+        const q = archiveSearch.trim().toLowerCase()
+        if (q) list = list.filter(o => paymentSearchText(o).includes(q))
+        return list.sort((a, b) => {
+            const ta = new Date(a.created_at).getTime()
+            const tb = new Date(b.created_at).getTime()
+            return sortOrder === 'oldest' ? ta - tb : tb - ta
+        })
+    }, [qrPickup, selectedCategoryIds, archiveSearch, sortOrder])
 
     const archiveStats = useMemo(() => {
         const revenue = visible.reduce((sum, o) => o.status === 'CANCELLED' ? sum : sum + Number(o.paid_amount || o.total_amount || 0), 0)
@@ -493,6 +537,83 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
         }
     }
 
+    const mergeQrPickupResult = useCallback((nextOrder: any) => {
+        setOrders(prev => {
+            const updated = prev.map(order => {
+                if (order.id !== nextOrder.id) return order
+                const nextItems = Array.isArray(nextOrder.items) ? nextOrder.items : []
+                return {
+                    ...order,
+                    status: nextOrder.status || order.status,
+                    paid_amount: nextOrder.paid_amount ?? order.paid_amount,
+                    ready_at: nextOrder.ready_at ?? order.ready_at,
+                    picked_up_at: nextOrder.picked_up_at ?? order.picked_up_at,
+                    items: (order.items || []).map((item: any) => {
+                        const nextItem = nextItems.find((it: any) => it.id === item.id)
+                        return nextItem ? {
+                            ...item,
+                            status: nextItem.status || item.status,
+                            takeaway_picked_quantity: nextItem.picked_quantity,
+                        } : item
+                    }),
+                } as Order
+            })
+            ordersSignatureRef.current = makeOrdersSignature(updated)
+            knownTakeawayOrderIdsRef.current = new Set(updated.map(order => order.id))
+            return updated
+        })
+    }, [makeOrdersSignature])
+
+    const claimQrPickupItem = async (order: Order, item: any) => {
+        const quantity = Math.max(0, Number(item.quantity || 0) - Number(item.takeaway_picked_quantity || 0))
+        if (quantity <= 0) return
+        const claimKey = `${order.id}:${item.id}`
+        setQrClaiming(claimKey)
+        try {
+            const result = await DatabaseService.claimTakeawayPickupItem({
+                restaurantId,
+                orderId: order.id,
+                orderItemId: item.id,
+                quantity,
+            })
+            mergeQrPickupResult(result.order)
+            const done = pickupPieces(result.order as any).remaining === 0
+            toast.success(done ? 'Ordine QR ritirato completamente' : 'Prodotto segnato come ritirato')
+            window.setTimeout(refresh, 400)
+        } catch (err: any) {
+            toast.error(err?.message || 'Errore ritiro prodotto')
+        } finally {
+            setQrClaiming(null)
+        }
+    }
+
+    const claimQrPickupAll = async (order: Order) => {
+        const remainingItems = (order.items || []).filter((item: any) => Number(item.quantity || 0) - Number(item.takeaway_picked_quantity || 0) > 0)
+        if (remainingItems.length === 0) return
+        const claimKey = `${order.id}:__all__`
+        setQrClaiming(claimKey)
+        try {
+            let lastOrder: any = order
+            for (const item of remainingItems) {
+                const quantity = Math.max(0, Number((item as any).quantity || 0) - Number((item as any).takeaway_picked_quantity || 0))
+                const result = await DatabaseService.claimTakeawayPickupItem({
+                    restaurantId,
+                    orderId: order.id,
+                    orderItemId: item.id,
+                    quantity,
+                })
+                lastOrder = result.order
+            }
+            mergeQrPickupResult(lastOrder)
+            toast.success('Ordine QR ritirato completamente')
+            window.setTimeout(refresh, 400)
+        } catch (err: any) {
+            toast.error(err?.message || 'Errore ritiro prodotti')
+        } finally {
+            setQrClaiming(null)
+        }
+    }
+
     const openPayment = (o: Order, forceStripeOnly = false) => {
         setSelected(o)
         setForceStripePayment(forceStripeOnly)
@@ -530,15 +651,25 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                             active={tab === 'active'}
                             onClick={() => setTab('active')}
                             count={counts.active}
-                            label="Attivi"
+                            label="Coda"
                             icon={<ForkKnife size={16} weight="fill" />}
                             accent="amber"
                         />
+                        {(takeawayPickupMode === 'qr' || counts.qr > 0) && (
+                            <TabButton
+                                active={tab === 'qr'}
+                                onClick={() => setTab('qr')}
+                                count={counts.qr}
+                                label="QR acquistati"
+                                icon={<QrCode size={16} weight="fill" />}
+                                accent="emerald"
+                            />
+                        )}
                         <TabButton
                             active={tab === 'archive'}
                             onClick={() => setTab('archive')}
                             count={counts.archive}
-                            label="Archivio"
+                            label="Storico"
                             icon={<CheckCircle size={16} weight="fill" />}
                             accent="zinc"
                         />
@@ -590,6 +721,39 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                             {sortOrder === 'oldest' ? 'Più vecchi prima' : 'Più recenti prima'}
                         </button>
                     </div>
+                </div>
+            )}
+
+            {tab === 'qr' && (
+                <div className="flex flex-wrap items-center gap-2 bg-zinc-900/50 border border-emerald-500/15 rounded-xl p-2">
+                    <div className="flex items-center gap-1.5 text-emerald-300 text-sm font-black px-2">
+                        <QrCode size={16} weight="fill" /> Acquistati:
+                    </div>
+                    {categories.length > 0 && (
+                        <CategoryFilterButton
+                            categories={categories}
+                            selectedCategoryIds={selectedCategoryIds}
+                            counts={categoryCounts}
+                            onChange={setSelectedCategoryIds}
+                        />
+                    )}
+                    <div className="relative flex-1 min-w-[220px]">
+                        <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                        <Input
+                            value={archiveSearch}
+                            onChange={e => setArchiveSearch(e.target.value)}
+                            placeholder="Cerca numero, cliente, piatto o pagamento"
+                            className="pl-9 bg-black/20 border-white/10 h-9 text-sm"
+                        />
+                    </div>
+                    <button
+                        onClick={() => setSortOrder(s => s === 'oldest' ? 'newest' : 'oldest')}
+                        className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-md bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10 transition-colors"
+                        title="Cambia ordinamento"
+                    >
+                        <ArrowsDownUp size={14} />
+                        {sortOrder === 'oldest' ? 'Più vecchi prima' : 'Più recenti prima'}
+                    </button>
                 </div>
             )}
 
@@ -660,11 +824,11 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             {/* Orders grid */}
             {loading ? (
                 <div className="text-center text-zinc-500 py-20 text-base">Caricamento...</div>
-            ) : visible.length === 0 ? (
+            ) : (tab === 'qr' ? visibleQrPickup.length === 0 : visible.length === 0) ? (
                 <div className="text-center text-zinc-600 py-24">
-                    <ShoppingBag size={48} className="mx-auto mb-3 opacity-30" />
+                    {tab === 'qr' ? <QrCode size={48} className="mx-auto mb-3 opacity-30" /> : <ShoppingBag size={48} className="mx-auto mb-3 opacity-30" />}
                     <p className="text-base uppercase tracking-widest font-semibold">
-                        {tab === 'active' ? 'Nessun ordine attivo' : 'Archivio vuoto'}
+                        {tab === 'active' ? 'Nessun ordine in coda' : tab === 'qr' ? 'Nessun acquisto QR da ritirare' : 'Storico vuoto'}
                     </p>
                 </div>
             ) : (
@@ -682,6 +846,23 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                                     order={o}
                                     onDetail={openDetail}
                                     onPrint={onPrintKitchenOrder}
+                                />
+                            ))}
+                        </div>
+                    ) : tab === 'qr' ? (
+                        <div
+                            className={cn('grid content-start pb-20', cardSize === 'compact' ? 'gap-2.5' : 'gap-3')}
+                            style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSizeConfig[cardSize].minWidth}px, 1fr))` }}
+                        >
+                            {visibleQrPickup.map(o => (
+                                <TakeawayQrPickupCard
+                                    key={o.id}
+                                    order={o}
+                                    cardSize={cardSize}
+                                    claiming={qrClaiming}
+                                    onClaimItem={claimQrPickupItem}
+                                    onClaimAll={claimQrPickupAll}
+                                    onDetail={openDetail}
                                 />
                             ))}
                         </div>
@@ -860,6 +1041,145 @@ function TakeawayArchiveRow({
                 </Button>
             </div>
         </div>
+    )
+}
+
+function TakeawayQrPickupCard({
+    order,
+    cardSize,
+    claiming,
+    onClaimItem,
+    onClaimAll,
+    onDetail,
+}: {
+    order: Order
+    cardSize: CardSize
+    claiming: string | null
+    onClaimItem: (order: Order, item: any) => void
+    onClaimAll: (order: Order) => void
+    onDetail: (order: Order) => void
+}) {
+    const cfg = cardSizeConfig[cardSize]
+    const due = orderDue(order)
+    const isPaid = due <= 0.01
+    const progress = pickupPieces(order)
+    const progressPct = progress.total > 0 ? Math.min(100, (progress.picked / progress.total) * 100) : 0
+    const claimAllKey = `${order.id}:__all__`
+    const isClaimingAll = claiming === claimAllKey
+
+    return (
+        <motion.div
+            layout
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16 }}
+        >
+            <Card
+                className="relative flex h-full flex-col overflow-hidden rounded-xl border border-emerald-400/35 bg-zinc-950/80 shadow-sm shadow-emerald-500/5 transition-all duration-200"
+                style={{ minHeight: cfg.minHeight }}
+            >
+                <div className="h-1 w-full shrink-0 bg-emerald-400" />
+                <CardContent className={cn('flex flex-1 flex-col gap-2.5', cfg.content)}>
+                    <div className="flex items-start gap-3">
+                        <div className={cn('font-mono font-black tracking-tight leading-none text-emerald-300', cfg.numberText)}>
+                            #{String(order.pickup_number || 0).padStart(3, '0')}
+                        </div>
+                        <div className="min-w-0 flex-1 pt-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <Badge className={cn(
+                                    'border text-[10px] uppercase font-black tracking-wide',
+                                    isPaid ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-amber-500/20 text-amber-200 border-amber-400/40'
+                                )}>
+                                    {isPaid ? 'Acquistato' : 'Da saldare'}
+                                </Badge>
+                                <span className={cn('text-xs font-bold', isPaid ? 'text-emerald-300' : 'text-amber-300')}>
+                                    {isPaid ? 'Pagato' : `Residuo €${due.toFixed(2)}`}
+                                </span>
+                            </div>
+                            <div className="mt-1 text-sm font-semibold text-white truncate">{order.customer_name || 'Cliente'}</div>
+                        </div>
+                    </div>
+
+                    <div className={cn('rounded-lg border px-3 py-2', isPaid ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-amber-500/25 bg-amber-500/10')}>
+                        <div className="flex items-center justify-between gap-2 text-xs font-black uppercase tracking-wide text-emerald-200">
+                            <span className={isPaid ? 'text-emerald-200' : 'text-amber-200'}>
+                                {isPaid ? 'Ritiro prodotti' : 'Pagamento richiesto'}
+                            </span>
+                            <span className="font-mono">{progress.picked}/{progress.total}</span>
+                        </div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/30">
+                            <div className={cn('h-full rounded-full transition-all', isPaid ? 'bg-emerald-400' : 'bg-amber-400')} style={{ width: `${progressPct}%` }} />
+                        </div>
+                    </div>
+
+                    <div className={cn('flex-1 space-y-1.5 overflow-y-auto pr-1 -mr-1', cfg.listMax)}>
+                        {(order.items || []).map((it: any) => {
+                            const quantity = Number(it.quantity || 0)
+                            const picked = Math.min(quantity, Math.max(0, Number(it.takeaway_picked_quantity || 0)))
+                            const remaining = Math.max(0, quantity - picked)
+                            const done = remaining === 0
+                            const claimKey = `${order.id}:${it.id}`
+                            return (
+                                <div
+                                    key={it.id}
+                                    className={cn(
+                                        'flex items-center gap-2 rounded-lg border px-2.5 py-2',
+                                        done ? 'border-emerald-500/20 bg-emerald-500/5 opacity-75' : 'border-white/10 bg-black/20'
+                                    )}
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <div className={cn('font-semibold leading-snug break-words', done ? 'text-emerald-200/80 line-through decoration-emerald-200/35' : 'text-white')}>
+                                            {quantity}× {it.dish?.name || 'Piatto'}
+                                        </div>
+                                        <div className="text-[11px] font-medium text-zinc-500">
+                                            {done ? 'Ritirato' : `${picked}/${quantity} ritirati`}
+                                        </div>
+                                    </div>
+                                    <Button
+                                        size="sm"
+                                        disabled={!isPaid || done || !!claiming}
+                                        onClick={() => onClaimItem(order, it)}
+                                        className={cn(
+                                            'h-9 shrink-0 px-3 font-black',
+                                            done ? 'bg-white/[0.04] text-zinc-500' : 'bg-emerald-500 hover:bg-emerald-400 text-black'
+                                        )}
+                                    >
+                                        {claiming === claimKey ? (
+                                            '...'
+                                        ) : done ? (
+                                            <CheckCircle size={16} weight="fill" />
+                                        ) : (
+                                            <>
+                                                <Check size={14} weight="bold" className="mr-1" /> Ritirato
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            )
+                        })}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mt-auto">
+                        <Button
+                            disabled={!isPaid || progress.remaining === 0 || !!claiming}
+                            onClick={() => onClaimAll(order)}
+                            className="h-10 bg-emerald-500 hover:bg-emerald-400 text-black font-black"
+                        >
+                            <Package size={16} weight="fill" className="mr-1.5" />
+                            {isClaimingAll ? 'Ritiro...' : `Ritira tutto (${progress.remaining})`}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => onDetail(order)}
+                            className="h-10 text-zinc-300 hover:text-white hover:bg-white/5 text-sm font-medium"
+                        >
+                            <CaretRight size={14} className="mr-1" />Dettagli
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </motion.div>
     )
 }
 
@@ -1051,11 +1371,16 @@ function TabButton({
     count: number
     icon: React.ReactNode
     label: string
-    accent: 'amber' | 'zinc'
+    accent: 'amber' | 'emerald' | 'zinc'
 }) {
-    const activeBg = accent === 'amber' ? 'bg-amber-500 text-black' : 'bg-zinc-700 text-white'
+    const activeBg = accent === 'amber'
+        ? 'bg-amber-500 text-black'
+        : accent === 'emerald'
+            ? 'bg-emerald-500 text-black'
+            : 'bg-zinc-700 text-white'
     return (
         <button
+            type="button"
             onClick={onClick}
             className={cn(
                 'px-3.5 py-2 rounded-md text-sm flex items-center gap-1.5 transition-all font-semibold',

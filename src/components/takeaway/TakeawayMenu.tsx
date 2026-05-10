@@ -71,7 +71,7 @@ export default function TakeawayMenu() {
                 setDishes((ds || []) as Dish[])
                 if (cats && cats.length > 0) setActiveCategory(cats[0].id)
                 // Default payment method based on restaurant config
-                if (info?.takeaway_require_stripe) setPaymentChoice('stripe')
+                if (info?.takeaway_require_stripe || info?.takeaway_pickup_mode === 'qr') setPaymentChoice('stripe')
                 else if (!info?.enable_stripe_payments || !info?.stripe_connect_enabled) setPaymentChoice('pay_on_pickup')
             } catch (e: any) {
                 console.error('[TakeawayMenu] load error:', e)
@@ -157,9 +157,10 @@ export default function TakeawayMenu() {
     }
     const removeLine = (idx: number) => setCart(prev => prev.filter((_, i) => i !== idx))
 
+    const qrPickupRequiresStripe = restaurant?.takeaway_pickup_mode === 'qr'
     const canPayStripe = Boolean(restaurant?.enable_stripe_payments && restaurant?.stripe_connect_enabled)
-    const canPayOnPickup = !restaurant?.takeaway_require_stripe
-    const stripeRequiredButUnavailable = Boolean(restaurant?.takeaway_require_stripe && !canPayStripe)
+    const canPayOnPickup = !restaurant?.takeaway_require_stripe && !qrPickupRequiresStripe
+    const stripeRequiredButUnavailable = Boolean((restaurant?.takeaway_require_stripe || qrPickupRequiresStripe) && !canPayStripe)
     const collectFirstName = restaurant?.takeaway_collect_first_name !== false
     const collectLastName = !!restaurant?.takeaway_collect_last_name
     const collectPhone = restaurant?.takeaway_collect_phone !== false
@@ -192,6 +193,7 @@ export default function TakeawayMenu() {
         if (collectEmail && emailRequired && !customerEmail.trim()) return toast.error("Inserisci l'email")
         if (paymentChoice === 'stripe' && !canPayStripe) return toast.error('Pagamento online non disponibile')
         if (paymentChoice === 'pay_on_pickup' && !canPayOnPickup) return toast.error('Questo ristorante richiede il pagamento online')
+        if (qrPickupRequiresStripe && paymentChoice !== 'stripe') return toast.error('Il ritiro QR richiede pagamento online')
 
         const goingToStripe = paymentChoice === 'stripe'
         setSubmitting(true)
