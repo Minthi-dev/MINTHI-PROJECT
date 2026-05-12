@@ -191,8 +191,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   }
 
   const handleCreateRestaurant = async () => {
-    if (!newRestaurant.name || !newRestaurant.phone || !newRestaurant.email || !newRestaurant.username || !newRestaurant.password) {
-      toast.error('Compila tutti i campi obbligatori')
+    if (!newRestaurant.name.trim() || !newRestaurant.username.trim() || !newRestaurant.password) {
+      toast.error('Nome ristorante, username e password sono obbligatori')
       return
     }
 
@@ -208,12 +208,19 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       const restaurantId = uuidv4()
       const userId = uuidv4()
 
+      // Email opzionale: se non inserita, generiamo un placeholder unico per
+      // soddisfare il vincolo NOT NULL della tabella users senza esporre dati
+      // reali. L'OWNER potrà loggarsi comunque tramite username + password.
+      const trimmedEmail = newRestaurant.email.trim().toLowerCase()
+      const fallbackEmail = `owner-${userId}@noemail.minthi.local`
+      const ownerEmail = trimmedEmail || fallbackEmail
+
       const restaurant: Restaurant = {
         id: restaurantId,
-        name: newRestaurant.name,
-        phone: newRestaurant.phone,
-        email: newRestaurant.email,
-        logo_url: finalLogoUrl,
+        name: newRestaurant.name.trim(),
+        phone: newRestaurant.phone.trim() || undefined,
+        email: trimmedEmail || undefined,
+        logo_url: finalLogoUrl || undefined,
         owner_id: userId,
         isActive: true,
         billing_name: newRestaurant.billingName.trim() || undefined,
@@ -228,8 +235,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       const hashedPw = await hashPassword(newRestaurant.password)
       const restaurantUser: User = {
         id: userId,
-        name: newRestaurant.username,
-        email: newRestaurant.email,
+        name: newRestaurant.username.trim(),
+        email: ownerEmail,
         password_hash: hashedPw,
         role: 'OWNER',
       }
@@ -653,24 +660,24 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     <DialogHeader>
                       <DialogTitle>Nuovo Ristorante Partner</DialogTitle>
                       <DialogDescription>
-                        Inserisci i dati del ristorante e le credenziali per il proprietario.
+                        Solo nome ristorante, username e password sono obbligatori. Gli altri campi sono facoltativi.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
                         <Label>Dati Ristorante</Label>
                         <Input
-                          placeholder="Nome Ristorante"
+                          placeholder="Nome Ristorante *"
                           value={newRestaurant.name}
                           onChange={(e) => setNewRestaurant(prev => ({ ...prev, name: e.target.value }))}
                         />
                         <Input
-                          placeholder="Telefono"
+                          placeholder="Telefono (facoltativo)"
                           value={newRestaurant.phone}
                           onChange={(e) => setNewRestaurant(prev => ({ ...prev, phone: e.target.value }))}
                         />
                         <Input
-                          placeholder="Email"
+                          placeholder="Email (facoltativo)"
                           type="email"
                           value={newRestaurant.email}
                           onChange={(e) => setNewRestaurant(prev => ({ ...prev, email: e.target.value }))}
@@ -689,7 +696,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                       </div>
 
                       <div className="space-y-2 pt-2 border-t border-white/10">
-                        <Label>Dati Fiscali</Label>
+                        <Label>Dati Fiscali (facoltativi)</Label>
                         <Input
                           placeholder="Nome Azienda / Ragione Sociale"
                           value={newRestaurant.billingName}
@@ -736,12 +743,12 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                       <div className="space-y-2 pt-2 border-t border-white/10">
                         <Label>Credenziali Proprietario</Label>
                         <Input
-                          placeholder="Username"
+                          placeholder="Username *"
                           value={newRestaurant.username}
                           onChange={(e) => setNewRestaurant(prev => ({ ...prev, username: e.target.value }))}
                         />
                         <Input
-                          placeholder="Password"
+                          placeholder="Password *"
                           type="password"
                           value={newRestaurant.password}
                           onChange={(e) => setNewRestaurant(prev => ({ ...prev, password: e.target.value }))}

@@ -82,10 +82,12 @@ export const DatabaseService = {
     async createUser(user: Partial<User>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-user-manage', {
-            body: { userId, action: 'create', data: user }
+            body: { userId, action: 'create', data: user, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione utente')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione utente'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Restaurants
@@ -138,10 +140,12 @@ export const DatabaseService = {
 
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'create_restaurant', data: payload }
+            body: { userId, action: 'create_restaurant', data: payload, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione ristorante')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione ristorante'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async updateRestaurant(restaurant: Partial<Restaurant>) {
@@ -251,37 +255,45 @@ export const DatabaseService = {
     async deleteRestaurant(restaurantId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'delete_restaurant', restaurantId }
+            body: { userId, action: 'delete_restaurant', restaurantId, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione ristorante')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore eliminazione ristorante'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async nukeDatabase() {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'nuke_database' }
+            body: { userId, action: 'nuke_database', sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore nuke database')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore nuke database'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async updateUser(user: Partial<User>) {
         const callerId = _getCurrentUserId()
         if (!callerId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-user-manage', {
-            body: { userId: callerId, action: 'update', targetUserId: user.id, data: user }
+            body: { userId: callerId, action: 'update', targetUserId: user.id, data: user, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento utente')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento utente'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async deleteUser(targetUserId: string) {
         const callerId = _getCurrentUserId()
         if (!callerId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-user-manage', {
-            body: { userId: callerId, action: 'delete', targetUserId }
+            body: { userId: callerId, action: 'delete', targetUserId, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione utente')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore eliminazione utente'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Staff
@@ -1674,38 +1686,46 @@ export const DatabaseService = {
     }) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'create_bonus', data: bonus }
+            body: { userId, action: 'create_bonus', data: bonus, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione bonus')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione bonus'))
+        if (data?.error) throw new Error(data.error)
         return data?.data
     },
 
     async deactivateBonus(bonusId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'deactivate_bonus', targetId: bonusId }
+            body: { userId, action: 'deactivate_bonus', targetId: bonusId, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore disattivazione bonus')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore disattivazione bonus'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async suspendRestaurant(restaurantId: string, reason: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'suspend_restaurant', restaurantId, data: { reason } }
+            body: { userId, action: 'suspend_restaurant', restaurantId, data: { reason }, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore sospensione ristorante')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore sospensione ristorante'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async reactivateRestaurant(restaurantId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'reactivate_restaurant', restaurantId }
+            body: { userId, action: 'reactivate_restaurant', restaurantId, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore riattivazione ristorante')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore riattivazione ristorante'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Mark orders as paid via stripe
@@ -1734,10 +1754,12 @@ export const DatabaseService = {
     async setAppConfig(key: string, value: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'set_app_config', data: { key, value } }
+            body: { userId, action: 'set_app_config', data: { key, value }, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento config')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento config'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Registration Tokens (onboarding)
@@ -1752,10 +1774,12 @@ export const DatabaseService = {
         void discountDurationMonths
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
 
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
             body: {
                 userId, action: 'create_registration_token',
+                sessionToken,
                 data: {
                     free_months: freeMonths,
                     discount_percent: 0,
@@ -1765,7 +1789,8 @@ export const DatabaseService = {
                 }
             }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione token')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione token'))
+        if (data?.error) throw new Error(data.error)
         return data?.data
     },
 
@@ -1779,10 +1804,12 @@ export const DatabaseService = {
     async markTokenUsed(tokenId: string, restaurantId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'mark_token_used', targetId: tokenId, restaurantId }
+            body: { userId, action: 'mark_token_used', targetId: tokenId, restaurantId, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento token')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento token'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async registerRestaurant(data: {
