@@ -186,7 +186,7 @@ async function ensureOpenApiConfiguration(
             throw new Error(
                 `Impossibile rimuovere la configurazione fantasma per ${fiscalId} su OpenAPI. ` +
                 `DELETE ha risposto: ${String(delErr?.message || delErr).slice(0, 200)}. ` +
-                `Contatta il supporto OpenAPI o usa una P.IVA diversa in sandbox.`
+                `Contatta il supporto OpenAPI per sbloccare la P.IVA o usa una P.IVA diversa.`
             );
         }
 
@@ -559,4 +559,3 @@ serve(async (req) => {
         });
     }
 });
-

@@ -29,7 +29,18 @@
  *   Then use Authorization: Bearer <token> on every API call.
  */
 
-const ENV = (Deno.env.get("OPENAPI_ENV") || "test").toLowerCase();
+type OpenApiEnv = "production" | "test";
+
+function normalizeOpenApiEnv(value: string | undefined): OpenApiEnv {
+    const normalized = (value || "production").trim().toLowerCase();
+    if (normalized === "production") return "production";
+    if (normalized === "test" || normalized === "sandbox") return "test";
+
+    console.warn(`[OpenAPI] OPENAPI_ENV non valido (${normalized || "vuoto"}): uso production.`);
+    return "production";
+}
+
+const ENV = normalizeOpenApiEnv(Deno.env.get("OPENAPI_ENV"));
 
 export function getOpenApiEnv(): string {
     return ENV;
@@ -511,7 +522,7 @@ export async function fetchReceiptPdf(receiptId: string): Promise<Uint8Array> {
         console.error("[OpenAPI] fetchReceiptPdf: received JSON instead of PDF:", JSON.stringify(json).slice(0, 500));
         throw new Error(
             `[OpenAPI] Il server ha restituito JSON invece di PDF per lo scontrino ${receiptId}. ` +
-            `Potrebbe essere un problema di ambiente (sandbox) o lo scontrino non è ancora pronto.`
+            `Potrebbe essere un problema di ambiente OpenAPI o lo scontrino non è ancora pronto.`
         );
     }
 

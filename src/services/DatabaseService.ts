@@ -2430,36 +2430,6 @@ export const DatabaseService = {
     },
 
     /**
-     * Emette uno scontrino di test (€1,00) verso il sandbox OpenAPI per
-     * verificare che l'integrazione sia configurata correttamente.
-     */
-    async issueFiscalTestReceipt(restaurantId: string) {
-        const userId = _getCurrentUserId()
-        const sessionToken = _requireCurrentSessionToken()
-        if (!userId) throw new Error('Non autenticato')
-        const { data, error } = await supabase.functions.invoke('openapi-issue-receipt', {
-            body: {
-                userId,
-                sessionToken,
-                restaurantId,
-                issuedVia: 'manual_cashier',
-                testReceipt: true,
-                items: [{
-                    description: 'Test integrazione fiscale',
-                    quantity: 1,
-                    unitPrice: 1.00,
-                }],
-                electronicAmount: 1.00,
-            },
-        })
-        if (error || (data && data.error)) {
-            const msg = await _edgeFunctionErrorMessage(data, error, 'Errore test scontrino')
-            throw new Error(msg)
-        }
-        return data
-    },
-
-    /**
      * Emissione manuale (es. cassiere registra contanti/POS allo sportello).
      */
     async issueFiscalReceiptManual(params: {

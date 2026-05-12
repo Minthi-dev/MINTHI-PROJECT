@@ -30,7 +30,6 @@ import {
     Buildings,
     Key,
     Question,
-    TestTube,
     Percent,
     DownloadSimple,
 } from '@phosphor-icons/react'
@@ -101,7 +100,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const [enableAuto, setEnableAuto] = useState(false)
     const [defaultVatRate, setDefaultVatRate] = useState('10')
     const [savingPrefs, setSavingPrefs] = useState(false)
-    const [testingReceipt, setTestingReceipt] = useState(false)
     const [verifying, setVerifying] = useState(false)
     const [retryingReceiptId, setRetryingReceiptId] = useState<string | null>(null)
     const [setupOpen, setSetupOpen] = useState(false)
@@ -237,25 +235,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
             toast.error(err?.message || 'Errore salvataggio preferenze')
         } finally {
             setSavingPrefs(false)
-        }
-    }
-
-    async function handleTestReceipt() {
-        setTestingReceipt(true)
-        try {
-            const result = await DatabaseService.issueFiscalTestReceipt(restaurantId)
-            if (result?.alreadyIssued) {
-                toast.success('Scontrino di test già emesso in precedenza')
-            } else if (result?.skipped) {
-                toast.error(result.message || 'Test non eseguito: completa prima l\'attivazione')
-            } else {
-                toast.success('Scontrino di test emesso! Verifica la dashboard OpenAPI.')
-            }
-            await loadRestaurant()
-        } catch (err: any) {
-            toast.error(err?.message || 'Errore emissione test')
-        } finally {
-            setTestingReceipt(false)
         }
     }
 
@@ -730,37 +709,6 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 </div>
             </section>
 
-            {/* === TEST INTEGRAZIONE === */}
-            {isActive && (
-                <section>
-                    <h3 className="text-[15px] font-bold text-white mb-3 px-1 tracking-wide uppercase flex items-center gap-2">
-                        <TestTube size={18} className="opacity-70" />
-                        Test integrazione
-                    </h3>
-                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 px-4 py-4">
-                        <div className="text-[13px] text-zinc-400 mb-3">
-                            Emette uno scontrino di test da <strong>€1,00</strong> verso l'ambiente
-                            sandbox di OpenAPI per verificare che le credenziali e l'integrazione
-                            funzionino correttamente. Non viene inviato all'Agenzia delle Entrate
-                            in ambiente di test.
-                        </div>
-                        <Button
-                            onClick={handleTestReceipt}
-                            disabled={testingReceipt || !enableAuto}
-                            variant="secondary"
-                            className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10"
-                        >
-                            <TestTube size={16} className="mr-2" weight="bold" />
-                            {testingReceipt ? 'Emissione in corso…' : 'Emetti scontrino di test'}
-                        </Button>
-                        {!enableAuto && (
-                            <div className="text-[11px] text-amber-400/80 mt-2">
-                                Attiva l'emissione automatica qui sopra per poter testare.
-                            </div>
-                        )}
-                    </div>
-                </section>
-            )}
                 </>
             )}
         </motion.div>
@@ -880,7 +828,7 @@ function friendlyFiscalError(raw?: string | null): { title: string; message: str
         not_found: {
             title: 'Configurazione non trovata',
             message: 'OpenAPI non ha trovato una configurazione per questa P.IVA.',
-            action: 'Verifica la P.IVA e riprova. Se hai cambiato ambiente (sandbox/produzione), ri-inserisci le credenziali.',
+            action: 'Verifica la P.IVA e riprova. Se hai cambiato ambiente OpenAPI, ri-inserisci le credenziali.',
         },
         credentials: {
             title: 'Credenziali AdE rifiutate',

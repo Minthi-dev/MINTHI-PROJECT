@@ -141,8 +141,8 @@ serve(async (req) => {
 
         // --- Validazione minima ---
         if (!restaurantId) return json({ error: "restaurantId mancante" }, 400);
-        if (testReceipt && getOpenApiEnv() === "production") {
-            return json({ error: "Lo scontrino di test è disponibile solo in ambiente sandbox OpenAPI." }, 400);
+        if (testReceipt) {
+            return json({ error: "Lo scontrino di prova è disattivato: l'integrazione OpenAPI è configurata per profili reali." }, 400);
         }
 
         // ----------------------------------------------------------------
