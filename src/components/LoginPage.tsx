@@ -111,9 +111,9 @@ export default function LoginPage({ onLogin }: Props) {
                 </svg>
               </motion.div>
             </div>
-            <h2 className="text-3xl font-bold text-white mb-4">Pagamento Completato!</h2>
+            <h2 className="text-3xl font-bold text-white mb-4">Registrazione completata!</h2>
             <p className="text-zinc-400 mb-8 leading-relaxed">
-              Il tuo abbonamento è attivo. Inserisci subito le credenziali che hai scelto durante la registrazione per accedere al tuo nuovo ristorante.
+              Inserisci le credenziali che hai scelto durante la registrazione per accedere al tuo nuovo ristorante.
             </p>
             <button
               onClick={() => setPaymentSuccess(false)}

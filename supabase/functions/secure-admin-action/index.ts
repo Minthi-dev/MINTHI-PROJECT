@@ -142,15 +142,7 @@ serve(async (req) => {
             }
 
             case "toggle_payment_status": {
-                if (!targetId || data?.admin_completed === undefined) {
-                    return json({ error: "targetId e admin_completed richiesti" }, 400);
-                }
-                const { error } = await supabase
-                    .from("subscription_payments")
-                    .update({ admin_completed: data.admin_completed })
-                    .eq("id", targetId);
-                if (error) return json({ error: error.message }, 500);
-                break;
+                return json({ error: "Pagamenti abbonamento Stripe MINTHI disattivati." }, 410);
             }
 
             case "suspend_restaurant": {
@@ -213,10 +205,10 @@ serve(async (req) => {
 
             case "create_registration_token": {
                 const freeMonths = data?.free_months || 0;
-                const discountPercent = data?.discount_percent || 0;
-                const discountDuration = data?.discount_duration || "once";
-                const discountDurationMonths = data?.discount_duration_months || null;
-                const stripeCouponId = data?.stripe_coupon_id || null;
+                const discountPercent = 0;
+                const discountDuration = "once";
+                const discountDurationMonths = null;
+                const stripeCouponId = null;
 
                 // Check if token with same params already exists
                 let existingQuery = supabase
@@ -261,36 +253,19 @@ serve(async (req) => {
             }
 
             case "update_subscription_payment": {
-                if (!targetId || !data) return json({ error: "targetId e data richiesti" }, 400);
-                // Solo campi consentiti
-                const allowedPaymentFields: Record<string, any> = {};
-                if (data.admin_completed !== undefined) allowedPaymentFields.admin_completed = data.admin_completed;
-                if (data.notes !== undefined) allowedPaymentFields.notes = data.notes;
-                if (Object.keys(allowedPaymentFields).length === 0) return json({ error: "Nessun campo valido da aggiornare" }, 400);
-                const { error } = await supabase.from("subscription_payments").update(allowedPaymentFields).eq("id", targetId);
-                if (error) return json({ error: error.message }, 500);
-                break;
+                return json({ error: "Pagamenti abbonamento Stripe MINTHI disattivati." }, 410);
             }
 
             case "delete_subscription_payment": {
-                if (!targetId) return json({ error: "targetId richiesto" }, 400);
-                const { error } = await supabase.from("subscription_payments").delete().eq("id", targetId);
-                if (error) return json({ error: error.message }, 500);
-                break;
+                return json({ error: "Pagamenti abbonamento Stripe MINTHI disattivati." }, 410);
             }
 
             case "deactivate_discount": {
-                if (!targetId) return json({ error: "targetId richiesto" }, 400);
-                const { error } = await supabase.from("restaurant_discounts").update({ is_active: false }).eq("id", targetId);
-                if (error) return json({ error: error.message }, 500);
-                break;
+                return json({ error: "Sconti abbonamento Stripe MINTHI disattivati." }, 410);
             }
 
             case "dismiss_discount_banner": {
-                if (!targetId) return json({ error: "targetId richiesto" }, 400);
-                const { error } = await supabase.from("restaurant_discounts").update({ banner_dismissed: true }).eq("id", targetId);
-                if (error) return json({ error: error.message }, 500);
-                break;
+                return json({ error: "Sconti abbonamento Stripe MINTHI disattivati." }, 410);
             }
 
             default:

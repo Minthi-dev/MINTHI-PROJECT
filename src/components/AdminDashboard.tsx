@@ -3,15 +3,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useSupabaseData } from '../hooks/useSupabaseData'
 import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
-import { User, Restaurant, SubscriptionPayment, RestaurantBonus } from '../services/types'
+import { User, Restaurant } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Crown, Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, Warning, CheckCircle, Clock, ArrowRight, Pause, Play, Link as LinkIcon, Copy, Rocket, Receipt, CalendarBlank, Funnel, CaretDown, CaretUp, XCircle, Info } from '@phosphor-icons/react'
+import { Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, CheckCircle, Link as LinkIcon, Copy, Rocket, Info } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
@@ -44,55 +43,23 @@ export default function AdminDashboard({ user, onLogout }: Props) {
   const [salesByRestaurant, setSalesByRestaurant] = useState<Record<string, number>>({})
   const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin'>('restaurants')
 
-  // Admin Payments State
-  const [subscriptionPayments, loadingPayments, refreshPayments, setSubscriptionPayments] = useSupabaseData<SubscriptionPayment>('subscription_payments', [])
-  const [restaurantBonuses, loadingBonuses, refreshBonuses, setRestaurantBonuses] = useSupabaseData<RestaurantBonus>('restaurant_bonuses', [])
-  const [adminFilter, setAdminFilter] = useState<'all' | 'paying' | 'not_paying' | 'suspended'>('all')
+  // Admin commercial state. Stripe billing toward MINTHI is disabled; this only keeps local access bonuses.
   const [showBonusDialog, setShowBonusDialog] = useState(false)
   const [bonusRestaurantId, setBonusRestaurantId] = useState('')
   const [bonusMonths, setBonusMonths] = useState(1)
   const [bonusReason, setBonusReason] = useState('')
-  const [stripePriceId, setStripePriceId] = useState('')
-  const [stripePriceIdSaved, setStripePriceIdSaved] = useState('')
-  const [stripePriceAmount, setStripePriceAmount] = useState<number>(0)
-  const [newPriceInput, setNewPriceInput] = useState('')
-  const [updatingPrice, setUpdatingPrice] = useState(false)
-  const [loadingPriceDetails, setLoadingPriceDetails] = useState(false)
-
-  // Discount dialog
-  const [showDiscountDialog, setShowDiscountDialog] = useState(false)
-  const [discountRestaurantId, setDiscountRestaurantId] = useState('')
-  const [discountPercent, setDiscountPercent] = useState<number | string>('')
-  const [discountDuration, setDiscountDuration] = useState('once')
-  const [discountDurationMonths, setDiscountDurationMonths] = useState(1)
-  const [discountReason, setDiscountReason] = useState('')
-  const [applyingDiscount, setApplyingDiscount] = useState(false)
-
-  // Admin Payments Sub-Tabs
-  const [adminSubTab, setAdminSubTab] = useState<'abbonamenti' | 'fatturazione'>('abbonamenti')
-
-  // Fatturazione Filters
-  const [fatturazioneSearch, setFatturazioneSearch] = useState('')
-  const [fatturazioneStatus, setFatturazioneStatus] = useState<'all' | 'paid' | 'failed'>('all')
-  const [fatturazioneDateFrom, setFatturazioneDateFrom] = useState('')
-  const [fatturazioneDateTo, setFatturazioneDateTo] = useState('')
-  const [fatturazioneSortField, setFatturazioneSortField] = useState<'date' | 'amount' | 'restaurant'>('date')
-  const [fatturazioneSortDir, setFatturazioneSortDir] = useState<'asc' | 'desc'>('desc')
 
   // Registration Link Generator
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [inviteFreeMonths, setInviteFreeMonths] = useState(false)
   const [inviteMonthsCount, setInviteMonthsCount] = useState(1)
-  const [inviteDiscountPercent, setInviteDiscountPercent] = useState<number | string>('')
-  const [inviteDiscountDuration, setInviteDiscountDuration] = useState('once')
-  const [inviteDiscountDurationMonths, setInviteDiscountDurationMonths] = useState(1)
   const [generatedLink, setGeneratedLink] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
 
   // Clear generated link when params change so user can generate a new one
   useEffect(() => {
     setGeneratedLink('')
-  }, [inviteFreeMonths, inviteMonthsCount, inviteDiscountPercent, inviteDiscountDuration])
+  }, [inviteFreeMonths, inviteMonthsCount])
 
   // Dedicated realtime subscription for new restaurant INSERTs.
   // The useSupabaseData hook subscribes to postgres_changes, but INSERT events
@@ -122,20 +89,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       clearInterval(pollInterval)
     }
   }, [refreshRestaurants])
-
-  // Load admin data
-  useEffect(() => {
-    if (activeView === 'admin') {
-      DatabaseService.getAppConfig('stripe_price_id').then(val => {
-        if (val) { setStripePriceId(val); setStripePriceIdSaved(val) }
-      }).catch(console.error)
-      // Fetch current Stripe price amount
-      setLoadingPriceDetails(true)
-      DatabaseService.getStripePriceDetails().then(details => {
-        if (details?.amount) setStripePriceAmount(details.amount)
-      }).catch(console.error).finally(() => setLoadingPriceDetails(false))
-    }
-  }, [activeView])
 
   // Fetch aggregated sales per restaurant (server-side RPC, no unbounded client query)
   useEffect(() => {
@@ -222,65 +175,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
 
     return result
   }, [restaurants, salesByRestaurant, searchQuery, sortOption])
-
-  // Fatturazione: filtered and sorted subscription payments
-  const filteredFatturazionePayments = useMemo(() => {
-    let result = [...(subscriptionPayments || [])]
-
-    // Filter by status
-    if (fatturazioneStatus === 'paid') {
-      result = result.filter(p => p.status === 'paid')
-    } else if (fatturazioneStatus === 'failed') {
-      result = result.filter(p => p.status === 'failed')
-    }
-
-    // Filter by restaurant search
-    if (fatturazioneSearch) {
-      const q = fatturazioneSearch.toLowerCase()
-      result = result.filter(p => {
-        const restaurant = (restaurants || []).find(r => r.id === p.restaurant_id)
-        return restaurant?.name?.toLowerCase().includes(q) || p.stripe_invoice_id?.toLowerCase().includes(q)
-      })
-    }
-
-    // Filter by date range
-    if (fatturazioneDateFrom) {
-      const from = new Date(fatturazioneDateFrom)
-      from.setHours(0, 0, 0, 0)
-      result = result.filter(p => p.created_at && new Date(p.created_at) >= from)
-    }
-    if (fatturazioneDateTo) {
-      const to = new Date(fatturazioneDateTo)
-      to.setHours(23, 59, 59, 999)
-      result = result.filter(p => p.created_at && new Date(p.created_at) <= to)
-    }
-
-    // Sort
-    result.sort((a, b) => {
-      let cmp = 0
-      if (fatturazioneSortField === 'date') {
-        cmp = new Date(a.created_at || '').getTime() - new Date(b.created_at || '').getTime()
-      } else if (fatturazioneSortField === 'amount') {
-        cmp = a.amount - b.amount
-      } else if (fatturazioneSortField === 'restaurant') {
-        const nameA = (restaurants || []).find(r => r.id === a.restaurant_id)?.name || ''
-        const nameB = (restaurants || []).find(r => r.id === b.restaurant_id)?.name || ''
-        cmp = nameA.localeCompare(nameB)
-      }
-      return fatturazioneSortDir === 'desc' ? -cmp : cmp
-    })
-
-    return result
-  }, [subscriptionPayments, restaurants, fatturazioneSearch, fatturazioneStatus, fatturazioneDateFrom, fatturazioneDateTo, fatturazioneSortField, fatturazioneSortDir])
-
-  // Fatturazione summary stats
-  const fatturazioneStats = useMemo(() => {
-    const allPayments = subscriptionPayments || []
-    const totaleIncassato = allPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0)
-    const pagamentiInSospeso = allPayments.filter(p => p.status === 'pending' || p.status === 'failed').length
-    const fattureEmesse = allPayments.length
-    return { totaleIncassato, pagamentiInSospeso, fattureEmesse }
-  }, [subscriptionPayments])
 
   const handleLogoUpload = async (file: File) => {
     try {
@@ -610,665 +504,34 @@ export default function AdminDashboard({ user, onLogout }: Props) {
             {/* Header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-white">Pagamenti</h2>
-                <p className="text-zinc-500 text-sm mt-0.5">Gestione abbonamenti, bonus e fatturazione</p>
+                <h2 className="text-2xl font-bold text-white">Gestione ristoratori</h2>
+                <p className="text-zinc-500 text-sm mt-0.5">Stripe resta solo per i pagamenti clienti verso i ristoratori.</p>
               </div>
               <div className="flex items-center gap-2">
-                {adminSubTab === 'abbonamenti' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 rounded-lg h-9"
-                    onClick={() => setShowBonusDialog(true)}
-                  >
-                    <Gift size={15} className="mr-1.5" />
-                    Assegna Bonus
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10 rounded-lg h-9"
+                  onClick={() => setShowBonusDialog(true)}
+                >
+                  <Gift size={15} className="mr-1.5" />
+                  Assegna Bonus
+                </Button>
               </div>
             </div>
 
-            {/* Sub-Tab Navigation */}
-            <div className="flex items-center gap-1 bg-zinc-900/50 p-1 rounded-xl border border-white/5 w-fit">
-              <button
-                onClick={() => setAdminSubTab('abbonamenti')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  adminSubTab === 'abbonamenti'
-                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
-                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <CreditCard size={16} weight={adminSubTab === 'abbonamenti' ? 'fill' : 'regular'} />
-                Abbonamenti
-              </button>
-              <button
-                onClick={() => setAdminSubTab('fatturazione')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  adminSubTab === 'fatturazione'
-                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
-                    : 'text-zinc-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Receipt size={16} weight={adminSubTab === 'fatturazione' ? 'fill' : 'regular'} />
-                Fatturazione
-              </button>
-            </div>
-
-            {/* ==================== FATTURAZIONE TAB ==================== */}
-            {adminSubTab === 'fatturazione' && (
-              <div className="space-y-6">
-                {/* Summary Stats */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/10 shadow-lg shadow-emerald-500/[0.03]">
-                    <div className="flex items-center gap-2 mb-2">
-                      <CheckCircle size={18} className="text-emerald-500" weight="fill" />
-                      <p className="text-xs text-emerald-500/80 font-semibold uppercase tracking-wider">Totale Incassato</p>
-                    </div>
-                    <p className="text-3xl font-bold text-emerald-400">{'\u20AC'}{fatturazioneStats.totaleIncassato.toFixed(2)}</p>
-                  </div>
-                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-amber-500/10 shadow-lg shadow-amber-500/[0.03]">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Clock size={18} className="text-amber-500" weight="fill" />
-                      <p className="text-xs text-amber-500/80 font-semibold uppercase tracking-wider">In Sospeso</p>
-                    </div>
-                    <p className="text-3xl font-bold text-amber-400">{fatturazioneStats.pagamentiInSospeso}</p>
-                  </div>
-                  <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Receipt size={18} className="text-zinc-400" weight="fill" />
-                      <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider">Fatture Emesse</p>
-                    </div>
-                    <p className="text-3xl font-bold text-white">{fatturazioneStats.fattureEmesse}</p>
-                  </div>
-                </div>
-
-                {/* Filters Bar */}
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-white/5">
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Funnel size={16} className="text-zinc-500" />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 flex-1">
-                    <div className="relative w-full md:w-56">
-                      <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                      <Input
-                        placeholder="Cerca ristorante..."
-                        value={fatturazioneSearch}
-                        onChange={(e) => setFatturazioneSearch(e.target.value)}
-                        className="h-10 pl-9 bg-black/40 border-white/5 text-sm rounded-xl"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {(['all', 'paid', 'failed'] as const).map(status => (
-                        <button
-                          key={status}
-                          onClick={() => setFatturazioneStatus(status)}
-                          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                            fatturazioneStatus === status
-                              ? status === 'paid' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-md shadow-emerald-500/5'
-                              : status === 'failed' ? 'bg-red-500/15 text-red-400 border border-red-500/20 shadow-md shadow-red-500/5'
-                              : 'bg-white text-black shadow-md'
-                              : 'text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent'
-                          }`}
-                        >
-                          {status === 'all' && 'Tutti'}
-                          {status === 'paid' && 'Pagati'}
-                          {status === 'failed' && 'Falliti'}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CalendarBlank size={16} className="text-zinc-500 shrink-0" />
-                      <input
-                        type="date"
-                        value={fatturazioneDateFrom}
-                        onChange={(e) => setFatturazioneDateFrom(e.target.value)}
-                        className="h-10 px-3 rounded-xl bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
-                        title="Data da"
-                      />
-                      <span className="text-zinc-600">→</span>
-                      <input
-                        type="date"
-                        value={fatturazioneDateTo}
-                        onChange={(e) => setFatturazioneDateTo(e.target.value)}
-                        className="h-10 px-3 rounded-xl bg-black/40 border border-white/5 text-sm text-zinc-300 outline-none focus:border-amber-500/30"
-                        title="Data a"
-                      />
-                    </div>
-                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
-                      <button
-                        onClick={() => {
-                          setFatturazioneSearch('')
-                          setFatturazioneStatus('all')
-                          setFatturazioneDateFrom('')
-                          setFatturazioneDateTo('')
-                        }}
-                        className="flex items-center gap-1 px-3 py-2 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-all"
-                      >
-                        <XCircle size={16} />
-                        Cancella
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Results count + sort */}
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-zinc-500">
-                    {filteredFatturazionePayments.length} {filteredFatturazionePayments.length === 1 ? 'risultato' : 'risultati'}
-                    {(fatturazioneSearch || fatturazioneStatus !== 'all' || fatturazioneDateFrom || fatturazioneDateTo) && (
-                      <span> su {(subscriptionPayments || []).length} totali</span>
-                    )}
+            <div className="rounded-2xl bg-zinc-900/70 border border-white/10 p-6">
+              <div className="flex items-start gap-3">
+                <CheckCircle size={22} weight="fill" className="text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Abbonamenti Stripe MINTHI disattivati</h3>
+                  <p className="text-sm text-zinc-400 mt-1 leading-relaxed">
+                    La piattaforma non genera piu checkout, coupon o portali di fatturazione per incassare da MINTHI.
+                    I ristoratori collegano solo il proprio Stripe Connect per ricevere pagamenti dai clienti.
                   </p>
-                  <div className="flex items-center gap-1">
-                    {(['date', 'amount', 'restaurant'] as const).map(field => (
-                      <button
-                        key={field}
-                        onClick={() => { setFatturazioneSortField(field); setFatturazioneSortDir(prev => fatturazioneSortField === field ? (prev === 'asc' ? 'desc' : 'asc') : field === 'restaurant' ? 'asc' : 'desc') }}
-                        className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                          fatturazioneSortField === field ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'
-                        }`}
-                      >
-                        {field === 'date' && 'Data'}
-                        {field === 'amount' && 'Importo'}
-                        {field === 'restaurant' && 'Nome'}
-                        {fatturazioneSortField === field && (fatturazioneSortDir === 'asc' ? <CaretUp size={12} /> : <CaretDown size={12} />)}
-                      </button>
-                    ))}
-                  </div>
                 </div>
-
-                {/* Payments List (card-based) */}
-                <div className="space-y-2">
-                  {filteredFatturazionePayments.length === 0 ? (
-                    <div className="text-center py-16 rounded-2xl bg-zinc-900/30 border border-white/5">
-                      <Receipt size={40} className="mx-auto mb-4 text-zinc-700" />
-                      <p className="text-base text-zinc-500">Nessun pagamento trovato</p>
-                      <p className="text-sm text-zinc-600 mt-1">Prova a modificare i filtri</p>
-                    </div>
-                  ) : (
-                    filteredFatturazionePayments.map(payment => {
-                      const restaurant = (restaurants || []).find(r => r.id === payment.restaurant_id)
-                      const isCompleted = payment.admin_completed
-                      return (
-                        <div key={payment.id} className={`group p-4 rounded-2xl border transition-all hover:shadow-lg ${
-                          isCompleted ? 'bg-zinc-900/30 border-white/3 opacity-70'
-                          : payment.status === 'paid' ? 'bg-zinc-900/60 border-emerald-500/10 hover:border-emerald-500/20 hover:shadow-emerald-500/[0.03]'
-                          : payment.status === 'failed' ? 'bg-zinc-900/60 border-red-500/10 hover:border-red-500/20 hover:shadow-red-500/[0.03]'
-                          : 'bg-zinc-900/60 border-white/5 hover:border-white/10'
-                        }`}>
-                          <div className="flex items-center gap-4">
-                            {/* Restaurant */}
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              {restaurant?.logo_url ? (
-                                <img src={restaurant.logo_url} alt="" className="w-10 h-10 rounded-xl object-cover border border-white/10 shrink-0" />
-                              ) : (
-                                <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
-                                  <Buildings size={16} className="text-zinc-600" />
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <p className="text-base font-semibold text-white truncate">{restaurant?.name || 'Sconosciuto'}</p>
-                                <p className="text-sm text-zinc-500">
-                                  {payment.created_at ? new Date(payment.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' }) : '-'}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Amount */}
-                            <div className="text-right shrink-0">
-                              <p className={`text-xl font-bold ${
-                                payment.status === 'paid' ? 'text-emerald-400' : payment.status === 'failed' ? 'text-red-400' : 'text-zinc-400'
-                              }`}>
-                                {'\u20AC'}{payment.amount.toFixed(2)}
-                              </p>
-                            </div>
-
-                            {/* Status */}
-                            <div className="shrink-0">
-                              <Badge
-                                variant="outline"
-                                className={`text-xs font-semibold border px-3 py-1 rounded-xl ${
-                                  isCompleted
-                                    ? 'border-blue-500/20 bg-blue-500/10 text-blue-400'
-                                    : payment.status === 'paid'
-                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
-                                    : payment.status === 'failed'
-                                    ? 'border-red-500/20 bg-red-500/10 text-red-400'
-                                    : payment.status === 'pending'
-                                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
-                                    : 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400'
-                                }`}
-                              >
-                                {isCompleted ? 'Completata' : payment.status === 'paid' ? 'Pagato' : payment.status === 'failed' ? 'Fallito' : payment.status === 'pending' ? 'In sospeso' : 'Rimborsato'}
-                              </Badge>
-                            </div>
-
-                            {/* Actions */}
-                            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {payment.status === 'paid' && !isCompleted && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-9 px-3 text-blue-400 hover:bg-blue-500/10 rounded-xl text-xs font-medium"
-                                  onClick={async () => {
-                                    try {
-                                      const userId = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
-                                      await supabase.functions.invoke('secure-admin-action', {
-                                        body: { userId, action: 'toggle_payment_status', targetId: payment.id, data: { admin_completed: true } }
-                                      })
-                                      setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: true } : p))
-                                      toast.success('Fattura completata')
-                                    } catch { toast.error('Errore') }
-                                  }}
-                                  title="Segna come completata"
-                                >
-                                  <CheckCircle size={16} className="mr-1" /> Completa
-                                </Button>
-                              )}
-                              {isCompleted && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-9 px-3 text-zinc-500 hover:bg-zinc-800 rounded-xl text-xs"
-                                  onClick={async () => {
-                                    try {
-                                      const userId = JSON.parse(localStorage.getItem('minthi_user') || '{}').id
-                                      await supabase.functions.invoke('secure-admin-action', {
-                                        body: { userId, action: 'toggle_payment_status', targetId: payment.id, data: { admin_completed: false } }
-                                      })
-                                      setSubscriptionPayments((prev: SubscriptionPayment[]) => prev.map(p => p.id === payment.id ? { ...p, admin_completed: false } : p))
-                                      toast.success('Fattura riaperta')
-                                    } catch { toast.error('Errore') }
-                                  }}
-                                >
-                                  Riapri
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Invoice ID row */}
-                          {payment.stripe_invoice_id && (
-                            <p className="text-[11px] font-mono text-zinc-600 mt-2 ml-[52px] truncate">
-                              {payment.stripe_invoice_id}
-                            </p>
-                          )}
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-
-                {/* Summary Footer */}
-                {filteredFatturazionePayments.length > 0 && (
-                  <div className="flex items-center justify-between p-5 rounded-2xl bg-zinc-900/50 border border-white/5">
-                    <div>
-                      <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1">Totale filtrato</p>
-                      <p className="text-2xl font-bold text-white">
-                        {'\u20AC'}{filteredFatturazionePayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-emerald-400 font-medium">{filteredFatturazionePayments.filter(p => p.status === 'paid').length} pagati</span>
-                      {filteredFatturazionePayments.filter(p => p.status === 'failed').length > 0 && (
-                        <span className="text-red-400 font-medium">{filteredFatturazionePayments.filter(p => p.status === 'failed').length} falliti</span>
-                      )}
-                      <span className="text-zinc-500">{filteredFatturazionePayments.length} totali</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ==================== ABBONAMENTI TAB ==================== */}
-            {adminSubTab === 'abbonamenti' && <>
-            {/* Stats Overview */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
-                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-2">Totale</p>
-                <p className="text-3xl font-bold text-white">{restaurants?.length || 0}</p>
-              </div>
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-emerald-500/10 shadow-lg shadow-emerald-500/[0.03]">
-                <p className="text-xs text-emerald-500/80 font-semibold uppercase tracking-wider mb-2">Abbonati</p>
-                <p className="text-3xl font-bold text-emerald-400">{restaurants?.filter(r => r.stripe_subscription_id).length || 0}</p>
-              </div>
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-amber-500/10 shadow-lg shadow-amber-500/[0.03]">
-                <p className="text-xs text-amber-500/80 font-semibold uppercase tracking-wider mb-2">Non abbonati</p>
-                <p className="text-3xl font-bold text-amber-400">{restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0}</p>
-              </div>
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-red-500/10 shadow-lg shadow-red-500/[0.03]">
-                <p className="text-xs text-red-500/80 font-semibold uppercase tracking-wider mb-2">Sospesi</p>
-                <p className="text-3xl font-bold text-red-400">{restaurants?.filter(r => !r.isActive).length || 0}</p>
-              </div>
-              <div className="p-5 rounded-2xl bg-zinc-900/80 border border-white/5 shadow-lg shadow-black/20">
-                <p className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-2">Incassato</p>
-                <p className="text-3xl font-bold text-white">€{subscriptionPayments.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0).toFixed(0)}</p>
               </div>
             </div>
-
-            {/* Gestione Prezzo Abbonamento */}
-            <div className="rounded-2xl bg-zinc-900/50 border border-white/5 overflow-hidden">
-              <div className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <CreditCard size={18} className="text-amber-400" weight="duotone" />
-                    <span className="text-sm font-semibold text-white">Prezzo Abbonamento</span>
-                  </div>
-                  {stripePriceAmount > 0 && (
-                    <span className="text-2xl font-bold text-white">
-                      €{stripePriceAmount.toFixed(0)}<span className="text-sm font-normal text-zinc-500">/mese</span>
-                    </span>
-                  )}
-                  {loadingPriceDetails && <span className="text-xs text-zinc-500">Caricamento...</span>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      placeholder={stripePriceAmount > 0 ? String(stripePriceAmount) : 'Nuovo importo...'}
-                      value={newPriceInput}
-                      onChange={(e) => setNewPriceInput(e.target.value)}
-                      className="h-10 pl-7 bg-black/40 border-white/5 text-sm"
-                    />
-                  </div>
-                  <Button
-                    disabled={!newPriceInput || updatingPrice}
-                    className="h-10 px-4 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded-xl shrink-0"
-                    onClick={async () => {
-                      const cents = Math.round(parseFloat(newPriceInput) * 100)
-                      if (!cents || cents <= 0) return toast.error('Importo non valido')
-                      setUpdatingPrice(true)
-                      try {
-                        const result = await DatabaseService.createStripePrice(cents)
-                        setStripePriceAmount(result.amount)
-                        setStripePriceId(result.priceId)
-                        setStripePriceIdSaved(result.priceId)
-                        setNewPriceInput('')
-                        toast.success(`Prezzo aggiornato a €${result.amount}/mese`)
-                      } catch (e: any) { toast.error(e.message) }
-                      finally { setUpdatingPrice(false) }
-                    }}
-                  >
-                    {updatingPrice ? 'Aggiornamento...' : 'Aggiorna'}
-                  </Button>
-                </div>
-                {stripePriceIdSaved && (
-                  <p className="text-[10px] text-zinc-600 mt-2 font-mono truncate">{stripePriceIdSaved}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Filters */}
-            <div className="flex items-center gap-1.5">
-              {(['all', 'paying', 'not_paying', 'suspended'] as const).map(filter => {
-                const count = filter === 'all' ? (restaurants?.length || 0)
-                  : filter === 'paying' ? (restaurants?.filter(r => r.stripe_subscription_id).length || 0)
-                  : filter === 'not_paying' ? (restaurants?.filter(r => !r.stripe_subscription_id && r.isActive).length || 0)
-                  : (restaurants?.filter(r => !r.isActive).length || 0)
-                return (
-                  <button
-                    key={filter}
-                    onClick={() => setAdminFilter(filter)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${adminFilter === filter
-                      ? 'bg-white text-black'
-                      : 'text-zinc-400 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {filter === 'all' && 'Tutti'}
-                    {filter === 'paying' && 'Abbonati'}
-                    {filter === 'not_paying' && 'Non abbonati'}
-                    {filter === 'suspended' && 'Sospesi'}
-                    <span className={`ml-1.5 ${adminFilter === filter ? 'text-black/50' : 'text-zinc-600'}`}>{count}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Restaurant List */}
-            <div className="space-y-2">
-              {(restaurants || [])
-                .filter(r => {
-                  if (adminFilter === 'paying') return r.stripe_subscription_id
-                  if (adminFilter === 'not_paying') return !r.stripe_subscription_id && r.isActive
-                  if (adminFilter === 'suspended') return !r.isActive
-                  return true
-                })
-                .map(restaurant => {
-                  const payments = subscriptionPayments.filter(p => p.restaurant_id === restaurant.id)
-                  const bonuses = restaurantBonuses.filter(b => b.restaurant_id === restaurant.id && b.is_active)
-                  const lastPayment = payments.find(p => p.status === 'paid')
-                  const activeBonus = bonuses.find(b => b.expires_at && new Date(b.expires_at) > new Date())
-                  const hasSubscription = !!restaurant.stripe_subscription_id
-                  const status = !restaurant.isActive ? 'suspended'
-                    : restaurant.subscription_status === 'past_due' ? 'past_due'
-                    : hasSubscription ? 'active'
-                    : activeBonus ? 'bonus'
-                    : 'none'
-
-                  return (
-                    <div key={restaurant.id} className={`group p-4 rounded-xl border transition-all hover:bg-white/[0.02] ${
-                      status === 'suspended' ? 'bg-red-950/5 border-red-500/10'
-                      : status === 'active' ? 'bg-zinc-900/50 border-emerald-500/10'
-                      : status === 'past_due' ? 'bg-zinc-900/50 border-amber-500/15'
-                      : 'bg-zinc-900/50 border-white/5'
-                    }`}>
-                      <div className="flex items-center gap-3">
-                        {/* Logo */}
-                        {restaurant.logo_url ? (
-                          <img src={restaurant.logo_url} alt="" className="w-9 h-9 rounded-lg object-cover border border-white/10 shrink-0" />
-                        ) : (
-                          <div className="w-9 h-9 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5 shrink-0">
-                            <Buildings size={16} className="text-zinc-600" />
-                          </div>
-                        )}
-
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-sm text-white truncate">{restaurant.name}</h3>
-                            {/* Status indicator */}
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
-                              status === 'active' ? 'bg-emerald-500/10 text-emerald-400'
-                              : status === 'past_due' ? 'bg-amber-500/10 text-amber-400'
-                              : status === 'suspended' ? 'bg-red-500/10 text-red-400'
-                              : status === 'bonus' ? 'bg-purple-500/10 text-purple-400'
-                              : 'bg-zinc-800 text-zinc-500'
-                            }`}>
-                              {status === 'active' && <><span className="w-1 h-1 rounded-full bg-emerald-400" />Attivo</>}
-                              {status === 'past_due' && 'Pagamento fallito'}
-                              {status === 'suspended' && 'Sospeso'}
-                              {status === 'bonus' && 'Bonus'}
-                              {status === 'none' && 'Nessun piano'}
-                            </span>
-                            {restaurant.enable_stripe_payments && (
-                              <span className="text-[10px] text-blue-400/60 font-medium">Connect</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 mt-0.5 text-[11px] text-zinc-500">
-                            {lastPayment && (
-                              <span>Ultimo: €{lastPayment.amount} il {new Date(lastPayment.created_at || '').toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
-                            )}
-                            {activeBonus && (
-                              <span className="text-purple-400/70">{activeBonus.free_months}m gratis fino {new Date(activeBonus.expires_at || '').toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
-                            )}
-                            {restaurant.suspension_reason && (
-                              <span className="text-red-400/70">{restaurant.suspension_reason}</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Payment history pills */}
-                        {payments.length > 0 && (
-                          <div className="hidden md:flex items-center gap-1 shrink-0">
-                            {payments.slice(0, 4).map(p => (
-                              <div
-                                key={p.id}
-                                title={`€${p.amount} — ${new Date(p.created_at || '').toLocaleDateString('it-IT')} — ${p.status === 'paid' ? 'Pagato' : 'Fallito'}`}
-                                className={`w-2 h-2 rounded-full ${p.status === 'paid' ? 'bg-emerald-500' : 'bg-red-500'}`}
-                              />
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-1 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-purple-400 hover:bg-purple-500/10 rounded-lg"
-                            onClick={() => {
-                              setBonusRestaurantId(restaurant.id)
-                              setBonusMonths(1)
-                              setBonusReason('')
-                              setShowBonusDialog(true)
-                            }}
-                            title="Assegna Bonus"
-                          >
-                            <Gift size={15} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-amber-400 hover:bg-amber-500/10 rounded-lg"
-                            onClick={() => {
-                              setDiscountRestaurantId(restaurant.id)
-                              setDiscountPercent('')
-                              setDiscountDuration('once')
-                              setDiscountDurationMonths(1)
-                              setDiscountReason('')
-                              setShowDiscountDialog(true)
-                            }}
-                            title="Assegna Sconto"
-                          >
-                            <CreditCard size={15} />
-                          </Button>
-                          {activeBonus && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
-                              onClick={async () => {
-                                if (confirm(`Revocare il bonus per ${restaurant.name}?`)) {
-                                  try {
-                                    await DatabaseService.deactivateBonus(activeBonus.id)
-                                    toast.success('Bonus revocato')
-                                    refreshRestaurants()
-                                    DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
-                                  } catch (e: any) { toast.error(e.message) }
-                                }
-                              }}
-                              title="Revoca Bonus"
-                            >
-                              <Trash size={14} />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-
-              {/* Empty state */}
-              {(restaurants || []).filter(r => {
-                if (adminFilter === 'paying') return r.stripe_subscription_id
-                if (adminFilter === 'not_paying') return !r.stripe_subscription_id && r.isActive
-                if (adminFilter === 'suspended') return !r.isActive
-                return true
-              }).length === 0 && (
-                <div className="text-center py-12 text-zinc-500 text-sm">
-                  Nessun ristorante trovato per questo filtro.
-                </div>
-              )}
-            </div>
-            </>}
-
-            {/* Discount Dialog */}
-            <Dialog open={showDiscountDialog} onOpenChange={setShowDiscountDialog}>
-              <DialogContent className="max-w-sm bg-zinc-950 border-white/10 text-white">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-base"><CreditCard size={18} className="text-amber-400" weight="duotone" /> Assegna Sconto</DialogTitle>
-                  <DialogDescription className="text-zinc-500 text-sm">Applica uno sconto Stripe all'abbonamento del ristorante.</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Ristorante</Label>
-                    <Select value={discountRestaurantId} onValueChange={setDiscountRestaurantId}>
-                      <SelectTrigger className="h-10"><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                      <SelectContent>
-                        {(restaurants || []).filter(r => r.stripe_subscription_id).map(r => (
-                          <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Sconto (%)</Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        min={1}
-                        max={100}
-                        placeholder="Es. 50"
-                        value={discountPercent}
-                        onChange={(e) => setDiscountPercent(e.target.value === '' ? '' : Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
-                        className="h-10 pr-8"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">%</span>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Durata sconto</Label>
-                    <Select value={discountDuration} onValueChange={setDiscountDuration}>
-                      <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="once">1 mese (una volta)</SelectItem>
-                        <SelectItem value="2">2 mesi</SelectItem>
-                        <SelectItem value="3">3 mesi</SelectItem>
-                        <SelectItem value="6">6 mesi</SelectItem>
-                        <SelectItem value="12">1 anno</SelectItem>
-                        <SelectItem value="forever">Per sempre</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-zinc-400">Motivo (opzionale)</Label>
-                    <Input placeholder="Es. Offerta lancio..." value={discountReason} onChange={(e) => setDiscountReason(e.target.value)} className="h-10" />
-                  </div>
-                  {discountPercent && stripePriceAmount > 0 && (
-                    <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 text-xs text-amber-300">
-                      Il ristorante pagherà <span className="font-bold">€{(stripePriceAmount * (1 - Number(discountPercent) / 100)).toFixed(2)}/mese</span> invece di €{stripePriceAmount.toFixed(2)}/mese
-                      {discountDuration !== 'forever' && <span className="text-zinc-500"> per {discountDuration === 'once' ? '1 mese' : `${discountDuration} mesi`}</span>}
-                    </div>
-                  )}
-                  <Button
-                    className="w-full h-11 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl"
-                    disabled={!discountRestaurantId || !discountPercent || applyingDiscount}
-                    onClick={async () => {
-                      setApplyingDiscount(true)
-                      try {
-                        const months = discountDuration === 'once' ? 1 : discountDuration === 'forever' ? undefined : parseInt(discountDuration)
-                        await DatabaseService.applyRestaurantDiscount({
-                          restaurantId: discountRestaurantId,
-                          discountPercent: Number(discountPercent),
-                          discountDuration: discountDuration === 'once' ? 'once' : discountDuration === 'forever' ? 'forever' : 'repeating',
-                          discountDurationMonths: months,
-                          reason: discountReason || undefined,
-                          grantedBy: user.name || user.email,
-                        })
-                        toast.success(`Sconto ${discountPercent}% applicato!`)
-                        setShowDiscountDialog(false)
-                      } catch (e: any) { toast.error('Errore: ' + e.message) }
-                      finally { setApplyingDiscount(false) }
-                    }}
-                  >
-                    {applyingDiscount ? 'Applicazione...' : `Applica ${discountPercent || '—'}% di sconto`}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-
             {/* Bonus Dialog */}
             <Dialog open={showBonusDialog} onOpenChange={setShowBonusDialog}>
               <DialogContent className="max-w-sm bg-zinc-950 border-white/10 text-white">
@@ -1321,7 +584,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         toast.success(`Bonus di ${bonusMonths} mesi assegnato!`)
                         setShowBonusDialog(false)
                         refreshRestaurants()
-                        DatabaseService.getRestaurantBonuses().then(setRestaurantBonuses).catch(console.error)
                       } catch (e: any) {
                         toast.error('Errore: ' + e.message)
                       }
@@ -1350,9 +612,6 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                     setGeneratedLink('')
                     setInviteFreeMonths(false)
                     setInviteMonthsCount(1)
-                    setInviteDiscountPercent('')
-                    setInviteDiscountDuration('once')
-                    setInviteDiscountDurationMonths(1)
                     setShowInviteDialog(true)
                   }}
                 >
@@ -1528,58 +787,13 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                         </div>
                       </div>
 
-                      {/* Sconto */}
-                      <div className="space-y-2">
-                        <Label className="text-xs text-zinc-400">Sconto (%)</Label>
-                        <div className="relative">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            placeholder="0 = nessuno sconto"
-                            value={inviteDiscountPercent}
-                            onChange={(e) => setInviteDiscountPercent(e.target.value === '' ? '' : Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
-                            className="h-9 pr-8 bg-zinc-900 border-white/10"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">%</span>
-                        </div>
-                      </div>
-
-                      {/* Durata sconto (visibile solo se sconto > 0) */}
-                      {Number(inviteDiscountPercent) > 0 && (
-                        <div className="space-y-2">
-                          <Label className="text-xs text-zinc-400">Durata sconto</Label>
-                          <Select value={inviteDiscountDuration} onValueChange={setInviteDiscountDuration}>
-                            <SelectTrigger className="h-9 bg-zinc-900 border-white/10"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="once">1 mese (una volta)</SelectItem>
-                              <SelectItem value="2">2 mesi</SelectItem>
-                              <SelectItem value="3">3 mesi</SelectItem>
-                              <SelectItem value="6">6 mesi</SelectItem>
-                              <SelectItem value="12">1 anno</SelectItem>
-                              <SelectItem value="forever">Per sempre</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-
                       {/* Preview offerta */}
-                      {(inviteFreeMonths || Number(inviteDiscountPercent) > 0) && (
+                      {inviteFreeMonths && (
                         <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-1">
-                          {inviteFreeMonths && (
-                            <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-                              <CheckCircle size={13} weight="fill" />
-                              {inviteMonthsCount} {inviteMonthsCount === 1 ? 'mese' : 'mesi'} gratis
-                            </p>
-                          )}
-                          {Number(inviteDiscountPercent) > 0 && (
-                            <p className="text-xs text-amber-400 flex items-center gap-1.5">
-                              <CheckCircle size={13} weight="fill" />
-                              {inviteDiscountPercent}% di sconto
-                              {inviteDiscountDuration === 'forever' ? ' per sempre' : inviteDiscountDuration === 'once' ? ' per 1 mese' : ` per ${inviteDiscountDuration} mesi`}
-                              {stripePriceAmount > 0 && ` → €${(stripePriceAmount * (1 - Number(inviteDiscountPercent) / 100)).toFixed(2)}/mese`}
-                            </p>
-                          )}
+                          <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+                            <CheckCircle size={13} weight="fill" />
+                            {inviteMonthsCount} {inviteMonthsCount === 1 ? 'mese' : 'mesi'} gratis
+                          </p>
                         </div>
                       )}
 
@@ -1617,10 +831,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                             setGeneratingLink(true)
                             try {
                               const freeMonths = inviteFreeMonths ? inviteMonthsCount : 0
-                              const discountPct = Number(inviteDiscountPercent) || 0
-                              const dur = inviteDiscountDuration
-                              const durMonths = dur === 'once' ? 1 : dur === 'forever' ? undefined : parseInt(dur)
-                              const { token } = await DatabaseService.createRegistrationToken(freeMonths, discountPct, dur === 'once' ? 'once' : dur === 'forever' ? 'forever' : 'repeating', durMonths)
+                              const { token } = await DatabaseService.createRegistrationToken(freeMonths)
                               const link = `${window.location.origin}/register/${token}`
                               setGeneratedLink(link)
                               if (navigator.clipboard && window.isSecureContext) {
@@ -1867,29 +1078,25 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 </div>
               )}
 
-              {/* Stripe Info */}
-              {(detailRestaurant.stripe_subscription_id || detailRestaurant.stripe_customer_id) && (
+              {/* Stripe Connect Info */}
+              {(detailRestaurant.stripe_connect_account_id || detailRestaurant.enable_stripe_payments) && (
                 <div className="p-4 rounded-xl bg-zinc-900/80 border border-white/5 space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Stripe</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Stripe Connect ristoratore</p>
                   <div className="space-y-1 text-xs">
-                    {detailRestaurant.stripe_customer_id && (
+                    {detailRestaurant.stripe_connect_account_id && (
                       <div className="flex items-center gap-2">
-                        <span className="text-zinc-500">Customer:</span>
-                        <span className="text-zinc-300 font-mono truncate">{detailRestaurant.stripe_customer_id}</span>
+                        <span className="text-zinc-500">Account:</span>
+                        <span className="text-zinc-300 font-mono truncate">{detailRestaurant.stripe_connect_account_id}</span>
                       </div>
                     )}
-                    {detailRestaurant.stripe_subscription_id && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-zinc-500">Subscription:</span>
-                        <span className="text-zinc-300 font-mono truncate">{detailRestaurant.stripe_subscription_id}</span>
-                      </div>
-                    )}
-                    {detailRestaurant.subscription_status && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-zinc-500">Stato:</span>
-                        <span className="text-zinc-300 capitalize">{detailRestaurant.subscription_status === 'trialing' ? 'active' : detailRestaurant.subscription_status}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-500">Pagamenti online:</span>
+                      <span className="text-zinc-300">{detailRestaurant.enable_stripe_payments ? 'abilitati' : 'disabilitati'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-zinc-500">Stato Connect:</span>
+                      <span className="text-zinc-300">{detailRestaurant.stripe_connect_enabled ? 'pronto' : 'da completare'}</span>
+                    </div>
                   </div>
                 </div>
               )}

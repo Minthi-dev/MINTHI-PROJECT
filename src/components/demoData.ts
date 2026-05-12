@@ -334,8 +334,8 @@ export const DEMO_TOUR_STEPS: DemoGuideStep[] = [
     id: 'settings-payments',
     tab: 'settings',
     subTab: 'subscription',
-    title: '💳 Pagamenti e Abbonamento',
-    description: 'Due sezioni: 1) Pagamenti Clienti — Collega il tuo conto Stripe con Stripe Connect, i clienti potranno pagare online direttamente dal tavolo. I soldi vanno sul tuo conto bancario. 2) Abbonamento Minthi — Gestisci il tuo piano, scarica fatture, cambia metodo di pagamento.',
+    title: '💳 Pagamenti clienti',
+    description: 'Collega il conto Stripe del ristoratore con Stripe Connect: i clienti possono pagare online direttamente dal tavolo e i soldi vanno sul conto bancario del ristorante.',
   },
 
   // FINE

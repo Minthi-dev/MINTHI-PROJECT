@@ -144,7 +144,6 @@ function FloatingBadge({ children, className = '', delay = 0 }: {
 export default function LandingPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [price, setPrice] = useState<number | null>(null)
   const heroRef = useRef(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] })
   const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
@@ -153,37 +152,24 @@ export default function LandingPage() {
 
   // Global promo from app_config (used when no URL params)
   const [globalBonus, setGlobalBonus] = useState(0)
-  const [globalDiscount, setGlobalDiscount] = useState(0)
   const [globalToken, setGlobalToken] = useState('')
 
   // URL params from admin registration link — fall back to global settings
   const bonusMonths = parseInt(searchParams.get('bonus') || '0') || globalBonus
-  const discountPercent = parseInt(searchParams.get('discount') || '0') || globalDiscount
   const token = searchParams.get('token') || globalToken
 
   useEffect(() => {
-    DatabaseService.getStripePriceDetails()
-      .then(d => setPrice(d.amount)) // amount already in EUR (not cents)
-      .catch(() => setPrice(null))
-
     // Fetch global promo settings if no URL params
-    if (!searchParams.get('bonus') && !searchParams.get('discount')) {
+    if (!searchParams.get('bonus')) {
       Promise.all([
         DatabaseService.getAppConfig('landing_bonus_months'),
-        DatabaseService.getAppConfig('landing_discount_percent'),
         DatabaseService.getAppConfig('landing_token'),
-      ]).then(([b, d, t]) => {
+      ]).then(([b, t]) => {
         if (b) setGlobalBonus(parseInt(b) || 0)
-        if (d) setGlobalDiscount(parseInt(d) || 0)
         if (t) setGlobalToken(t)
       }).catch(() => {})
     }
   }, [])
-
-  const displayPrice = price !== null ? (Number.isInteger(price) ? String(price) : price.toFixed(2)) : null
-  const discountedPrice = price !== null && discountPercent > 0
-    ? (price * (1 - discountPercent / 100)).toFixed(2)
-    : null
 
   // CTA click — always go to registration page
   const handleCTA = () => {
@@ -372,14 +358,12 @@ export default function LandingPage() {
 
         <motion.div style={{ opacity: heroOpacity, scale: heroScale, y: heroY }} className="relative text-center max-w-4xl mx-auto">
           {/* Promo badge */}
-          {(bonusMonths > 0 || discountPercent > 0) && (
+          {bonusMonths > 0 && (
             <FloatingBadge delay={0} className="mb-8">
               <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 backdrop-blur-md">
                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
                 <span className="text-amber-300 text-sm font-medium">
-                  {bonusMonths > 0 && `${bonusMonths} ${bonusMonths === 1 ? 'mese' : 'mesi'} gratis`}
-                  {bonusMonths > 0 && discountPercent > 0 && ' + '}
-                  {discountPercent > 0 && `${discountPercent}% di sconto`}
+                  {bonusMonths} {bonusMonths === 1 ? 'mese' : 'mesi'} gratis
                 </span>
               </div>
             </FloatingBadge>
@@ -678,7 +662,7 @@ export default function LandingPage() {
                   <p className="text-amber-500 text-sm font-medium tracking-wider uppercase mb-6">MINTHI Pro</p>
 
                   {/* Promo badge */}
-                  {(bonusMonths > 0 || discountPercent > 0) && (
+                  {bonusMonths > 0 && (
                     <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       <span className="text-emerald-300 text-sm font-medium">
@@ -687,21 +671,10 @@ export default function LandingPage() {
                     </div>
                   )}
 
-                  {/* Price */}
-                  <div className="flex items-baseline justify-center gap-1 mb-2">
-                    {discountedPrice ? (
-                      <>
-                        <span className="text-3xl text-zinc-500 line-through font-light mr-2">€{displayPrice}</span>
-                        <span className="text-6xl md:text-7xl font-extralight text-white">€{discountedPrice}</span>
-                      </>
-                    ) : (
-                      <span className="text-6xl md:text-7xl font-extralight text-white">
-                        {displayPrice !== null ? `€${displayPrice}` : '...'}
-                      </span>
-                    )}
-                    <span className="text-zinc-500 text-lg font-light">/mese</span>
+                  <div className="mb-6">
+                    <p className="text-4xl md:text-5xl font-extralight text-white leading-tight">Accesso ristoratori</p>
+                    <p className="text-zinc-500 text-sm mt-3">Nessun pagamento a MINTHI in Stripe.</p>
                   </div>
-                  <p className="text-zinc-500 text-sm mb-2">IVA esclusa</p>
                   {bonusMonths > 0 && (
                     <p className="text-emerald-400 text-sm font-medium mb-6">
                       + {bonusMonths} {bonusMonths === 1 ? 'mese' : 'mesi'} gratis inclus{bonusMonths === 1 ? 'o' : 'i'}
@@ -740,8 +713,8 @@ export default function LandingPage() {
                     {token ? 'Registrati Gratis' : 'Inizia Ora'}
                   </button>
 
-                  <p className="text-emerald-400/80 text-xs mt-4 font-medium">Prova gratuita fino al 1° del prossimo mese. Il primo addebito avviene il 1° del mese.</p>
-                  <p className="text-zinc-600 text-xs mt-1">Disdici quando vuoi. Nessun vincolo.</p>
+                  <p className="text-emerald-400/80 text-xs mt-4 font-medium">Stripe si collega solo al conto del ristoratore per ricevere pagamenti dai clienti.</p>
+                  <p className="text-zinc-600 text-xs mt-1">MINTHI non incassa abbonamenti tramite Stripe.</p>
                 </div>
               </div>
             </div>

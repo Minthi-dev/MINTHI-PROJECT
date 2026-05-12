@@ -357,16 +357,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   // Stampa termica automatica scontrini fiscali quando OpenAPI conferma "ready"
   useFiscalReceiptAutoPrint(restaurantId, currentRestaurant?.name || 'Ristorante')
 
-  // Discount banner
-  const [activeDiscount, setActiveDiscount] = useState<any>(null)
-  useEffect(() => {
-    if (!restaurantId) return
-    DatabaseService.getRestaurantDiscounts(restaurantId).then(discounts => {
-      const active = discounts.find((d: any) => d.is_active)
-      setActiveDiscount(active || null)
-    }).catch(() => { })
-  }, [restaurantId])
-
   // First-access detection: show demo guide + setup wizard on first login
   useEffect(() => {
     if (!restaurantId) return
@@ -2313,75 +2303,6 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
               </motion.div>
             )}
           </AnimatePresence>
-          {/* Banner sconto attivo */}
-          <AnimatePresence>
-            {activeDiscount && !activeDiscount.banner_dismissed && (
-              <motion.div
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
-                className="mb-4"
-              >
-                <div className="flex items-center gap-3 p-4 bg-amber-950/40 border border-amber-500/30 rounded-2xl backdrop-blur-sm shadow-lg shadow-amber-950/20">
-                  <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
-                    <CreditCard className="text-amber-400" weight="duotone" size={20} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-amber-300 text-sm">
-                      Hai uno sconto attivo: {activeDiscount.discount_percent}%
-                      {activeDiscount.discount_duration === 'forever' ? ' per sempre'
-                        : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
-                          : ` per ${activeDiscount.discount_duration_months || activeDiscount.discount_duration} mesi`}
-                    </p>
-                    {activeDiscount.reason && (
-                      <p className="text-xs text-amber-400/60 mt-0.5">{activeDiscount.reason}</p>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      await DatabaseService.dismissDiscountBanner(activeDiscount.id).catch(() => { })
-                      setActiveDiscount((d: any) => d ? { ...d, banner_dismissed: true } : null)
-                    }}
-                    className="shrink-0 text-zinc-500 hover:text-white h-8 w-8 p-0 rounded-lg"
-                  >
-                    ✕
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Banner pagamento fallito — mostrato finché il pagamento non viene risolto */}
-          <AnimatePresence>
-            {currentRestaurant?.subscription_status === 'past_due' && (
-              <motion.div
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
-                className="mb-4"
-              >
-                <div className="flex items-center gap-3 p-4 bg-red-950/60 border border-red-500/40 rounded-2xl backdrop-blur-sm shadow-lg shadow-red-950/20">
-                  <WarningCircle className="text-red-400 shrink-0" weight="fill" size={24} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-red-300 text-sm">Pagamento abbonamento non andato a buon fine</p>
-                    <p className="text-xs text-red-400/70 mt-0.5">Aggiorna il metodo di pagamento per evitare la sospensione del servizio.</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => setActiveTab('settings')}
-                    className="shrink-0 bg-red-500 hover:bg-red-600 text-white text-xs font-bold h-8 px-4"
-                  >
-                    Risolvi
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8 animate-in fade-in-30 duration-500">
             {/* Orders Tab */}
             <TabsContent value="orders" className="space-y-6">

@@ -4,7 +4,6 @@ import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import {
-    CreditCard,
     CheckCircle, Eye, EyeSlash, Rocket, ShieldCheck,
     X
 } from '@phosphor-icons/react'
@@ -19,7 +18,6 @@ export default function RestaurantOnboarding() {
     const [loading, setLoading] = useState(true)
     const [showForm, setShowForm] = useState(false)
     const [submitting, setSubmitting] = useState(false)
-    const [priceAmount, setPriceAmount] = useState<number>(0)
     const [passwordVisible, setPasswordVisible] = useState(false)
 
     const [form, setForm] = useState({
@@ -55,10 +53,6 @@ export default function RestaurantOnboarding() {
             setLoading(false)
         }).catch(() => { setTokenError(true); setLoading(false) })
 
-        // Fetch subscription price for display
-        DatabaseService.getAppConfig('stripe_price_amount').then(val => {
-            if (val && parseFloat(val) > 0) setPriceAmount(parseFloat(val))
-        }).catch(() => {})
     }, [token])
 
     const handleSubmit = async () => {
@@ -76,40 +70,7 @@ export default function RestaurantOnboarding() {
 
         setSubmitting(true)
         try {
-            // Caso bonus (mesi gratis): crea subito utente + ristorante, nessun pagamento
-            if (tokenData.free_months > 0) {
-                await DatabaseService.registerRestaurant({
-                    name: form.name.trim(),
-                    phone: form.phone.trim(),
-                    email: form.email.trim(),
-                    username: form.username.trim(),
-                    password: form.password,
-                    freeMonths: tokenData.free_months,
-                    registrationToken: tokenData.token || null,
-                    billingName: form.billingName.trim(),
-                    vatNumber: form.vatNumber.trim(),
-                    billingAddress: form.billingAddress.trim(),
-                    billingCity: form.billingCity.trim(),
-                    billingCap: form.billingCap.trim(),
-                    billingProvince: form.billingProvince.trim(),
-                    codiceUnivoco: form.codiceUnivoco.trim(),
-                })
-                toast.success(`Registrazione completata! Hai ${tokenData.free_months} mesi gratis.`)
-                navigate('/')
-                return
-            }
-
-            // Caso senza bonus: salva dati in pending_registrations e vai su Stripe.
-            // Il ristorante viene creato NEL DB solo DOPO che Stripe conferma il pagamento.
-            const priceId = await DatabaseService.getAppConfig('stripe_price_id')
-            if (!priceId) {
-                toast.error('Errore di configurazione. Contatta il supporto.')
-                setSubmitting(false)
-                return
-            }
-
-            toast.loading('Preparazione pagamento...', { id: 'stripe' })
-            const { url } = await DatabaseService.createPendingRegistrationCheckout({
+            await DatabaseService.registerRestaurant({
                 registrationToken: tokenData.token || null,
                 name: form.name.trim(),
                 phone: form.phone.trim(),
@@ -123,13 +84,12 @@ export default function RestaurantOnboarding() {
                 billingCap: form.billingCap.trim(),
                 billingProvince: form.billingProvince.trim(),
                 codiceUnivoco: form.codiceUnivoco.trim(),
-                priceId,
-                couponId: tokenData.stripe_coupon_id || null,
+                freeMonths: tokenData.free_months || 0,
             })
-            toast.dismiss('stripe')
-            // Save username so the success page can poll for account readiness
-            sessionStorage.setItem('minthi_pending_username', form.username.trim())
-            window.location.href = url
+            toast.success(tokenData.free_months > 0
+                ? `Registrazione completata! Hai ${tokenData.free_months} mesi gratis.`
+                : 'Registrazione completata!')
+            navigate('/')
         } catch (err: any) {
             toast.dismiss('stripe')
             console.error('Registration error:', err)
@@ -203,15 +163,6 @@ export default function RestaurantOnboarding() {
                             <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium">
                                 <Rocket size={16} weight="fill" />
                                 {tokenData.free_months} {tokenData.free_months === 1 ? 'mese' : 'mesi'} gratis inclusi!
-                            </div>
-                        )}
-                        {tokenData?.discount_percent > 0 && (
-                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-400 text-sm font-medium">
-                                <CheckCircle size={16} weight="fill" />
-                                {tokenData.discount_percent}% di sconto
-                                {tokenData.discount_duration === 'forever' ? ' per sempre'
-                                    : tokenData.discount_duration === 'once' ? ' per 1 mese'
-                                        : ` per ${tokenData.discount_duration_months || 1} mesi`}
                             </div>
                         )}
                     </div>
@@ -427,27 +378,20 @@ export default function RestaurantOnboarding() {
                                         <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                                         Registrazione in corso...
                                     </>
-                                ) : tokenData?.free_months > 0 ? (
-                                    <>
-                                        <CheckCircle size={18} weight="bold" />
-                                        Registrati Gratis
-                                    </>
                                 ) : (
                                     <>
-                                        <CreditCard size={18} weight="bold" />
-                                        Registrati e Paga
+                                        <CheckCircle size={18} weight="bold" />
+                                        Completa registrazione
                                     </>
                                 )}
                             </button>
 
-                            {!tokenData?.free_months && (
-                                <div className="text-center mt-2 pb-[env(safe-area-inset-bottom)]">
-                                    <p className="text-[10px] text-emerald-400/80 font-medium">Prova gratuita fino al 1° del prossimo mese</p>
-                                    <p className="text-[10px] text-zinc-600 mt-0.5">
-                                        Verrai reindirizzato a Stripe per il pagamento dell'abbonamento.
-                                    </p>
-                                </div>
-                            )}
+                            <div className="text-center mt-2 pb-[env(safe-area-inset-bottom)]">
+                                <p className="text-[10px] text-emerald-400/80 font-medium">Nessun pagamento a MINTHI in fase di registrazione.</p>
+                                <p className="text-[10px] text-zinc-600 mt-0.5">
+                                    Stripe si configura dopo, solo se vuoi ricevere pagamenti dai clienti.
+                                </p>
+                            </div>
                         </div>
                     </motion.div>
                 </div>

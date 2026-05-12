@@ -1433,25 +1433,14 @@ export const DatabaseService = {
         if (error || data?.error) throw new Error(data?.error || error?.message || 'Errore ripristino menù completo')
     },
 
-    // Stripe - Abbonamento ristorante
+    // Stripe billing verso MINTHI disattivato: Stripe resta solo per pagamenti clienti -> ristoratore.
     async createStripeSubscriptionCheckout(restaurantId: string, priceId: string) {
-        const userId = _getCurrentUserId()
-        const { data, error } = await supabase.functions.invoke('stripe-checkout', {
-            body: {
-                userId,
-                restaurantId,
-                priceId,
-                successUrl: `${window.location.origin}/?payment=success`,
-                cancelUrl: `${window.location.origin}/?payment=cancelled`
-            }
-        });
-
-        if (error) throw new Error(data?.error || error.message || 'Errore durante il checkout');
-        return data; // { sessionId: string, url: string }
+        void restaurantId
+        void priceId
+        throw new Error('Gli abbonamenti Stripe verso MINTHI sono disattivati.')
     },
 
-    // Crea una registrazione pending e avvia il checkout Stripe.
-    // Il ristorante viene creato nel DB SOLO quando Stripe conferma il pagamento.
+    // Compatibilità con vecchi client: la registrazione non passa più da Stripe.
     async createPendingRegistrationCheckout(data: {
         registrationToken: string | null,
         name: string, phone: string, email: string,
@@ -1461,41 +1450,24 @@ export const DatabaseService = {
         priceId: string,
         couponId?: string | null,
     }) {
-        const passwordHash = await hashPassword(data.password)
-
-        // Salva i dati in pending_registrations via RPC (bypassa RLS)
-        const { data: pendingId, error: insertError } = await supabase.rpc('insert_pending_registration', {
-            p_registration_token: data.registrationToken,
-            p_name: data.name,
-            p_phone: data.phone || null,
-            p_email: data.email || null,
-            p_billing_name: data.billingName,
-            p_vat_number: data.vatNumber,
-            p_billing_address: data.billingAddress,
-            p_billing_city: data.billingCity,
-            p_billing_cap: data.billingCap,
-            p_billing_province: data.billingProvince,
-            p_codice_univoco: data.codiceUnivoco,
-            p_username: data.username,
-            p_password_hash: passwordHash,
-            p_raw_password: '',
+        void data.priceId
+        void data.couponId
+        await this.registerRestaurant({
+            name: data.name,
+            phone: data.phone,
+            email: data.email,
+            username: data.username,
+            password: data.password,
+            registrationToken: data.registrationToken || undefined,
+            billingName: data.billingName,
+            vatNumber: data.vatNumber,
+            billingAddress: data.billingAddress,
+            billingCity: data.billingCity,
+            billingCap: data.billingCap,
+            billingProvince: data.billingProvince,
+            codiceUnivoco: data.codiceUnivoco,
         })
-
-        if (insertError) throw insertError
-
-        // Crea sessione Stripe con pendingRegistrationId
-        const { data: checkout, error: checkoutError } = await supabase.functions.invoke('stripe-checkout', {
-            body: {
-                pendingRegistrationId: pendingId,
-                priceId: data.priceId,
-                successUrl: `${window.location.origin}/register-success`,
-                cancelUrl: `${window.location.origin}/register?cancelled=true`,
-                ...(data.couponId ? { couponId: data.couponId } : {}),
-            }
-        })
-
-        if (checkoutError) throw new Error(checkout?.error || checkoutError.message || 'Errore durante il checkout')
-        return checkout as { sessionId: string, url: string }
+        return { sessionId: '', url: `${window.location.origin}/` }
     },
 
     // Stripe - Pagamento cliente dal menu
@@ -1586,22 +1558,10 @@ export const DatabaseService = {
         if (data?.error) throw new Error(data.error)
     },
 
-    // Stripe - Billing Portal (gestisci abbonamento, scarica fatture, cambia metodo pagamento)
+    // Stripe Billing Portal verso MINTHI disattivato.
     async createBillingPortalSession(restaurantId: string) {
-        const userId = _getCurrentUserId()
-        if (!userId) throw new Error('Non autenticato')
-        const sessionToken = _requireCurrentSessionToken()
-        const { data, error } = await supabase.functions.invoke('stripe-billing-portal', {
-            body: {
-                userId,
-                restaurantId,
-                returnUrl: `${window.location.origin}/?section=settings`,
-                sessionToken,
-            }
-        });
-        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore portale di fatturazione'));
-        if (data?.error) throw new Error(data.error)
-        return data as { url: string };
+        void restaurantId
+        throw new Error('Il portale abbonamento Stripe MINTHI è disattivato.')
     },
 
     // Stripe Connect - Crea account Express (senza redirect, per embedded onboarding)
@@ -1675,36 +1635,21 @@ export const DatabaseService = {
         return data as { url: string };
     },
 
-    // Admin - Subscription payments
+    // Admin - pagamenti abbonamento MINTHI disattivati.
     async getSubscriptionPayments(restaurantId?: string) {
-        let query = supabase
-            .from('subscription_payments')
-            .select('*')
-            .order('created_at', { ascending: false })
-        if (restaurantId) {
-            query = query.eq('restaurant_id', restaurantId)
-        }
-        const { data, error } = await query
-        if (error) throw error
-        return data
+        void restaurantId
+        return []
     },
 
     async updateSubscriptionPayment(paymentId: string, updates: { admin_completed?: boolean }) {
-        const userId = _getCurrentUserId()
-        if (!userId) throw new Error('Non autenticato')
-        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'update_subscription_payment', targetId: paymentId, data: updates }
-        })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento pagamento')
+        void paymentId
+        void updates
+        throw new Error('Pagamenti abbonamento Stripe MINTHI disattivati.')
     },
 
     async deleteSubscriptionPayment(paymentId: string) {
-        const userId = _getCurrentUserId()
-        if (!userId) throw new Error('Non autenticato')
-        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'delete_subscription_payment', targetId: paymentId }
-        })
-        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione pagamento')
+        void paymentId
+        throw new Error('Pagamenti abbonamento Stripe MINTHI disattivati.')
     },
 
     // Admin - Restaurant bonuses
@@ -1802,36 +1747,21 @@ export const DatabaseService = {
         discountDuration: string = 'once',
         discountDurationMonths?: number
     ): Promise<{ token: string, id: string }> {
+        void discountPercent
+        void discountDuration
+        void discountDurationMonths
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
-
-        // Create Stripe coupon first if discount > 0
-        let stripeCouponId: string | null = null
-        if (discountPercent > 0) {
-            const { data: couponData, error: couponError } = await supabase.functions.invoke('stripe-create-coupon', {
-                body: {
-                    userId,
-                    percent_off: discountPercent,
-                    duration: discountDuration === 'once' || discountDuration === 'forever'
-                        ? discountDuration
-                        : 'repeating',
-                    duration_in_months: discountDurationMonths
-                }
-            })
-            if (!couponError && couponData?.couponId) {
-                stripeCouponId = couponData.couponId
-            }
-        }
 
         const { data, error } = await supabase.functions.invoke('secure-admin-action', {
             body: {
                 userId, action: 'create_registration_token',
                 data: {
                     free_months: freeMonths,
-                    discount_percent: discountPercent,
-                    discount_duration: discountDuration,
-                    discount_duration_months: discountDurationMonths || null,
-                    stripe_coupon_id: stripeCouponId,
+                    discount_percent: 0,
+                    discount_duration: 'once',
+                    discount_duration_months: null,
+                    stripe_coupon_id: null,
                 }
             }
         })
@@ -1892,56 +1822,18 @@ export const DatabaseService = {
 
     // Stripe price management
     async getStripePriceDetails(): Promise<{ amount: number, currency: string, product_id: string | null, price_id: string | null }> {
-        const fallback = { amount: 0, currency: 'eur', product_id: null, price_id: null }
-        try {
-            const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
-                body: { action: 'get' }
-            })
-            if (error) {
-                // Edge function returned non-2xx — fall back to cached app_config values
-                console.warn('getStripePriceDetails: edge function unavailable, using cached config')
-                const [amountStr, priceId, productId] = await Promise.all([
-                    this.getAppConfig('stripe_price_amount'),
-                    this.getAppConfig('stripe_price_id'),
-                    this.getAppConfig('stripe_product_id'),
-                ])
-                return {
-                    amount: amountStr ? parseFloat(amountStr) : 0,
-                    currency: 'eur',
-                    product_id: productId,
-                    price_id: priceId,
-                }
-            }
-            return data ?? fallback
-        } catch (e) {
-            console.warn('getStripePriceDetails: unexpected error, returning defaults', e)
-            return fallback
-        }
+        return { amount: 0, currency: 'eur', product_id: null, price_id: null }
     },
 
     async createStripePrice(amountCents: number): Promise<{ priceId: string, amount: number }> {
-        const userId = _getCurrentUserId()
-        const { data, error } = await supabase.functions.invoke('stripe-manage-price', {
-            body: { action: 'create', amount_cents: amountCents, userId }
-        })
-        if (error) {
-            const msg = typeof data === 'object' && data?.error ? data.error : error.message
-            console.error('createStripePrice error:', msg, data)
-            throw new Error(msg)
-        }
-        return data
+        void amountCents
+        throw new Error('La gestione prezzi Stripe MINTHI è disattivata.')
     },
 
     // Restaurant discounts
     async getRestaurantDiscounts(restaurantId?: string) {
-        let query = supabase
-            .from('restaurant_discounts')
-            .select('*')
-            .order('created_at', { ascending: false })
-        if (restaurantId) query = query.eq('restaurant_id', restaurantId)
-        const { data, error } = await query
-        if (error) throw error
-        return data || []
+        void restaurantId
+        return []
     },
 
     async applyRestaurantDiscount(params: {
@@ -1952,38 +1844,18 @@ export const DatabaseService = {
         reason?: string,
         grantedBy?: string,
     }) {
-        const userId = _getCurrentUserId()
-        const { data, error } = await supabase.functions.invoke('stripe-apply-discount', {
-            body: {
-                userId,
-                restaurantId: params.restaurantId,
-                discountPercent: params.discountPercent,
-                discountDuration: params.discountDuration,
-                discountDurationMonths: params.discountDurationMonths,
-                reason: params.reason,
-                grantedBy: params.grantedBy,
-            }
-        })
-        if (error) throw new Error(data?.error || error.message)
-        return data
+        void params
+        throw new Error('Gli sconti abbonamento Stripe MINTHI sono disattivati.')
     },
 
     async dismissDiscountBanner(discountId: string) {
-        const userId = _getCurrentUserId()
-        if (!userId) throw new Error('Non autenticato')
-        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'dismiss_discount_banner', targetId: discountId }
-        })
-        if (error) throw new Error(data?.error || error?.message || 'Errore dismiss banner')
+        void discountId
+        throw new Error('Gli sconti abbonamento Stripe MINTHI sono disattivati.')
     },
 
     async deactivateRestaurantDiscount(discountId: string) {
-        const userId = _getCurrentUserId()
-        if (!userId) throw new Error('Non autenticato')
-        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
-            body: { userId, action: 'deactivate_discount', targetId: discountId }
-        })
-        if (error) throw new Error(data?.error || error?.message || 'Errore disattivazione sconto')
+        void discountId
+        throw new Error('Gli sconti abbonamento Stripe MINTHI sono disattivati.')
     },
 
     // === Auth helpers (used by LoginPage and App.tsx) ===

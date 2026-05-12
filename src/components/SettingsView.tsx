@@ -21,7 +21,6 @@ import {
     Eye,
     EyeSlash,
     ArrowSquareOut,
-    Receipt,
     Buildings,
     Warning,
     WarningCircle,
@@ -37,7 +36,7 @@ import WeeklyScheduleEditor from './WeeklyScheduleEditor'
 import WeeklyServiceHoursEditor from './WeeklyServiceHoursEditor'
 import { DatabaseService } from '@/services/DatabaseService'
 import { supabase } from '@/lib/supabase'
-import type { WeeklyCopertoSchedule, WeeklyAyceSchedule, RestaurantStaff, WeeklyServiceSchedule, SubscriptionPayment } from '@/services/types'
+import type { WeeklyCopertoSchedule, WeeklyAyceSchedule, RestaurantStaff, WeeklyServiceSchedule } from '@/services/types'
 import { createDefaultCopertoSchedule, createDefaultAyceSchedule } from '@/utils/pricingUtils'
 import { useThermalPrinter } from '@/hooks/useThermalPrinter'
 import { toast } from 'sonner'
@@ -207,24 +206,17 @@ export function SettingsView({
     const [editingStaff, setEditingStaff] = useState<RestaurantStaff | null>(null)
     const [staffForm, setStaffForm] = useState({ name: '', username: '', password: '', is_active: true })
 
-    // Payment & Subscription state
-    const [subscriptionPayments, setSubscriptionPayments] = useState<SubscriptionPayment[]>([])
+    // Customer payment state
     const [subscriptionInfo, setSubscriptionInfo] = useState<{
-        stripe_subscription_id?: string | null
         stripe_connect_account_id?: string | null
         stripe_connect_enabled?: boolean
-        subscription_status?: string | null
-        subscription_cancel_at?: string | null
         vat_number?: string | null
         billing_name?: string | null
     } | null>(null)
     const [vatNumber, setVatNumber] = useState('')
     const [billingName, setBillingName] = useState('')
     const [savingPaymentInfo, setSavingPaymentInfo] = useState(false)
-    const [loadingBillingPortal, setLoadingBillingPortal] = useState(false)
     const [loadingConnectOnboarding, setLoadingConnectOnboarding] = useState(false)
-    const [activeDiscount, setActiveDiscount] = useState<any>(null)
-    const [priceAmount, setPriceAmount] = useState<number>(0)
     const [openInfo, setOpenInfo] = useState<string | null>(null)
     const stripeReadyForTakeaway = Boolean(stripePaymentsEnabled && subscriptionInfo?.stripe_connect_enabled)
 
@@ -264,7 +256,7 @@ export function SettingsView({
         try {
             const { data } = await supabase
                 .from('restaurants')
-                .select('enable_stripe_payments, stripe_subscription_id, stripe_connect_account_id, stripe_connect_enabled, subscription_status, subscription_cancel_at, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_pickup_mode, takeaway_auto_print, takeaway_auto_pickup_enabled, takeaway_max_orders_per_hour, takeaway_collect_first_name, takeaway_first_name_required, takeaway_collect_last_name, takeaway_last_name_required, takeaway_collect_phone, takeaway_phone_required, takeaway_collect_email, takeaway_email_required')
+                .select('enable_stripe_payments, stripe_connect_account_id, stripe_connect_enabled, vat_number, billing_name, auto_deliver_ready_dishes, takeaway_enabled, dine_in_enabled, takeaway_require_stripe, takeaway_pickup_notice, takeaway_pickup_mode, takeaway_auto_print, takeaway_auto_pickup_enabled, takeaway_max_orders_per_hour, takeaway_collect_first_name, takeaway_first_name_required, takeaway_collect_last_name, takeaway_last_name_required, takeaway_collect_phone, takeaway_phone_required, takeaway_collect_email, takeaway_email_required')
                 .eq('id', restaurantId)
                 .single()
             if (data) {
@@ -303,40 +295,12 @@ export function SettingsView({
             }
         } catch (e) { /* ignore */ }
 
-        try {
-            const payments = await DatabaseService.getSubscriptionPayments(restaurantId)
-            setSubscriptionPayments(payments || [])
-        } catch (e) { /* ignore */ }
-
-        try {
-            const discounts = await DatabaseService.getRestaurantDiscounts(restaurantId)
-            const active = discounts.find((d: any) => d.is_active)
-            setActiveDiscount(active || null)
-        } catch (e) { /* ignore */ }
-
-        try {
-            const amountStr = await DatabaseService.getAppConfig('stripe_price_amount')
-            if (amountStr && parseFloat(amountStr) > 0) setPriceAmount(parseFloat(amountStr))
-        } catch (e) { /* ignore */ }
     }
 
     useEffect(() => {
         loadStaff()
         loadPaymentData()
     }, [restaurantId])
-
-    const handleOpenBillingPortal = async () => {
-        setLoadingBillingPortal(true)
-        try {
-            const { url } = await DatabaseService.createBillingPortalSession(restaurantId)
-            window.location.href = url
-        } catch (e: any) {
-            toast.error('Errore: ' + e.message)
-        } finally {
-            setLoadingBillingPortal(false)
-        }
-    }
-
 
     const [stripeConnectInstance, setStripeConnectInstance] = useState<any>(null)
     const [showOnboardingEmbed, setShowOnboardingEmbed] = useState(false)
@@ -439,26 +403,6 @@ export function SettingsView({
         }
     }
 
-    // Calcola data prossimo pagamento dal periodo dell'ultima fattura pagata
-    // Se non ci sono pagamenti (trial attivo), mostra il 1° del prossimo mese
-    const nextPaymentDate = (() => {
-        const paid = subscriptionPayments.filter(p => p.status === 'paid' && p.period_end)
-        if (paid.length) {
-            const last = paid[0] // già ordinato per created_at desc
-            if (last.period_end) return new Date(last.period_end)
-        }
-        // Nessun pagamento ancora — trial attivo, primo addebito il 1° del prossimo mese
-        if (subscriptionInfo?.stripe_subscription_id) {
-            const now = new Date()
-            return new Date(Date.UTC(
-                now.getUTCMonth() === 11 ? now.getUTCFullYear() + 1 : now.getUTCFullYear(),
-                now.getUTCMonth() === 11 ? 0 : now.getUTCMonth() + 1,
-                1
-            ))
-        }
-        return null
-    })()
-
     const handleSaveStaff = async () => {
         if (!staffForm.name || !staffForm.username) {
             toast.error("Compila nome e username!")
@@ -551,7 +495,7 @@ export function SettingsView({
                         { value: 'reservations', icon: CalendarCheck, label: 'Prenotazioni', color: 'amber' },
                         // Asporto entry — shown always so owner can toggle it on; header here doubles as the enable row.
                         { value: 'takeaway', icon: Package, label: 'Asporto', color: 'amber' },
-                        { value: 'subscription', icon: CreditCard, label: 'Abbonamento e fatturazione', color: 'emerald' },
+                        { value: 'subscription', icon: CreditCard, label: 'Pagamenti e fiscale', color: 'emerald' },
                         { value: 'printer', icon: Printer, label: 'Stampante', color: 'amber' },
                     ].map(({ value, icon: Icon, label, color }) => (
                         <TabsTrigger
@@ -1398,7 +1342,7 @@ export function SettingsView({
                                         <div className="mt-3 flex items-start gap-2.5 px-1">
                                             <WarningCircle size={14} weight="fill" className="text-amber-500 shrink-0 mt-0.5" />
                                             <p className="text-[12px] text-amber-300/90 leading-relaxed">
-                                                Per rendere il pagamento anticipato obbligatorio devi prima attivare i pagamenti online e completare Stripe Connect nella sezione <strong className="text-amber-200">Abbonamento e pagamenti</strong>.
+                                                Per rendere il pagamento anticipato obbligatorio devi prima attivare i pagamenti online e completare Stripe Connect nella sezione <strong className="text-amber-200">Pagamenti e fiscale</strong>.
                                             </p>
                                         </div>
                                     )}
@@ -1720,181 +1664,6 @@ export function SettingsView({
                         {/* Scontrino fiscale OpenAPI */}
                         <FiscalReceiptSettings restaurantId={restaurantId} />
 
-                        {/* Abbonamento MINTHI */}
-                        <section data-tour="settings-subscription">
-                            <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
-                                Abbonamento MINTHI
-                            </h3>
-                            {subscriptionInfo?.stripe_subscription_id ? (
-                                <>
-                                    <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
-                                        {/* Stato + piano */}
-                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
-                                            <div className="min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <p className="text-[15px] font-semibold text-white">Stato abbonamento</p>
-                                                    <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at
-                                                        ? 'text-emerald-400'
-                                                        : ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at
-                                                            ? 'text-amber-400'
-                                                            : subscriptionInfo.subscription_status === 'past_due'
-                                                                ? 'text-red-400'
-                                                                : 'text-zinc-500'
-                                                        }`}>
-                                                        {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && <><span className="w-1 h-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)] animate-pulse" />Attivo</>}
-                                                        {['active','trialing'].includes(subscriptionInfo.subscription_status || '') && subscriptionInfo.subscription_cancel_at && <><span className="w-1 h-1 rounded-full bg-amber-400" />In cancellazione</>}
-                                                        {subscriptionInfo.subscription_status === 'past_due' && <><span className="w-1 h-1 rounded-full bg-red-500 animate-pulse" />Pagamento fallito</>}
-                                                        {subscriptionInfo.subscription_status === 'canceled' && <><span className="w-1 h-1 rounded-full bg-zinc-500" />Annullato</>}
-                                                        {!subscriptionInfo.subscription_status && <><span className="w-1 h-1 rounded-full bg-emerald-500" />Attivo</>}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Piano mensile MINTHI</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Prossimo addebito */}
-                                        {nextPaymentDate && ['active','trialing'].includes(subscriptionInfo.subscription_status || '') && !subscriptionInfo.subscription_cancel_at && (
-                                            <div className="flex items-center justify-between gap-4 px-5 py-4">
-                                                <div className="min-w-0">
-                                                    <p className="text-[15px] font-semibold text-white">Prossimo addebito</p>
-                                                    <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">{nextPaymentDate.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                                                </div>
-                                                {activeDiscount && activeDiscount.is_active && priceAmount > 0 && (
-                                                    <p className="text-sm text-amber-300 shrink-0">€{(priceAmount * (1 - activeDiscount.discount_percent / 100)).toFixed(2)}</p>
-                                                )}
-                                            </div>
-                                        )}
-
-                                        {/* Sconto attivo */}
-                                        {activeDiscount && activeDiscount.is_active && (
-                                            <div className="flex items-center justify-between gap-4 px-5 py-4">
-                                                <div className="min-w-0">
-                                                    <p className="text-[15px] font-semibold text-white">Sconto attivo</p>
-                                                    <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">
-                                                        {activeDiscount.discount_percent}%
-                                                        {activeDiscount.discount_duration === 'forever' ? ' per sempre'
-                                                            : activeDiscount.discount_duration === 'once' ? ' per 1 mese'
-                                                                : ` per ${activeDiscount.discount_duration_months || activeDiscount.discount_duration} mesi`}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Notifiche stato */}
-                                    {subscriptionInfo.subscription_status === 'past_due' && (
-                                        <div className="mt-3 flex items-start gap-2.5 px-1">
-                                            <WarningCircle weight="fill" size={14} className="text-red-400 shrink-0 mt-0.5" />
-                                            <p className="text-[12px] text-zinc-400 leading-relaxed">
-                                                <span className="text-red-300 font-medium">Pagamento non riuscito.</span> Aggiorna il metodo di pagamento per evitare la sospensione.
-                                            </p>
-                                        </div>
-                                    )}
-                                    {(subscriptionInfo.subscription_cancel_at && subscriptionInfo.subscription_status !== 'canceled') && (
-                                        <div className="mt-3 flex items-start gap-2.5 px-1">
-                                            <WarningCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-                                            <p className="text-[12px] text-zinc-400 leading-relaxed">
-                                                Servizi attivi fino al <span className="text-zinc-300">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                            </p>
-                                        </div>
-                                    )}
-                                    {subscriptionInfo.subscription_status === 'canceled' && (
-                                        <div className="mt-3 flex items-start gap-2.5 px-1">
-                                            <WarningCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
-                                            <p className="text-[12px] text-zinc-400 leading-relaxed">
-                                                {subscriptionInfo.subscription_cancel_at
-                                                    ? <>Servizi attivi fino al <span className="text-zinc-300">{new Date(subscriptionInfo.subscription_cancel_at).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</span>. Riattiva per continuare.</>
-                                                    : <>Riattiva per continuare ad usufruire dei servizi.</>
-                                                }
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {/* Azioni */}
-                                    <div className="flex gap-2 mt-4 px-1">
-                                        <Button
-                                            onClick={handleOpenBillingPortal}
-                                            disabled={loadingBillingPortal}
-                                            variant="outline"
-                                            size="sm"
-                                            className="h-9 px-4 text-xs border-white/10 text-zinc-200 hover:bg-white/[0.04] hover:text-white gap-2"
-                                        >
-                                            {loadingBillingPortal ? (
-                                                <ArrowClockwise className="animate-spin" size={13} />
-                                            ) : (
-                                                <ArrowSquareOut size={13} />
-                                            )}
-                                            Gestisci Abbonamento
-                                        </Button>
-                                        <Button
-                                            onClick={handleOpenBillingPortal}
-                                            disabled={loadingBillingPortal}
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-9 px-4 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.04] gap-2"
-                                        >
-                                            <Receipt size={13} />
-                                            Fatture
-                                        </Button>
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
-                                    <div className="px-4 py-8 text-center max-w-md mx-auto">
-                                        <CreditCard className="text-emerald-400 mx-auto mb-4" weight="fill" size={26} />
-                                        <p className="text-sm font-medium text-zinc-100 mb-1">Sblocca tutte le funzionalità</p>
-                                        <p className="text-[13px] text-zinc-400 mb-5">Abbonamento mensile completo</p>
-
-                                        <div className="flex items-baseline justify-center gap-1 mb-5">
-                                            <span className="text-4xl font-light text-white tracking-tight">€49</span>
-                                            <span className="text-zinc-500 text-sm">/mese</span>
-                                        </div>
-
-                                        <ul className="space-y-2 mb-6 text-left max-w-xs mx-auto">
-                                            {['Ordini e tavoli illimitati', 'Menu digitale QR code', 'Supporto prioritario', 'Statistiche avanzate'].map((f, i) => (
-                                                <li key={i} className="flex items-center gap-2 text-[13px] text-zinc-300">
-                                                    <CheckCircle className="text-emerald-400 shrink-0" weight="fill" size={13} />
-                                                    {f}
-                                                </li>
-                                            ))}
-                                        </ul>
-
-                                        <Button
-                                            className="h-10 px-6 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md shadow-[0_0_20px_-4px_rgba(16,185,129,0.5)]"
-                                            onClick={async () => {
-                                                try {
-                                                    const { data: restaurantData } = await supabase
-                                                        .from('restaurants')
-                                                        .select('stripe_price_id')
-                                                        .eq('id', restaurantId)
-                                                        .single();
-
-                                                    let priceId = restaurantData?.stripe_price_id;
-                                                    if (!priceId) {
-                                                        priceId = await DatabaseService.getAppConfig('stripe_price_id');
-                                                    }
-                                                    if (!priceId) {
-                                                        toast.error("L'amministratore non ha ancora configurato il Price ID di Stripe. Contatta il supporto.");
-                                                        return;
-                                                    }
-
-                                                    toast.loading("Generazione del link di pagamento...", { id: "stripe-checkout" });
-                                                    const { url } = await DatabaseService.createStripeSubscriptionCheckout(restaurantId, priceId);
-                                                    window.location.href = url;
-                                                } catch (e: any) {
-                                                    console.error(e);
-                                                    toast.error("Errore: " + e.message, { id: "stripe-checkout" });
-                                                }
-                                            }}
-                                        >
-                                            Attiva Abbonamento
-                                        </Button>
-                                        <p className="text-[11px] text-emerald-400/80 mt-3 font-medium">Prova gratuita fino al 1° del prossimo mese</p>
-                                        <p className="text-[11px] text-zinc-600 mt-1">Pagamenti sicuri gestiti da Stripe</p>
-                                    </div>
-                                </div>
-                            )}
-                        </section>
                     </motion.div>
                 </TabsContent>
 
