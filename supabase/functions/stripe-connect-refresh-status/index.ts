@@ -65,7 +65,26 @@ serve(async (req) => {
       });
     }
 
-    const account = await stripe.accounts.retrieve(restaurant.stripe_connect_account_id);
+    let account: any;
+    try {
+      account = await stripe.accounts.retrieve(restaurant.stripe_connect_account_id);
+    } catch (retrieveErr: any) {
+      console.warn("Stripe account non valido, resetto collegamento:", retrieveErr?.message || retrieveErr);
+      await supabase
+        .from("restaurants")
+        .update({ stripe_connect_account_id: null, stripe_connect_enabled: false })
+        .eq("id", restaurantId)
+        .eq("stripe_connect_account_id", restaurant.stripe_connect_account_id);
+
+      return new Response(JSON.stringify({
+        enabled: false,
+        needsReconnect: true,
+        error: "Account Stripe da ricollegare in modalità reale.",
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
 
     const { error: updateErr } = await supabase
       .from("restaurants")

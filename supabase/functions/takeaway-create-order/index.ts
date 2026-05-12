@@ -8,6 +8,7 @@ import Stripe from "https://esm.sh/stripe@20.4.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateRedirectUrl } from "../_shared/auth.ts";
+import { ensureStripeConnectReady } from "../_shared/stripe-connect.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2026-02-25.clover" as any,
@@ -293,6 +294,15 @@ serve(async (req) => {
             }
             if (!restaurant.stripe_connect_account_id || !restaurant.stripe_connect_enabled) {
                 return json({ error: "Il ristorante non ha ancora completato la configurazione per ricevere pagamenti" }, 403);
+            }
+            const connectReady = await ensureStripeConnectReady({
+                stripe,
+                supabase,
+                restaurantId,
+                accountId: restaurant.stripe_connect_account_id,
+            });
+            if (!connectReady.ok) {
+                return json({ error: connectReady.message, needsReconnect: connectReady.needsReconnect === true }, 403);
             }
         }
 

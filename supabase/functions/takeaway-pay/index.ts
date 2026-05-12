@@ -10,6 +10,7 @@ import Stripe from "https://esm.sh/stripe@20.4.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess, validateRedirectUrl } from "../_shared/auth.ts";
+import { ensureStripeConnectReady } from "../_shared/stripe-connect.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2026-02-25.clover" as any,
@@ -161,6 +162,15 @@ serve(async (req) => {
             if (!rest || !rest.enable_stripe_payments) return json({ error: "Pagamenti online non attivi" }, 400);
             if (!rest.stripe_connect_account_id || !rest.stripe_connect_enabled) {
                 return json({ error: "Account Stripe non configurato" }, 403);
+            }
+            const connectReady = await ensureStripeConnectReady({
+                stripe,
+                supabase,
+                restaurantId: order.restaurant_id,
+                accountId: rest.stripe_connect_account_id,
+            });
+            if (!connectReady.ok) {
+                return json({ error: connectReady.message, needsReconnect: connectReady.needsReconnect === true }, 403);
             }
 
             const origin = req.headers.get("origin") || "https://minthi.it";
