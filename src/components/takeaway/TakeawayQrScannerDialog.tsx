@@ -44,6 +44,13 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
     const zxingControlsRef = useRef<IScannerControls | null>(null)
     const nativeFrameRef = useRef<number | null>(null)
     const lockedRef = useRef(false)
+    // Concurrency guard: prevents double-starts and races between rapid
+    // close/reopen cycles. The startScanner is async (getUserMedia + decoder
+    // init), so two near-simultaneous starts can leak streams and end up with
+    // the camera permanently dead until refresh.
+    const startingRef = useRef(false)
+    const abortRef = useRef<AbortController | null>(null)
+    const startTokenRef = useRef(0)
     const [manualValue, setManualValue] = useState('')
     const [scannerError, setScannerError] = useState<string | null>(null)
     const [resolving, setResolving] = useState(false)
@@ -54,6 +61,12 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
     const [qrFound, setQrFound] = useState(false)
 
     const stopScanner = () => {
+        // Bump the token so any in-flight startScanner aborts gracefully.
+        startTokenRef.current += 1
+        if (abortRef.current) {
+            try { abortRef.current.abort() } catch {}
+            abortRef.current = null
+        }
         if (zxingControlsRef.current) {
             try { zxingControlsRef.current.stop() } catch {}
             zxingControlsRef.current = null
@@ -66,7 +79,11 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
             try { streamRef.current.getTracks().forEach(t => t.stop()) } catch {}
             streamRef.current = null
         }
+        if (videoRef.current) {
+            try { (videoRef.current as any).srcObject = null } catch {}
+        }
         lockedRef.current = false
+        startingRef.current = false
         setScanning(false)
     }
 
@@ -154,6 +171,16 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
         if (!open || order || resolving) return
         if (!videoRef.current) return
         if (zxingControlsRef.current || nativeFrameRef.current !== null) return
+        if (startingRef.current) return
+        startingRef.current = true
+
+        // Each start gets a token; if a stop happens mid-start, the token
+        // is bumped and we abort before mutating shared state.
+        const myToken = ++startTokenRef.current
+        const isStale = () => myToken !== startTokenRef.current
+        const abort = new AbortController()
+        abortRef.current = abort
+
         setScannerError(null)
         try {
             // Richiedi camera posteriore con risoluzione alta e autofocus
@@ -169,34 +196,56 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
                     advanced: [{ focusMode: 'continuous' }, { zoom: 1.0 }],
                 },
             })
+
+            // If we were closed mid-getUserMedia, drop the stream we just
+            // obtained — otherwise we'd hold an unreferenced camera handle.
+            if (isStale() || abort.signal.aborted) {
+                stream.getTracks().forEach(t => { try { t.stop() } catch {} })
+                return
+            }
+
             streamRef.current = stream
             const video = videoRef.current
+            if (!video) {
+                stream.getTracks().forEach(t => { try { t.stop() } catch {} })
+                return
+            }
             video.srcObject = stream
             video.setAttribute('playsinline', 'true')
             video.muted = true
             await video.play().catch(() => {})
+
+            if (isStale()) return
             setScanning(true)
 
             const usingNative = await startNativeDetector(stream)
+            if (isStale()) return
             if (!usingNative) {
                 await startZxingDetector(stream)
             }
         } catch (err: any) {
+            if (isStale() || err?.name === 'AbortError') return
             setScanning(false)
             setScannerError(err?.message || 'Fotocamera non disponibile. Inserisci il codice manualmente.')
+        } finally {
+            startingRef.current = false
         }
     }
 
     useEffect(() => {
         if (!open) {
             stopScanner()
-                setOrder(null)
-                setScannerError(null)
-                setManualValue('')
-                setQrFound(false)
+            setOrder(null)
+            setScannerError(null)
+            setManualValue('')
+            setQrFound(false)
             return
         }
-        const timer = window.setTimeout(startScanner, 50)
+        // 250ms gives the previous teardown (closing dialog, browser
+        // releasing camera handles) enough time when the user
+        // open → close → open in <1s. Below ~150ms we hit "AbortError:
+        // Another video session is already active" on Chrome/iOS Safari.
+        const timer = window.setTimeout(() => { void startScanner() }, 250)
         return () => {
             window.clearTimeout(timer)
             stopScanner()
@@ -259,7 +308,13 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="top-[calc(env(safe-area-inset-top)+0.75rem)] bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] translate-y-0 md:top-1/2 md:bottom-auto md:-translate-y-1/2 w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-lg max-h-none md:max-h-[92dvh] bg-zinc-950 border-white/10 text-white p-0 overflow-hidden rounded-[1.5rem] sm:rounded-[1.75rem] flex flex-col gap-0">
+            <DialogContent
+                // Prevent Radix from auto-focusing the first focusable element
+                // (which is the manual-entry input) — on mobile that pops the
+                // soft keyboard and pushes the scanner viewport off-screen.
+                onOpenAutoFocus={(e) => e.preventDefault()}
+                className="top-[calc(env(safe-area-inset-top)+0.75rem)] bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] translate-y-0 md:top-1/2 md:bottom-auto md:-translate-y-1/2 w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-lg max-h-none md:max-h-[92dvh] bg-zinc-950 border-white/10 text-white p-0 overflow-hidden rounded-[1.5rem] sm:rounded-[1.75rem] flex flex-col gap-0"
+            >
                 <DialogHeader className="shrink-0 px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-white/5">
                     <DialogTitle className="flex items-center gap-2.5 text-white">
                         <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
@@ -333,11 +388,12 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
                             </div>
                         )}
 
-                        <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-3">
-                            <div className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold mb-2">
-                                Inserimento manuale
-                            </div>
-                            <div className="flex gap-2">
+                        <details className="rounded-2xl border border-white/10 bg-zinc-900/60 p-3 group">
+                            <summary className="cursor-pointer flex items-center justify-between text-[10px] uppercase tracking-widest text-zinc-400 font-bold list-none [&::-webkit-details-marker]:hidden">
+                                <span>Inserimento manuale</span>
+                                <span className="text-zinc-600 group-open:rotate-180 transition-transform">▾</span>
+                            </summary>
+                            <div className="flex gap-2 mt-3">
                                 <Input
                                     value={manualValue}
                                     onChange={e => setManualValue(e.target.value)}
@@ -352,7 +408,7 @@ export default function TakeawayQrScannerDialog({ open, onOpenChange, restaurant
                                     Cerca
                                 </Button>
                             </div>
-                        </div>
+                        </details>
                         <div className="rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-zinc-500 leading-snug">
                             <span className="text-emerald-300/90 font-semibold">Suggerimento:</span> tieni il telefono a 15-20 cm dal QR e assicurati che sia ben illuminato. La lettura è quasi istantanea.
                         </div>

@@ -190,7 +190,22 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [pendingAutoOrderTableId, setPendingAutoOrderTableId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('orders')
   const [sidebarExpanded, setSidebarExpanded] = useState(false)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true) // Collapsible sidebar state
+  // Collapsible sidebar: closed by default on phones (<=768px) so the
+  // dashboard does not waste 60% of the screen on the nav rail.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.innerWidth >= 768
+  })
+  // Track viewport to switch between fixed-overlay (mobile) and inline (desktop)
+  const [isMobileViewport, setIsMobileViewport] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth < 768
+  })
+  useEffect(() => {
+    const onResize = () => setIsMobileViewport(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
   const [tableSearchTerm, setTableSearchTerm] = useState('')
 
   // Analytics password state
@@ -267,12 +282,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const firstAccessCheckedRef = useRef<string | null>(null)
   const manualDemoRef = useRef(false)
 
+  // Helper inlined where used so it can read currentRestaurant lazily
+  // (currentRestaurant is derived from `restaurants` below). Returns a tab id
+  // that we know exists in the sidebar for this restaurant — falls back
+  // gracefully when dine-in is off (no "orders" / "tables" tabs).
+  const pickDefaultTabRef = useRef<() => string>(() => 'orders')
+
   const startDemo = useCallback(() => {
     // Use the unified demo system — showDemoGuide swaps data via aliases
     manualDemoRef.current = true
     setDemoGuideStep(0)
     setShowDemoGuide(true)
-    setActiveTab('orders')
+    setActiveTab(pickDefaultTabRef.current())
   }, [])
 
   const stopDemo = useCallback(() => {
@@ -344,6 +365,18 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
   const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
   const currentRestaurant = restaurants?.[0]
+
+  // Keep pickDefaultTab in sync with the restaurant flags so demo/exit
+  // / setActiveTab callbacks always land on a tab that is actually rendered.
+  useEffect(() => {
+    pickDefaultTabRef.current = () => {
+      const dineInActive = currentRestaurant?.dine_in_enabled !== false
+      const takeawayActive = !!currentRestaurant?.takeaway_enabled
+      if (dineInActive) return 'orders'
+      if (takeawayActive) return 'takeaway'
+      return 'menu'
+    }
+  }, [currentRestaurant?.dine_in_enabled, currentRestaurant?.takeaway_enabled])
 
   const markRestaurantIntroFlag = useCallback(async (updates: Partial<Pick<Restaurant, 'demo_completed' | 'setup_completed'>>) => {
     if (!restaurantId) return
@@ -2162,15 +2195,23 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
 
       {/* Sidebar Toggle Button - Inline, does not overlap content */}
 
+      {/* Mobile overlay backdrop — closes the sidebar when tapped */}
+      {isMobileViewport && isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar - Collapsible with AnimatePresence */}
       <AnimatePresence mode="wait">
         {isSidebarOpen && (
           <motion.aside
-            initial={{ width: 0, opacity: 0, x: -50 }}
-            animate={{ width: 272, opacity: 1, x: 0 }}
-            exit={{ width: 0, opacity: 0, x: -50 }}
+            initial={{ width: isMobileViewport ? 280 : 0, opacity: 0, x: -50 }}
+            animate={{ width: isMobileViewport ? 280 : 272, opacity: 1, x: 0 }}
+            exit={{ width: isMobileViewport ? 280 : 0, opacity: 0, x: -50 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="h-full bg-zinc-950/80 backdrop-blur-3xl border-r border-white/[0.03] flex flex-col flex-shrink-0 z-40 relative shadow-[20px_0_50px_rgba(0,0,0,0.5)] overflow-hidden"
+            className={`h-full bg-zinc-950/95 backdrop-blur-3xl border-r border-white/[0.03] flex flex-col flex-shrink-0 z-40 shadow-[20px_0_50px_rgba(0,0,0,0.5)] overflow-hidden ${isMobileViewport ? 'fixed left-0 top-0 bottom-0 max-w-[85vw]' : 'relative'}`}
           >
             <div className="p-6 border-b border-white/5 flex items-center justify-between gap-4 min-w-[272px]">
               {currentRestaurant?.logo_url ? (
@@ -5289,7 +5330,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
             setShowDemoGuide(false)
             setDemoMode(false)
             manualDemoRef.current = false
-            setActiveTab('orders')
+            setActiveTab(pickDefaultTabRef.current())
             if (restaurantId) {
               localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
               localStorage.setItem(tourKey, '1')
@@ -5600,6 +5641,8 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           tablesCount={restaurantTables.length}
           dishesCount={restaurantDishes.length}
           categoriesCount={restaurantCategories.length}
+          dineInEnabled={currentRestaurant?.dine_in_enabled !== false}
+          takeawayEnabled={!!currentRestaurant?.takeaway_enabled}
         />
       )}
     </div>

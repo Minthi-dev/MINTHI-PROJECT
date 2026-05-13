@@ -11,6 +11,10 @@ interface SetupWizardProps {
   dishesCount: number
   categoriesCount: number
   setSettingsSubTab?: (tab: string) => void
+  /** True when the restaurant has dine-in enabled. Defaults to true (legacy). */
+  dineInEnabled?: boolean
+  /** True when the restaurant has takeaway enabled. */
+  takeawayEnabled?: boolean
 }
 
 export default function SetupWizard({
@@ -20,11 +24,21 @@ export default function SetupWizard({
   dishesCount,
   categoriesCount,
   setSettingsSubTab,
+  dineInEnabled = true,
+  takeawayEnabled = false,
 }: SetupWizardProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
 
-  const steps = SETUP_STEPS
+  // Hide steps whose target tab does not exist in the sidebar for this
+  // restaurant. Without this guard the wizard tried to setActiveTab('tables')
+  // / setActiveTab('orders') on takeaway-only accounts, which left the view
+  // blank ("bug: ricarica") because those tabs are conditionally rendered.
+  const steps = SETUP_STEPS.filter(s => {
+    if (!dineInEnabled && (s.tab === 'tables' || s.tab === 'orders')) return false
+    if (!takeawayEnabled && s.tab === 'takeaway') return false
+    return true
+  })
 
   const navigateToStep = useCallback((i: number) => {
     const s = steps[i]

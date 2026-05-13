@@ -89,6 +89,11 @@ export function useSupabaseData<T>(
                     })
 
                     if (debounceTimer) clearTimeout(debounceTimer)
+                    // Bumped from 300 → 500ms: realtime can fire several
+                    // events in a tight burst (insert + N updates on the same
+                    // row). The longer window coalesces them so we re-render
+                    // once instead of three times, removing visible jank on
+                    // mid-spec phones.
                     debounceTimer = setTimeout(() => {
                         const events = pendingEvents
                         pendingEvents = []
@@ -121,7 +126,7 @@ export function useSupabaseData<T>(
                         } else if (evt.eventType === 'DELETE') {
                             setData((prev) => prev.filter((item: any) => item.id !== evt.old.id))
                         }
-                    }, 300)
+                    }, 500)
                 }
             )
             .subscribe()
