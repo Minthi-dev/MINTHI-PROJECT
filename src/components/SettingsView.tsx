@@ -618,41 +618,38 @@ export function SettingsView({
                                 <h3 className="text-[15px] font-bold text-zinc-200 mb-3 px-1 tracking-wide uppercase">
                                     Guida & Setup
                                 </h3>
-                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden divide-y divide-white/10">
-                                    {onRestartTour && (
-                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
-                                            <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Guida interattiva</p>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Naviga un sito demo con dati di esempio e scopri tutte le funzioni.</p>
-                                            </div>
-                                            <Button
-                                                data-tour="settings-demo-btn"
-                                                onClick={onRestartTour}
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8 px-3 text-xs border-white/10 text-zinc-200 hover:bg-white/[0.04] hover:text-white shrink-0"
-                                            >
-                                                <Sparkle size={12} weight="fill" className="mr-1.5 text-amber-400" />
-                                                Avvia Demo
-                                            </Button>
+                                <div className="rounded-xl bg-zinc-900/60 border border-white/10 shadow-lg shadow-black/20 overflow-hidden">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-5 py-4">
+                                        <div className="min-w-0">
+                                            <p className="text-[15px] font-semibold text-white">Demo e configurazione guidata</p>
+                                            <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Riavvia il tour con dati di esempio oppure apri i passaggi rapidi di configurazione.</p>
                                         </div>
-                                    )}
-                                    {onRestartSetup && (
-                                        <div className="flex items-center justify-between gap-4 px-5 py-4">
-                                            <div className="min-w-0">
-                                                <p className="text-[15px] font-semibold text-white">Configurazione guidata</p>
-                                                <p className="text-sm text-zinc-400 mt-0.5 leading-relaxed">Segui i passaggi per configurare categorie, piatti, tavoli e impostazioni.</p>
-                                            </div>
-                                            <Button
-                                                onClick={onRestartSetup}
-                                                variant="outline"
-                                                size="sm"
-                                                className="h-8 px-3 text-xs border-white/10 text-zinc-200 hover:bg-white/[0.04] hover:text-white shrink-0"
-                                            >
-                                                Avvia
-                                            </Button>
+                                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                            {onRestartTour && (
+                                                <Button
+                                                    data-tour="settings-demo-btn"
+                                                    onClick={onRestartTour}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 px-3 text-xs border-white/10 text-zinc-200 hover:bg-white/[0.04] hover:text-white"
+                                                >
+                                                    <Sparkle size={12} weight="fill" className="mr-1.5 text-amber-400" />
+                                                    Demo
+                                                </Button>
+                                            )}
+                                            {onRestartSetup && (
+                                                <Button
+                                                    onClick={onRestartSetup}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 px-3 text-xs border-white/10 text-zinc-200 hover:bg-white/[0.04] hover:text-white"
+                                                >
+                                                    <Gear size={12} weight="duotone" className="mr-1.5 text-emerald-400" />
+                                                    Setup
+                                                </Button>
+                                            )}
                                         </div>
-                                    )}
+                                    </div>
                                 </div>
                             </section>
                         )}

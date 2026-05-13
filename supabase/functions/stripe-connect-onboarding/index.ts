@@ -115,6 +115,10 @@ serve(async (req) => {
                 country: "IT",
                 email: validEmail,
                 business_type: "company",
+                business_profile: {
+                    name: restaurant.name || undefined,
+                    product_description: "Pagamenti digitali per ordini ristorante tramite MINTHI",
+                },
                 capabilities: {
                     card_payments: { requested: true },
                     transfers: { requested: true },

@@ -21,6 +21,7 @@ const OWNER_ALLOWED_FIELDS = [
     "waiter_mode_enabled", "allow_waiter_payments",
     "vat_number", "billing_name", "enable_stripe_payments",
     "auto_deliver_ready_dishes",
+    "demo_completed", "setup_completed",
     // Takeaway
     "takeaway_enabled", "dine_in_enabled", "takeaway_require_stripe",
     "takeaway_pickup_notice", "takeaway_pickup_mode", "takeaway_auto_print", "takeaway_auto_pickup_enabled", "takeaway_max_orders_per_hour",

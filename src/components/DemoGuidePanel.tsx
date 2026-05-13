@@ -107,14 +107,14 @@ export default function DemoGuidePanel({
 
       {/* Top banner */}
       <div className="fixed top-0 left-0 right-0 z-[9999] pointer-events-none">
-        <div className="pointer-events-auto bg-amber-500 text-black px-4 py-1.5 flex items-center justify-center gap-4 text-sm font-medium">
-          <span><strong>DEMO</strong> — Dati di esempio</span>
+        <div className="pointer-events-auto bg-amber-500 text-black px-4 py-2 flex items-center justify-between gap-3 text-sm font-medium shadow-lg shadow-black/20">
+          <span className="truncate"><strong>DEMO</strong> — dati di esempio, nulla viene salvato</span>
           <button
             onClick={onExit}
-            className="flex items-center gap-1 text-xs font-bold bg-black/20 hover:bg-black/30 rounded-full px-3 py-1 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-black bg-black/20 hover:bg-black/30 rounded-full px-4 py-1.5 transition-colors shrink-0"
           >
-            <X size={10} weight="bold" />
-            Esci
+            <X size={12} weight="bold" />
+            Salta demo
           </button>
         </div>
       </div>
@@ -206,9 +206,10 @@ export default function DemoGuidePanel({
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.8 }}
                     onClick={onExit}
-                    className="h-10 px-6 rounded-xl text-zinc-500 hover:text-zinc-300 font-medium text-sm transition-colors"
+                    className="h-12 px-6 rounded-xl border border-white/10 bg-white/[0.03] text-zinc-200 hover:text-white hover:bg-white/[0.07] font-semibold text-sm transition-colors flex items-center gap-2"
                   >
-                    Salta Tour
+                    <X size={15} weight="bold" />
+                    Salta demo
                   </motion.button>
                 </div>
               </motion.div>
@@ -305,6 +306,12 @@ export default function DemoGuidePanel({
 
                     {/* Buttons */}
                     <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={onExit}
+                        className="h-8 px-3 rounded-lg border border-white/10 bg-white/[0.03] text-zinc-300 hover:text-white hover:bg-white/[0.07] text-xs font-semibold"
+                      >
+                        Salta demo
+                      </button>
                       {currentStep > 1 && (
                         <button
                           onClick={handlePrev}

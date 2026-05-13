@@ -248,9 +248,9 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [selectedCustomMenuId, setSelectedCustomMenuId] = useState<string>('')
   const [isExportingMenu, setIsExportingMenu] = useState(false)
   const [exportPreviewData, setExportPreviewData] = useState<{ title: string, subtitle?: string, sections: { id: string, title: string, dishes: Dish[] }[] } | null>(null)
-  const [dishes, , refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
-  const [tables, , refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
-  const [categories, , refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
+  const [dishes, dishesLoading, refreshDishes, setDishes] = useSupabaseData<Dish>('dishes', [], { column: 'restaurant_id', value: restaurantId })
+  const [tables, tablesLoading, refreshTables, setTables] = useSupabaseData<Table>('tables', [], { column: 'restaurant_id', value: restaurantId })
+  const [categories, categoriesLoading, refreshCategories, setCategories] = useSupabaseData<Category>('categories', [], { column: 'restaurant_id', value: restaurantId })
   const [bookings, , refreshBookings, setBookings] = useSupabaseData<Booking>('bookings', [], { column: 'restaurant_id', value: restaurantId })
   const [sessions, , refreshSessions, setSessions] = useSupabaseData<TableSession>('table_sessions', [], { column: 'restaurant_id', value: restaurantId }, undefined, { column: 'opened_at', ascending: false })
   const [rooms, , refreshRooms, setRooms] = useSupabaseData<Room>('rooms', [], { column: 'restaurant_id', value: restaurantId })
@@ -264,8 +264,12 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     orders: Order[], pastOrders: Order[], bookings: Booking[], sessions: TableSession[]
   } | null>(null)
 
+  const firstAccessCheckedRef = useRef<string | null>(null)
+  const manualDemoRef = useRef(false)
+
   const startDemo = useCallback(() => {
     // Use the unified demo system — showDemoGuide swaps data via aliases
+    manualDemoRef.current = true
     setDemoGuideStep(0)
     setShowDemoGuide(true)
     setActiveTab('orders')
@@ -292,20 +296,7 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
     refreshBookings(); refreshSessions(); fetchOrdersRef.current?.()
   }, [setDishes, setTables, setCategories, setRooms, setBookings, setSessions, refreshDishes, refreshTables, refreshCategories, refreshRooms, refreshBookings, refreshSessions])
 
-  // First login is handled by showDemoGuide (line ~257) — no need for demoMode here
-
-  const handleDemoExit = useCallback(() => {
-    // Check real data BEFORE stopDemo clears it
-    const real = realDataRef.current
-    const hasNoData = !real || (real.tables.length === 0 && real.dishes.length === 0 && real.categories.length === 0)
-    stopDemo()
-    // Mark tour as done
-    localStorage.setItem(tourKey, '1')
-    // Show setup wizard if no real data exists
-    if (hasNoData) {
-      setShowSetupWizard(true)
-    }
-  }, [stopDemo, tourKey])
+  // First login is handled by the DB-backed first-access flow.
   // Initialize selected categories when available
   const categoriesInitializedRef = useRef(false)
 
@@ -354,18 +345,63 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
   const [restaurants, , refreshRestaurants] = useSupabaseData<Restaurant>('restaurants', [], { column: 'id', value: restaurantId })
   const currentRestaurant = restaurants?.[0]
 
+  const markRestaurantIntroFlag = useCallback(async (updates: Partial<Pick<Restaurant, 'demo_completed' | 'setup_completed'>>) => {
+    if (!restaurantId) return
+    try {
+      await DatabaseService.updateRestaurant({ id: restaurantId, ...updates })
+      refreshRestaurants()
+    } catch (error) {
+      console.warn('Errore aggiornamento stato guida/setup:', error)
+    }
+  }, [restaurantId, refreshRestaurants])
+
   // Stampa termica automatica scontrini fiscali quando OpenAPI conferma "ready"
   useFiscalReceiptAutoPrint(restaurantId, currentRestaurant?.name || 'Ristorante')
 
-  // First-access detection: show demo guide + setup wizard on first login
+  // First-access detection is stored on the restaurant, not the browser,
+  // so new devices do not restart the onboarding flow.
   useEffect(() => {
-    if (!restaurantId) return
-    const key = `minthi_guide_done_${restaurantId}`
-    if (!localStorage.getItem(key)) {
-      // First access: auto-start demo guide
-      setShowDemoGuide(true)
+    if (!restaurantId || !currentRestaurant || firstAccessCheckedRef.current === restaurantId) return
+    if (dishesLoading || tablesLoading || categoriesLoading) return
+
+    firstAccessCheckedRef.current = restaurantId
+
+    const hasConfiguredData = (tables?.length || 0) > 0 || (dishes?.length || 0) > 0 || (categories?.length || 0) > 0
+    const legacyDemoDone = localStorage.getItem(`minthi_guide_done_${restaurantId}`) === 'true' || localStorage.getItem(tourKey) === '1'
+    const legacySetupDone = localStorage.getItem(`minthi_setup_done_${restaurantId}`) === 'true'
+    const demoDone = Boolean(currentRestaurant.demo_completed || legacyDemoDone)
+    const setupDone = Boolean(currentRestaurant.setup_completed || legacySetupDone)
+
+    if (hasConfiguredData) {
+      if (!currentRestaurant.demo_completed || !currentRestaurant.setup_completed) {
+        markRestaurantIntroFlag({ demo_completed: true, setup_completed: true })
+      }
+      return
     }
-  }, [restaurantId])
+
+    if (!demoDone) {
+      manualDemoRef.current = false
+      setDemoGuideStep(0)
+      setShowDemoGuide(true)
+      setActiveTab('orders')
+      return
+    }
+
+    if (!setupDone) {
+      setShowSetupWizard(true)
+    }
+  }, [
+    restaurantId,
+    currentRestaurant,
+    dishesLoading,
+    tablesLoading,
+    categoriesLoading,
+    dishes,
+    tables,
+    categories,
+    tourKey,
+    markRestaurantIntroFlag,
+  ])
   const restaurantSlug = currentRestaurant?.name?.toLowerCase().replace(/\s+/g, '_') || ''
 
   // Aliases: when demo is active (either first-access or manual restart), use demo data
@@ -5247,18 +5283,21 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
           currentStep={demoGuideStep}
           setCurrentStep={setDemoGuideStep}
           setActiveTab={setActiveTab}
-          onExit={() => {
+          onExit={async () => {
+            const wasManualDemo = manualDemoRef.current
+            const hasConfiguredData = (tables?.length || 0) > 0 || (dishes?.length || 0) > 0 || (categories?.length || 0) > 0
             setShowDemoGuide(false)
             setDemoMode(false)
+            manualDemoRef.current = false
             setActiveTab('orders')
-            // Mark guide as done
             if (restaurantId) {
               localStorage.setItem(`minthi_guide_done_${restaurantId}`, 'true')
               localStorage.setItem(tourKey, '1')
+              await markRestaurantIntroFlag({ demo_completed: true })
             }
-            // Always start setup wizard after first demo — user needs to configure
-            const setupDone = restaurantId ? localStorage.getItem(`minthi_setup_done_${restaurantId}`) : null
-            if (!setupDone) {
+
+            const setupDone = Boolean(currentRestaurant?.setup_completed || (restaurantId && localStorage.getItem(`minthi_setup_done_${restaurantId}`) === 'true'))
+            if (!wasManualDemo && !setupDone && !hasConfiguredData) {
               setShowSetupWizard(true)
             }
           }}
@@ -5551,10 +5590,11 @@ const RestaurantDashboard = ({ user, onLogout }: RestaurantDashboardProps) => {
       {showSetupWizard && !isDemoActive && (
         <SetupWizard
           setActiveTab={setActiveTab}
-          onComplete={() => {
+          onComplete={async () => {
             setShowSetupWizard(false)
             if (restaurantId) {
               localStorage.setItem(`minthi_setup_done_${restaurantId}`, 'true')
+              await markRestaurantIntroFlag({ setup_completed: true })
             }
           }}
           tablesCount={restaurantTables.length}

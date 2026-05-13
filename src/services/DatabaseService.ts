@@ -162,6 +162,7 @@ export const DatabaseService = {
             'show_cooking_times', 'enable_course_suggestions',
             'auto_deliver_ready_dishes',
             'enable_stripe_payments', 'vat_number', 'billing_name',
+            'demo_completed', 'setup_completed',
             'takeaway_enabled', 'dine_in_enabled', 'takeaway_require_stripe',
             'takeaway_pickup_notice', 'takeaway_pickup_mode', 'takeaway_auto_print', 'takeaway_auto_pickup_enabled', 'takeaway_max_orders_per_hour',
             'takeaway_collect_first_name', 'takeaway_first_name_required',

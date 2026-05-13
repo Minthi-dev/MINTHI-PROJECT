@@ -150,7 +150,7 @@ export default function SetupWizard({
               </div>
               <button onClick={onComplete} className="flex items-center gap-1.5 text-zinc-400 hover:text-white text-sm font-medium transition-colors bg-white/5 hover:bg-white/10 rounded-lg px-3 py-1.5">
                 <X size={14} weight="bold" />
-                Esci
+                Salta
               </button>
             </div>
 
