@@ -189,6 +189,20 @@ serve(async (req) => {
                 .limit(safeLimit);
             if (error) throw error;
             receipts = data || [];
+
+            // Pair refunds with originals so the UI can show "annullato da reso"
+            // on the original row and show the link on the refund row.
+            if (receipts.length > 0) {
+                const refundedOriginalIds = new Set(
+                    receipts
+                        .filter((r: any) => r.linked_receipt_id && (r.issued_via === "refund_stripe" || r.issued_via === "refund_manual"))
+                        .map((r: any) => r.linked_receipt_id)
+                );
+                receipts = receipts.map((r: any) => ({
+                    ...r,
+                    has_refund: refundedOriginalIds.has(r.id),
+                }));
+            }
         }
 
         return json({

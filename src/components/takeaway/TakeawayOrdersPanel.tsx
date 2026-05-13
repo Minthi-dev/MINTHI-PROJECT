@@ -1055,8 +1055,12 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                                                                     amount,
                                                                 })
                                                                 toast.success(`Rimborso eseguito: €${result.refundedAmount.toFixed(2)}`)
-                                                                if (result.fiscalNotice) {
-                                                                    setTimeout(() => toast.info(result.fiscalNotice, { duration: 8000 }), 500)
+                                                                if (result.fiscalRefund) {
+                                                                    setTimeout(() => toast.success('Scontrino di reso emesso e trasmesso ad AdE', { duration: 6000 }), 500)
+                                                                } else if (result.fiscalRefundError) {
+                                                                    setTimeout(() => toast.warning(`Scontrino reso non emesso: ${result.fiscalRefundError}`, { duration: 10000 }), 500)
+                                                                } else if (result.fiscalNotice) {
+                                                                    setTimeout(() => toast.info(result.fiscalNotice, { duration: 6000 }), 500)
                                                                 }
                                                                 refresh()
                                                             } catch (e: any) {

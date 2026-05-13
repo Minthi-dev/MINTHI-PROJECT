@@ -1167,6 +1167,8 @@ export const DatabaseService = {
             paidAmount: number
             stripeRefundId: string
             externalReconciliation: boolean
+            fiscalRefund: { id: string, openapi_receipt_id: string | null, openapi_status: string } | null
+            fiscalRefundError: string | null
             fiscalNotice: string
         }
     },

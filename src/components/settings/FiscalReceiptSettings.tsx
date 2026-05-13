@@ -500,12 +500,22 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                     <span className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${meta.className}`}>
                                                         {meta.label}
                                                     </span>
+                                                    {(receipt as any).has_refund && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap bg-amber-500/10 border-amber-500/30 text-amber-300" title="Esiste uno scontrino di reso collegato">
+                                                            ⊘ Annullato da reso
+                                                        </span>
+                                                    )}
+                                                    {(receipt.issued_via === 'refund_stripe' || receipt.issued_via === 'refund_manual') && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap bg-red-500/10 border-red-500/30 text-red-300" title="Scontrino di reso">
+                                                            ↩ Reso
+                                                        </span>
+                                                    )}
                                                     <div className="min-w-0 flex-1">
                                                         <div className="text-[12px] font-medium text-zinc-200 truncate">
                                                             {receiptPrimaryLabel(receipt)}
                                                         </div>
                                                         <div className="text-[11px] text-zinc-500 flex items-center gap-2 mt-0.5 flex-wrap">
-                                                            <span className="text-emerald-400 font-mono">{formatEuro(receipt.total_amount)}</span>
+                                                            <span className={`font-mono ${Number(receipt.total_amount) < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{formatEuro(receipt.total_amount)}</span>
                                                             <span>·</span>
                                                             <span>{formatReceiptDate(receipt.created_at)}</span>
                                                             {receipt.openapi_receipt_id && (

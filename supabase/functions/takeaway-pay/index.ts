@@ -11,6 +11,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess, validateRedirectUrl } from "../_shared/auth.ts";
 import { ensureStripeConnectReady } from "../_shared/stripe-connect.ts";
+import { issueReceipt, isOpenApiConfigured } from "../_shared/openapi.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
     apiVersion: "2026-02-25.clover" as any,
@@ -382,6 +383,104 @@ serve(async (req) => {
                 }, 500);
             }
 
+            // ---- Auto-emit fiscal refund receipt (best-effort) ----
+            //
+            // Italian regulation (D.Lgs. 127/2015 + AdE Prov. 28/10/2016)
+            // requires a "documento commerciale per reso/annullo" referencing
+            // the original receipt. We do this via OpenAPI's linked_receipt
+            // mechanism. Failure of this step does NOT roll back the Stripe
+            // refund — fiscal reconciliation can be retried, money cannot.
+            let fiscalRefund: any = null;
+            let fiscalRefundError: string | null = null;
+            try {
+                const { data: originalReceipt } = await supabase
+                    .from("fiscal_receipts")
+                    .select("id, openapi_receipt_id, openapi_status, items, total_amount, electronic_payment_amount, restaurant_id, customer_email, customer_tax_code, customer_lottery_code")
+                    .eq("restaurant_id", order.restaurant_id)
+                    .eq("stripe_payment_intent_id", piId)
+                    .neq("issued_via", "refund_stripe")
+                    .neq("issued_via", "refund_manual")
+                    .order("created_at", { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (originalReceipt?.openapi_receipt_id && originalReceipt.openapi_status === "ready") {
+                    if (!isOpenApiConfigured()) {
+                        fiscalRefundError = "OpenAPI non configurato sulla piattaforma";
+                    } else {
+                        // Get fiscal_id (P.IVA) of restaurant
+                        const { data: fiscalSettings } = await supabase
+                            .from("restaurant_fiscal_settings")
+                            .select("openapi_fiscal_id")
+                            .eq("restaurant_id", order.restaurant_id)
+                            .maybeSingle();
+
+                        if (!fiscalSettings?.openapi_fiscal_id) {
+                            fiscalRefundError = "P.IVA fiscale non configurata";
+                        } else {
+                            // Build refund items.
+                            // - Full refund: invert all original items (negative quantity).
+                            // - Partial refund: emit a single "Rimborso parziale" line for
+                            //   the refunded amount. AdE accepts this pattern via
+                            //   linked_receipt.
+                            const originalItems: any[] = Array.isArray(originalReceipt.items) ? originalReceipt.items : [];
+                            const refundItems = fullRefund && originalItems.length > 0
+                                ? originalItems.map((it: any) => ({
+                                    quantity: Number(it.quantity) || 1,
+                                    description: `RESO ${String(it.description || "Voce").slice(0, 990)}`,
+                                    unit_price: -Math.abs(Number(it.unit_price ?? it.unitPrice ?? 0)),
+                                    vat_rate_code: String(it.vat_rate_code || it.vatRate || "10"),
+                                }))
+                                : [{
+                                    quantity: 1,
+                                    description: `Rimborso parziale ordine #${order.pickup_number || ""}`.trim(),
+                                    unit_price: -refundedAmount,
+                                    vat_rate_code: "10",
+                                }];
+
+                            const refundResult = await issueReceipt({
+                                fiscal_id: fiscalSettings.openapi_fiscal_id,
+                                items: refundItems,
+                                electronic_payment_amount: -refundedAmount,
+                                linked_receipt: originalReceipt.openapi_receipt_id,
+                                idempotency_key: `refund-${originalReceipt.id}-${refund.id}`,
+                                customer_tax_code: originalReceipt.customer_tax_code || undefined,
+                            });
+
+                            // Persist refund receipt row
+                            const { data: refundRow } = await supabase
+                                .from("fiscal_receipts")
+                                .insert({
+                                    restaurant_id: order.restaurant_id,
+                                    order_id: orderId,
+                                    stripe_payment_intent_id: piId,
+                                    openapi_receipt_id: refundResult.id,
+                                    openapi_status: refundResult.status || "submitted",
+                                    openapi_response: refundResult.raw || null,
+                                    items: refundItems,
+                                    cash_payment_amount: 0,
+                                    electronic_payment_amount: -refundedAmount,
+                                    total_amount: -refundedAmount,
+                                    issued_via: "refund_stripe",
+                                    linked_receipt_id: originalReceipt.id,
+                                    issued_by_user_id: userId,
+                                    submitted_at: new Date().toISOString(),
+                                })
+                                .select("id, openapi_receipt_id, openapi_status")
+                                .single();
+                            fiscalRefund = refundRow;
+                        }
+                    }
+                } else if (!originalReceipt) {
+                    fiscalRefundError = "Nessuno scontrino fiscale originale trovato — emetti il reso manualmente";
+                } else if (originalReceipt.openapi_status !== "ready") {
+                    fiscalRefundError = `Scontrino originale in stato ${originalReceipt.openapi_status}: reso emettibile solo dopo trasmissione AdE`;
+                }
+            } catch (err: any) {
+                fiscalRefundError = String(err?.message || err).slice(0, 400);
+                console.error("[TAKEAWAY-REFUND-STRIPE] fiscal refund error:", err);
+            }
+
             return json({
                 success: true,
                 refundedAmount,
@@ -389,7 +488,13 @@ serve(async (req) => {
                 paidAmount: newPaid,
                 stripeRefundId: refund.id,
                 externalReconciliation: refund.external_reconciliation === true,
-                fiscalNotice: "Lo scontrino fiscale eventualmente già emesso resta valido. Per emettere lo scontrino di reso/rimborso contatta il commercialista.",
+                fiscalRefund,
+                fiscalRefundError,
+                fiscalNotice: fiscalRefund
+                    ? `Rimborso completato. Scontrino di reso emesso (#${fiscalRefund.openapi_receipt_id || fiscalRefund.id}).`
+                    : (fiscalRefundError
+                        ? `Rimborso Stripe eseguito. ATTENZIONE: scontrino di reso NON emesso (${fiscalRefundError}). Emettilo manualmente dal POS o contatta il commercialista.`
+                        : "Rimborso Stripe eseguito. Nessun scontrino fiscale da annullare (l'ordine non aveva uno scontrino emesso)."),
             });
         }
 
