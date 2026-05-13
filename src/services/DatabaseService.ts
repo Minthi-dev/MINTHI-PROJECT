@@ -1820,6 +1820,91 @@ export const DatabaseService = {
         return row || null
     },
 
+    // -----------------------------------------------------------------
+    // Reusable Physical QR codes (admin-only)
+    // -----------------------------------------------------------------
+    async listPhysicalQrCodes() {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('admin-qr-codes', {
+            body: { userId, sessionToken, action: 'list' },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore caricamento QR'))
+        if (data?.error) throw new Error(data.error)
+        return (data?.data || []) as Array<{
+            id: string
+            code: string
+            restaurant_id: string | null
+            label: string | null
+            created_at: string
+            assigned_at: string | null
+            restaurant: { id: string, name: string } | null
+        }>
+    },
+
+    async createPhysicalQrCode(params: { code?: string, label?: string, restaurantId?: string }) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('admin-qr-codes', {
+            body: {
+                userId, sessionToken, action: 'create',
+                code: params.code, label: params.label, restaurantId: params.restaurantId,
+            },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione QR'))
+        if (data?.error) throw new Error(data.error)
+        return data?.data
+    },
+
+    async assignPhysicalQrCode(qrId: string, restaurantId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('admin-qr-codes', {
+            body: { userId, sessionToken, action: 'assign', qrId, restaurantId },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore assegnazione QR'))
+        if (data?.error) throw new Error(data.error)
+        return data?.data
+    },
+
+    async unassignPhysicalQrCode(qrId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('admin-qr-codes', {
+            body: { userId, sessionToken, action: 'unassign', qrId },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore sgancio QR'))
+        if (data?.error) throw new Error(data.error)
+        return data?.data
+    },
+
+    async updatePhysicalQrCodeLabel(qrId: string, label: string | null) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('admin-qr-codes', {
+            body: { userId, sessionToken, action: 'update_label', qrId, label },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento etichetta'))
+        if (data?.error) throw new Error(data.error)
+        return data?.data
+    },
+
+    async deletePhysicalQrCode(qrId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('admin-qr-codes', {
+            body: { userId, sessionToken, action: 'delete', qrId },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore eliminazione QR'))
+        if (data?.error) throw new Error(data.error)
+    },
+
     async markTokenUsed(tokenId: string, restaurantId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')

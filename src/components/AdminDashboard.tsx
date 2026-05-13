@@ -10,8 +10,9 @@ import { DatabaseService } from '../services/DatabaseService'
 import { toast } from 'sonner'
 import { User, Restaurant } from '../services/types'
 import { supabase } from '../lib/supabase'
-import { Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, CheckCircle, Link as LinkIcon, Copy, Rocket, Info } from '@phosphor-icons/react'
+import { Plus, Buildings, SignOut, Trash, ChartBar, PencilSimple, Eye, EyeSlash, Database, MagnifyingGlass, SortAscending, UploadSimple, SignIn, CreditCard, Gift, CheckCircle, Link as LinkIcon, Copy, Rocket, Info, QrCode } from '@phosphor-icons/react'
 import AdminStatistics from './AdminStatistics'
+import AdminQrCodesView from './AdminQrCodesView'
 import RestaurantDashboard from './RestaurantDashboard'
 import { v4 as uuidv4 } from 'uuid'
 import { populateRestaurantData } from '../services/populateData'
@@ -41,7 +42,7 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     { realtimeEnabled: false }
   )
   const [salesByRestaurant, setSalesByRestaurant] = useState<Record<string, number>>({})
-  const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin'>('restaurants')
+  const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin' | 'qrcodes'>('restaurants')
 
   // Admin commercial state. Stripe billing toward MINTHI is disabled; this only keeps local access bonuses.
   const [showBonusDialog, setShowBonusDialog] = useState(false)
@@ -473,6 +474,14 @@ export default function AdminDashboard({ user, onLogout }: Props) {
                 </Button>
                 <Button
                   variant="ghost"
+                  onClick={() => setActiveView('qrcodes')}
+                  className={`gap-3 h-10 px-6 rounded-xl transition-all duration-300 ${activeView === 'qrcodes' ? 'bg-amber-500 text-black font-bold shadow-lg shadow-amber-500/20 scale-105' : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'}`}
+                >
+                  <QrCode size={20} weight={activeView === 'qrcodes' ? 'fill' : 'regular'} />
+                  <span className="text-sm">QR Asporto</span>
+                </Button>
+                <Button
+                  variant="ghost"
                   onClick={() => setActiveView('admin')}
                   className={`gap-3 h-10 px-6 rounded-xl transition-all duration-300 ${activeView === 'admin' ? 'bg-amber-500 text-black font-bold shadow-lg shadow-amber-500/20 scale-105' : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/5'}`}
                 >
@@ -506,6 +515,8 @@ export default function AdminDashboard({ user, onLogout }: Props) {
       <div className="container mx-auto px-4 py-8 relative z-10">
         {activeView === 'statistics' ? (
           <AdminStatistics onImpersonate={(id) => setImpersonatedRestaurantId(id)} />
+        ) : activeView === 'qrcodes' ? (
+          <AdminQrCodesView restaurants={restaurants || []} />
         ) : activeView === 'admin' ? (
           <div className="space-y-6">
             {/* Header */}

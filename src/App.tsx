@@ -14,6 +14,7 @@ const CustomerMenu = lazyImportRetry(() => import('./components/CustomerMenu'))
 const TakeawayMenu = lazyImportRetry(() => import('./components/takeaway/TakeawayMenu'))
 const TakeawayOrderStatus = lazyImportRetry(() => import('./components/takeaway/TakeawayOrderStatus'))
 const PublicDisplayScreen = lazyImportRetry(() => import('./components/takeaway/PublicDisplayScreen'))
+const PhysicalQrRedirect = lazyImportRetry(() => import('./components/qr/PhysicalQrRedirect'))
 const PublicReservationPage = lazyImportRetry(() => import('./components/reservations/PublicReservationPage'))
 const RestaurantOnboarding = lazyImportRetry(() => import('./components/RestaurantOnboarding'))
 const RegisterSuccessPage = lazyImportRetry(() => import('./components/RegisterSuccessPage'))
@@ -270,6 +271,8 @@ const AppContent = () => {
           <Route path="/client/takeaway/:restaurantId/order/:pickupCode" element={<TakeawayOrderStatus />} />
           {/* Public display screen (for in-room monitor) */}
           <Route path="/display/:restaurantId" element={<PublicDisplayScreen />} />
+          {/* Reusable physical QR (admin can re-point to a different restaurant) */}
+          <Route path="/qr/:code" element={<PhysicalQrRedirect />} />
           {/* Support for existing physical QR codes */}
           <Route path="/menu/:tableId" element={<LegacyPathRedirect />} />
           <Route path="/menu" element={<LegacyCustomerMenuRedirect />} />
