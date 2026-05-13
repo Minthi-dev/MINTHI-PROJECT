@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { verifyAccess } from "../_shared/auth.ts";
-import { getConfiguration } from "../_shared/openapi.ts";
+import { getConfiguration, getOpenApiEnv } from "../_shared/openapi.ts";
 
 const supabase = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -28,6 +28,7 @@ serve(async (req) => {
             includeReceipts = false,
             limit = 50,
             action,
+            orderId,
             defaultVatRateCode,
             fiscalEmailToCustomer,
         } = body || {};
@@ -102,6 +103,33 @@ serve(async (req) => {
             }
         }
 
+        // -- Lookup the fiscal receipt(s) for a specific order ------------
+        if (action === "lookup_for_order") {
+            if (typeof orderId !== "string" || orderId.length !== 36) {
+                return json({ error: "orderId non valido" }, 400);
+            }
+            const { data, error } = await supabase
+                .from("fiscal_receipts")
+                .select("id, openapi_receipt_id, openapi_status, total_amount, created_at, ready_at, submitted_at, voided_at, error_log, retry_count, items, customer_email, customer_tax_code, customer_lottery_code, issued_via, stripe_payment_intent_id, electronic_payment_amount, cash_payment_amount")
+                .eq("restaurant_id", restaurantId)
+                .eq("order_id", orderId)
+                .order("created_at", { ascending: false });
+            if (error) {
+                console.error("[openapi-fiscal-dashboard] lookup_for_order error:", error);
+                return json({ error: error.message }, 500);
+            }
+
+            // Also pull any pending fiscal_receipt_jobs for that order
+            const { data: jobs } = await supabase
+                .from("fiscal_receipt_jobs")
+                .select("id, status, attempts, last_error, run_after, created_at, updated_at")
+                .contains("payload", { orderId })
+                .order("created_at", { ascending: false })
+                .limit(5);
+
+            return json({ success: true, receipts: data || [], jobs: jobs || [] });
+        }
+
         // -- Update preferences (admin/owner only) -----------------------
         if (action === "update_preferences") {
             if (!access.isOwner && !access.isAdmin) {
@@ -164,6 +192,9 @@ serve(async (req) => {
         }
 
         return json({
+            platform: {
+                openapi_env: getOpenApiEnv(),
+            },
             restaurant: {
                 ...restaurant,
                 tax_code: settings?.tax_code || null,

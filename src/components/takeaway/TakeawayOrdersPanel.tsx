@@ -216,6 +216,54 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
     const onAutoPrintKitchenOrderRef = useRef(onAutoPrintKitchenOrder)
     const knownTakeawayOrderIdsRef = useRef<Set<string>>(new Set())
 
+    // ── Audio alert for new orders ────────────────────────────────────────
+    const audioCtxRef = useRef<AudioContext | null>(null)
+    const initialOrdersLoadRef = useRef(true)
+    const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+        try { return localStorage.getItem('minthi_takeaway_sound') !== 'off' } catch { return true }
+    })
+    const beepNewOrder = useCallback(() => {
+        try {
+            let ctx = audioCtxRef.current
+            if (!ctx) {
+                ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+                audioCtxRef.current = ctx
+            }
+            // Two-tone "ding-dong" to distinguish from the READY beep on the
+            // public display screen.
+            const playTone = (freq: number, when: number, duration: number) => {
+                const osc = ctx!.createOscillator()
+                const gain = ctx!.createGain()
+                osc.frequency.value = freq
+                osc.type = 'sine'
+                osc.connect(gain)
+                gain.connect(ctx!.destination)
+                gain.gain.setValueAtTime(0.0001, ctx!.currentTime + when)
+                gain.gain.exponentialRampToValueAtTime(0.25, ctx!.currentTime + when + 0.04)
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx!.currentTime + when + duration)
+                osc.start(ctx!.currentTime + when)
+                osc.stop(ctx!.currentTime + when + duration + 0.05)
+            }
+            playTone(660, 0, 0.2)
+            playTone(880, 0.22, 0.32)
+        } catch (e) {
+            console.warn('[takeaway-panel] beep failed', e)
+        }
+    }, [])
+    const toggleSound = useCallback(() => {
+        setSoundEnabled(prev => {
+            const next = !prev
+            try { localStorage.setItem('minthi_takeaway_sound', next ? 'on' : 'off') } catch {}
+            // First time the user enables sound, also unlock the audio context
+            // (browsers require a user gesture). The next beep will play.
+            if (next && !audioCtxRef.current) {
+                try { audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)() } catch {}
+            }
+            toast.success(next ? 'Suoni attivati' : 'Suoni disattivati')
+            return next
+        })
+    }, [])
+
     useEffect(() => {
         onAutoPrintKitchenOrderRef.current = onAutoPrintKitchenOrder
     }, [onAutoPrintKitchenOrder])
@@ -255,7 +303,22 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             const data = await DatabaseService.getTakeawayOrders(restaurantId)
             const nextOrders = data as Order[]
             const signature = makeOrdersSignature(nextOrders)
-            knownTakeawayOrderIdsRef.current = new Set(nextOrders.map(o => o.id))
+            const previouslyKnownIds = knownTakeawayOrderIdsRef.current
+            const nextIds = new Set(nextOrders.map(o => o.id))
+
+            // Audio beep when a brand-new actionable order arrives.
+            // Skipped on the very first load (so we don't beep on every refresh).
+            if (!initialOrdersLoadRef.current && soundEnabled) {
+                const newActionable = nextOrders.filter(o =>
+                    !previouslyKnownIds.has(o.id)
+                    && (o.status === 'PENDING' || o.status === 'PREPARING')
+                )
+                if (newActionable.length > 0) {
+                    beepNewOrder()
+                }
+            }
+            knownTakeawayOrderIdsRef.current = nextIds
+
             if (signature !== ordersSignatureRef.current) {
                 ordersSignatureRef.current = signature
                 setOrders(nextOrders)
@@ -271,10 +334,11 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
             }
             knownKitchenPrintIdsRef.current = new Set(printable.map(o => o.id))
             initialKitchenPrintLoadRef.current = false
+            initialOrdersLoadRef.current = false
         } catch (e: any) {
             console.error('[takeaway-panel] refresh error', e)
         }
-    }, [restaurantId, makeOrdersSignature])
+    }, [restaurantId, makeOrdersSignature, soundEnabled, beepNewOrder])
 
     useEffect(() => {
         let alive = true
@@ -629,6 +693,16 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     <Package size={26} className="text-amber-400" weight="fill" /> Ordini asporto
                 </h2>
                 <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={toggleSound}
+                        className={`h-9 px-3 border-white/10 ${soundEnabled ? 'text-emerald-300 hover:bg-emerald-500/10' : 'text-zinc-500 hover:bg-white/5'}`}
+                        title={soundEnabled ? 'Suoni nuovi ordini: ON' : 'Suoni nuovi ordini: OFF'}
+                    >
+                        {soundEnabled ? '🔔' : '🔕'}
+                        <span className="ml-1.5 text-xs hidden sm:inline">{soundEnabled ? 'Suoni ON' : 'Suoni OFF'}</span>
+                    </Button>
                     {takeawayPickupMode === 'qr' && (
                         <Button
                             onClick={() => setScannerOpen(true)}
@@ -944,18 +1018,69 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                                         <div key={`${payment.at || index}-${payment.amount || 0}`} className="rounded-lg bg-black/20 border border-white/5 p-2 space-y-1">
                                             <div className="flex justify-between gap-3">
                                                 <span className="font-semibold text-zinc-100">{payment.label || payment.method || 'Pagamento'}</span>
-                                                <span className="font-mono text-emerald-300">€{Number(payment.amount || 0).toFixed(2)}</span>
+                                                <span className={`font-mono ${Number(payment.amount || 0) < 0 ? 'text-red-300' : 'text-emerald-300'}`}>€{Number(payment.amount || 0).toFixed(2)}</span>
                                             </div>
                                             <div className="text-[11px] text-zinc-500">
                                                 {[payment.method, payment.paymentMethodType, payment.cardBrand, payment.cardLast4 ? `•••• ${payment.cardLast4}` : ''].filter(Boolean).join(' · ')}
+                                                {Number(payment.refundedAmount) > 0 && (
+                                                    <span className="text-amber-400 ml-2">· Rimborsato €{Number(payment.refundedAmount).toFixed(2)}</span>
+                                                )}
                                             </div>
-                                            {[payment.stripeSessionId, payment.stripePaymentIntentId, payment.stripeChargeId, payment.paypalEmail, payment.paypalPayerId].filter(Boolean).map((value: string) => (
+                                            {[payment.stripeSessionId, payment.stripePaymentIntentId, payment.stripeChargeId, payment.stripeRefundId, payment.paypalEmail, payment.paypalPayerId].filter(Boolean).map((value: string) => (
                                                 <div key={value} className="text-[11px] text-zinc-500 font-mono truncate">{value}</div>
                                             ))}
+                                            {payment.method === 'stripe' && payment.stripePaymentIntentId && Number(payment.amount) > Number(payment.refundedAmount || 0) + 0.01 && (
+                                                <div className="pt-1">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-7 text-[11px] border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
+                                                        onClick={async () => {
+                                                            const maxRefund = Math.max(0, Number(payment.amount || 0) - Number(payment.refundedAmount || 0))
+                                                            const input = prompt(
+                                                                `Importo da rimborsare via Stripe (max €${maxRefund.toFixed(2)}).\n\nLascia vuoto per rimborso totale.\n\n⚠️ Il rimborso è IRREVERSIBILE. Lo scontrino fiscale già emesso resta valido.`,
+                                                                maxRefund.toFixed(2)
+                                                            )
+                                                            if (input === null) return
+                                                            const amount = input.trim() === '' ? undefined : Number(input.replace(',', '.'))
+                                                            if (amount !== undefined && (!Number.isFinite(amount) || amount <= 0 || amount > maxRefund + 0.01)) {
+                                                                toast.error(`Importo non valido (max €${maxRefund.toFixed(2)})`)
+                                                                return
+                                                            }
+                                                            if (!confirm(`Confermi rimborso di €${(amount ?? maxRefund).toFixed(2)} via Stripe?\n\nL'importo verrà restituito sulla carta del cliente. Operazione irreversibile.`)) return
+                                                            try {
+                                                                const result = await DatabaseService.refundTakeawayStripePayment({
+                                                                    orderId: selected.id,
+                                                                    stripePaymentIntentId: payment.stripePaymentIntentId,
+                                                                    amount,
+                                                                })
+                                                                toast.success(`Rimborso eseguito: €${result.refundedAmount.toFixed(2)}`)
+                                                                if (result.fiscalNotice) {
+                                                                    setTimeout(() => toast.info(result.fiscalNotice, { duration: 8000 }), 500)
+                                                                }
+                                                                refresh()
+                                                            } catch (e: any) {
+                                                                toast.error(e?.message || 'Errore rimborso')
+                                                            }
+                                                        }}
+                                                    >
+                                                        Rimborsa via Stripe
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
                             )}
+
+                            {/* Fiscal receipt check (only for paid orders) */}
+                            {Number(selected.paid_amount || 0) > 0 && (
+                                <FiscalReceiptInlineCheck
+                                    restaurantId={selected.restaurant_id}
+                                    orderId={selected.id}
+                                />
+                            )}
+
                             <div className="flex gap-2">
                                 {onPrintKitchenOrder && <Button size="sm" onClick={() => onPrintKitchenOrder(selected)} variant="outline" className="border-white/10"><Receipt size={14} className="mr-1" />Stampa comanda</Button>}
                                 {selected.status !== 'PAID' && selected.status !== 'CANCELLED' && selected.status !== 'PICKED_UP' && (
@@ -976,6 +1101,156 @@ export default function TakeawayOrdersPanel({ restaurantId, takeawayRequireStrip
                     )}
                 </DialogContent>
             </Dialog>
+        </div>
+    )
+}
+
+/**
+ * Small expandable widget that fetches the fiscal receipt status for a
+ * single order on demand. Avoids loading receipt data for every order row.
+ */
+function FiscalReceiptInlineCheck({ restaurantId, orderId }: { restaurantId: string, orderId: string }) {
+    const [open, setOpen] = useState(false)
+    const [loading, setLoading] = useState(false)
+    const [data, setData] = useState<{
+        receipts: Array<{
+            id: string
+            openapi_receipt_id: string | null
+            openapi_status: string
+            total_amount: number
+            created_at: string
+            ready_at: string | null
+            error_log: any[]
+            retry_count: number
+            issued_via: string
+        }>
+        jobs: Array<{ id: string, status: string, attempts: number, last_error: string | null, run_after: string | null }>
+    } | null>(null)
+
+    const load = async () => {
+        setLoading(true)
+        try {
+            const result = await DatabaseService.getFiscalReceiptForOrder(restaurantId, orderId)
+            setData(result)
+        } catch (e: any) {
+            toast.error(e?.message || 'Errore verifica scontrino')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        if (open && !data) {
+            load()
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, orderId])
+
+    const summary = useMemo(() => {
+        if (!data) return null
+        const ready = data.receipts.filter(r => r.openapi_status === 'ready')
+        const failed = data.receipts.filter(r => r.openapi_status === 'failed')
+        const pending = data.receipts.filter(r => ['pending', 'submitted', 'retry'].includes(r.openapi_status))
+        const queuedJobs = data.jobs.filter(j => j.status !== 'succeeded' && j.status !== 'dead')
+        if (ready.length > 0 && failed.length === 0 && pending.length === 0) {
+            return { color: 'emerald', label: '✓ Scontrino fiscale emesso', detail: `${ready.length} scontrino ${ready.length === 1 ? 'trasmesso' : 'trasmessi'} all'AdE` }
+        }
+        if (failed.length > 0) {
+            return { color: 'red', label: '✗ Emissione fallita', detail: `${failed.length} scontrino fallito${failed.length > 1 ? 'i' : ''}` }
+        }
+        if (pending.length > 0 || queuedJobs.length > 0) {
+            return { color: 'amber', label: '⏳ In attesa di trasmissione', detail: 'Lo scontrino è in coda — verrà inviato a breve' }
+        }
+        return { color: 'zinc', label: 'Nessuno scontrino', detail: 'Nessuno scontrino fiscale associato a questo ordine' }
+    }, [data])
+
+    return (
+        <div className="bg-white/5 rounded-lg p-3 border border-white/10 text-sm">
+            <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                className="w-full flex items-center justify-between gap-2 text-left"
+            >
+                <span className="text-zinc-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <Receipt size={13} /> Scontrino fiscale
+                </span>
+                <span className="text-xs text-zinc-500">{open ? '▲' : '▼ verifica'}</span>
+            </button>
+
+            {open && (
+                <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
+                    {loading ? (
+                        <div className="text-zinc-500 text-xs text-center py-2">Caricamento...</div>
+                    ) : summary ? (
+                        <>
+                            <div className={`rounded px-2 py-1.5 text-xs ${
+                                summary.color === 'emerald' ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' :
+                                summary.color === 'red' ? 'bg-red-500/10 border border-red-500/30 text-red-300' :
+                                summary.color === 'amber' ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300' :
+                                'bg-zinc-500/10 border border-zinc-500/30 text-zinc-300'
+                            }`}>
+                                <div className="font-semibold">{summary.label}</div>
+                                <div className="opacity-80 mt-0.5">{summary.detail}</div>
+                            </div>
+
+                            {data?.receipts.map(r => (
+                                <div key={r.id} className="rounded bg-black/40 border border-white/5 p-2 space-y-1 text-[11px]">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-mono text-zinc-300">
+                                            {r.openapi_receipt_id ? `#${r.openapi_receipt_id.slice(-10)}` : `Locale ${r.id.slice(-6)}`}
+                                        </span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                                            r.openapi_status === 'ready' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' :
+                                            r.openapi_status === 'failed' ? 'bg-red-500/10 border-red-500/30 text-red-300' :
+                                            r.openapi_status === 'voided' ? 'bg-zinc-500/10 border-zinc-500/30 text-zinc-400' :
+                                            'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                        }`}>
+                                            {r.openapi_status}
+                                        </span>
+                                    </div>
+                                    <div className="text-zinc-500 flex gap-2 flex-wrap">
+                                        <span>€{Number(r.total_amount).toFixed(2)}</span>
+                                        <span>·</span>
+                                        <span>{new Date(r.created_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                                        <span>·</span>
+                                        <span>via {r.issued_via}</span>
+                                    </div>
+                                    {r.openapi_status === 'failed' && r.error_log?.length > 0 && (
+                                        <div className="text-red-300 text-[10px] mt-1">
+                                            Ultimo errore: {typeof r.error_log[r.error_log.length - 1] === 'string'
+                                                ? r.error_log[r.error_log.length - 1]
+                                                : (r.error_log[r.error_log.length - 1]?.message || 'errore').slice(0, 120)}
+                                        </div>
+                                    )}
+                                    {r.openapi_status === 'ready' && r.ready_at && (
+                                        <div className="text-emerald-400 text-[10px]">
+                                            ✓ Trasmesso all'AdE il {new Date(r.ready_at).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+
+                            {data?.jobs.filter(j => j.status !== 'succeeded' && j.status !== 'dead').map(j => (
+                                <div key={j.id} className="rounded bg-amber-500/5 border border-amber-500/20 p-2 text-[11px] text-amber-200">
+                                    <div className="font-semibold">In coda: {j.status} (tentativo {j.attempts})</div>
+                                    {j.last_error && <div className="opacity-70 mt-0.5">{j.last_error.slice(0, 120)}</div>}
+                                </div>
+                            ))}
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={load}
+                                className="w-full h-7 text-xs text-zinc-400 hover:text-amber-400"
+                            >
+                                Ricarica
+                            </Button>
+                        </>
+                    ) : (
+                        <div className="text-zinc-500 text-xs text-center py-2">Click per verificare</div>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

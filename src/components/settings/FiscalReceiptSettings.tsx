@@ -106,15 +106,22 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
     const [credentialsOpen, setCredentialsOpen] = useState(false)
     const [showReceipts, setShowReceipts] = useState(false)
     const [receiptsDateFilter, setReceiptsDateFilter] = useState('')
+    const [receiptsStatusFilter, setReceiptsStatusFilter] = useState<'all' | 'ready' | 'pending' | 'failed' | 'voided'>('all')
+    const [receiptsSearch, setReceiptsSearch] = useState('')
+    const [receiptsExpanded, setReceiptsExpanded] = useState<string | null>(null)
+    const [receiptsLoadedCount, setReceiptsLoadedCount] = useState(20)
+    const [loadingMoreReceipts, setLoadingMoreReceipts] = useState(false)
 
     const [saving, setSaving] = useState(false)
     const [stats, setStats] = useState<{ sent_count: number; failed_count: number; voided_count: number; revenue_total: number } | null>(null)
     const [recentReceipts, setRecentReceipts] = useState<FiscalReceipt[]>([])
+    const [openapiEnv, setOpenapiEnv] = useState<string | null>(null)
 
-    const loadRestaurant = async () => {
+    const loadRestaurant = async (overrideLimit?: number) => {
         setLoading(true)
         try {
-            const dashboard = await DatabaseService.getOpenApiFiscalDashboard(restaurantId, true, 8)
+            const limit = overrideLimit || receiptsLoadedCount
+            const dashboard = await DatabaseService.getOpenApiFiscalDashboard(restaurantId, true, limit)
             if (dashboard?.restaurant) {
                 const r = dashboard.restaurant as unknown as Restaurant
                 setRestaurant(r)
@@ -133,6 +140,7 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                 setCredentialsOpen(r.openapi_status !== 'active')
                 setStats(dashboard.stats || null)
                 setRecentReceipts(dashboard.receipts || [])
+                setOpenapiEnv((dashboard as any).platform?.openapi_env || null)
             }
         } finally {
             setLoading(false)
@@ -289,6 +297,22 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-10 max-w-3xl"
         >
+            {openapiEnv && openapiEnv !== 'production' && (
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/40 px-4 py-3 flex items-start gap-3">
+                    <div className="text-2xl leading-none">⚠️</div>
+                    <div className="text-sm">
+                        <div className="font-bold text-amber-300">MODALITÀ SANDBOX — Scontrini fittizi</div>
+                        <div className="text-amber-100/80 text-[12px] mt-1">
+                            OpenAPI è configurato in modalità test/sandbox. Gli scontrini emessi
+                            in questa fase <strong>NON sono trasmessi all'Agenzia delle Entrate</strong> e
+                            non hanno valore fiscale. Per attivare la modalità reale, l'amministratore deve impostare
+                            <code className="mx-1 px-1 bg-amber-500/20 rounded text-amber-200">OPENAPI_ENV=production</code>
+                            nei secret Supabase.
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <section className="rounded-xl bg-zinc-900/70 border border-white/10 overflow-hidden">
                 <div className="flex items-center justify-between gap-4 px-4 py-4">
                     <div className="flex items-start gap-3 min-w-0">
@@ -375,8 +399,8 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                             <Receipt size={18} className="opacity-70" />
                             Archivio Scontrini
                         </h3>
-                        <Button 
-                            variant="secondary" 
+                        <Button
+                            variant="secondary"
                             size="sm"
                             className="bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-white/10 text-xs h-7"
                             onClick={() => setShowReceipts(!showReceipts)}
@@ -384,76 +408,247 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                             {showReceipts ? 'Nascondi' : 'Mostra'}
                         </Button>
                     </div>
-                    
-                    {showReceipts && (
-                        <div className="rounded-xl bg-zinc-900/60 border border-white/10 overflow-hidden flex flex-col">
-                            <div className="p-3 border-b border-white/5 bg-black/20 flex gap-2 items-center">
-                                <Label className="text-xs text-zinc-400">Filtra per data:</Label>
-                                <Input 
-                                    type="date" 
-                                    value={receiptsDateFilter} 
-                                    onChange={(e) => setReceiptsDateFilter(e.target.value)}
-                                    className="h-7 text-xs bg-black/40 border-white/10 w-auto"
-                                />
-                                {receiptsDateFilter && (
-                                    <Button variant="ghost" size="sm" className="h-7 text-xs text-zinc-400 px-2" onClick={() => setReceiptsDateFilter('')}>Reset</Button>
-                                )}
-                            </div>
-                            <div className="divide-y divide-white/5 max-h-[400px] overflow-y-auto">
-                                {recentReceipts.filter(r => !receiptsDateFilter || (r.created_at && r.created_at.startsWith(receiptsDateFilter))).length === 0 ? (
-                                    <div className="px-4 py-4 text-[13px] text-zinc-500">
-                                        Nessuno scontrino trovato.
+
+                    {showReceipts && (() => {
+                        const filtered = recentReceipts.filter(r => {
+                            if (receiptsDateFilter && !(r.created_at || '').startsWith(receiptsDateFilter)) return false
+                            if (receiptsStatusFilter !== 'all') {
+                                if (receiptsStatusFilter === 'pending') {
+                                    if (!['pending', 'submitted', 'retry'].includes(r.openapi_status || '')) return false
+                                } else if (r.openapi_status !== receiptsStatusFilter) return false
+                            }
+                            const q = receiptsSearch.trim().toLowerCase()
+                            if (q) {
+                                const hay = [
+                                    receiptPrimaryLabel(r),
+                                    r.openapi_receipt_id,
+                                    String(r.total_amount || ''),
+                                    r.customer_email,
+                                    r.customer_tax_code,
+                                    r.id,
+                                ].filter(Boolean).join(' ').toLowerCase()
+                                if (!hay.includes(q)) return false
+                            }
+                            return true
+                        })
+
+                        const statusCount = (status: typeof receiptsStatusFilter) => {
+                            if (status === 'all') return recentReceipts.length
+                            if (status === 'pending') return recentReceipts.filter(r => ['pending', 'submitted', 'retry'].includes(r.openapi_status || '')).length
+                            return recentReceipts.filter(r => r.openapi_status === status).length
+                        }
+
+                        return (
+                            <div className="rounded-xl bg-zinc-900/60 border border-white/10 overflow-hidden flex flex-col">
+                                {/* Filters bar */}
+                                <div className="p-3 border-b border-white/5 bg-black/20 space-y-2">
+                                    <div className="flex gap-2 flex-wrap items-center">
+                                        <Input
+                                            type="search"
+                                            placeholder="Cerca per importo, ID OpenAPI, email, codice fiscale cliente..."
+                                            value={receiptsSearch}
+                                            onChange={(e) => setReceiptsSearch(e.target.value)}
+                                            className="h-8 text-xs bg-black/40 border-white/10 flex-1 min-w-[200px]"
+                                        />
+                                        <Input
+                                            type="date"
+                                            value={receiptsDateFilter}
+                                            onChange={(e) => setReceiptsDateFilter(e.target.value)}
+                                            className="h-8 text-xs bg-black/40 border-white/10 w-auto"
+                                        />
+                                        {(receiptsDateFilter || receiptsSearch || receiptsStatusFilter !== 'all') && (
+                                            <Button variant="ghost" size="sm" className="h-8 text-xs text-zinc-400 px-2" onClick={() => { setReceiptsDateFilter(''); setReceiptsSearch(''); setReceiptsStatusFilter('all') }}>Reset</Button>
+                                        )}
                                     </div>
-                                ) : recentReceipts.filter(r => !receiptsDateFilter || (r.created_at && r.created_at.startsWith(receiptsDateFilter))).map(receipt => {
-                                    const meta = fiscalReceiptStatusMeta(receipt.openapi_status)
-                                    const canDownloadReceipt = Boolean(receipt.openapi_receipt_id) && receipt.openapi_status !== 'failed' && receipt.openapi_status !== 'voided'
-                                    return (
-                                        <div key={receipt.id} className="px-3 py-2 flex items-center justify-between gap-2 hover:bg-white/5 transition-colors">
-                                            <div className="min-w-0 flex-1 flex items-center gap-3">
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${meta.className}`}>
-                                                    {meta.label}
-                                                </span>
-                                                <div className="text-[12px] font-medium text-zinc-200 truncate">
-                                                    {receiptPrimaryLabel(receipt)}
-                                                </div>
-                                                <div className="text-[11px] text-zinc-500 hidden sm:flex items-center gap-2">
-                                                    <span>{formatEuro(receipt.total_amount)}</span>
-                                                    <span>·</span>
-                                                    <span>{formatReceiptDate(receipt.created_at)}</span>
-                                                </div>
-                                            </div>
-                                            {canDownloadReceipt && (
-                                                <div className="flex items-center gap-1 shrink-0">
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        onClick={() => handleReceiptPdf(receipt)}
-                                                        className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
-                                                        title="Scarica PDF"
-                                                    >
-                                                        <DownloadSimple size={14} />
-                                                    </Button>
-                                                </div>
-                                            )}
-                                            {receipt.openapi_status === 'failed' && (receipt.retry_count || 0) < 5 && (
-                                                <div className="shrink-0">
-                                                    <Button
-                                                        type="button"
-                                                        onClick={() => handleRetryReceipt(receipt.id)}
-                                                        disabled={retryingReceiptId === receipt.id}
-                                                        className="h-6 text-[10px] px-2 bg-red-900/40 hover:bg-red-800/50 text-red-100 border border-red-500/30"
-                                                    >
-                                                        <ArrowsClockwise size={12} className={`mr-1 ${retryingReceiptId === receipt.id ? 'animate-spin' : ''}`} />
-                                                        Riprova
-                                                    </Button>
-                                                </div>
-                                            )}
+                                    <div className="flex gap-1 flex-wrap">
+                                        {(['all', 'ready', 'pending', 'failed', 'voided'] as const).map(s => {
+                                            const labels = { all: 'Tutti', ready: '✅ Emessi', pending: '⏳ In corso', failed: '❌ Falliti', voided: '⊘ Annullati' }
+                                            return (
+                                                <Button
+                                                    key={s}
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => setReceiptsStatusFilter(s)}
+                                                    className={`h-7 px-3 text-[11px] rounded ${receiptsStatusFilter === s ? 'bg-amber-500 text-black font-bold' : 'bg-black/40 text-zinc-400 hover:bg-white/5'}`}
+                                                >
+                                                    {labels[s]} <span className="ml-1 opacity-60">({statusCount(s)})</span>
+                                                </Button>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* List */}
+                                <div className="divide-y divide-white/5 max-h-[500px] overflow-y-auto">
+                                    {filtered.length === 0 ? (
+                                        <div className="px-4 py-6 text-[13px] text-zinc-500 text-center">
+                                            Nessuno scontrino trovato con questi filtri.
                                         </div>
-                                    )
-                                })}
+                                    ) : filtered.map(receipt => {
+                                        const meta = fiscalReceiptStatusMeta(receipt.openapi_status)
+                                        const canDownloadReceipt = Boolean(receipt.openapi_receipt_id) && receipt.openapi_status !== 'failed' && receipt.openapi_status !== 'voided'
+                                        const isExpanded = receiptsExpanded === receipt.id
+                                        const items: Array<{ description?: string, quantity?: number, unit_price?: number, unitPrice?: number, vat_rate_code?: string }> = Array.isArray((receipt as any).items) ? (receipt as any).items : []
+                                        const errorLog: any[] = Array.isArray((receipt as any).error_log) ? (receipt as any).error_log : []
+                                        return (
+                                            <div key={receipt.id} className="hover:bg-white/5 transition-colors">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReceiptsExpanded(isExpanded ? null : receipt.id)}
+                                                    className="w-full px-3 py-2 flex items-center gap-2 text-left"
+                                                >
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${meta.className}`}>
+                                                        {meta.label}
+                                                    </span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-[12px] font-medium text-zinc-200 truncate">
+                                                            {receiptPrimaryLabel(receipt)}
+                                                        </div>
+                                                        <div className="text-[11px] text-zinc-500 flex items-center gap-2 mt-0.5 flex-wrap">
+                                                            <span className="text-emerald-400 font-mono">{formatEuro(receipt.total_amount)}</span>
+                                                            <span>·</span>
+                                                            <span>{formatReceiptDate(receipt.created_at)}</span>
+                                                            {receipt.openapi_receipt_id && (
+                                                                <>
+                                                                    <span>·</span>
+                                                                    <span className="font-mono text-zinc-600">#{receipt.openapi_receipt_id.slice(-8)}</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-zinc-600 text-xs">{isExpanded ? '▲' : '▼'}</span>
+                                                </button>
+
+                                                {isExpanded && (
+                                                    <div className="px-3 pb-3 pt-1 border-t border-white/5 bg-black/30 space-y-3 text-[12px]">
+                                                        {/* Status / IDs */}
+                                                        <div className="grid grid-cols-2 gap-2 text-zinc-300">
+                                                            <div>
+                                                                <div className="text-zinc-500 text-[10px] uppercase">Stato OpenAPI</div>
+                                                                <div className="font-medium">{receipt.openapi_status}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-zinc-500 text-[10px] uppercase">ID OpenAPI</div>
+                                                                <div className="font-mono text-[11px] break-all">{receipt.openapi_receipt_id || '—'}</div>
+                                                            </div>
+                                                            {receipt.stripe_payment_intent_id && (
+                                                                <div className="col-span-2">
+                                                                    <div className="text-zinc-500 text-[10px] uppercase">Stripe Payment Intent</div>
+                                                                    <div className="font-mono text-[11px] break-all">{receipt.stripe_payment_intent_id}</div>
+                                                                </div>
+                                                            )}
+                                                            {receipt.customer_email && (
+                                                                <div className="col-span-2">
+                                                                    <div className="text-zinc-500 text-[10px] uppercase">Cliente</div>
+                                                                    <div className="text-zinc-200">{receipt.customer_email}{receipt.customer_tax_code ? ` · CF ${receipt.customer_tax_code}` : ''}{receipt.customer_lottery_code ? ` · 🎰 ${receipt.customer_lottery_code}` : ''}</div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Items breakdown */}
+                                                        {items.length > 0 && (
+                                                            <div>
+                                                                <div className="text-zinc-500 text-[10px] uppercase mb-1">Voci</div>
+                                                                <div className="rounded bg-black/40 border border-white/5 divide-y divide-white/5">
+                                                                    {items.slice(0, 12).map((it, idx) => (
+                                                                        <div key={idx} className="px-2 py-1 flex items-center gap-2 text-[11px]">
+                                                                            <span className="text-zinc-400 w-8">×{it.quantity || 1}</span>
+                                                                            <span className="flex-1 text-zinc-200 truncate">{it.description || '—'}</span>
+                                                                            <span className="text-zinc-500 font-mono">€{Number(it.unit_price ?? it.unitPrice ?? 0).toFixed(2)}</span>
+                                                                            {it.vat_rate_code && <span className="text-zinc-600">IVA {it.vat_rate_code}</span>}
+                                                                        </div>
+                                                                    ))}
+                                                                    {items.length > 12 && (
+                                                                        <div className="px-2 py-1 text-[10px] text-zinc-500 text-center">+{items.length - 12} altri prodotti</div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Error log */}
+                                                        {errorLog.length > 0 && (
+                                                            <div>
+                                                                <div className="text-red-400 text-[10px] uppercase mb-1">Errori (ultimi 3)</div>
+                                                                <div className="rounded bg-red-950/40 border border-red-500/20 divide-y divide-red-500/10">
+                                                                    {errorLog.slice(-3).map((err, idx) => (
+                                                                        <div key={idx} className="px-2 py-1 text-[11px] text-red-200">
+                                                                            <div className="text-red-400/70 text-[9px]">{err.at || ''}</div>
+                                                                            <div className="break-all">{typeof err === 'string' ? err : (err.message || JSON.stringify(err).slice(0, 200))}</div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Verify on AdE hint */}
+                                                        {receipt.openapi_status === 'ready' && (
+                                                            <div className="rounded bg-emerald-950/40 border border-emerald-500/20 p-2 text-[11px] text-emerald-200">
+                                                                ✓ Scontrino trasmesso all'Agenzia delle Entrate.
+                                                                Puoi verificarlo accedendo a{' '}
+                                                                <a href="https://www.agenziaentrate.gov.it/portale/web/guest/area-riservata" target="_blank" rel="noreferrer" className="underline">agenziaentrate.gov.it</a>
+                                                                {' '}→ Area Riservata → Fatture e Corrispettivi → Corrispettivi Telematici.
+                                                            </div>
+                                                        )}
+
+                                                        {/* Action buttons */}
+                                                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                                                            {canDownloadReceipt && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => handleReceiptPdf(receipt)}
+                                                                    className="h-7 text-[11px] border-white/10 text-zinc-200 hover:bg-white/5"
+                                                                >
+                                                                    <DownloadSimple size={12} className="mr-1" />
+                                                                    Scarica PDF
+                                                                </Button>
+                                                            )}
+                                                            {receipt.openapi_status === 'failed' && (receipt.retry_count || 0) < 5 && (
+                                                                <Button
+                                                                    type="button"
+                                                                    onClick={() => handleRetryReceipt(receipt.id)}
+                                                                    disabled={retryingReceiptId === receipt.id}
+                                                                    className="h-7 text-[11px] px-2 bg-red-900/40 hover:bg-red-800/50 text-red-100 border border-red-500/30"
+                                                                >
+                                                                    <ArrowsClockwise size={12} className={`mr-1 ${retryingReceiptId === receipt.id ? 'animate-spin' : ''}`} />
+                                                                    Riprova invio
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+
+                                {/* Load more + retention notice */}
+                                <div className="px-3 py-2 border-t border-white/5 bg-black/20 flex items-center justify-between gap-2">
+                                    <span className="text-[10px] text-zinc-500">
+                                        {filtered.length} di {recentReceipts.length} caricati · Archiviazione 10 anni per legge
+                                    </span>
+                                    {recentReceipts.length >= receiptsLoadedCount && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            disabled={loadingMoreReceipts}
+                                            onClick={async () => {
+                                                setLoadingMoreReceipts(true)
+                                                const next = receiptsLoadedCount + 50
+                                                setReceiptsLoadedCount(next)
+                                                await loadRestaurant(next)
+                                                setLoadingMoreReceipts(false)
+                                            }}
+                                            className="h-7 text-[11px] text-amber-400 hover:bg-amber-500/10"
+                                        >
+                                            {loadingMoreReceipts ? 'Caricamento...' : '+ Carica altri 50'}
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )
+                    })()}
                 </section>
             )}
 

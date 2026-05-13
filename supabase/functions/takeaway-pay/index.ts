@@ -27,6 +27,7 @@ type PaymentAction =
     | { action: "register_stripe_online"; amount: number; label?: string } // after Stripe webhook lands
     | { action: "create_stripe_checkout"; amount: number; label?: string; successUrl?: string; cancelUrl?: string }
     | { action: "refund_last"; }
+    | { action: "refund_stripe"; stripePaymentIntentId: string; amount?: number; reason?: string }
     | { action: "cancel_order"; };
 
 serve(async (req) => {
@@ -228,6 +229,168 @@ serve(async (req) => {
             const { error } = await supabase.from("orders").update(updates).eq("id", orderId);
             if (error) return json({ error: error.message }, 500);
             return json({ success: true, paidAmount: newPaid });
+        }
+
+        // ------------------------------------------------------------------
+        // refund_stripe — refund an existing Stripe payment via Connect
+        //
+        // Safety guarantees:
+        //   - Only refunds a payment that we can trace to a payment intent
+        //     stored in payments[].
+        //   - Asks Stripe directly on the Connect account; if Stripe says
+        //     "already refunded" we just reconcile our DB and return success.
+        //   - Idempotent: a deterministic idempotencyKey prevents double-refund
+        //     even if the cashier double-clicks or the network retries.
+        //   - DB update happens only after Stripe confirms the refund.
+        //   - Partial refunds supported via `amount` (defaults to full).
+        // ------------------------------------------------------------------
+        if (a.action === "refund_stripe") {
+            const piId = String(a.stripePaymentIntentId || "").trim();
+            if (!piId || !piId.startsWith("pi_")) {
+                return json({ error: "Payment intent non valido" }, 400);
+            }
+
+            const entryIdx = payments.findIndex(
+                (p: any) => p?.method === "stripe" && p?.stripePaymentIntentId === piId
+            );
+            if (entryIdx === -1) {
+                return json({ error: "Pagamento Stripe non trovato per questo ordine" }, 404);
+            }
+            const entry = payments[entryIdx] as any;
+            const alreadyRefunded = Number(entry.refundedAmount) || 0;
+            const originalAmount = Number(entry.amount) || 0;
+            const remainingRefundable = Math.max(0, Math.round((originalAmount - alreadyRefunded) * 100) / 100);
+            if (remainingRefundable <= 0.01) {
+                return json({ error: "Pagamento già rimborsato completamente" }, 409);
+            }
+
+            const requestedAmount = typeof a.amount === "number" && Number.isFinite(a.amount)
+                ? Math.round(a.amount * 100) / 100
+                : remainingRefundable;
+            if (requestedAmount <= 0) {
+                return json({ error: "Importo rimborso non valido" }, 400);
+            }
+            if (requestedAmount > remainingRefundable + 0.01) {
+                return json({
+                    error: `Importo richiesto (€${requestedAmount.toFixed(2)}) supera il residuo rimborsabile (€${remainingRefundable.toFixed(2)})`,
+                }, 400);
+            }
+
+            // Need the connected account id to talk to Stripe Connect.
+            const { data: restConnect } = await supabase
+                .from("restaurants")
+                .select("stripe_connect_account_id, name")
+                .eq("id", order.restaurant_id)
+                .maybeSingle();
+            if (!restConnect?.stripe_connect_account_id) {
+                return json({ error: "Account Stripe Connect del ristorante non disponibile" }, 409);
+            }
+
+            // Stripe refund (with deterministic idempotency to prevent
+            // double-refund on retries).
+            const idempotencyKey = `takeaway-refund-${orderId}-${piId}-${Math.round(requestedAmount * 100)}`;
+            let refund: any = null;
+            try {
+                refund = await stripe.refunds.create(
+                    {
+                        payment_intent: piId,
+                        amount: Math.round(requestedAmount * 100),
+                        reason: a.reason === "fraudulent" ? "fraudulent"
+                            : a.reason === "duplicate" ? "duplicate"
+                            : "requested_by_customer",
+                        metadata: {
+                            minthiOrderId: orderId,
+                            minthiRestaurantId: order.restaurant_id,
+                            initiatedBy: userId,
+                        },
+                    },
+                    { stripeAccount: restConnect.stripe_connect_account_id, idempotencyKey }
+                );
+            } catch (stripeErr: any) {
+                // If Stripe says the charge was already refunded externally
+                // (e.g. from Stripe Dashboard), reconcile our DB silently.
+                const msg = String(stripeErr?.message || stripeErr || "").toLowerCase();
+                if (msg.includes("already") && msg.includes("refunded")) {
+                    // Treat as full refund of remaining amount
+                    refund = {
+                        id: `external-${Date.now()}`,
+                        amount: Math.round(remainingRefundable * 100),
+                        status: "succeeded",
+                        external_reconciliation: true,
+                    };
+                } else {
+                    console.error("[TAKEAWAY-REFUND-STRIPE] Stripe error:", stripeErr);
+                    return json({
+                        error: "Stripe ha rifiutato il rimborso: " + (stripeErr?.message || "errore sconosciuto"),
+                    }, 502);
+                }
+            }
+
+            const refundedAmount = (Number(refund.amount) || Math.round(requestedAmount * 100)) / 100;
+            const fullRefund = refundedAmount + 0.01 >= remainingRefundable;
+
+            // --- Update payments[] -------------------------------------------------
+            const newRefundedAmount = Math.round((alreadyRefunded + refundedAmount) * 100) / 100;
+            payments[entryIdx] = {
+                ...entry,
+                refundedAmount: newRefundedAmount,
+                refundedAt: new Date().toISOString(),
+                lastRefundId: refund.id,
+            };
+
+            // Audit row: log the refund as a NEGATIVE-amount payment so the
+            // running total of paid_amount stays correct.
+            payments.push({
+                method: "stripe_refund",
+                amount: -refundedAmount,
+                at: new Date().toISOString(),
+                label: `Rimborso Stripe [${piId.slice(0, 12)}…]`,
+                by: userId,
+                stripeRefundId: refund.id,
+                stripePaymentIntentId: piId,
+                externalReconciliation: refund.external_reconciliation === true,
+            });
+
+            const newPaid = Math.max(
+                0,
+                Math.round((currentPaid - refundedAmount) * 100) / 100
+            );
+            const updates: Record<string, unknown> = {
+                paid_amount: newPaid,
+                payments,
+            };
+            // If the order was PAID and now isn't fully covered → reopen as PREPARING
+            if (order.status === "PAID" && newPaid + 0.01 < total) {
+                updates.status = "PREPARING";
+                updates.closed_at = null;
+                updates.payment_method = null;
+            }
+            // If we refunded everything and there are no other payments → reset method
+            const anyRemainingPayment = payments.some((p: any) => Number(p?.amount) > 0);
+            if (!anyRemainingPayment) {
+                updates.payment_method = null;
+            }
+
+            const { error: uErr } = await supabase.from("orders").update(updates).eq("id", orderId);
+            if (uErr) {
+                console.error("[TAKEAWAY-REFUND-STRIPE] DB update error after Stripe success:", uErr);
+                // Stripe already refunded → DB inconsistency must be visible
+                return json({
+                    error: "Rimborso eseguito su Stripe ma errore nel salvataggio locale. Contatta supporto.",
+                    stripeRefundId: refund.id,
+                    refundedAmount,
+                }, 500);
+            }
+
+            return json({
+                success: true,
+                refundedAmount,
+                fullRefund,
+                paidAmount: newPaid,
+                stripeRefundId: refund.id,
+                externalReconciliation: refund.external_reconciliation === true,
+                fiscalNotice: "Lo scontrino fiscale eventualmente già emesso resta valido. Per emettere lo scontrino di reso/rimborso contatta il commercialista.",
+            });
         }
 
         // ------------------------------------------------------------------

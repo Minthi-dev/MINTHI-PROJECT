@@ -1140,6 +1140,37 @@ export const DatabaseService = {
         return data as { success: true; checkoutUrl: string; sessionId: string }
     },
 
+    async refundTakeawayStripePayment(params: {
+        orderId: string
+        stripePaymentIntentId: string
+        amount?: number
+        reason?: 'requested_by_customer' | 'duplicate' | 'fraudulent'
+    }) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('takeaway-pay', {
+            body: {
+                userId, orderId: params.orderId, sessionToken,
+                action: 'refund_stripe',
+                stripePaymentIntentId: params.stripePaymentIntentId,
+                amount: params.amount,
+                reason: params.reason || 'requested_by_customer',
+            },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore rimborso Stripe'))
+        if (data?.error) throw new Error(data.error)
+        return data as {
+            success: true
+            refundedAmount: number
+            fullRefund: boolean
+            paidAmount: number
+            stripeRefundId: string
+            externalReconciliation: boolean
+            fiscalNotice: string
+        }
+    },
+
     async refundLastTakeawayPayment(orderId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
@@ -2062,6 +2093,53 @@ export const DatabaseService = {
             throw new Error(msg)
         }
         return data
+    },
+
+    /**
+     * Returns the fiscal receipt(s) and pending jobs related to a single order.
+     * Used by the takeaway management panel to show "Scontrino: ✓/⏳/✗" inline.
+     */
+    async getFiscalReceiptForOrder(restaurantId: string, orderId: string) {
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('openapi-fiscal-dashboard', {
+            body: { userId, sessionToken, restaurantId, action: 'lookup_for_order', orderId },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore verifica scontrino'))
+        if (data?.error) throw new Error(data.error)
+        return data as {
+            success: true
+            receipts: Array<{
+                id: string
+                openapi_receipt_id: string | null
+                openapi_status: string
+                total_amount: number
+                created_at: string
+                ready_at: string | null
+                submitted_at: string | null
+                voided_at: string | null
+                error_log: any[]
+                retry_count: number
+                items: any[]
+                customer_email: string | null
+                customer_tax_code: string | null
+                customer_lottery_code: string | null
+                issued_via: string
+                stripe_payment_intent_id: string | null
+                electronic_payment_amount: number
+                cash_payment_amount: number
+            }>
+            jobs: Array<{
+                id: string
+                status: string
+                attempts: number
+                last_error: string | null
+                run_after: string | null
+                created_at: string
+                updated_at: string
+            }>
+        }
     },
 
     async getOpenApiFiscalDashboard(restaurantId: string, includeReceipts = false, limit = 50) {
