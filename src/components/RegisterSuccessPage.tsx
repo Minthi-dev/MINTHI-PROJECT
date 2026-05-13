@@ -2,52 +2,23 @@ import { motion } from 'framer-motion'
 import { CheckCircle, ArrowRight, Confetti, CircleNotch, WarningCircle } from '@phosphor-icons/react'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 
 type Status = 'polling' | 'ready' | 'timeout'
 
 export default function RegisterSuccessPage() {
   const navigate = useNavigate()
   const [status, setStatus] = useState<Status>('polling')
-  const pendingUsername = sessionStorage.getItem('minthi_pending_username')
 
   useEffect(() => {
-    // If no username stored (e.g. direct navigation), skip polling
-    if (!pendingUsername) {
+    // Registration is synchronous (no Stripe billing webhook in the loop
+    // anymore). We just show a brief "preparing" state before unlocking
+    // the login CTA, so the experience feels intentional.
+    const t = setTimeout(() => {
       setStatus('ready')
-      return
-    }
-
-    let stopped = false
-
-    const checkReady = async () => {
-      const { data } = await supabase
-        .from('users_safe')
-        .select('id')
-        .eq('name', pendingUsername)
-        .maybeSingle()
-      if (data && !stopped) {
-        setStatus('ready')
-        sessionStorage.removeItem('minthi_pending_username')
-      }
-    }
-
-    // Poll every 2s
-    checkReady()
-    const interval = setInterval(checkReady, 2000)
-
-    // After 3 minutes give up and let user try anyway
-    const timeout = setTimeout(() => {
-      if (!stopped) setStatus('timeout')
-      clearInterval(interval)
-    }, 180_000)
-
-    return () => {
-      stopped = true
-      clearInterval(interval)
-      clearTimeout(timeout)
-    }
-  }, [pendingUsername])
+      sessionStorage.removeItem('minthi_pending_username')
+    }, 1500)
+    return () => clearTimeout(t)
+  }, [])
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4 relative overflow-hidden">

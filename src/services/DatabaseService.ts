@@ -74,9 +74,17 @@ export const DatabaseService = {
 
     // Users
     async getUsers() {
-        const { data, error } = await supabase.from('users_safe').select('id, email, name, role, created_at')
-        if (error) throw error
-        return data as unknown as User[]
+        // Admin-only: route through secure-admin-action because users_safe runs
+        // with security_invoker and would deny anon/browser reads.
+        const userId = _getCurrentUserId()
+        if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
+        const { data, error } = await supabase.functions.invoke('secure-admin-action', {
+            body: { userId, sessionToken, action: 'list_users' },
+        })
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore caricamento utenti'))
+        if (data?.error) throw new Error(data.error)
+        return (data?.data || []) as User[]
     },
 
     async createUser(user: Partial<User>) {

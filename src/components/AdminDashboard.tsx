@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -33,14 +33,20 @@ export default function AdminDashboard({ user, onLogout }: Props) {
     undefined,
     (r: any) => ({ ...r, isActive: r.is_active })
   )
-  const [users, , refreshUsers] = useSupabaseData<User>(
-    'users_safe',
-    [],
-    undefined,
-    undefined,
-    undefined,
-    { realtimeEnabled: false }
-  )
+  // users_safe view runs with security_invoker which blocks anon reads.
+  // Use the edge function (admin-only) instead of a direct table query.
+  const [users, setUsers] = useState<User[]>([])
+  const refreshUsers = useCallback(async () => {
+    try {
+      const list = await DatabaseService.getUsers()
+      setUsers(list)
+    } catch (e: any) {
+      console.error('Error fetching users:', e)
+    }
+  }, [])
+  useEffect(() => {
+    refreshUsers()
+  }, [refreshUsers])
   const [salesByRestaurant, setSalesByRestaurant] = useState<Record<string, number>>({})
   const [activeView, setActiveView] = useState<'restaurants' | 'statistics' | 'admin' | 'qrcodes'>('restaurants')
 

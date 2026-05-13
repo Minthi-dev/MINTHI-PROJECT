@@ -35,6 +35,19 @@ serve(async (req) => {
 
         // 2. Route to action
         switch (action) {
+            case "list_users": {
+                // Admin-only listing of users.
+                // The users_safe view runs with security_invoker, which blocks
+                // anon/authenticated clients (correct), so we fetch through
+                // the service-role client here, returning only safe columns.
+                const { data, error } = await supabase
+                    .from("users")
+                    .select("id, email, name, role, created_at")
+                    .order("created_at", { ascending: false });
+                if (error) return json({ error: error.message }, 500);
+                return json({ success: true, data: data || [] });
+            }
+
             case "create_restaurant": {
                 if (!data || !data.name || !data.owner_id) {
                     return json({ error: "name e owner_id richiesti" }, 400);
