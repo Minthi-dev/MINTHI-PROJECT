@@ -229,28 +229,34 @@ export const DatabaseService = {
     async createRoom(room: Partial<any>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-room-manage', {
-            body: { userId, restaurantId: room.restaurant_id, action: 'create', data: room }
+            body: { userId, restaurantId: room.restaurant_id, action: 'create', data: room, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione sala')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione sala'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async updateRoom(roomId: string, updates: Partial<any>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-room-manage', {
-            body: { userId, action: 'update', targetId: roomId, data: updates }
+            body: { userId, action: 'update', targetId: roomId, data: updates, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento sala')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento sala'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async deleteRoom(roomId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-room-manage', {
-            body: { userId, action: 'delete', targetId: roomId }
+            body: { userId, action: 'delete', targetId: roomId, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione sala')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore eliminazione sala'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async deleteRestaurant(restaurantId: string) {
@@ -318,30 +324,36 @@ export const DatabaseService = {
     async createStaff(staff: Omit<any, 'id' | 'created_at'>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         // Password hashing happens server-side in the edge function
         const { data, error } = await supabase.functions.invoke('secure-staff-manage', {
-            body: { userId, restaurantId: staff.restaurant_id, action: 'create', data: staff }
+            body: { userId, restaurantId: staff.restaurant_id, action: 'create', data: staff, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione staff')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione staff'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async updateStaff(staffId: string, updates: Partial<any>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         // Password hashing happens server-side in the edge function
         const { data, error } = await supabase.functions.invoke('secure-staff-manage', {
-            body: { userId, action: 'update', staffId, data: updates }
+            body: { userId, action: 'update', staffId, data: updates, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento staff')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento staff'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async deleteStaff(staffId: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-staff-manage', {
-            body: { userId, action: 'delete', staffId }
+            body: { userId, action: 'delete', staffId, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione staff')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore eliminazione staff'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Waiter Activity Logs
@@ -601,29 +613,35 @@ export const DatabaseService = {
     async createTable(table: Partial<Table>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-table-manage', {
-            body: { userId, restaurantId: table.restaurant_id, action: 'create', data: table }
+            body: { userId, restaurantId: table.restaurant_id, action: 'create', data: table, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore creazione tavolo')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore creazione tavolo'))
+        if (data?.error) throw new Error(data.error)
         return (data?.data || table) as Table
     },
 
     async updateTable(tableId: string, updates: Partial<Table>) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-table-manage', {
-            body: { userId, action: 'update', targetId: tableId, data: updates }
+            body: { userId, action: 'update', targetId: tableId, data: updates, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore aggiornamento tavolo')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore aggiornamento tavolo'))
+        if (data?.error) throw new Error(data.error)
     },
 
     async deleteTable(id: string) {
         const userId = _getCurrentUserId()
         if (!userId) throw new Error('Non autenticato')
+        const sessionToken = _requireCurrentSessionToken()
         const { data, error } = await supabase.functions.invoke('secure-table-manage', {
-            body: { userId, action: 'delete', targetId: id }
+            body: { userId, action: 'delete', targetId: id, sessionToken }
         })
-        if (error) throw new Error(data?.error || error?.message || 'Errore eliminazione tavolo')
+        if (error) throw new Error(await _edgeFunctionErrorMessage(data, error, 'Errore eliminazione tavolo'))
+        if (data?.error) throw new Error(data.error)
     },
 
     // Sessions
