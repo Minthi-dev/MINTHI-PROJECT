@@ -282,13 +282,17 @@ serve(async (req) => {
                         break;
                     }
 
+                    // Defense-in-depth: also filter by restaurant_id so a
+                    // webhook with mismatched orderId / restaurantId metadata
+                    // can never touch a different restaurant's order.
                     const { data: order, error: fetchErr } = await supabase
                         .from("orders")
-                        .select("id, status, total_amount, paid_amount, payments, order_type")
+                        .select("id, status, total_amount, paid_amount, payments, order_type, restaurant_id")
                         .eq("id", orderId)
+                        .eq("restaurant_id", restaurantId)
                         .maybeSingle();
                     if (fetchErr || !order) {
-                        console.error(`[WEBHOOK] takeaway_order: ordine ${orderId} non trovato`, fetchErr);
+                        console.error(`[WEBHOOK] takeaway_order: ordine ${orderId} non trovato (o restaurant_id mismatch)`, fetchErr);
                         break;
                     }
                     if (order.order_type !== "takeaway") {
