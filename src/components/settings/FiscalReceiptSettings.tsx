@@ -1062,18 +1062,20 @@ function friendlyFiscalError(raw?: string | null): { title: string; message: str
 
 function fiscalReceiptStatusMeta(status: FiscalReceipt['openapi_status']) {
     if (status === 'ready') {
-        return { label: 'Pronto', className: 'text-emerald-200 bg-emerald-500/10 border-emerald-500/30' }
+        // "ready" = AdE has acknowledged the receipt. This is the green
+        // light the user should look for.
+        return { label: '✓ AdE OK', className: 'text-emerald-200 bg-emerald-500/10 border-emerald-500/30' }
     }
     if (status === 'failed') {
-        return { label: 'Fallito', className: 'text-red-200 bg-red-500/10 border-red-500/30' }
+        return { label: '✗ Fallito', className: 'text-red-200 bg-red-500/10 border-red-500/30' }
     }
     if (status === 'retry') {
-        return { label: 'Riprova', className: 'text-amber-200 bg-amber-500/10 border-amber-500/30' }
+        return { label: '↻ In retry', className: 'text-amber-200 bg-amber-500/10 border-amber-500/30' }
     }
     if (status === 'voided') {
-        return { label: 'Annullato', className: 'text-zinc-300 bg-zinc-700/50 border-white/10' }
+        return { label: '⊘ Annullato', className: 'text-zinc-300 bg-zinc-700/50 border-white/10' }
     }
-    return { label: 'In invio', className: 'text-sky-200 bg-sky-500/10 border-sky-500/30' }
+    return { label: '⏳ In trasmissione', className: 'text-sky-200 bg-sky-500/10 border-sky-500/30' }
 }
 
 function receiptPrimaryLabel(receipt: FiscalReceipt): string {
