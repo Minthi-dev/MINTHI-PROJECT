@@ -17,27 +17,20 @@ serve(async (req) => {
         const key = req.headers.get("x-minthi-internal-key") || body.internalKey || "";
         if (!INTERNAL_KEY || key !== INTERNAL_KEY) return json({ error: "Non autorizzato" }, 403);
 
-        // ── Italian RT (Registratore Telematico) close window ──
+        // NOTE on the 23:55-00:00 Italian RT close window:
         //
-        // OpenAPI cannot transmit electronic receipts to the Agenzia delle
-        // Entrate during the RT daily-close window (23:55→00:00 Europe/Rome).
-        // Trying anyway either fails outright or — worse — gets the receipt
-        // assigned the NEXT day's date, which is a fiscal mismatch with the
-        // actual sale time. We defer the run instead.
-        if (isInRtCloseWindow(new Date())) {
-            const deferUntil = nextRtWindowEnd(new Date()).toISOString();
-            await supabase
-                .from("fiscal_receipt_jobs")
-                .update({ run_after: deferUntil })
-                .in("status", ["queued", "failed"])
-                .lt("run_after", deferUntil);
-            return json({
-                success: true,
-                deferred: true,
-                reason: "rt_close_window_23_55_00_00",
-                deferUntil,
-            });
-        }
+        // We considered auto-deferring all queued jobs during that window so
+        // OpenAPI's eventual error wouldn't burn retry attempts. We backed it
+        // out because deferring the EMISSION shifts the receipt's date forward
+        // (OpenAPI stamps the receipt with its own server time). A sale made
+        // at 23:57 would carry tomorrow's date, which is a real fiscal
+        // mismatch with the actual transaction.
+        //
+        // Instead we let OpenAPI accept the call as soon as it can: if it
+        // refuses for ~30 seconds during the daily close, the standard
+        // exponential retry (20s, 40s, 80s, …) recovers in well under a
+        // minute, with the receipt date staying as close to the sale time
+        // as physically possible.
 
         const limit = Math.min(Math.max(Number(body.limit || 25), 1), 100);
         const concurrency = Math.min(Math.max(Number(body.concurrency || 8), 1), 20);
@@ -144,36 +137,3 @@ function retryDelaySeconds(attempts: number): number {
     return base + jitter;
 }
 
-/**
- * Returns true if `at` falls inside the Italian RT close window
- * (23:55:00 → 00:00:00 Europe/Rome).
- *
- * Implementation: we read the hour/minute of the date in Europe/Rome via
- * Intl.DateTimeFormat — which honours DST transitions correctly — instead
- * of relying on raw UTC offsets.
- */
-function isInRtCloseWindow(at: Date): boolean {
-    try {
-        const fmt = new Intl.DateTimeFormat("it-IT", {
-            timeZone: "Europe/Rome",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-        });
-        const parts = fmt.formatToParts(at);
-        const hour = Number(parts.find(p => p.type === "hour")?.value || "0");
-        const minute = Number(parts.find(p => p.type === "minute")?.value || "0");
-        return hour === 23 && minute >= 55;
-    } catch {
-        return false;
-    }
-}
-
-/**
- * Given a moment inside the RT close window, returns the first instant
- * AFTER the window (~6 minutes ahead is enough: it covers the worst-case
- * entry at 23:55:00 and lands at 00:01:00 plus a small buffer).
- */
-function nextRtWindowEnd(at: Date): Date {
-    return new Date(at.getTime() + 6 * 60 * 1000);
-}

@@ -408,34 +408,38 @@ serve(async (req) => {
                     if (!isOpenApiConfigured()) {
                         fiscalRefundError = "OpenAPI non configurato sulla piattaforma";
                     } else {
-                        // Get fiscal_id (P.IVA) of restaurant
+                        // Get fiscal_id (P.IVA) + default VAT rate of restaurant.
+                        // The default VAT is used as fallback in partial refunds
+                        // when the original items had mixed VAT rates.
                         const { data: fiscalSettings } = await supabase
                             .from("restaurant_fiscal_settings")
-                            .select("openapi_fiscal_id")
+                            .select("openapi_fiscal_id, default_vat_rate_code")
                             .eq("restaurant_id", order.restaurant_id)
                             .maybeSingle();
 
                         if (!fiscalSettings?.openapi_fiscal_id) {
                             fiscalRefundError = "P.IVA fiscale non configurata";
                         } else {
+                            const restaurantDefaultVat = String(fiscalSettings.default_vat_rate_code || "10");
+
                             // Build refund items.
-                            // - Full refund: invert all original items (negative quantity).
-                            // - Partial refund: emit a single "Rimborso parziale" line for
-                            //   the refunded amount. AdE accepts this pattern via
-                            //   linked_receipt.
+                            // - Full refund: invert all original items (negative price + same VAT).
+                            // - Partial refund: emit a single "Rimborso parziale" line at the
+                            //   restaurant's DEFAULT VAT rate (not a hardcoded 10%). AdE accepts
+                            //   this pattern when linked_receipt is set.
                             const originalItems: any[] = Array.isArray(originalReceipt.items) ? originalReceipt.items : [];
                             const refundItems = fullRefund && originalItems.length > 0
                                 ? originalItems.map((it: any) => ({
                                     quantity: Number(it.quantity) || 1,
                                     description: `RESO ${String(it.description || "Voce").slice(0, 990)}`,
                                     unit_price: -Math.abs(Number(it.unit_price ?? it.unitPrice ?? 0)),
-                                    vat_rate_code: String(it.vat_rate_code || it.vatRate || "10"),
+                                    vat_rate_code: String(it.vat_rate_code || it.vatRate || restaurantDefaultVat),
                                 }))
                                 : [{
                                     quantity: 1,
                                     description: `Rimborso parziale ordine #${order.pickup_number || ""}`.trim(),
                                     unit_price: -refundedAmount,
-                                    vat_rate_code: "10",
+                                    vat_rate_code: restaurantDefaultVat,
                                 }];
 
                             const refundResult = await issueReceipt({
