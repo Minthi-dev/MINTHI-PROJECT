@@ -21,6 +21,7 @@ import {
     Sparkle,
 } from '@phosphor-icons/react'
 import QRCodeGenerator from '@/components/QRCodeGenerator'
+import { createQrDataUrl } from '@/lib/qrCode'
 
 type Status = 'PENDING' | 'PREPARING' | 'READY' | 'PICKED_UP' | 'PAID' | 'CANCELLED'
 
@@ -40,11 +41,11 @@ const LABEL: Record<Status, { text: string; sub: string; color: string; ring: st
  * per arrivare al rullino foto senza app nativa.
  */
 async function buildPickupQrPoster(opts: {
-    qrUrl: string
+    qrDataUrl: string
     pickupNumber: string
     restaurantName?: string
 }): Promise<{ blob: Blob; dataUrl: string }> {
-    const { qrUrl, pickupNumber, restaurantName } = opts
+    const { qrDataUrl, pickupNumber, restaurantName } = opts
     const W = 1080
     const H = 1600
     const canvas = document.createElement('canvas')
@@ -87,7 +88,7 @@ async function buildPickupQrPoster(opts: {
     const qrY = 390
     ctx.fillStyle = '#ffffff'
     roundRect(ctx, qrX - 26, qrY - 26, qrSize + 52, qrSize + 52, 38, true, false)
-    const qrImg = await loadImage(await fetchImageAsDataUrl(qrUrl))
+    const qrImg = await loadImage(qrDataUrl)
     ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize)
 
     ctx.fillStyle = '#18181b'
@@ -134,18 +135,6 @@ function loadImage(src: string): Promise<HTMLImageElement> {
         img.onload = () => resolve(img)
         img.onerror = () => reject(new Error('Caricamento QR fallito'))
         img.src = src
-    })
-}
-
-async function fetchImageAsDataUrl(url: string): Promise<string> {
-    const res = await fetch(url, { cache: 'force-cache' })
-    if (!res.ok) throw new Error(`QR non generato (${res.status})`)
-    const blob = await res.blob()
-    return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = () => reject(reader.error)
-        reader.readAsDataURL(blob)
     })
 }
 
@@ -319,9 +308,9 @@ export default function TakeawayOrderStatus() {
         setSavingQr(true)
         const safeNumber = String(order.pickup_number).padStart(3, '0')
         try {
-            const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=720x720&margin=0&qzone=1&data=${encodeURIComponent(pickupQrValue)}`
+            const qrDataUrl = await createQrDataUrl(pickupQrValue, 900)
             const { blob, dataUrl } = await buildPickupQrPoster({
-                qrUrl: qrApiUrl,
+                qrDataUrl,
                 pickupNumber: safeNumber,
                 restaurantName: order.restaurant_name || undefined,
             })

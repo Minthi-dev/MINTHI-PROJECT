@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { FilePdf } from '@phosphor-icons/react'
 import jsPDF from 'jspdf'
 import { toast } from 'sonner'
+import { createQrDataUrl } from '@/lib/qrCode'
 
 interface Props {
     /** Slug encoded in the QR (e.g. "abc123"). The QR will encode minthi.it/qr/{code}. */
@@ -21,8 +22,8 @@ interface Props {
 }
 
 const DEFAULT_HEADLINE = 'SCANSIONA, ORDINA E PAGA'
-const DEFAULT_SUBHEADLINE = 'salta la coda'
-const DEFAULT_CONTACT_LINE = 'Vuoi questo sistema al tuo evento? Contatta 351 757 0155'
+const DEFAULT_SUBHEADLINE = 'SALTA LA CODA'
+const DEFAULT_CONTACT_LINE = 'Vuoi attivare il salta coda in altri eventi? Contatta 351 757 0155'
 
 /**
  * Printable A4 poster for a REUSABLE physical QR code. Encodes minthi.it/qr/{code}.
@@ -30,11 +31,9 @@ const DEFAULT_CONTACT_LINE = 'Vuoi questo sistema al tuo evento? Contatta 351 75
  * the admin panel — no reprint needed.
  *
  * Layout (top → bottom):
- *   • Big bold headline: "Scansiona, ordina e paga" + "salta la coda"
- *   • Massive QR centered with amber accent frame
- *   • Tagline: "INQUADRA • ORDINA • RITIRA"
- *   • Subtle minthi branding
- *   • Tiny contact footer (with the configurable phone CTA)
+ *   - Big bold promise: pay here and skip the queue
+ *   - Massive QR centered, no decorative frame
+ *   - Short pickup instruction and visible promo footer
  */
 export default function PhysicalQrPosterButton({
     code,
@@ -54,84 +53,81 @@ export default function PhysicalQrPosterButton({
         try {
             const baseUrl = (typeof window !== 'undefined' && window.location?.origin) || 'https://minthi.it'
             const targetUrl = `${baseUrl}/qr/${code}`
-
-            // High-res QR for crisp print
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&margin=0&format=png&data=${encodeURIComponent(targetUrl)}`
-            const qrDataUrl = await fetchAsDataUrl(qrUrl)
+            const qrDataUrl = await createQrDataUrl(targetUrl, 1400)
 
             const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
             const pageW = pdf.internal.pageSize.getWidth()   // 210mm
             const pageH = pdf.internal.pageSize.getHeight()  // 297mm
 
-            // --- Outer frame ---
-            pdf.setDrawColor(15, 15, 15)
-            pdf.setLineWidth(1.6)
-            pdf.rect(8, 8, pageW - 16, pageH - 16)
+            pdf.setFillColor(255, 255, 255)
+            pdf.rect(0, 0, pageW, pageH, 'F')
 
-            // --- Optional restaurant hint at top (tiny / muted) ---
             if (restaurantName || label) {
-                pdf.setTextColor(120, 120, 120)
-                pdf.setFont('helvetica', 'normal')
-                pdf.setFontSize(11)
-                const top = [restaurantName, label].filter(Boolean).join('  •  ')
-                pdf.text(top, pageW / 2, 24, { align: 'center' })
+                pdf.setTextColor(112, 112, 112)
+                pdf.setFont('helvetica', 'bold')
+                pdf.setFontSize(10)
+                const top = [restaurantName, label].filter(Boolean).join(' / ').toUpperCase()
+                pdf.text(top, pageW / 2, 19, { align: 'center', maxWidth: pageW - 30 })
             }
-
-            // --- Big headline (split in 2 lines for impact) ---
-            pdf.setTextColor(10, 10, 10)
-            pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(38)
-            pdf.text(headline, pageW / 2, 50, { align: 'center', maxWidth: pageW - 30 })
 
             pdf.setTextColor(245, 158, 11)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(52)
-            pdf.text(DEFAULT_SUBHEADLINE.toUpperCase(), pageW / 2, 76, { align: 'center' })
+            pdf.setFontSize(14)
+            pdf.text(headline.toUpperCase(), pageW / 2, 39, { align: 'center', maxWidth: pageW - 34 })
 
-            // --- Amber divider ---
-            pdf.setDrawColor(245, 158, 11)
-            pdf.setLineWidth(1.6)
-            pdf.line(pageW / 2 - 40, 84, pageW / 2 + 40, 84)
-
-            // --- QR centered, large, with double frame ---
-            const qrSize = 125 // mm
-            const qrX = (pageW - qrSize) / 2
-            const qrY = 100
-            // amber outer accent
-            pdf.setDrawColor(245, 158, 11)
-            pdf.setLineWidth(2.0)
-            pdf.rect(qrX - 6, qrY - 6, qrSize + 12, qrSize + 12)
-            // white inner backing
-            pdf.setFillColor(255, 255, 255)
-            pdf.rect(qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, 'F')
-            pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
-
-            // --- Tagline under QR ---
-            pdf.setTextColor(10, 10, 10)
+            pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(26)
-            pdf.text('INQUADRA  •  ORDINA  •  RITIRA', pageW / 2, qrY + qrSize + 22, { align: 'center' })
+            pdf.setFontSize(50)
+            pdf.text(DEFAULT_SUBHEADLINE, pageW / 2, 63, { align: 'center', maxWidth: pageW - 22 })
 
-            // --- Hint: how to scan ---
-            pdf.setTextColor(110, 110, 110)
+            pdf.setTextColor(18, 18, 18)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(20)
+            pdf.text('PAGA DA QUI. RITIRI APPENA PRONTO.', pageW / 2, 82, {
+                align: 'center',
+                maxWidth: pageW - 26,
+            })
+
+            pdf.setTextColor(96, 96, 96)
             pdf.setFont('helvetica', 'normal')
             pdf.setFontSize(12)
-            pdf.text(
-                'Apri la fotocamera del telefono e inquadra il codice. Il menu si apre da solo.',
-                pageW / 2, qrY + qrSize + 32, { align: 'center', maxWidth: pageW - 40 }
-            )
+            pdf.text("Apri la fotocamera, inquadra il QR e completa l'ordine dal telefono.", pageW / 2, 92, {
+                align: 'center',
+                maxWidth: pageW - 34,
+            })
 
-            // --- minthi branding (subtle, above contact CTA) ---
-            pdf.setTextColor(180, 180, 180)
+            const qrSize = 124
+            const qrX = (pageW - qrSize) / 2
+            const qrY = 102
+            pdf.setFillColor(255, 255, 255)
+            pdf.rect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, 'F')
+            pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
+
+            pdf.setTextColor(8, 8, 8)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(23)
+            pdf.text('INQUADRA  -  ORDINA  -  PAGA  -  RITIRA', pageW / 2, qrY + qrSize + 19, {
+                align: 'center',
+                maxWidth: pageW - 20,
+            })
+
+            pdf.setTextColor(95, 95, 95)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(12)
+            pdf.text('Niente cassa: paghi online e passi solo per il ritiro.', pageW / 2, qrY + qrSize + 31, {
+                align: 'center',
+                maxWidth: pageW - 34,
+            })
+
+            pdf.setTextColor(30, 30, 30)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(12)
+            pdf.text(contactLine, pageW / 2, pageH - 20, { align: 'center', maxWidth: pageW - 30 })
+
+            pdf.setTextColor(170, 170, 170)
             pdf.setFont('helvetica', 'normal')
             pdf.setFontSize(10)
-            pdf.text('powered by  minthi', pageW / 2, pageH - 28, { align: 'center' })
-
-            // --- Contact CTA at bottom (small but readable) ---
-            pdf.setTextColor(80, 80, 80)
-            pdf.setFont('helvetica', 'italic')
-            pdf.setFontSize(11)
-            pdf.text(contactLine, pageW / 2, pageH - 18, { align: 'center', maxWidth: pageW - 30 })
+            pdf.text('powered by minthi', pageW / 2, pageH - 9, { align: 'center' })
 
             const safeName = (restaurantName || code).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'minthi'
             pdf.save(`qr-minthi-${safeName}-${code}.pdf`)
@@ -156,16 +152,4 @@ export default function PhysicalQrPosterButton({
             {busy ? 'Generazione...' : 'Stampa QR'}
         </Button>
     )
-}
-
-async function fetchAsDataUrl(url: string): Promise<string> {
-    const res = await fetch(url, { cache: 'force-cache' })
-    if (!res.ok) throw new Error(`QR fetch fallito (${res.status})`)
-    const blob = await res.blob()
-    return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result as string)
-        reader.onerror = () => reject(reader.error)
-        reader.readAsDataURL(blob)
-    })
 }
