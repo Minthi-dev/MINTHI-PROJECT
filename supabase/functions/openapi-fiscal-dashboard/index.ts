@@ -198,10 +198,76 @@ serve(async (req) => {
                         .filter((r: any) => r.linked_receipt_id && (r.issued_via === "refund_stripe" || r.issued_via === "refund_manual"))
                         .map((r: any) => r.linked_receipt_id)
                 );
-                receipts = receipts.map((r: any) => ({
-                    ...r,
-                    has_refund: refundedOriginalIds.has(r.id),
-                }));
+
+                // Enrich with payment status from the related order. We do a
+                // single SELECT bounded by the receipts' order_ids — kept on
+                // the same restaurant_id for defense-in-depth so a tampered
+                // receipt row could never leak another restaurant's payments.
+                const orderIds = [...new Set(
+                    receipts
+                        .map((r: any) => r.order_id)
+                        .filter((id: any): id is string => typeof id === "string" && id.length === 36)
+                )];
+
+                let ordersById = new Map<string, any>();
+                if (orderIds.length > 0) {
+                    const { data: orderRows } = await supabase
+                        .from("orders")
+                        .select("id, payments, paid_amount, total_amount, status")
+                        .eq("restaurant_id", restaurantId)
+                        .in("id", orderIds);
+                    ordersById = new Map((orderRows || []).map((o: any) => [o.id, o]));
+                }
+
+                receipts = receipts.map((r: any) => {
+                    const order = r.order_id ? ordersById.get(r.order_id) : null;
+                    const payments: any[] = Array.isArray(order?.payments) ? order.payments : [];
+                    const stripeEntries = payments.filter((p: any) =>
+                        p?.method === "stripe" && p?.stripePaymentIntentId
+                    );
+                    const matchedByPi = r.stripe_payment_intent_id
+                        ? stripeEntries.find((p: any) => p.stripePaymentIntentId === r.stripe_payment_intent_id)
+                        : null;
+                    const stripeEntry = matchedByPi || stripeEntries[0] || null;
+
+                    const totalRefunded = stripeEntries
+                        .reduce((s: number, p: any) => s + (Number(p?.refundedAmount) || 0), 0);
+                    const totalStripePaid = stripeEntries
+                        .reduce((s: number, p: any) => s + (Number(p?.amount) || 0), 0);
+
+                    let paymentStatus: "paid" | "refunded" | "partial_refund" | "cash" | "none" | "stripe_pending";
+                    if (stripeEntry) {
+                        if (totalRefunded >= totalStripePaid - 0.01 && totalRefunded > 0) {
+                            paymentStatus = "refunded";
+                        } else if (totalRefunded > 0) {
+                            paymentStatus = "partial_refund";
+                        } else {
+                            paymentStatus = "paid";
+                        }
+                    } else if (payments.length > 0) {
+                        paymentStatus = "cash";
+                    } else if (order && Number(order.paid_amount || 0) >= Number(order.total_amount || 0) - 0.01) {
+                        paymentStatus = "stripe_pending";
+                    } else {
+                        paymentStatus = "none";
+                    }
+
+                    return {
+                        ...r,
+                        has_refund: refundedOriginalIds.has(r.id),
+                        payment_summary: {
+                            status: paymentStatus,
+                            total_paid: Math.round(totalStripePaid * 100) / 100,
+                            total_refunded: Math.round(totalRefunded * 100) / 100,
+                            stripe_payment_intent_id: stripeEntry?.stripePaymentIntentId || null,
+                            stripe_charge_id: stripeEntry?.stripeChargeId || null,
+                            payment_method_type: stripeEntry?.paymentMethodType || null,
+                            card_brand: stripeEntry?.cardBrand || null,
+                            card_last4: stripeEntry?.cardLast4 || null,
+                            receipt_url: stripeEntry?.stripeReceiptUrl || null,
+                        },
+                    };
+                });
             }
         }
 

@@ -507,12 +507,39 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                         </div>
                                                     </div>
 
-                                                    {/* Status badge + meta — colonna centrale */}
-                                                    <div className="min-w-0 flex-1 space-y-1">
+                                                    {/* Status badges — Stripe + AdE side-by-side */}
+                                                    <div className="min-w-0 flex-1 space-y-1.5">
                                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${meta.className}`}>
-                                                                {meta.label}
+                                                            {/* AdE badge */}
+                                                            <span
+                                                                className={`text-[11px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${meta.className}`}
+                                                                title="Stato Agenzia delle Entrate"
+                                                            >
+                                                                AdE: {meta.label}
                                                             </span>
+                                                            {/* Stripe badge */}
+                                                            {(() => {
+                                                                const ps = (receipt as any).payment_summary
+                                                                if (!ps) return null
+                                                                const stripeMeta = (() => {
+                                                                    if (ps.status === 'paid') return { label: '✓ Pagato', cls: 'text-emerald-200 bg-emerald-500/10 border-emerald-500/30' }
+                                                                    if (ps.status === 'refunded') return { label: '↩ Rimborsato', cls: 'text-red-200 bg-red-500/10 border-red-500/30' }
+                                                                    if (ps.status === 'partial_refund') return { label: '↩ Rimb. parziale', cls: 'text-amber-200 bg-amber-500/10 border-amber-500/30' }
+                                                                    if (ps.status === 'cash') return { label: '💵 Contanti/POS', cls: 'text-zinc-300 bg-zinc-700/30 border-white/10' }
+                                                                    if (ps.status === 'stripe_pending') return { label: '⏳ In attesa', cls: 'text-sky-200 bg-sky-500/10 border-sky-500/30' }
+                                                                    return null
+                                                                })()
+                                                                if (!stripeMeta) return null
+                                                                return (
+                                                                    <span
+                                                                        className={`text-[11px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${stripeMeta.cls}`}
+                                                                        title={`Stripe: pagato €${ps.total_paid.toFixed(2)}${ps.total_refunded > 0 ? ` · rimborsato €${ps.total_refunded.toFixed(2)}` : ''}`}
+                                                                    >
+                                                                        Stripe: {stripeMeta.label}
+                                                                    </span>
+                                                                )
+                                                            })()}
+                                                            {/* Refund tags */}
                                                             {(receipt as any).has_refund && (
                                                                 <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap bg-amber-500/10 border-amber-500/30 text-amber-300" title="Esiste uno scontrino di reso collegato">
                                                                     ⊘ Reso emesso
@@ -524,9 +551,16 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        {receipt.openapi_receipt_id && (
-                                                            <div className="text-[10px] text-zinc-500 font-mono truncate">
-                                                                #{receipt.openapi_receipt_id.slice(-12)}
+                                                        {(receipt.openapi_receipt_id || (receipt as any).payment_summary?.card_last4) && (
+                                                            <div className="text-[10px] text-zinc-500 font-mono truncate flex items-center gap-2">
+                                                                {receipt.openapi_receipt_id && (
+                                                                    <span>#{receipt.openapi_receipt_id.slice(-12)}</span>
+                                                                )}
+                                                                {(receipt as any).payment_summary?.card_brand && (receipt as any).payment_summary?.card_last4 && (
+                                                                    <span className="text-zinc-600">
+                                                                        · {(receipt as any).payment_summary.card_brand} •••• {(receipt as any).payment_summary.card_last4}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>
@@ -537,22 +571,51 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
 
                                                 {isExpanded && (
                                                     <div className="px-3 pb-3 pt-1 border-t border-white/5 bg-black/30 space-y-3 text-[12px]">
+                                                        {/* Payment summary block (Stripe side) */}
+                                                        {(receipt as any).payment_summary && (receipt as any).payment_summary.status !== 'none' && (
+                                                            <div className="rounded bg-black/40 border border-white/10 p-2.5 space-y-1.5">
+                                                                <div className="text-zinc-400 text-[10px] uppercase tracking-wide font-bold">💳 Pagamento Stripe</div>
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    <div>
+                                                                        <div className="text-zinc-500 text-[10px]">Incassato</div>
+                                                                        <div className="text-emerald-300 font-bold font-mono">€{Number((receipt as any).payment_summary.total_paid || 0).toFixed(2)}</div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="text-zinc-500 text-[10px]">Rimborsato</div>
+                                                                        <div className={`font-bold font-mono ${Number((receipt as any).payment_summary.total_refunded) > 0 ? 'text-red-300' : 'text-zinc-500'}`}>
+                                                                            €{Number((receipt as any).payment_summary.total_refunded || 0).toFixed(2)}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                {(receipt as any).payment_summary.stripe_payment_intent_id && (
+                                                                    <div>
+                                                                        <div className="text-zinc-500 text-[10px]">Payment Intent</div>
+                                                                        <div className="font-mono text-[11px] break-all text-zinc-300">{(receipt as any).payment_summary.stripe_payment_intent_id}</div>
+                                                                    </div>
+                                                                )}
+                                                                {(receipt as any).payment_summary.receipt_url && (
+                                                                    <a
+                                                                        href={(receipt as any).payment_summary.receipt_url}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        className="inline-flex items-center gap-1 text-[11px] text-amber-300 hover:text-amber-200 underline"
+                                                                    >
+                                                                        Apri ricevuta Stripe ↗
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        )}
+
                                                         {/* Status / IDs */}
                                                         <div className="grid grid-cols-2 gap-2 text-zinc-300">
                                                             <div>
-                                                                <div className="text-zinc-500 text-[10px] uppercase">Stato OpenAPI</div>
+                                                                <div className="text-zinc-500 text-[10px] uppercase">Stato AdE</div>
                                                                 <div className="font-medium">{receipt.openapi_status}</div>
                                                             </div>
                                                             <div>
                                                                 <div className="text-zinc-500 text-[10px] uppercase">ID OpenAPI</div>
                                                                 <div className="font-mono text-[11px] break-all">{receipt.openapi_receipt_id || '—'}</div>
                                                             </div>
-                                                            {receipt.stripe_payment_intent_id && (
-                                                                <div className="col-span-2">
-                                                                    <div className="text-zinc-500 text-[10px] uppercase">Stripe Payment Intent</div>
-                                                                    <div className="font-mono text-[11px] break-all">{receipt.stripe_payment_intent_id}</div>
-                                                                </div>
-                                                            )}
                                                             {receipt.customer_email && (
                                                                 <div className="col-span-2">
                                                                     <div className="text-zinc-500 text-[10px] uppercase">Cliente</div>

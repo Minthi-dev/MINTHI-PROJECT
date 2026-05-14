@@ -168,6 +168,17 @@ export interface FiscalReceipt {
     issued_via: 'auto_stripe' | 'auto_takeaway_stripe' | 'manual_cashier' | 'manual_retry' | 'refund_stripe' | 'refund_manual'
     linked_receipt_id?: string | null
     has_refund?: boolean
+    payment_summary?: {
+        status: 'paid' | 'refunded' | 'partial_refund' | 'cash' | 'stripe_pending' | 'none'
+        total_paid: number
+        total_refunded: number
+        stripe_payment_intent_id: string | null
+        stripe_charge_id: string | null
+        payment_method_type: string | null
+        card_brand: string | null
+        card_last4: string | null
+        receipt_url: string | null
+    }
     error_log?: Array<{ at: string; error: string; source?: string }>
     retry_count: number
     created_at: string
