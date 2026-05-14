@@ -495,38 +495,44 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                 <button
                                                     type="button"
                                                     onClick={() => setReceiptsExpanded(isExpanded ? null : receipt.id)}
-                                                    className="w-full px-3 py-2 flex items-center gap-2 text-left"
+                                                    className="w-full px-4 py-3 flex items-center gap-3 text-left"
                                                 >
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${meta.className}`}>
-                                                        {meta.label}
-                                                    </span>
-                                                    {(receipt as any).has_refund && (
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap bg-amber-500/10 border-amber-500/30 text-amber-300" title="Esiste uno scontrino di reso collegato">
-                                                            ⊘ Annullato da reso
-                                                        </span>
-                                                    )}
-                                                    {(receipt.issued_via === 'refund_stripe' || receipt.issued_via === 'refund_manual') && (
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap bg-red-500/10 border-red-500/30 text-red-300" title="Scontrino di reso">
-                                                            ↩ Reso
-                                                        </span>
-                                                    )}
-                                                    <div className="min-w-0 flex-1">
-                                                        <div className="text-[12px] font-medium text-zinc-200 truncate">
-                                                            {receiptPrimaryLabel(receipt)}
+                                                    {/* Importo — colonna sinistra, grossa e immediata */}
+                                                    <div className="shrink-0 w-20 text-right">
+                                                        <div className={`text-base font-bold font-mono ${Number(receipt.total_amount) < 0 ? 'text-red-300' : 'text-zinc-100'}`}>
+                                                            {formatEuro(receipt.total_amount)}
                                                         </div>
-                                                        <div className="text-[11px] text-zinc-500 flex items-center gap-2 mt-0.5 flex-wrap">
-                                                            <span className={`font-mono ${Number(receipt.total_amount) < 0 ? 'text-red-400' : 'text-emerald-400'}`}>{formatEuro(receipt.total_amount)}</span>
-                                                            <span>·</span>
-                                                            <span>{formatReceiptDate(receipt.created_at)}</span>
-                                                            {receipt.openapi_receipt_id && (
-                                                                <>
-                                                                    <span>·</span>
-                                                                    <span className="font-mono text-zinc-600">#{receipt.openapi_receipt_id.slice(-8)}</span>
-                                                                </>
-                                                            )}
+                                                        <div className="text-[10px] text-zinc-500 mt-0.5">
+                                                            {formatReceiptDate(receipt.created_at)}
                                                         </div>
                                                     </div>
-                                                    <span className="text-zinc-600 text-xs">{isExpanded ? '▲' : '▼'}</span>
+
+                                                    {/* Status badge + meta — colonna centrale */}
+                                                    <div className="min-w-0 flex-1 space-y-1">
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap ${meta.className}`}>
+                                                                {meta.label}
+                                                            </span>
+                                                            {(receipt as any).has_refund && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap bg-amber-500/10 border-amber-500/30 text-amber-300" title="Esiste uno scontrino di reso collegato">
+                                                                    ⊘ Reso emesso
+                                                                </span>
+                                                            )}
+                                                            {(receipt.issued_via === 'refund_stripe' || receipt.issued_via === 'refund_manual') && (
+                                                                <span className="text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap bg-red-500/10 border-red-500/30 text-red-300" title="Scontrino di reso/annullo">
+                                                                    ↩ Reso
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {receipt.openapi_receipt_id && (
+                                                            <div className="text-[10px] text-zinc-500 font-mono truncate">
+                                                                #{receipt.openapi_receipt_id.slice(-12)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Caret */}
+                                                    <span className="shrink-0 text-zinc-600 text-xs">{isExpanded ? '▲' : '▼'}</span>
                                                 </button>
 
                                                 {isExpanded && (
@@ -600,18 +606,16 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                             </div>
                                                         )}
 
-                                                        {/* Action buttons */}
-                                                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                                                        {/* Action buttons — primary CTA = Download PDF */}
+                                                        <div className="flex items-center gap-2 flex-wrap pt-2">
                                                             {canDownloadReceipt && (
                                                                 <Button
                                                                     type="button"
-                                                                    variant="outline"
-                                                                    size="sm"
                                                                     onClick={() => handleReceiptPdf(receipt)}
-                                                                    className="h-7 text-[11px] border-white/10 text-zinc-200 hover:bg-white/5"
+                                                                    className="h-9 text-sm font-bold bg-amber-500 hover:bg-amber-400 text-black px-4 shadow-md shadow-amber-500/20"
                                                                 >
-                                                                    <DownloadSimple size={12} className="mr-1" />
-                                                                    Scarica PDF
+                                                                    <DownloadSimple size={16} weight="bold" className="mr-1.5" />
+                                                                    Scarica PDF scontrino
                                                                 </Button>
                                                             )}
                                                             {receipt.openapi_status === 'failed' && (receipt.retry_count || 0) < 5 && (
@@ -619,9 +623,9 @@ export function FiscalReceiptSettings({ restaurantId }: Props) {
                                                                     type="button"
                                                                     onClick={() => handleRetryReceipt(receipt.id)}
                                                                     disabled={retryingReceiptId === receipt.id}
-                                                                    className="h-7 text-[11px] px-2 bg-red-900/40 hover:bg-red-800/50 text-red-100 border border-red-500/30"
+                                                                    className="h-9 text-sm px-3 bg-red-900/40 hover:bg-red-800/50 text-red-100 border border-red-500/30"
                                                                 >
-                                                                    <ArrowsClockwise size={12} className={`mr-1 ${retryingReceiptId === receipt.id ? 'animate-spin' : ''}`} />
+                                                                    <ArrowsClockwise size={14} className={`mr-1 ${retryingReceiptId === receipt.id ? 'animate-spin' : ''}`} />
                                                                     Riprova invio
                                                                 </Button>
                                                             )}
