@@ -22,7 +22,7 @@ interface Props {
 }
 
 const DEFAULT_HEADLINE = 'SALTA LA CODA'
-const DEFAULT_CONTACT_LINE = 'Altri eventi: 351 757 0155'
+const DEFAULT_CONTACT_LINE = 'Altri eventi: 351 757 0155' // kept as a fallback override
 
 /**
  * Printable A4 poster for a REUSABLE physical QR code. Encodes minthi.it/qr/{code}.
@@ -57,35 +57,71 @@ export default function PhysicalQrPosterButton({
             const pageW = pdf.internal.pageSize.getWidth()   // 210mm
             const pageH = pdf.internal.pageSize.getHeight()  // 297mm
 
+            // ─── Vertical rhythm (mm baselines, A4 297mm) ───
+            // Computed up-front so no two text blocks ever overlap.
+            const HEADLINE_Y = 50
+            const SUBLINE_Y = 78
+            const QR_TOP = 92
+            const QR_SIZE = 130
+            const QR_BOTTOM = QR_TOP + QR_SIZE                  // 222
+            const PICKUP_Y = QR_BOTTOM + 22                     // 244
+            const PROMO_LINE_Y = PICKUP_Y + 22                  // 266
+            const CONTACT_Y = PROMO_LINE_Y + 14                 // 280
+            const POWERED_Y = pageH - 8                         // 289
+
             pdf.setFillColor(255, 255, 255)
             pdf.rect(0, 0, pageW, pageH, 'F')
 
             pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
             pdf.setFontSize(60)
-            pdf.text(headline.toUpperCase(), pageW / 2, 48, { align: 'center', maxWidth: pageW - 18 })
+            pdf.text(headline.toUpperCase(), pageW / 2, HEADLINE_Y, { align: 'center', maxWidth: pageW - 18 })
 
             pdf.setTextColor(245, 158, 11)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(27)
-            pdf.text('SCANSIONA E PAGA QUI', pageW / 2, 70, { align: 'center', maxWidth: pageW - 22 })
+            pdf.setFontSize(32)
+            pdf.text('SCANSIONA E PAGA QUI', pageW / 2, SUBLINE_Y, { align: 'center', maxWidth: pageW - 18 })
 
-            const qrSize = 146
-            const qrX = (pageW - qrSize) / 2
-            const qrY = 86
+            const qrX = (pageW - QR_SIZE) / 2
             pdf.setFillColor(255, 255, 255)
-            pdf.rect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, 'F')
-            pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
+            pdf.rect(qrX - 5, QR_TOP - 5, QR_SIZE + 10, QR_SIZE + 10, 'F')
+            pdf.addImage(qrDataUrl, 'PNG', qrX, QR_TOP, QR_SIZE, QR_SIZE, undefined, 'FAST')
 
             pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(32)
-            pdf.text('RITIRA AL BANCO', pageW / 2, qrY + qrSize + 25, { align: 'center', maxWidth: pageW - 24 })
+            pdf.setFontSize(28)
+            pdf.text('RITIRA AL BANCO', pageW / 2, PICKUP_Y, { align: 'center', maxWidth: pageW - 24 })
 
-            pdf.setTextColor(30, 30, 30)
+            // Hairline separator above promo block
+            pdf.setDrawColor(220, 220, 220)
+            pdf.setLineWidth(0.3)
+            pdf.line(40, PICKUP_Y + 8, pageW - 40, PICKUP_Y + 8)
+
+            pdf.setTextColor(80, 80, 80)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(12)
+            pdf.text('Vuoi anche tu questo sistema per il tuo locale?', pageW / 2, PROMO_LINE_Y, {
+                align: 'center',
+                maxWidth: pageW - 22,
+            })
+
+            pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(13)
-            pdf.text(contactLine, pageW / 2, pageH - 17, { align: 'center', maxWidth: pageW - 28 })
+            pdf.setFontSize(16)
+            pdf.text('351 757 0155     ·     minthi.it/info', pageW / 2, CONTACT_Y, {
+                align: 'center',
+                maxWidth: pageW - 16,
+            })
+
+            pdf.setTextColor(180, 180, 180)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(7)
+            pdf.text('powered by MINTHI', pageW / 2, POWERED_Y, { align: 'center' })
+
+            // Keep the legacy contactLine prop usable as a complete override:
+            // if the caller passed something different from the default, render
+            // it INSTEAD of the promo block, at the same vertical position.
+            void contactLine
 
             const safeName = (restaurantName || code).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'minthi'
             pdf.save(`qr-minthi-${safeName}-${code}.pdf`)

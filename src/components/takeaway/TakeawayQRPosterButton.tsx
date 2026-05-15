@@ -46,35 +46,74 @@ export default function TakeawayQRPosterButton({
             const pageW = pdf.internal.pageSize.getWidth()   // 210mm
             const pageH = pdf.internal.pageSize.getHeight()  // 297mm
 
+            // ─── Vertical rhythm ───
+            // Computed up-front so we can guarantee no overlap. Every text
+            // block reserves its own band of mm based on font size.
+            const HEADLINE_Y = 50         // 60pt headline baseline
+            const SUBLINE_Y = 78          // 32pt "SCANSIONA E PAGA QUI" baseline
+            const QR_TOP = 92             // QR top
+            const QR_SIZE = 130           // QR side (smaller than before → leaves room for footer)
+            const QR_BOTTOM = QR_TOP + QR_SIZE                  // 222
+            const PICKUP_Y = QR_BOTTOM + 22                     // 244 — 28pt "RITIRA AL BANCO"
+            const PROMO_LINE_Y = PICKUP_Y + 22                  // 266 — 12pt promo question
+            const CONTACT_Y = PROMO_LINE_Y + 14                 // 280 — 16pt phone + site
+            const POWERED_Y = pageH - 8                         // 289 — 7pt hairline
+
             pdf.setFillColor(255, 255, 255)
             pdf.rect(0, 0, pageW, pageH, 'F')
 
+            // Headline
             pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
             pdf.setFontSize(60)
-            pdf.text(headline.toUpperCase(), pageW / 2, 48, { align: 'center', maxWidth: pageW - 18 })
+            pdf.text(headline.toUpperCase(), pageW / 2, HEADLINE_Y, { align: 'center', maxWidth: pageW - 18 })
 
+            // "Scansiona e paga qui" — bigger and bolder
             pdf.setTextColor(245, 158, 11)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(27)
-            pdf.text('SCANSIONA E PAGA QUI', pageW / 2, 70, { align: 'center', maxWidth: pageW - 22 })
+            pdf.setFontSize(32)
+            pdf.text('SCANSIONA E PAGA QUI', pageW / 2, SUBLINE_Y, { align: 'center', maxWidth: pageW - 18 })
 
-            const qrSize = 146
-            const qrX = (pageW - qrSize) / 2
-            const qrY = 86
+            // QR
+            const qrX = (pageW - QR_SIZE) / 2
             pdf.setFillColor(255, 255, 255)
-            pdf.rect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, 'F')
-            pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
+            pdf.rect(qrX - 5, QR_TOP - 5, QR_SIZE + 10, QR_SIZE + 10, 'F')
+            pdf.addImage(qrDataUrl, 'PNG', qrX, QR_TOP, QR_SIZE, QR_SIZE, undefined, 'FAST')
 
+            // Pickup hint
             pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(32)
-            pdf.text('RITIRA AL BANCO', pageW / 2, qrY + qrSize + 25, { align: 'center', maxWidth: pageW - 24 })
+            pdf.setFontSize(28)
+            pdf.text('RITIRA AL BANCO', pageW / 2, PICKUP_Y, { align: 'center', maxWidth: pageW - 24 })
 
-            pdf.setTextColor(30, 30, 30)
+            // Thin separator line between content and promo footer
+            pdf.setDrawColor(220, 220, 220)
+            pdf.setLineWidth(0.3)
+            pdf.line(40, PICKUP_Y + 8, pageW - 40, PICKUP_Y + 8)
+
+            // Promo question
+            pdf.setTextColor(80, 80, 80)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(12)
+            pdf.text('Vuoi anche tu questo sistema per il tuo locale?', pageW / 2, PROMO_LINE_Y, {
+                align: 'center',
+                maxWidth: pageW - 22,
+            })
+
+            // Phone + website on one line, well spaced
+            pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(13)
-            pdf.text('Altri eventi: 351 757 0155', pageW / 2, pageH - 17, { align: 'center', maxWidth: pageW - 28 })
+            pdf.setFontSize(16)
+            pdf.text('351 757 0155     ·     minthi.it/info', pageW / 2, CONTACT_Y, {
+                align: 'center',
+                maxWidth: pageW - 16,
+            })
+
+            // Tiny hairline footer
+            pdf.setTextColor(180, 180, 180)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(7)
+            pdf.text('powered by MINTHI', pageW / 2, POWERED_Y, { align: 'center' })
 
             const safeName = (restaurantName || restaurantId).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'minthi'
             pdf.save(`qr-asporto-${safeName}.pdf`)
