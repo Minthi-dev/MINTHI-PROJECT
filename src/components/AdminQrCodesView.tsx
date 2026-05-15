@@ -10,7 +10,6 @@ import { QrCode, Plus, Link as LinkIcon, ArrowsLeftRight, Trash, Tag, Copy } fro
 import { DatabaseService } from '@/services/DatabaseService'
 import type { Restaurant } from '@/services/types'
 import PhysicalQrPosterButton from './qr/PhysicalQrPosterButton'
-import { generatePhysicalQrUrl } from '@/utils/qrUtils'
 
 type QrRow = {
     id: string
@@ -185,7 +184,7 @@ export default function AdminQrCodesView({ restaurants }: Props) {
     }
 
     const copyUrl = (code: string) => {
-        const url = generatePhysicalQrUrl(code)
+        const url = `${window.location.origin}/qr/${code}`
         navigator.clipboard.writeText(url)
             .then(() => toast.success('URL copiato negli appunti'))
             .catch(() => toast.error('Impossibile copiare'))

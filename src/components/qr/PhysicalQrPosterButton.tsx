@@ -1,10 +1,9 @@
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { FilePdf } from '@phosphor-icons/react'
+import jsPDF from 'jspdf'
 import { toast } from 'sonner'
 import { createQrDataUrl } from '@/lib/qrCode'
-import { drawQrPosterPdf, QR_POSTER_CONTACT_LINE } from '@/utils/qrPosterPdf'
-import { generatePhysicalQrUrl } from '@/utils/qrUtils'
 
 interface Props {
     /** Slug encoded in the QR (e.g. "abc123"). The QR will encode minthi.it/qr/{code}. */
@@ -23,7 +22,7 @@ interface Props {
 }
 
 const DEFAULT_HEADLINE = 'SALTA LA CODA'
-const DEFAULT_CONTACT_LINE = QR_POSTER_CONTACT_LINE
+const DEFAULT_CONTACT_LINE = 'Altri eventi: 351 757 0155'
 
 /**
  * Printable A4 poster for a REUSABLE physical QR code. Encodes minthi.it/qr/{code}.
@@ -32,7 +31,7 @@ const DEFAULT_CONTACT_LINE = QR_POSTER_CONTACT_LINE
  *
  * Layout (top → bottom):
  *   - Huge headline
- *   - Massive QR centered in a clean print-safe frame
+ *   - Massive QR centered, no decorative frame
  *   - One pickup line and one compact promo footer
  */
 export default function PhysicalQrPosterButton({
@@ -50,13 +49,43 @@ export default function PhysicalQrPosterButton({
         if (busy) return
         setBusy(true)
         try {
-            const targetUrl = generatePhysicalQrUrl(code)
+            const baseUrl = (typeof window !== 'undefined' && window.location?.origin) || 'https://minthi.it'
+            const targetUrl = `${baseUrl}/qr/${code}`
             const qrDataUrl = await createQrDataUrl(targetUrl, 1400)
-            const { jsPDF } = await import('jspdf')
-            const pdf = drawQrPosterPdf(
-                new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' }),
-                { qrDataUrl, headline, contactLine }
-            )
+
+            const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+            const pageW = pdf.internal.pageSize.getWidth()   // 210mm
+            const pageH = pdf.internal.pageSize.getHeight()  // 297mm
+
+            pdf.setFillColor(255, 255, 255)
+            pdf.rect(0, 0, pageW, pageH, 'F')
+
+            pdf.setTextColor(8, 8, 8)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(60)
+            pdf.text(headline.toUpperCase(), pageW / 2, 48, { align: 'center', maxWidth: pageW - 18 })
+
+            pdf.setTextColor(245, 158, 11)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(27)
+            pdf.text('SCANSIONA E PAGA QUI', pageW / 2, 70, { align: 'center', maxWidth: pageW - 22 })
+
+            const qrSize = 146
+            const qrX = (pageW - qrSize) / 2
+            const qrY = 86
+            pdf.setFillColor(255, 255, 255)
+            pdf.rect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, 'F')
+            pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
+
+            pdf.setTextColor(8, 8, 8)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(32)
+            pdf.text('RITIRA AL BANCO', pageW / 2, qrY + qrSize + 25, { align: 'center', maxWidth: pageW - 24 })
+
+            pdf.setTextColor(30, 30, 30)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(13)
+            pdf.text(contactLine, pageW / 2, pageH - 17, { align: 'center', maxWidth: pageW - 28 })
 
             const safeName = (restaurantName || code).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'minthi'
             pdf.save(`qr-minthi-${safeName}-${code}.pdf`)
