@@ -1442,18 +1442,21 @@ function TakeawayQrPickupCard({
                         <Button
                             disabled={!isPaid || progress.remaining === 0 || !!claiming}
                             onClick={() => onClaimAll(order)}
-                            className="h-10 bg-emerald-500 hover:bg-emerald-400 text-black font-black"
+                            className="h-10 bg-emerald-500 hover:bg-emerald-400 text-black font-black min-w-0"
                         >
-                            <Package size={16} weight="fill" className="mr-1.5" />
-                            {isClaimingAll ? 'Ritiro...' : `Ritira tutto (${progress.remaining})`}
+                            <Package size={16} weight="fill" className="mr-1.5 shrink-0" />
+                            <span className="truncate">
+                                {isClaimingAll ? 'Ritiro...' : `Ritira tutto (${progress.remaining})`}
+                            </span>
                         </Button>
                         <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => onDetail(order)}
-                            className="h-10 text-zinc-300 hover:text-white hover:bg-white/5 text-sm font-medium"
+                            className="h-10 text-zinc-300 hover:text-white hover:bg-white/5 text-sm font-medium min-w-0"
                         >
-                            <CaretRight size={14} className="mr-1" />Dettagli
+                            <CaretRight size={14} className="mr-1 shrink-0" />
+                            <span className="truncate">Dettagli</span>
                         </Button>
                     </div>
                 </CardContent>
@@ -1566,25 +1569,28 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                         {o.status === 'PENDING' && lockedForStripePrepay && (
                             <Button
                                 disabled
-                                className={cn('bg-zinc-800 text-zinc-400 border border-white/10 col-span-2 text-base', cfg.actionHeight)}
+                                className={cn('bg-zinc-800 text-zinc-400 border border-white/10 col-span-2 text-base min-w-0', cfg.actionHeight)}
                             >
-                                <CreditCard size={18} weight="fill" className="mr-2" />Attesa pagamento Stripe
+                                <CreditCard size={18} weight="fill" className="mr-2 shrink-0" />
+                                <span className="truncate">Attesa Stripe</span>
                             </Button>
                         )}
                         {o.status === 'PENDING' && !lockedForStripePrepay && (
                             <Button
                                 onClick={() => onStatus(o, 'PREPARING')}
-                                className={cn('bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 text-base shadow-lg shadow-amber-500/20', cfg.actionHeight)}
+                                className={cn('bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 text-base shadow-lg shadow-amber-500/20 min-w-0', cfg.actionHeight)}
                             >
-                                <ForkKnife size={18} weight="fill" className="mr-2" />Avvia preparazione
+                                <ForkKnife size={18} weight="fill" className="mr-2 shrink-0" />
+                                <span className="truncate">Avvia</span>
                             </Button>
                         )}
                         {o.status === 'PREPARING' && (
                             <Button
                                 onClick={() => onStatus(o, 'READY')}
-                                className={cn('bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 text-base shadow-lg shadow-amber-500/20', cfg.actionHeight)}
+                                className={cn('bg-amber-500 hover:bg-amber-400 text-black font-bold col-span-2 text-base shadow-lg shadow-amber-500/20 min-w-0', cfg.actionHeight)}
                             >
-                                <Bell size={18} weight="fill" className="mr-2" />Segna pronto
+                                <Bell size={18} weight="fill" className="mr-2 shrink-0" />
+                                <span className="truncate">Segna pronto</span>
                             </Button>
                         )}
                         {o.status === 'READY' && takeawayAutoPickupEnabled && (
@@ -1607,9 +1613,10 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                                     }
                                     onStatus(o, 'PICKED_UP')
                                 }}
-                                className={cn('bg-emerald-500 hover:bg-emerald-400 text-white font-black col-span-2 text-base shadow-xl shadow-emerald-500/40 ring-2 ring-emerald-300/70 animate-[pulse_2s_ease-in-out_infinite]', cfg.actionHeight)}
+                                className={cn('bg-emerald-500 hover:bg-emerald-400 text-white font-black col-span-2 text-base shadow-xl shadow-emerald-500/40 ring-2 ring-emerald-300/70 animate-[pulse_2s_ease-in-out_infinite] min-w-0', cfg.actionHeight)}
                             >
-                                <CheckCircle size={22} weight="fill" className="mr-2" />Consegna ora
+                                <CheckCircle size={22} weight="fill" className="mr-2 shrink-0" />
+                                <span className="truncate">Consegna ora</span>
                             </Button>
                         )}
                         {due > 0.01 && o.status !== 'CANCELLED' && o.status !== 'PICKED_UP' && (
@@ -1617,18 +1624,20 @@ function TakeawayCard({ order: o, now, onStatus, onPay, onDetail, takeawayRequir
                                 size="sm"
                                 onClick={() => onPay(o, lockedForStripePrepay)}
                                 variant="outline"
-                                className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 col-span-2 h-9 text-sm font-semibold"
+                                className="border-amber-500/40 text-amber-300 hover:bg-amber-500/10 col-span-2 h-9 text-sm font-semibold min-w-0"
                             >
-                                <Receipt size={16} className="mr-1.5" /> {lockedForStripePrepay ? 'Apri pagamento Stripe' : 'Gestisci pagamento'}
+                                <Receipt size={16} className="mr-1.5 shrink-0" />
+                                <span className="truncate">{lockedForStripePrepay ? 'Paga con Stripe' : 'Pagamento'}</span>
                             </Button>
                         )}
                         <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => onDetail(o)}
-                            className="text-zinc-300 hover:text-white hover:bg-white/5 h-9 text-sm font-medium col-span-2"
+                            className="text-zinc-300 hover:text-white hover:bg-white/5 h-9 text-sm font-medium col-span-2 min-w-0"
                         >
-                            <CaretRight size={14} className="mr-1" />Dettagli cliente
+                            <CaretRight size={14} className="mr-1 shrink-0" />
+                            <span className="truncate">Dettagli</span>
                         </Button>
                     </div>
                 </CardContent>
