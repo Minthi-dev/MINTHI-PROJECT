@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { motion, useInView, useScroll, useTransform } from 'framer-motion'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { DatabaseService } from '../services/DatabaseService'
+
+// ─── Public contact details (used by every CTA on the landing) ───
+const WHATSAPP_NUMBER = '393517570155' // E.164 without leading +
+const WHATSAPP_MESSAGE = encodeURIComponent('Ciao! Vorrei più informazioni su MINTHI per il mio locale/evento.')
+const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`
 
 // ─── Animated reveal on scroll ───
 function FadeIn({ children, className = '', delay = 0, direction = 'up' }: {
@@ -142,41 +145,17 @@ function FloatingBadge({ children, className = '', delay = 0 }: {
 }
 
 export default function LandingPage() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
   const heroRef = useRef(null)
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] })
   const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
   const heroScale = useTransform(scrollYProgress, [0, 0.5], [1, 0.95])
   const heroY = useTransform(scrollYProgress, [0, 0.5], ['0%', '8%'])
 
-  // Global promo from app_config (used when no URL params)
-  const [globalBonus, setGlobalBonus] = useState(0)
-  const [globalToken, setGlobalToken] = useState('')
-
-  // URL params from admin registration link — fall back to global settings
-  const bonusMonths = parseInt(searchParams.get('bonus') || '0') || globalBonus
-  const token = searchParams.get('token') || globalToken
-
-  useEffect(() => {
-    // Fetch global promo settings if no URL params
-    if (!searchParams.get('bonus')) {
-      Promise.all([
-        DatabaseService.getAppConfig('landing_bonus_months'),
-        DatabaseService.getAppConfig('landing_token'),
-      ]).then(([b, t]) => {
-        if (b) setGlobalBonus(parseInt(b) || 0)
-        if (t) setGlobalToken(t)
-      }).catch(() => {})
-    }
-  }, [])
-
-  // CTA click — always go to registration page
-  const handleCTA = () => {
-    if (token) {
-      navigate(`/register/${token}`)
-    } else {
-      navigate('/register')
+  // Every primary CTA on this page opens WhatsApp to the founder.
+  // No registration funnel, no pricing page, no Stripe billing for MINTHI.
+  const openWhatsApp = () => {
+    if (typeof window !== 'undefined') {
+      window.open(WHATSAPP_URL, '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -331,19 +310,21 @@ export default function LandingPage() {
           </div>
           <div className="hidden md:flex items-center gap-8 text-[13px] text-zinc-400">
             <a href="#funzioni" className="hover:text-white transition-colors duration-300">Funzionalità</a>
-            <a href="#prezzi" className="hover:text-white transition-colors duration-300">Prezzi</a>
+            <a href="#salta-coda" className="hover:text-white transition-colors duration-300">Salta coda</a>
             <button
-              onClick={handleCTA}
-              className="px-5 py-2 bg-amber-500 text-black font-semibold rounded-full text-[13px] hover:bg-amber-400 transition-all hover:shadow-[0_0_30px_-8px_rgba(245,158,11,0.4)]"
+              onClick={openWhatsApp}
+              className="inline-flex items-center gap-2 px-5 py-2 bg-emerald-500 text-black font-semibold rounded-full text-[13px] hover:bg-emerald-400 transition-all hover:shadow-[0_0_30px_-8px_rgba(16,185,129,0.45)]"
             >
-              {token ? 'Registrati' : 'Accedi'}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+              Contattaci
             </button>
           </div>
           <button
-            onClick={handleCTA}
-            className="md:hidden px-4 py-1.5 bg-amber-500 text-black font-semibold rounded-full text-[12px]"
+            onClick={openWhatsApp}
+            className="md:hidden inline-flex items-center gap-1.5 px-4 py-1.5 bg-emerald-500 text-black font-semibold rounded-full text-[12px]"
           >
-            {token ? 'Registrati' : 'Accedi'}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z"/></svg>
+            WhatsApp
           </button>
         </div>
       </nav>
@@ -357,21 +338,9 @@ export default function LandingPage() {
         </div>
 
         <motion.div style={{ opacity: heroOpacity, scale: heroScale, y: heroY }} className="relative text-center max-w-4xl mx-auto">
-          {/* Promo badge */}
-          {bonusMonths > 0 && (
-            <FloatingBadge delay={0} className="mb-8">
-              <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/30 backdrop-blur-md">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-amber-300 text-sm font-medium">
-                  {bonusMonths} {bonusMonths === 1 ? 'mese' : 'mesi'} gratis
-                </span>
-              </div>
-            </FloatingBadge>
-          )}
-
           <FadeIn delay={0.1}>
             <p className="text-amber-500 text-[13px] font-medium tracking-[0.4em] uppercase mb-6">
-              Il futuro della ristorazione
+              Gestionale per ristoranti ed eventi
             </p>
           </FadeIn>
 
@@ -379,7 +348,7 @@ export default function LandingPage() {
             <h1 className="text-5xl sm:text-6xl md:text-8xl font-extralight tracking-tight leading-[0.9] mb-8">
               <span className="text-white">Gestisci il tuo</span>
               <br />
-              <span className="text-amber-500 font-light">ristorante</span>
+              <span className="text-amber-500 font-light">locale o evento</span>
               <br />
               <span className="text-white">come mai prima.</span>
             </h1>
@@ -387,19 +356,20 @@ export default function LandingPage() {
 
           <FadeIn delay={0.4}>
             <p className="text-zinc-400 text-lg sm:text-xl font-light max-w-2xl mx-auto leading-relaxed mb-12">
-              Menu digitale, ordini in tempo reale, analitiche avanzate e app camerieri.
+              Menu digitale, ordini in tempo reale, asporto con QR salta‑coda, scontrini fiscali automatici, analitiche avanzate.
               <br className="hidden sm:block" />
-              Tutto in un'unica piattaforma elegante e potente.
+              Tutto in un'unica piattaforma per ristoranti, bar, food truck ed eventi.
             </p>
           </FadeIn>
 
           <FadeIn delay={0.5}>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
-                onClick={handleCTA}
-                className="px-8 py-4 bg-amber-500 text-black font-semibold rounded-full text-base hover:bg-amber-400 transition-all hover:shadow-[0_0_40px_-10px_rgba(245,158,11,0.4)] hover:scale-105 active:scale-95"
+                onClick={openWhatsApp}
+                className="inline-flex items-center gap-2 px-8 py-4 bg-emerald-500 text-black font-semibold rounded-full text-base hover:bg-emerald-400 transition-all hover:shadow-[0_0_40px_-10px_rgba(16,185,129,0.5)] hover:scale-105 active:scale-95"
               >
-                {token ? 'Registrati Gratis' : 'Inizia Ora'}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                Scrivici su WhatsApp
               </button>
               <a
                 href="#funzioni"
@@ -408,6 +378,9 @@ export default function LandingPage() {
                 Scopri le funzioni
               </a>
             </div>
+            <p className="text-zinc-500 text-sm font-light mt-6">
+              Risposta in poche ore. Demo personalizzata gratuita.
+            </p>
           </FadeIn>
 
           {/* Hero screenshot */}
@@ -423,9 +396,9 @@ export default function LandingPage() {
         <StaggerChildren className="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8 text-center relative">
           {[
             { value: '< 1s', label: 'Ordine in cucina' },
-            { value: '100%', label: 'Tempo reale' },
-            { value: '0€', label: 'Costi nascosti' },
-            { value: '24/7', label: 'Supporto' },
+            { value: 'QR', label: 'Salta‑coda asporto' },
+            { value: '100%', label: 'Scontrini AdE auto' },
+            { value: '24/7', label: 'Supporto diretto' },
           ].map((stat, i) => (
             <motion.div key={i} variants={childVariant}>
               <p className="text-3xl md:text-4xl font-extralight text-amber-500 tabular-nums">{stat.value}</p>
@@ -638,109 +611,103 @@ export default function LandingPage() {
       {/* ════════ PRICING ════════ */}
       <section id="prezzi" className="py-24 md:py-32 relative">
         <div className="absolute inset-0 bg-zinc-950/50" />
-        <div className="relative max-w-3xl mx-auto px-6 text-center">
+        <div className="relative max-w-5xl mx-auto px-6">
+          {/* Salta coda anchor target */}
+          <span id="salta-coda" className="block -mt-24 pt-24" aria-hidden="true" />
+
           <FadeIn>
-            <p className="text-amber-500 text-[13px] font-medium tracking-[0.4em] uppercase mb-4">Prezzi</p>
-            <h2 className="text-4xl md:text-6xl font-extralight tracking-tight mb-6">
-              Semplice e trasparente.
-            </h2>
-            <p className="text-zinc-400 text-lg font-light max-w-xl mx-auto mb-16">
-              Un unico piano con tutte le funzionalità. Nessun costo nascosto, nessuna sorpresa.
-            </p>
+            <div className="text-center mb-14">
+              <p className="text-emerald-400 text-[13px] font-medium tracking-[0.4em] uppercase mb-4">Salta coda + Asporto</p>
+              <h2 className="text-4xl md:text-6xl font-extralight tracking-tight mb-6">
+                Il cliente <span className="text-emerald-400 font-light">scansiona, ordina, paga.</span>
+                <br />
+                Tu lo richiami quando è pronto.
+              </h2>
+              <p className="text-zinc-400 text-lg font-light max-w-2xl mx-auto">
+                Stampa un QR code, mettilo sul banco o all'ingresso. I clienti ordinano dal telefono,
+                pagano subito con la carta, ritirano quando il loro numero è pronto. Niente più code,
+                niente più stress per i camerieri.
+              </p>
+            </div>
           </FadeIn>
 
-          <FadeIn delay={0.2}>
-            <div className="relative max-w-md mx-auto">
-              {/* Glow */}
-              <div className="absolute -inset-3 bg-gradient-to-b from-amber-500/20 via-amber-500/5 to-transparent rounded-[2rem] blur-2xl opacity-60" />
-
-              <div className="relative bg-zinc-900 border border-amber-500/20 rounded-3xl p-10 overflow-hidden">
-                {/* Shimmer effect */}
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/[0.03] via-transparent to-transparent" />
-
-                <div className="relative">
-                  <p className="text-amber-500 text-sm font-medium tracking-wider uppercase mb-6">MINTHI Pro</p>
-
-                  {/* Promo badge */}
-                  {bonusMonths > 0 && (
-                    <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-emerald-300 text-sm font-medium">
-                        Offerta speciale per te
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="mb-6">
-                    <p className="text-4xl md:text-5xl font-extralight text-white leading-tight">Accesso ristoratori</p>
-                    <p className="text-zinc-500 text-sm mt-3">Nessun pagamento a MINTHI in Stripe.</p>
-                  </div>
-                  {bonusMonths > 0 && (
-                    <p className="text-emerald-400 text-sm font-medium mb-6">
-                      + {bonusMonths} {bonusMonths === 1 ? 'mese' : 'mesi'} gratis inclus{bonusMonths === 1 ? 'o' : 'i'}
-                    </p>
-                  )}
-                  {!bonusMonths && <div className="mb-8" />}
-
-                  <ul className="text-left space-y-4 mb-10">
-                    {[
-                      'Menu digitale con QR code',
-                      'Ordini in tempo reale',
-                      'Gestione tavoli e sale',
-                      'App camerieri illimitati',
-                      'Prenotazioni online',
-                      'Analitiche e report',
-                      'Menu personalizzati programmabili',
-                      'Pagamenti digitali con Stripe',
-                      'Gestione portate',
-                      'Supporto dedicato',
-                    ].map((item, i) => (
-                      <li key={i} className="flex items-center gap-3 text-zinc-300 text-sm font-light">
-                        <span className="w-5 h-5 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                            <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    onClick={handleCTA}
-                    className="w-full py-4 bg-amber-500 text-black font-semibold rounded-full text-base hover:bg-amber-400 transition-all hover:shadow-[0_0_40px_-10px_rgba(245,158,11,0.4)] hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    {token ? 'Registrati Gratis' : 'Inizia Ora'}
-                  </button>
-
-                  <p className="text-emerald-400/80 text-xs mt-4 font-medium">Stripe si collega solo al conto del ristoratore per ricevere pagamenti dai clienti.</p>
-                  <p className="text-zinc-600 text-xs mt-1">MINTHI non incassa abbonamenti tramite Stripe.</p>
+          <FadeIn delay={0.15}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                {
+                  title: 'QR fisico riassegnabile',
+                  body: 'Stampi una volta i tuoi QR personalizzati. Da admin li riassegni a eventi diversi o food truck mobili senza ristampare.',
+                  icon: '🎟️',
+                },
+                {
+                  title: 'Scontrini fiscali automatici',
+                  body: 'Ogni pagamento genera scontrino elettronico trasmesso all\'Agenzia delle Entrate in tempo reale. Zero burocrazia.',
+                  icon: '🧾',
+                },
+                {
+                  title: 'Display sala d\'attesa',
+                  body: 'TV con i numeri pronti al ritiro che si aggiornano in automatico. Il cliente vede il suo turno da lontano.',
+                  icon: '📺',
+                },
+                {
+                  title: 'Pagamenti diretti al ristoratore',
+                  body: 'Stripe Connect: i soldi arrivano sul tuo IBAN. MINTHI non incassa nulla — zero commissioni nascoste.',
+                  icon: '💳',
+                },
+                {
+                  title: 'Refund + reso fiscale in 1 click',
+                  body: 'Rimborsi un cliente? Il sistema emette automaticamente anche lo scontrino di reso che annulla quello originale.',
+                  icon: '↩️',
+                },
+                {
+                  title: 'Multi‑evento e multi‑locale',
+                  body: 'Un\'unica dashboard per gestire ristorante, food truck, eventi temporanei, sagre. Analitiche separate per ogni location.',
+                  icon: '🏟️',
+                },
+              ].map((card, i) => (
+                <div key={i} className="rounded-2xl border border-white/10 bg-zinc-900/40 p-6 hover:border-emerald-400/30 transition-all">
+                  <div className="text-3xl mb-3">{card.icon}</div>
+                  <h3 className="text-white text-lg font-light mb-2">{card.title}</h3>
+                  <p className="text-zinc-400 text-sm font-light leading-relaxed">{card.body}</p>
                 </div>
-              </div>
+              ))}
             </div>
           </FadeIn>
         </div>
       </section>
 
       {/* ════════ FINAL CTA ════════ */}
-      <section className="py-32 md:py-40 relative">
-        <div className="absolute inset-0 bg-gradient-to-t from-amber-500/[0.03] to-transparent" />
+      <section className="py-28 md:py-36 relative" id="contattaci">
+        <div className="absolute inset-0 bg-gradient-to-t from-emerald-500/[0.04] to-transparent" />
         <div className="relative max-w-3xl mx-auto px-6 text-center">
           <FadeIn>
             <h2 className="text-4xl md:text-6xl font-extralight tracking-tight mb-6">
-              Pronto a trasformare
+              Parliamone.
               <br />
-              il tuo ristorante?
+              <span className="text-emerald-400 font-light">Senza impegno.</span>
             </h2>
-            <p className="text-zinc-400 text-lg font-light mb-10">
-              Unisciti a MINTHI e porta la tua gestione al livello successivo.
+            <p className="text-zinc-400 text-lg font-light mb-10 max-w-xl mx-auto">
+              Raccontaci il tuo locale o evento. Ti rispondiamo entro qualche ora con una proposta su misura
+              e una demo gratuita del sistema.
             </p>
-            <button
-              onClick={handleCTA}
-              className="px-10 py-4 bg-amber-500 text-black font-semibold rounded-full text-lg hover:bg-amber-400 transition-all hover:shadow-[0_0_50px_-10px_rgba(245,158,11,0.5)] hover:scale-105 active:scale-95"
-            >
-              {token ? 'Registrati Gratis' : 'Inizia Ora'}
-            </button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button
+                onClick={openWhatsApp}
+                className="inline-flex items-center gap-2 px-10 py-4 bg-emerald-500 text-black font-semibold rounded-full text-lg hover:bg-emerald-400 transition-all hover:shadow-[0_0_50px_-10px_rgba(16,185,129,0.55)] hover:scale-105 active:scale-95"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163a11.867 11.867 0 01-1.587-5.946C.16 5.335 5.495 0 12.05 0a11.817 11.817 0 018.413 3.488 11.824 11.824 0 013.48 8.414c-.003 6.557-5.338 11.892-11.893 11.892a11.9 11.9 0 01-5.688-1.448L.057 24zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+                Scrivici su WhatsApp
+              </button>
+              <a
+                href="tel:+393517570155"
+                className="inline-flex items-center gap-2 px-10 py-4 border border-white/15 text-white rounded-full text-lg hover:bg-white/5 transition-all font-light"
+              >
+                📞 351 757 0155
+              </a>
+            </div>
+            <p className="text-zinc-500 text-sm font-light mt-8">
+              Risposta in poche ore · Demo gratuita su misura · Nessun obbligo
+            </p>
           </FadeIn>
         </div>
       </section>
@@ -752,8 +719,10 @@ export default function LandingPage() {
             <span className="text-sm font-light tracking-[0.3em] text-zinc-500">MIN</span>
             <span className="text-sm font-light tracking-[0.3em] text-amber-500/60">THI</span>
           </div>
-          <div className="flex items-center gap-6 text-[13px] text-zinc-600">
+          <div className="flex items-center gap-5 text-[13px] text-zinc-600 flex-wrap justify-center">
             <a href="tel:+393517570155" className="hover:text-zinc-400 transition-colors">+39 351 757 0155</a>
+            <span>&middot;</span>
+            <button onClick={openWhatsApp} className="hover:text-emerald-400 transition-colors">WhatsApp</button>
             <span>&middot;</span>
             <span>&copy; {new Date().getFullYear()} MINTHI Systems</span>
           </div>

@@ -22,7 +22,9 @@ interface Props {
 }
 
 const DEFAULT_HEADLINE = 'SALTA LA CODA'
-const DEFAULT_CONTACT_LINE = 'Altri eventi: 351 757 0155'
+const DEFAULT_PROMO_HEADLINE = 'Vuoi anche tu questo sistema per il tuo locale?'
+const DEFAULT_PHONE = '351 757 0155'
+const DEFAULT_WEBSITE = 'minthi.it/info'
 
 /**
  * Printable A4 poster for a REUSABLE physical QR code. Encodes minthi.it/qr/{code}.
@@ -41,7 +43,6 @@ export default function PhysicalQrPosterButton({
     className,
     size = 'sm',
     headline = DEFAULT_HEADLINE,
-    contactLine = DEFAULT_CONTACT_LINE,
 }: Props) {
     const [busy, setBusy] = useState(false)
 
@@ -57,35 +58,58 @@ export default function PhysicalQrPosterButton({
             const pageW = pdf.internal.pageSize.getWidth()   // 210mm
             const pageH = pdf.internal.pageSize.getHeight()  // 297mm
 
+            // White background
             pdf.setFillColor(255, 255, 255)
             pdf.rect(0, 0, pageW, pageH, 'F')
 
+            // Top headline
             pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(60)
-            pdf.text(headline.toUpperCase(), pageW / 2, 48, { align: 'center', maxWidth: pageW - 18 })
+            pdf.setFontSize(64)
+            pdf.text(headline.toUpperCase(), pageW / 2, 50, { align: 'center', maxWidth: pageW - 18 })
 
+            // "SCANSIONA E PAGA QUI" — bigger and bolder per user request
             pdf.setTextColor(245, 158, 11)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(27)
-            pdf.text('SCANSIONA E PAGA QUI', pageW / 2, 70, { align: 'center', maxWidth: pageW - 22 })
+            pdf.setFontSize(36)
+            pdf.text('SCANSIONA E PAGA QUI', pageW / 2, 78, { align: 'center', maxWidth: pageW - 18 })
 
-            const qrSize = 146
+            // QR — slightly larger, centered
+            const qrSize = 150
             const qrX = (pageW - qrSize) / 2
-            const qrY = 86
+            const qrY = 96
             pdf.setFillColor(255, 255, 255)
             pdf.rect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, 'F')
             pdf.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST')
 
+            // Below QR: pickup hint
             pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(32)
-            pdf.text('RITIRA AL BANCO', pageW / 2, qrY + qrSize + 25, { align: 'center', maxWidth: pageW - 24 })
+            pdf.setFontSize(28)
+            pdf.text('RITIRA AL BANCO', pageW / 2, qrY + qrSize + 20, { align: 'center', maxWidth: pageW - 24 })
 
-            pdf.setTextColor(30, 30, 30)
+            // Promo block at the bottom
+            const promoY = pageH - 38
+
+            pdf.setTextColor(60, 60, 60)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(11)
+            pdf.text(DEFAULT_PROMO_HEADLINE, pageW / 2, promoY, { align: 'center', maxWidth: pageW - 24 })
+
+            // Phone + website on the same row
+            pdf.setTextColor(8, 8, 8)
             pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(13)
-            pdf.text(contactLine, pageW / 2, pageH - 17, { align: 'center', maxWidth: pageW - 28 })
+            pdf.setFontSize(14)
+            pdf.text(`${DEFAULT_PHONE}   ·   ${DEFAULT_WEBSITE}`, pageW / 2, promoY + 9, {
+                align: 'center',
+                maxWidth: pageW - 20,
+            })
+
+            // Very small footer
+            pdf.setTextColor(160, 160, 160)
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(8)
+            pdf.text('powered by MINTHI', pageW / 2, pageH - 8, { align: 'center' })
 
             const safeName = (restaurantName || code).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'minthi'
             pdf.save(`qr-minthi-${safeName}-${code}.pdf`)
