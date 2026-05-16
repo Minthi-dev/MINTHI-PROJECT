@@ -91,22 +91,19 @@ export default function TakeawayQRPosterButton({
             pdf.setLineWidth(0.3)
             pdf.line(40, PICKUP_Y + 8, pageW - 40, PICKUP_Y + 8)
 
-            // Promo question — slightly more readable, still soft enough to
-            // sit behind the phone+website (which stay the primary contact).
-            // italic + medium grey + 13pt = legible from arm's length but
-            // visually subordinate to the bold black contact row below.
-            pdf.setTextColor(55, 55, 55)
-            pdf.setFont('helvetica', 'italic')
-            pdf.setFontSize(13)
+            // Promo question — primary in the footer block
+            pdf.setTextColor(25, 25, 25)
+            pdf.setFont('helvetica', 'bold')
+            pdf.setFontSize(15)
             pdf.text('Vuoi anche tu questo sistema per il tuo locale?', pageW / 2, PROMO_LINE_Y, {
                 align: 'center',
                 maxWidth: pageW - 22,
             })
 
-            // Phone + website on one line, well spaced
-            pdf.setTextColor(8, 8, 8)
-            pdf.setFont('helvetica', 'bold')
-            pdf.setFontSize(16)
+            // Contact row — secondary (smaller + lighter + italic)
+            pdf.setTextColor(95, 95, 95)
+            pdf.setFont('helvetica', 'italic')
+            pdf.setFontSize(13)
             pdf.text('351 757 0155     ·     minthi.it/info', pageW / 2, CONTACT_Y, {
                 align: 'center',
                 maxWidth: pageW - 16,
