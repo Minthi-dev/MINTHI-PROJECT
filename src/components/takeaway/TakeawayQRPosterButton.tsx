@@ -91,10 +91,13 @@ export default function TakeawayQRPosterButton({
             pdf.setLineWidth(0.3)
             pdf.line(40, PICKUP_Y + 8, pageW - 40, PICKUP_Y + 8)
 
-            // Promo question
-            pdf.setTextColor(80, 80, 80)
-            pdf.setFont('helvetica', 'normal')
-            pdf.setFontSize(12)
+            // Promo question — slightly more readable, still soft enough to
+            // sit behind the phone+website (which stay the primary contact).
+            // italic + medium grey + 13pt = legible from arm's length but
+            // visually subordinate to the bold black contact row below.
+            pdf.setTextColor(55, 55, 55)
+            pdf.setFont('helvetica', 'italic')
+            pdf.setFontSize(13)
             pdf.text('Vuoi anche tu questo sistema per il tuo locale?', pageW / 2, PROMO_LINE_Y, {
                 align: 'center',
                 maxWidth: pageW - 22,
