@@ -55,7 +55,7 @@ handle(async (req) => {
     const trialEnd = new Date();
     trialEnd.setMonth(trialEnd.getMonth() + Math.max(invite.free_months, 0));
     await db.from("memberships").insert({ restaurant_id: r.id, user_id: ownerId, role: "owner", display_name: body.fullName, can_take_payments: true });
-    await db.from("billing_accounts").insert({
+    await db.from("billing_accounts").upsert({
       restaurant_id: r.id,
       billing_name: body.billing.billingName ?? null,
       vat_number: body.billing.vatNumber ?? null,
@@ -68,7 +68,7 @@ handle(async (req) => {
       subscription_status: invite.free_months > 0 ? "trialing" : "active",
       current_period_end: invite.free_months > 0 ? trialEnd.toISOString() : null,
     });
-    await db.from("fiscal_settings").insert({ restaurant_id: r.id });
+    
     if (invite.free_months > 0) {
       await db.from("restaurant_bonuses").insert({ restaurant_id: r.id, free_months: invite.free_months, reason: "Invito di registrazione" });
     }

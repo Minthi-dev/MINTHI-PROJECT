@@ -80,12 +80,12 @@ handle(async (req) => {
       const { data: r, error } = await db.from("restaurants").insert({ name: body.name, created_by: caller.user.id }).select("id").single();
       if (error) throw error;
       await db.from("memberships").insert({ restaurant_id: r.id, user_id: ownerId, role: "owner", display_name: body.ownerName || "Titolare", can_take_payments: true });
-      await db.from("billing_accounts").insert({
+      await db.from("billing_accounts").upsert({
         restaurant_id: r.id,
         subscription_status: body.freeMonths > 0 ? "trialing" : "active",
         current_period_end: body.freeMonths > 0 ? addMonths(new Date(), body.freeMonths).toISOString() : null,
       });
-      await db.from("fiscal_settings").insert({ restaurant_id: r.id });
+      
       return json(req, { restaurantId: r.id, ownerId, recoveryLink });
     }
 

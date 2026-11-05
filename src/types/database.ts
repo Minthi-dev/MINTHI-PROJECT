@@ -1910,6 +1910,7 @@ export type Database = {
         Args: { p_code_or_token: string; p_restaurant_id: string }
         Returns: Json
       }
+      fiscal_active: { Args: { p_restaurant_id: string }; Returns: boolean }
       get_public_config: { Args: never; Returns: Json }
       get_public_menu: {
         Args: { p_context?: string; p_restaurant_id: string }
