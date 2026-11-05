@@ -40,3 +40,4 @@ ios/App/build/
 ios/DerivedData/
 .vercel
 .env*.local
+supabase/.temp
