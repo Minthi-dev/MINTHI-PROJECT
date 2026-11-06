@@ -57,9 +57,11 @@ export function BillTab({ sessionId, payments, receipts, onClosed }: {
   }
 
   const closeTable = async () => {
-    if (b.due > 0.01) {
-      if (!r.isManager) return toast.error(`Restano ${formatMoney(b.due)} da incassare.`)
-      const ok = await confirm({ title: 'Chiudere senza saldo?', description: `Restano ${formatMoney(b.due)} non incassati. Verrà registrato nel log.`, confirmLabel: 'Chiudi comunque', danger: true })
+    // ricarica il conto: un incasso appena registrato potrebbe non essere ancora visibile
+    const fresh = (await bill.refetch()).data ?? b
+    if (fresh.due > 0.01) {
+      if (!r.isManager) return toast.error(`Restano ${formatMoney(fresh.due)} da incassare.`)
+      const ok = await confirm({ title: 'Chiudere senza saldo?', description: `Restano ${formatMoney(fresh.due)} non incassati. Verrà registrato nel log.`, confirmLabel: 'Chiudi comunque', danger: true })
       if (!ok) return
       await close.mutateAsync({ sessionId, force: true })
     } else {

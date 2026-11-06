@@ -35,15 +35,24 @@ interface FieldProps {
 
 /** Etichetta + controllo + suggerimento/errore, sempre con la stessa spaziatura. */
 export function Field({ label, hint, error, htmlFor, className, children, optional }: FieldProps) {
+  // collega automaticamente etichetta e controllo (accessibilità) se manca htmlFor
+  const autoId = React.useId()
+  let id = htmlFor
+  let control = children
+  if (!id && React.isValidElement<{ id?: string }>(children) && typeof children.type !== 'string' || (!id && React.isValidElement<{ id?: string }>(children) && ['input', 'textarea', 'select'].includes(children.type as string))) {
+    const el = children as React.ReactElement<{ id?: string }>
+    id = el.props.id ?? autoId
+    control = React.cloneElement(el, { id })
+  }
   return (
     <div className={cn('grid gap-1.5', className)}>
       {label && (
-        <Label htmlFor={htmlFor} className="flex items-center gap-1.5">
+        <Label htmlFor={id} className="flex items-center gap-1.5">
           {label}
           {optional && <span className="text-xs font-normal text-muted-foreground">(facoltativo)</span>}
         </Label>
       )}
-      {children}
+      {control}
       {error ? <p className="text-xs text-danger">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   )

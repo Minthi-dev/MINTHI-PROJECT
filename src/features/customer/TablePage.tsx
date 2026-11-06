@@ -34,6 +34,7 @@ export function TablePage() {
   const [tab, setTab] = useState<Tab>(params.get('pagamento') ? 'bill' : 'menu')
   const [picked, setPicked] = useState<MenuDish | null>(null)
   const [cartOpen, setCartOpen] = useState(false)
+  const [wantsNewSession, setWantsNewSession] = useState(false)
 
   const assist = useMutation({
     mutationFn: () => rpc('set_assistance', { p_session_id: s!.id, p_requested: true }),
@@ -60,7 +61,7 @@ export function TablePage() {
     )
   }
 
-  if (!s || (s.status === 'closed' && e.hasOpenSession)) {
+  if (!s || wantsNewSession) {
     if (!e.hasOpenSession) {
       return (
         <PublicLayout accent={accent} name={r.name} logoUrl={r.logoUrl}>
@@ -73,7 +74,7 @@ export function TablePage() {
     }
     return (
       <PublicLayout accent={accent} name={r.name} logoUrl={r.logoUrl}>
-        <PinGate token={token} tableName={e.tableName} onJoined={() => session.refetch()} />
+        <PinGate token={token} tableName={e.tableName} onJoined={() => { setWantsNewSession(false); session.refetch() }} />
       </PublicLayout>
     )
   }
@@ -81,7 +82,10 @@ export function TablePage() {
   if (s.status === 'closed') {
     return (
       <PublicLayout accent={accent} name={r.name} logoUrl={r.logoUrl}>
-        <PublicMessage icon={<CheckCircle2 className="size-6 text-success" />} title="Grazie della visita!">Il tavolo è stato chiuso. Ti aspettiamo presto da {r.name}.</PublicMessage>
+        <PublicMessage icon={<CheckCircle2 className="size-6 text-success" />} title="Grazie della visita!">
+          Il tavolo è stato chiuso. Ti aspettiamo presto da {r.name}.
+          <Button variant="ghost" className="mt-6" onClick={async () => { await entry.refetch(); setWantsNewSession(true) }}>Sei a un nuovo tavolo? Inserisci il PIN</Button>
+        </PublicMessage>
       </PublicLayout>
     )
   }

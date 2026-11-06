@@ -24,8 +24,8 @@
 
   --primary: var(--brand);
   --primary-foreground: var(--brand-foreground);
-  --accent: color-mix(in oklch, var(--brand) 12%, var(--surface));
-  --accent-foreground: color-mix(in oklch, var(--brand) 70%, black);
+  --accent: color-mix(in oklab, var(--brand) 12%, var(--surface));
+  --accent-foreground: color-mix(in oklab, var(--brand) 70%, black);
 
   --success: oklch(0.62 0.15 155);
   --warning: oklch(0.75 0.15 70);
@@ -55,8 +55,8 @@
   --border: oklch(0.29 0.009 260);
   --input: oklch(0.33 0.01 260);
 
-  --accent: color-mix(in oklch, var(--brand) 16%, var(--surface));
-  --accent-foreground: color-mix(in oklch, var(--brand) 80%, white);
+  --accent: color-mix(in oklab, var(--brand) 16%, var(--surface));
+  --accent-foreground: color-mix(in oklab, var(--brand) 80%, white);
 
   --warning-foreground: oklch(0.9 0.08 80);
   --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.35);
@@ -135,7 +135,7 @@
     outline-offset: 2px;
   }
   ::selection {
-    background: color-mix(in oklch, var(--brand) 30%, transparent);
+    background: color-mix(in oklab, var(--brand) 30%, transparent);
   }
 }
 
