@@ -1,643 +1,228 @@
-/**
- * OpenAPI.it — Scontrini Elettronici (Italian electronic receipts).
- *
- * One Minthi-wide OAuth Bearer token, generated on demand from
- * OPENAPI_EMAIL + OPENAPI_API_KEY. Per-restaurant routing happens via
- * the `fiscal_id` field on each call (each restaurant is a separate
- * IT-configuration on OpenAPI's side).
- *
- * Docs (live): https://console.openapi.com/apis/invoice/documentation
- *
- * Endpoints used here:
- *   - POST   /IT-configurations           — create per-restaurant config
- *   - PATCH  /IT-configurations/{fiscal_id} — update (e.g. rotate AdE creds)
- *   - GET    /IT-configurations/{fiscal_id} — read current config
- *   - DELETE /IT-configurations/{fiscal_id} — disable a restaurant
- *   - POST   /IT-receipts                 — emit a receipt (€0.019/op)
- *   - GET    /IT-receipts/{id}            — fetch JSON
- *   - GET    /IT-receipts/{id} (Content-Type: application/pdf) — fetch PDF
- *   - DELETE /IT-receipts/{id}            — void a receipt
- *
- * Authentication:
- *   Token endpoint:
- *     production: POST https://oauth.openapi.it/token
- *     sandbox:    POST https://test.oauth.openapi.it/token
- *     Body: { scopes: [...], ttl: <seconds> }
- *     Auth header: Basic base64(EMAIL:APIKEY)
- *   Returned: { token: "Bearer...", expires_at, ... }
- *
- *   Then use Authorization: Bearer <token> on every API call.
- */
+// Provider fiscale OpenAPI.it (scontrini elettronici / documento commerciale online).
+// Un unico account MINTHI; ogni ristorante è una IT-configuration identificata dal fiscal_id.
+// Ambiente: OPENAPI_ENV = "test" (sandbox, default sicuro) | "production".
 
-type OpenApiEnv = "production" | "test";
+export type OpenApiEnv = "production" | "test";
 
-function normalizeOpenApiEnv(value: string | undefined): OpenApiEnv {
-    const normalized = (value || "production").trim().toLowerCase();
-    if (normalized === "production") return "production";
-    if (normalized === "test" || normalized === "sandbox") return "test";
-
-    console.warn(`[OpenAPI] OPENAPI_ENV non valido (${normalized || "vuoto"}): uso production.`);
-    return "production";
+export function openApiEnv(): OpenApiEnv {
+  return (Deno.env.get("OPENAPI_ENV") ?? "test").trim().toLowerCase() === "production" ? "production" : "test";
 }
 
-const ENV = normalizeOpenApiEnv(Deno.env.get("OPENAPI_ENV"));
-
-export function getOpenApiEnv(): string {
-    return ENV;
+function hosts() {
+  const prod = openApiEnv() === "production";
+  return {
+    api: prod ? "invoice.openapi.com" : "test.invoice.openapi.com",
+    oauth: prod ? "https://oauth.openapi.it" : "https://test.oauth.openapi.it",
+  };
 }
-
-export const OPENAPI_BASE_URL = ENV === "production"
-    ? "https://invoice.openapi.com"
-    : "https://test.invoice.openapi.com";
-
-const OPENAPI_API_DOMAIN = ENV === "production"
-    ? "invoice.openapi.com"
-    : "test.invoice.openapi.com";
-
-const OAUTH_BASE_URL = ENV === "production"
-    ? "https://oauth.openapi.it"
-    : "https://test.oauth.openapi.it";
-
-const OPENAPI_EMAIL = Deno.env.get("OPENAPI_EMAIL") || "";
-const OPENAPI_API_KEY = Deno.env.get("OPENAPI_API_KEY") || "";
-const OPENAPI_WEBHOOK_SECRET = Deno.env.get("OPENAPI_WEBHOOK_SECRET") || "";
-
-// Token cache (per worker instance). Token TTL is configurable up to 12mo;
-// we mint for ~30 days and refresh as needed. Each cold-started worker will
-// re-mint, which is fine — minting costs nothing and is fast.
-interface TokenCache {
-    token: string;
-    expiresAt: number;
-}
-let tokenCache: TokenCache | null = null;
-const TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
-
-const REQUIRED_SCOPES = [
-    // IT-configurations
-    `POST:${OPENAPI_API_DOMAIN}/IT-configurations`,
-    `PATCH:${OPENAPI_API_DOMAIN}/IT-configurations/{fiscal_id}`,
-    `GET:${OPENAPI_API_DOMAIN}/IT-configurations`,
-    `GET:${OPENAPI_API_DOMAIN}/IT-configurations/{fiscal_id}`,
-    `DELETE:${OPENAPI_API_DOMAIN}/IT-configurations/{fiscal_id}`,
-    // IT-receipts
-    `POST:${OPENAPI_API_DOMAIN}/IT-receipts`,
-    `GET:${OPENAPI_API_DOMAIN}/IT-receipts`,
-    `GET:${OPENAPI_API_DOMAIN}/IT-receipts/{id}`,
-    `PATCH:${OPENAPI_API_DOMAIN}/IT-receipts/{id}`,
-    `DELETE:${OPENAPI_API_DOMAIN}/IT-receipts/{id}`,
-];
 
 export function isOpenApiConfigured(): boolean {
-    return Boolean(OPENAPI_EMAIL && OPENAPI_API_KEY);
+  return Boolean(Deno.env.get("OPENAPI_EMAIL") && Deno.env.get("OPENAPI_API_KEY"));
 }
 
-export function getOpenApiWebhookSecret(): string {
-    return OPENAPI_WEBHOOK_SECRET;
+let tokenCache: { token: string; env: OpenApiEnv; expiresAt: number } | null = null;
+const TOKEN_TTL_SECONDS = 30 * 24 * 3600;
+
+async function token(): Promise<string> {
+  if (!isOpenApiConfigured()) throw new Error("Credenziali OpenAPI non configurate.");
+  const env = openApiEnv();
+  if (tokenCache && tokenCache.env === env && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
+
+  const { api, oauth } = hosts();
+  const scopes = [
+    `POST:${api}/IT-configurations`, `PATCH:${api}/IT-configurations/{fiscal_id}`,
+    `GET:${api}/IT-configurations`, `GET:${api}/IT-configurations/{fiscal_id}`,
+    `DELETE:${api}/IT-configurations/{fiscal_id}`,
+    `POST:${api}/IT-receipts`, `GET:${api}/IT-receipts`, `GET:${api}/IT-receipts/{id}`,
+    `PATCH:${api}/IT-receipts/{id}`, `DELETE:${api}/IT-receipts/{id}`,
+  ];
+  const basic = btoa(`${Deno.env.get("OPENAPI_EMAIL")}:${Deno.env.get("OPENAPI_API_KEY")}`);
+  const res = await fetch(`${oauth}/token`, {
+    method: "POST",
+    headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ scopes, ttl: TOKEN_TTL_SECONDS }),
+  });
+  if (!res.ok) throw new Error(`OpenAPI login fallito (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const raw = data?.token ?? data?.access_token ?? data?.data?.token;
+  if (!raw) throw new Error("OpenAPI: token assente nella risposta.");
+  tokenCache = { token: String(raw).replace(/^Bearer\s+/i, ""), env, expiresAt: Date.now() + (TOKEN_TTL_SECONDS - 3600) * 1000 };
+  return tokenCache.token;
 }
 
-function basicAuthHeader(): string {
-    const encoded = btoa(`${OPENAPI_EMAIL}:${OPENAPI_API_KEY}`);
-    return `Basic ${encoded}`;
+async function request(path: string, init: RequestInit & { pdf?: boolean } = {}): Promise<Response> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${await token()}`, ...(init.headers as Record<string, string> ?? {}) };
+  const method = (init.method ?? "GET").toUpperCase();
+  if (init.pdf) {
+    // OpenAPI negozia il PDF con Content-Type anche sulla GET (contratto documentato)
+    headers["Content-Type"] = "application/pdf";
+    headers["Accept"] = "application/pdf";
+  } else if (["POST", "PATCH", "PUT"].includes(method)) {
+    headers["Content-Type"] ??= "application/json";
+  } else {
+    headers["Accept"] ??= "application/json";
+  }
+  return await fetch(`https://${hosts().api}${path}`, { ...init, headers });
 }
 
-/**
- * Mint (or reuse cached) OAuth Bearer token for OpenAPI.
- * Throws on misconfiguration or auth failure.
- */
-export async function getOpenApiToken(): Promise<string> {
-    if (!isOpenApiConfigured()) {
-        throw new Error(
-            "[OpenAPI] credenziali mancanti. Imposta OPENAPI_EMAIL e OPENAPI_API_KEY come secret Supabase."
-        );
-    }
-
-    const now = Date.now();
-    if (tokenCache && tokenCache.expiresAt > now + 60_000) {
-        return tokenCache.token;
-    }
-
-    const res = await fetch(`${OAUTH_BASE_URL}/token`, {
-        method: "POST",
-        headers: {
-            "Authorization": basicAuthHeader(),
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            scopes: REQUIRED_SCOPES,
-            ttl: TOKEN_TTL_SECONDS,
-        }),
-    });
-
-    if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`[OpenAPI] login fallito: ${res.status} ${txt}`);
-    }
-
-    const data = await res.json();
-    const token = data?.token || data?.access_token || data?.data?.token;
-    if (!token) {
-        throw new Error("[OpenAPI] login senza token nella risposta");
-    }
-    const normalizedToken = String(token).replace(/^Bearer\s+/i, "");
-
-    tokenCache = {
-        token: normalizedToken,
-        expiresAt: now + (TOKEN_TTL_SECONDS - 3600) * 1000, // -1h safety
-    };
-    return normalizedToken;
+async function jsonOrThrow(res: Response, what: string) {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`OpenAPI ${what} fallito (${res.status}): ${JSON.stringify(body).slice(0, 500)}`);
+  return body;
 }
 
-/**
- * Internal helper: signed JSON request to OpenAPI.
- */
-async function openapiRequest(path: string, init: RequestInit & { acceptPdf?: boolean } = {}) {
-    const token = await getOpenApiToken();
-    const method = (init.method || "GET").toUpperCase();
-    const headers: Record<string, string> = {
-        "Authorization": `Bearer ${token}`,
-        ...((init.headers as Record<string, string>) || {}),
-    };
-    // OpenAPI Invoice uses Content-Type: application/pdf, not Accept, to
-    // content-negotiate the PDF version of GET /IT-receipts/{id}.
-    // This is unusual for a GET, but it is the documented contract.
-    if (init.acceptPdf) {
-        headers["Content-Type"] = "application/pdf";
-        headers["Accept"] = "application/pdf";
-    } else if (method === "POST" || method === "PATCH" || method === "PUT") {
-        if (!headers["Content-Type"]) {
-            headers["Content-Type"] = "application/json";
-        }
-    } else if (method === "GET" || method === "DELETE") {
-        // GET/DELETE with JSON response expected
-        if (!headers["Accept"]) {
-            headers["Accept"] = "application/json";
-        }
-    }
-    const url = `${OPENAPI_BASE_URL}${path}`;
-    console.log(`[OpenAPI] ${method} ${url} (acceptPdf=${!!init.acceptPdf})`);
-    const res = await fetch(url, {
-        ...init,
-        headers,
-    });
-    console.log(`[OpenAPI] → ${res.status} ${res.statusText} (content-type: ${res.headers.get("content-type")})`);
-    return res;
+// ---------------------------------------------------------------- configurazioni
+
+export interface MerchantConfigInput {
+  fiscalId: string;
+  name: string;
+  email: string;
+  adeTaxCode: string;
+  adePassword: string;
+  adePin: string;
+  webhookUrl?: string;
 }
 
-// =====================================================================
-// IT-configurations
-// =====================================================================
-
-export interface OpenApiConfigurationInput {
-    fiscal_id: string;       // P.IVA o codice fiscale del ristorante
-    name: string;            // ragione sociale
-    email: string;           // email aziendale
-    receipts_authentication: {
-        taxCode: string;     // codice fiscale del responsabile invio (deve coincidere con AdE)
-        password: string;    // password Area Privata AdE
-        pin: string;         // PIN AdE
-    };
-    callback_receipt_url?: string;   // webhook URL per evento receipt (success)
-    callback_receipt_error_url?: string; // webhook URL per evento receipt-error
-    merchant_address?: {
-        street_address: string;
-        street_number: string;
-        zip_code: string;
-        city: string;
-        province: string;
-    };
+function callbacks(url?: string) {
+  if (!url) return undefined;
+  const secret = Deno.env.get("OPENAPI_WEBHOOK_SECRET");
+  const cb = { url, method: "JSON", ...(secret ? { headers: { "x-openapi-secret": secret } } : {}) };
+  return ["receipt", "receipt-retry", "receipt-credentials", "appointee", "receipt-error"].map((event) => ({ event, callback: cb }));
 }
 
-export async function getConfiguration(fiscalId: string): Promise<{ raw: any } | null> {
-    const res = await openapiRequest(
-        `/IT-configurations/${encodeURIComponent(fiscalId)}`,
-        { method: "GET" }
-    );
-    const json = await res.json().catch(() => ({}));
-    if (res.status === 404) return null;
-    if (!res.ok) {
-        throw new Error(
-            `[OpenAPI] lettura configurazione fallita: ${res.status} ${JSON.stringify(json)}`
-        );
-    }
-    return { raw: json };
+export async function getConfiguration(fiscalId: string): Promise<Record<string, unknown> | null> {
+  const res = await request(`/IT-configurations/${encodeURIComponent(fiscalId)}`);
+  if (res.status === 404) return null;
+  const body = await jsonOrThrow(res, "lettura configurazione");
+  return body?.data ?? body;
 }
 
-/**
- * Post-onboarding health check: GET the configuration and verify it is
- * usable for receipt issuance. Returns a structured result with actionable
- * diagnostics. Never throws — returns { ok: false, ... } on failure.
- */
-export interface VerifyConfigurationResult {
-    ok: boolean;
-    exists: boolean;
-    receiptsEnabled: boolean;
-    fiscalIdMatch: boolean;
-    detail: string;
-    raw: any;
+export async function upsertConfiguration(input: MerchantConfigInput): Promise<{ created: boolean }> {
+  const auth = { taxCode: input.adeTaxCode, password: input.adePassword, pin: input.adePin };
+  const existing = await getConfiguration(input.fiscalId);
+  if (existing) {
+    await jsonOrThrow(await request(`/IT-configurations/${encodeURIComponent(input.fiscalId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ receipts: true, receipts_authentication: auth, api_configurations: callbacks(input.webhookUrl) }),
+    }), "aggiornamento configurazione");
+    return { created: false };
+  }
+  await jsonOrThrow(await request("/IT-configurations", {
+    method: "POST",
+    body: JSON.stringify({
+      fiscal_id: input.fiscalId, name: input.name, email: input.email,
+      receipts: true, supplier_invoice: false, legal_storage: false, signature: false,
+      receipts_authentication: auth, api_configurations: callbacks(input.webhookUrl),
+    }),
+  }), "creazione configurazione");
+  return { created: true };
 }
 
-export async function verifyConfiguration(fiscalId: string): Promise<VerifyConfigurationResult> {
-    const fail = (detail: string, raw: any = null): VerifyConfigurationResult => ({
-        ok: false, exists: false, receiptsEnabled: false, fiscalIdMatch: false, detail, raw,
-    });
-    try {
-        const res = await openapiRequest(
-            `/IT-configurations/${encodeURIComponent(fiscalId)}`,
-            { method: "GET" }
-        );
-        if (res.status === 404) {
-            return fail("Configurazione non trovata su OpenAPI dopo l'attivazione");
-        }
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            return fail(`OpenAPI ha risposto ${res.status}: ${JSON.stringify(json).slice(0, 300)}`, json);
-        }
-        const data = json?.data ?? json;
-        const exists = true;
-        const receiptsEnabled = data?.receipts === true;
-        const remoteFiscalId = String(data?.fiscal_id || "");
-        const fiscalIdMatch = remoteFiscalId === fiscalId;
+// ---------------------------------------------------------------- scontrini
 
-        if (!receiptsEnabled) {
-            return {
-                ok: false, exists, receiptsEnabled, fiscalIdMatch,
-                detail: "La configurazione esiste ma l'emissione scontrini (receipts) risulta disabilitata su OpenAPI.",
-                raw: json,
-            };
-        }
-        if (!fiscalIdMatch) {
-            return {
-                ok: false, exists, receiptsEnabled, fiscalIdMatch,
-                detail: `Fiscal ID mismatch: atteso ${fiscalId}, trovato ${remoteFiscalId} su OpenAPI.`,
-                raw: json,
-            };
-        }
-        return { ok: true, exists, receiptsEnabled, fiscalIdMatch, detail: "OK", raw: json };
-    } catch (err: any) {
-        return fail(`Errore verifica: ${err?.message || err}`);
-    }
+export interface ReceiptItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;   // IVA inclusa
+  vatRateCode: string;
 }
 
-function receiptCallbacks(successUrl?: string, errorUrl?: string): Array<Record<string, unknown>> {
-    const secret = getOpenApiWebhookSecret();
-    const makeCallback = (url: string) => ({
-        url,
-        method: "JSON",
-        ...(secret ? { headers: { "x-openapi-secret": secret } } : {}),
-    });
-
-    const callbacks: Array<Record<string, unknown>> = [];
-    if (successUrl) {
-        // OpenAPI recommends listening to all receipt lifecycle events so our
-        // local audit log can reflect retries, credential updates, and the
-        // appointee/assignment flow as well as successful receipts.
-        for (const event of ["receipt", "receipt-retry", "receipt-credentials", "appointee"]) {
-            callbacks.push({ event, callback: makeCallback(successUrl) });
-        }
-    }
-    if (errorUrl) {
-        callbacks.push({ event: "receipt-error", callback: makeCallback(errorUrl) });
-    }
-    return callbacks;
+export interface IssueReceiptInput {
+  fiscalId: string;
+  items: ReceiptItem[];
+  cash: number;
+  electronic: number;
+  voucher: number;
+  voucherQuantity: number;
+  discount: number;
+  lotteryCode?: string | null;
+  customerTaxCode?: string | null;
+  linkedReceipt?: string | null;
+  idempotencyKey: string;
 }
 
-/**
- * Create a per-restaurant IT-configuration. Idempotent on OpenAPI side
- * (will return 409 if already exists for that fiscal_id).
- */
-export async function createConfiguration(input: OpenApiConfigurationInput): Promise<{
-    fiscal_id: string;
-    raw: any;
-}> {
-    const body: Record<string, unknown> = {
-        fiscal_id: input.fiscal_id,
-        name: input.name,
-        email: input.email,
-        receipts: true,
-        supplier_invoice: false,
-        legal_storage: false,
-        signature: false,
-        receipts_authentication: input.receipts_authentication,
-        ...(input.merchant_address ? { merchant_address: input.merchant_address } : {}),
-    };
+const r2 = (n: number) => Math.round((Number.isFinite(n) ? n : 0) * 100) / 100;
 
-    const callbacks = receiptCallbacks(input.callback_receipt_url, input.callback_receipt_error_url);
-    if (callbacks.length > 0) {
-        body.api_configurations = callbacks;
-    }
+export async function issueReceipt(input: IssueReceiptInput) {
+  const body: Record<string, unknown> = {
+    fiscal_id: input.fiscalId,
+    items: input.items.map((it) => ({
+      quantity: it.quantity,
+      description: it.description.slice(0, 1000),
+      unit_price: r2(it.unitPrice),
+      vat_rate_code: it.vatRateCode,
+    })),
+    cash_payment_amount: r2(input.cash),
+    electronic_payment_amount: r2(input.electronic),
+    ticket_restaurant_payment_amount: r2(input.voucher),
+    ticket_restaurant_quantity: input.voucherQuantity,
+    discount: r2(input.discount),
+    invoice_issuing: false,
+    services_uncollected_amount: 0,
+    goods_uncollected_amount: 0,
+  };
+  if (input.lotteryCode) body.lottery_code = input.lotteryCode;
+  if (input.customerTaxCode) body.customer_tax_code = input.customerTaxCode;
+  if (input.linkedReceipt) body.linked_receipt = input.linkedReceipt;
 
-    const res = await openapiRequest("/IT-configurations", {
-        method: "POST",
-        body: JSON.stringify(body),
-    });
-
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(
-            `[OpenAPI] creazione configurazione fallita: ${res.status} ${JSON.stringify(json)}`
-        );
-    }
-    return { fiscal_id: input.fiscal_id, raw: json };
-}
-
-/**
- * Update an existing IT-configuration. Use this to rotate AdE
- * credentials every 90 days, or to update the email/business name.
- */
-export async function updateConfiguration(
-    fiscalId: string,
-    patch: Partial<OpenApiConfigurationInput>
-): Promise<{ raw: any }> {
-    const body: Record<string, unknown> = {
-        receipts: true,
-    };
-    if (patch.receipts_authentication) {
-        body.receipts_authentication = patch.receipts_authentication;
-    }
-    if (patch.callback_receipt_url || patch.callback_receipt_error_url) {
-        body.api_configurations = receiptCallbacks(
-            patch.callback_receipt_url,
-            patch.callback_receipt_error_url
-        );
-    }
-
-    const res = await openapiRequest(
-        `/IT-configurations/${encodeURIComponent(fiscalId)}`,
-        { method: "PATCH", body: JSON.stringify(body) }
-    );
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(
-            `[OpenAPI] update configurazione fallito: ${res.status} ${JSON.stringify(json)}`
-        );
-    }
-    return { raw: json };
-}
-
-export async function deleteConfiguration(fiscalId: string): Promise<void> {
-    const res = await openapiRequest(
-        `/IT-configurations/${encodeURIComponent(fiscalId)}`,
-        { method: "DELETE" }
-    );
-    if (!res.ok && res.status !== 404) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`[OpenAPI] delete configurazione fallito: ${res.status} ${txt}`);
-    }
-}
-
-// =====================================================================
-// IT-receipts
-// =====================================================================
-
-export interface OpenApiReceiptItem {
-    quantity: number;
-    description: string;
-    unit_price: number;        // EUR IVA inclusa
-    vat_rate_code: string;     // "0" | "4" | "5" | "10" | "22" (Italian VAT)
-    discount?: number;         // EUR
-    complimentary?: boolean;
-    sku?: string;
-}
-
-export interface OpenApiIssueReceiptInput {
-    fiscal_id: string;
-    items: OpenApiReceiptItem[];
-    cash_payment_amount?: number;
-    electronic_payment_amount?: number;
-    ticket_restaurant_payment_amount?: number;
-    ticket_restaurant_quantity?: number;
-    discount?: number;
-    invoice_issuing?: boolean;       // true → also issue invoice (B2B)
-    services_uncollected_amount?: number;
-    goods_uncollected_amount?: number;
-    lottery_code?: string;           // 8-char codice lotteria scontrini
-    customer_tax_code?: string;      // CF cliente per Tessera Sanitaria
-    linked_receipt?: string;         // for refunds / voids
-    idempotency_key?: string;        // we use our internal receipt id
-}
-
-export interface OpenApiReceiptResult {
-    id: string;                       // OpenAPI receipt id
-    status: string;                   // new | retry | submitted | ready | failed | voided
-    document_number?: string;
-    fiscal_serial?: string;
-    issued_at?: string;
-    raw: any;
-}
-
-export async function issueReceipt(input: OpenApiIssueReceiptInput): Promise<OpenApiReceiptResult> {
-    const body: Record<string, unknown> = {
-        fiscal_id: input.fiscal_id,
-        items: input.items.map(it => ({
-            quantity: it.quantity,
-            description: it.description.slice(0, 1000),
-            unit_price: Math.round(it.unit_price * 100) / 100,
-            vat_rate_code: it.vat_rate_code,
-            ...(typeof it.discount === "number" ? { discount: Math.round(it.discount * 100) / 100 } : {}),
-            ...(it.complimentary ? { complimentary: true } : {}),
-            ...(it.sku ? { sku: it.sku } : {}),
-        })),
-        cash_payment_amount: round2(input.cash_payment_amount),
-        electronic_payment_amount: round2(input.electronic_payment_amount),
-        ticket_restaurant_payment_amount: round2(input.ticket_restaurant_payment_amount),
-        ticket_restaurant_quantity: input.ticket_restaurant_quantity || 0,
-        discount: round2(input.discount),
-        invoice_issuing: !!input.invoice_issuing,
-        services_uncollected_amount: round2(input.services_uncollected_amount),
-        goods_uncollected_amount: round2(input.goods_uncollected_amount),
-    };
-
-    if (input.lottery_code) body.lottery_code = input.lottery_code;
-    if (input.customer_tax_code) body.customer_tax_code = input.customer_tax_code;
-    if (input.linked_receipt) body.linked_receipt = input.linked_receipt;
-
-    const headers: Record<string, string> = {};
-    if (input.idempotency_key) headers["Idempotency-Key"] = input.idempotency_key;
-
-    console.log(`[OpenAPI] issueReceipt: fiscal_id=${input.fiscal_id}, items=${input.items.length}, ` +
-        `electronic=${round2(input.electronic_payment_amount)}, cash=${round2(input.cash_payment_amount)}`);
-
-    const res = await openapiRequest("/IT-receipts", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-    });
-
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        throw new Error(`[OpenAPI] emissione scontrino fallita: ${res.status} ${JSON.stringify(json)}`);
-    }
-
-    const receipt = json?.data ?? json;
-    if (!receipt?.id) {
-        throw new Error("[OpenAPI] scontrino emesso senza id nella risposta: " + JSON.stringify(json));
-    }
-
-    return {
-        id: String(receipt.id),
-        status: String(receipt.status || "submitted"),
-        document_number: receipt.document_number,
-        fiscal_serial: receipt.fiscal_serial,
-        issued_at: receipt.issued_at,
-        raw: json,
-    };
-}
-
-export async function fetchReceipt(receiptId: string): Promise<any> {
-    const res = await openapiRequest(`/IT-receipts/${encodeURIComponent(receiptId)}`, {
-        method: "GET",
-    });
-    if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`[OpenAPI] fetch scontrino fallito: ${res.status} ${txt}`);
-    }
-    return await res.json();
-}
-
-/**
- * Returns a Uint8Array containing the PDF bytes of a fiscal receipt.
- *
- * Validates that the response actually contains a PDF (magic bytes "%PDF")
- * and not a JSON error or demo placeholder. In sandbox mode, OpenAPI may
- * return sample/demo PDFs with generic data — this is expected behaviour
- * of the sandbox environment and NOT a bug in Minthi.
- */
-export async function fetchReceiptPdf(receiptId: string): Promise<Uint8Array> {
-    console.log(`[OpenAPI] fetchReceiptPdf: requesting PDF for receipt ${receiptId}`);
-    const res = await openapiRequest(`/IT-receipts/${encodeURIComponent(receiptId)}`, {
-        method: "GET",
-        acceptPdf: true,
-    });
-    const contentType = res.headers.get("content-type") || "";
-    console.log(`[OpenAPI] fetchReceiptPdf: status=${res.status}, content-type=${contentType}`);
-
-    if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`[OpenAPI] fetch PDF fallito: ${res.status} ${txt}`);
-    }
-
-    // If the server returned JSON instead of PDF, something went wrong
-    if (contentType.includes("application/json")) {
-        const json = await res.json().catch(() => ({}));
-        console.error("[OpenAPI] fetchReceiptPdf: received JSON instead of PDF:", JSON.stringify(json).slice(0, 500));
-        throw new Error(
-            `[OpenAPI] Il server ha restituito JSON invece di PDF per lo scontrino ${receiptId}. ` +
-            `Potrebbe essere un problema di ambiente OpenAPI o lo scontrino non è ancora pronto.`
-        );
-    }
-
-    const buf = await res.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-
-    // Validate PDF magic bytes: a valid PDF starts with "%PDF"
-    if (bytes.length < 4 || bytes[0] !== 0x25 || bytes[1] !== 0x50 || bytes[2] !== 0x44 || bytes[3] !== 0x46) {
-        const preview = new TextDecoder().decode(bytes.subarray(0, 200));
-        console.error(`[OpenAPI] fetchReceiptPdf: response is NOT a valid PDF. First 200 chars: ${preview}`);
-        throw new Error(
-            `[OpenAPI] Il file ricevuto per lo scontrino ${receiptId} non è un PDF valido. ` +
-            `Content-Type: ${contentType}, dimensione: ${bytes.length} bytes.`
-        );
-    }
-
-    console.log(`[OpenAPI] fetchReceiptPdf: received valid PDF, ${bytes.length} bytes`);
-    return bytes;
+  const res = await request("/IT-receipts", {
+    method: "POST",
+    headers: { "Idempotency-Key": input.idempotencyKey },
+    body: JSON.stringify(body),
+  });
+  const json = await jsonOrThrow(res, "emissione scontrino");
+  const data = json?.data ?? json;
+  if (!data?.id) throw new Error("OpenAPI: scontrino senza id nella risposta.");
+  return { id: String(data.id), status: normalizeStatus(data.status), documentNumber: data.document_number ?? null, raw: json };
 }
 
 export async function voidReceipt(receiptId: string): Promise<void> {
-    const res = await openapiRequest(
-        `/IT-receipts/${encodeURIComponent(receiptId)}`,
-        { method: "DELETE" }
-    );
-    if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`[OpenAPI] annullamento scontrino fallito: ${res.status} ${txt}`);
-    }
+  const res = await request(`/IT-receipts/${encodeURIComponent(receiptId)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`OpenAPI annullamento fallito (${res.status}): ${(await res.text()).slice(0, 300)}`);
 }
 
-// =====================================================================
-// Helpers
-// =====================================================================
-
-function round2(n?: number | null): number {
-    if (typeof n !== "number" || !Number.isFinite(n)) return 0;
-    return Math.round(n * 100) / 100;
+export async function fetchReceiptPdf(receiptId: string): Promise<Uint8Array> {
+  const res = await request(`/IT-receipts/${encodeURIComponent(receiptId)}`, { pdf: true });
+  if (!res.ok) throw new Error(`OpenAPI PDF fallito (${res.status})`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.length < 4 || String.fromCharCode(...bytes.subarray(0, 4)) !== "%PDF") {
+    throw new Error("Il PDF dello scontrino non è ancora disponibile.");
+  }
+  return bytes;
 }
 
-/**
- * P.IVA italiana — 11 cifre con check digit (Luhn variante italiana).
- */
+export function normalizeStatus(s: unknown): "submitted" | "ready" | "failed" | "voided" {
+  const v = String(s ?? "").toLowerCase();
+  if (v === "ready") return "ready";
+  if (v === "failed" || v === "error") return "failed";
+  if (v === "voided") return "voided";
+  return "submitted";
+}
+
+// ---------------------------------------------------------------- validazioni
+
 export function isValidVatIT(vat: string): boolean {
-    if (!/^\d{11}$/.test(vat)) return false;
-    let sum = 0;
-    for (let i = 0; i < 10; i++) {
-        const digit = parseInt(vat[i], 10);
-        if (i % 2 === 0) {
-            sum += digit;
-        } else {
-            const doubled = digit * 2;
-            sum += doubled > 9 ? doubled - 9 : doubled;
-        }
-    }
-    const check = (10 - (sum % 10)) % 10;
-    return check === parseInt(vat[10], 10);
+  if (!/^\d{11}$/.test(vat)) return false;
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    const d = Number(vat[i]);
+    sum += i % 2 === 0 ? d : (d * 2 > 9 ? d * 2 - 9 : d * 2);
+  }
+  return (10 - (sum % 10)) % 10 === Number(vat[10]);
 }
 
-/**
- * Codice fiscale italiano — formato CF persona fisica (16 char) o 11 cifre P.IVA.
- */
 export function isValidTaxCodeIT(cf: string): boolean {
-    if (!cf) return false;
-    const upper = cf.toUpperCase();
-    if (/^\d{11}$/.test(upper)) return isValidVatIT(upper);
-    if (!/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(upper)) return false;
-
-    const odd: Record<string, number> = {
-        "0": 1, "1": 0, "2": 5, "3": 7, "4": 9, "5": 13, "6": 15, "7": 17, "8": 19, "9": 21,
-        A: 1, B: 0, C: 5, D: 7, E: 9, F: 13, G: 15, H: 17, I: 19, J: 21, K: 2, L: 4, M: 18,
-        N: 20, O: 11, P: 3, Q: 6, R: 8, S: 12, T: 14, U: 16, V: 10, W: 22, X: 25, Y: 24, Z: 23,
-    };
-    const even: Record<string, number> = {};
-    "0123456789".split("").forEach((c, i) => even[c] = i);
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach((c, i) => even[c] = i);
-
-    let sum = 0;
-    for (let i = 0; i < 15; i++) {
-        const c = upper[i];
-        sum += i % 2 === 0 ? odd[c] : even[c];
-    }
-    const expected = String.fromCharCode("A".charCodeAt(0) + (sum % 26));
-    return upper[15] === expected;
-}
-
-/**
- * Italian VAT codes accepted by OpenAPI (matches DB CHECK constraint on
- * restaurant_fiscal_settings.default_vat_rate_code):
- *   - Numeric percentages: 4, 5, 10, 22
- *   - Exemption codes: N1, N2, N3, N4, N5, N6 (esenzioni AdE)
- */
-export const VALID_VAT_RATE_CODES = [
-    "4", "5", "10", "22",
-    "N1", "N2", "N3", "N4", "N5", "N6",
-] as const;
-
-/**
- * Maps a numeric VAT rate (e.g. 22) or string code (e.g. "10", "N3") to a
- * valid OpenAPI vat_rate_code. Returns `fallback` when the input is missing
- * or not in the allowed set. In Minthi, numeric 0 on dishes historically means
- * "unset", not a legally selected exemption nature code, so it falls back to
- * the restaurant default.
- */
-export function vatRateCode(
-    rate: number | string | undefined | null,
-    fallback = "10"
-): string {
-    if (rate === undefined || rate === null || rate === "") return fallback;
-    const raw = String(rate).trim().toUpperCase();
-    if ((VALID_VAT_RATE_CODES as readonly string[]).includes(raw)) return raw;
-    const numeric = Number(raw);
-    if (Number.isFinite(numeric)) {
-        const rounded = Math.round(numeric);
-        if ([4, 5, 10, 22].includes(rounded)) return String(rounded);
-    }
-    return fallback;
+  const v = cf.toUpperCase();
+  if (/^\d{11}$/.test(v)) return isValidVatIT(v);
+  if (!/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(v)) return false;
+  const odd: Record<string, number> = {
+    0: 1, 1: 0, 2: 5, 3: 7, 4: 9, 5: 13, 6: 15, 7: 17, 8: 19, 9: 21, A: 1, B: 0, C: 5, D: 7, E: 9, F: 13, G: 15,
+    H: 17, I: 19, J: 21, K: 2, L: 4, M: 18, N: 20, O: 11, P: 3, Q: 6, R: 8, S: 12, T: 14, U: 16, V: 10, W: 22, X: 25, Y: 24, Z: 23,
+  };
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    const c = v[i];
+    sum += i % 2 === 0 ? odd[c] : (/\d/.test(c) ? Number(c) : c.charCodeAt(0) - 65);
+  }
+  return v[15] === String.fromCharCode(65 + (sum % 26));
 }

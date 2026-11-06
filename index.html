@@ -1,41 +1,31 @@
-<!DOCTYPE html>
-<html lang="it" class="dark">
-
-<head>
+<!doctype html>
+<html lang="it">
+  <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafbfa" media="(prefers-color-scheme: light)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Minthi" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="MINTHI" />
     <meta name="format-detection" content="telephone=no" />
-    <meta name="msapplication-TileColor" content="#000000" />
-
-    <title>Minthi - Gestione Ristorante</title>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- iOS safe area support -->
-    <style>
-        :root {
-            --sat: env(safe-area-inset-top);
-            --sar: env(safe-area-inset-right);
-            --sab: env(safe-area-inset-bottom);
-            --sal: env(safe-area-inset-left);
-        }
-        body {
-            background-color: #000000;
-            -webkit-overflow-scrolling: touch;
-            overscroll-behavior: none;
-        }
-    </style>
-</head>
-
-<body>
+    <meta name="description" content="MINTHI: menu digitale, ordini al tavolo, asporto, prenotazioni e scontrini per ristoranti." />
+    <link rel="icon" href="/favicon.ico" />
+    <title>MINTHI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&display=swap" rel="stylesheet" />
+    <script>
+      // tema applicato prima del render per evitare lampi
+      try {
+        var t = localStorage.getItem('minthi-theme') || 'system';
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-</body>
-
+  </body>
 </html>
