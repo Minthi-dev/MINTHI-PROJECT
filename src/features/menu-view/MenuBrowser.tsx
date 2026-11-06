@@ -1,4 +1,4 @@
-import { ImageOff, Plus, Search } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
 import { ALLERGENS, formatMoney } from '@/shared/lib/format'
@@ -91,9 +91,9 @@ function DishRow({ dish, ayce, quantity, compact, readOnly, onSelect }: { dish: 
         quantity > 0 && 'border-primary/50 ring-1 ring-primary/30',
       )}
     >
-      {!compact && (
+      {!compact && dish.imageUrl && (
         <div className="size-20 shrink-0 overflow-hidden rounded-lg bg-muted">
-          {dish.imageUrl ? <img src={dish.imageUrl} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><ImageOff className="size-5 text-muted-foreground/50" /></div>}
+          <img src={dish.imageUrl} alt="" loading="lazy" className="size-full object-cover" />
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">

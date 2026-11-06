@@ -16,7 +16,7 @@ import { Field, Input, Textarea } from '@/shared/ui/input'
 import { Dialog, DialogContent, DialogFooter } from '@/shared/ui/overlay'
 
 export function usePublicRestaurant(id: string) {
-  return useQuery({ queryKey: ['public-restaurant', id], queryFn: async () => (await rpc('get_public_restaurant', { p_restaurant_id: id })) as unknown as PublicRestaurant | null })
+  return useQuery({ queryKey: ['public-restaurant', id], enabled: !!id, queryFn: async () => (await rpc('get_public_restaurant', { p_restaurant_id: id })) as unknown as PublicRestaurant | null })
 }
 
 function useLocalCart(key: string) {
