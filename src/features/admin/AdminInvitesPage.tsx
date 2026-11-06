@@ -11,8 +11,9 @@ import { Badge, Card, EmptyState, PageHeader, Skeleton } from '@/shared/ui/displ
 import { Field, Input } from '@/shared/ui/input'
 import { Dialog, DialogContent, DialogFooter } from '@/shared/ui/overlay'
 import { useAdminAction } from './queries'
+import { publicUrl } from '@/shared/lib/url'
 
-const link = (token: string) => `${location.origin}/registrati/${token}`
+const link = (token: string) => publicUrl(`/registrati/${token}`)
 
 export function AdminInvitesPage() {
   const invites = useQuery({ queryKey: ['admin', 'invites'], queryFn: async () => unwrap(await supabase.from('invites').select('*, restaurants:used_by_restaurant_id(name)').order('created_at', { ascending: false })) })

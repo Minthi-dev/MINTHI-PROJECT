@@ -6,13 +6,14 @@ import { Select, SwitchRow } from '@/shared/ui/controls'
 import { Card, CardBody, CardHeader, Skeleton } from '@/shared/ui/display'
 import { Field, Input } from '@/shared/ui/input'
 import { useSettings, useUpdateSettings } from '../queries'
+import { publicUrl } from '@/shared/lib/url'
 
 export function ReservationsSection() {
   const r = useRestaurant()
   const s = useSettings()
   const update = useUpdateSettings()
   if (!s.data) return <Skeleton className="h-64" />
-  const url = `${location.origin}/prenota/${r.id}`
+  const url = publicUrl(`/prenota/${r.id}`)
   return (
     <Card>
       <CardHeader title="Prenotazioni" />

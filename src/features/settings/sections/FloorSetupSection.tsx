@@ -12,6 +12,7 @@ import { Select, Stepper } from '@/shared/ui/controls'
 import { Card, CardBody, CardHeader, EmptyState, Skeleton } from '@/shared/ui/display'
 import { Field, Input } from '@/shared/ui/input'
 import { Dialog, DialogContent, DialogFooter, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, useConfirm } from '@/shared/ui/overlay'
+import { publicUrl } from '@/shared/lib/url'
 
 type Room = Tables<'rooms'>
 type T = Tables<'tables'>
@@ -182,7 +183,7 @@ function printRoot() {
 export function QrPrintSheet({ tables, restaurant, onDone }: { tables: T[]; restaurant: string; onDone: () => void }) {
   const [codes, setCodes] = useState<Record<string, string>>({})
   useEffect(() => {
-    Promise.all(tables.map(async (t) => [t.id, await QRCode.toDataURL(`${window.location.origin}/t/${t.qr_token}`, { width: 600, margin: 1, errorCorrectionLevel: 'M' })] as const))
+    Promise.all(tables.map(async (t) => [t.id, await QRCode.toDataURL(publicUrl(`/t/${t.qr_token}`), { width: 600, margin: 1, errorCorrectionLevel: 'M' })] as const))
       .then((entries) => setCodes(Object.fromEntries(entries)))
   }, [tables])
   useEffect(() => {

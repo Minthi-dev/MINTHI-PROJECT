@@ -11,6 +11,7 @@ import { Segmented, SwitchRow } from '@/shared/ui/controls'
 import { Badge, Callout, Card, CardHeader, Skeleton } from '@/shared/ui/display'
 import { Field, Input } from '@/shared/ui/input'
 import { Dialog, DialogContent, DialogFooter, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, useConfirm } from '@/shared/ui/overlay'
+import { publicOrigin } from '@/shared/lib/url'
 
 interface Member { user_id: string; role: string; display_name: string; can_take_payments: boolean; is_active: boolean; profiles: { username: string | null; email: string | null } | null }
 
@@ -43,7 +44,7 @@ export function StaffSection() {
   return (
     <div className="grid gap-6">
       <Callout title="Accesso dello staff">
-        Ogni persona entra da <strong>{location.host}/accedi</strong> con il proprio username e password. Nessuna password condivisa: puoi disattivare un account in un attimo.
+        Ogni persona entra da <strong>{publicOrigin().replace(/^https?:\/\//, '')}/accedi</strong> con il proprio username e password. Nessuna password condivisa: puoi disattivare un account in un attimo.
       </Callout>
       <Card>
         <CardHeader title="Staff" actions={<Button size="sm" onClick={() => setDialog('new')}><Plus />Aggiungi</Button>} />

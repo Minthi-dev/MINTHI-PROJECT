@@ -12,6 +12,7 @@ import { Input } from '@/shared/ui/input'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, useConfirm } from '@/shared/ui/overlay'
 import { BookingDialog } from './BookingDialog'
 import { useBookings, useDeleteBooking, useSetBookingStatus, type Booking } from './queries'
+import { publicUrl } from '@/shared/lib/url'
 
 const STATUS: Record<Booking['status'], { label: string; tone: 'brand' | 'success' | 'neutral' | 'danger' | 'warning' }> = {
   confirmed: { label: 'Confermata', tone: 'brand' },
@@ -38,7 +39,7 @@ export function ReservationsPage() {
       <PageHeader
         title="Prenotazioni"
         actions={<>
-          <Button variant="outline" onClick={() => { navigator.clipboard.writeText(`${location.origin}/prenota/${r.id}`); toast.success('Link copiato') }}><Link2 />Link pubblico</Button>
+          <Button variant="outline" onClick={() => { navigator.clipboard.writeText(publicUrl(`/prenota/${r.id}`)); toast.success('Link copiato') }}><Link2 />Link pubblico</Button>
           <Button onClick={() => setCreating(true)}><Plus />Nuova</Button>
         </>}
       />

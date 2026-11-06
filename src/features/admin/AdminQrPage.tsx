@@ -9,6 +9,7 @@ import { Select } from '@/shared/ui/controls'
 import { Card, EmptyState, PageHeader, Skeleton } from '@/shared/ui/display'
 import { Input } from '@/shared/ui/input'
 import { useConfirm } from '@/shared/ui/overlay'
+import { publicUrl } from '@/shared/lib/url'
 
 const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('')
 
@@ -31,7 +32,7 @@ export function AdminQrPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'qr'] }),
   })
   const download = async (code: string, label: string | null) => {
-    const url = await QRCode.toDataURL(`${location.origin}/qr/${code}`, { width: 1024, margin: 2 })
+    const url = await QRCode.toDataURL(publicUrl(`/qr/${code}`), { width: 1024, margin: 2 })
     const a = document.createElement('a')
     a.href = url
     a.download = `minthi-qr-${label || code}.png`

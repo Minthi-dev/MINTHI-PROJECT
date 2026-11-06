@@ -8,6 +8,7 @@ import { Segmented, SwitchRow } from '@/shared/ui/controls'
 import { Card, CardBody, CardHeader, Skeleton } from '@/shared/ui/display'
 import { Field, Input, Textarea } from '@/shared/ui/input'
 import { useTakeawaySettings, useUpdateTakeawaySettings } from '../queries'
+import { publicUrl } from '@/shared/lib/url'
 
 type Mode = 'off' | 'optional' | 'required'
 
@@ -17,7 +18,7 @@ export function TakeawaySection() {
   const update = useUpdateTakeawaySettings()
   const [notice, setNotice] = useState('')
   const [qr, setQr] = useState('')
-  const url = `${location.origin}/asporto/${r.id}`
+  const url = publicUrl(`/asporto/${r.id}`)
 
   useEffect(() => { setNotice(s.data?.pickup_notice ?? '') }, [s.data?.pickup_notice])
   useEffect(() => { QRCode.toDataURL(url, { width: 480, margin: 1 }).then(setQr) }, [url])

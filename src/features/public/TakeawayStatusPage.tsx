@@ -10,6 +10,7 @@ import { formatMoney, formatTime } from '@/shared/lib/format'
 import { Button } from '@/shared/ui/button'
 import { Callout, Card, Spinner } from '@/shared/ui/display'
 import { usePublicRestaurant } from './TakeawayMenuPage'
+import { publicUrl } from '@/shared/lib/url'
 
 interface Order {
   id: string; restaurantId: string; status: string; paymentStatus: string; pickupNumber: number; pickupCode: string; total: number
@@ -34,7 +35,7 @@ export function TakeawayStatusPage() {
   const o = order.data
   const info = usePublicRestaurant(o?.restaurantId ?? '')
   const [qr, setQr] = useState('')
-  useEffect(() => { QRCode.toDataURL(`${location.origin}/asporto/ordine/${token}`, { width: 360, margin: 1 }).then(setQr) }, [token])
+  useEffect(() => { QRCode.toDataURL(publicUrl(`/asporto/ordine/${token}`), { width: 360, margin: 1 }).then(setQr) }, [token])
   const pay = useMutation({ mutationFn: () => callFunction<{ url: string }>('checkout', { kind: 'takeaway', token }), onSuccess: (d) => { window.location.href = d.url } })
 
   if (order.isLoading) return <Spinner className="min-h-dvh" />
